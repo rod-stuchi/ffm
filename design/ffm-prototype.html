@@ -1,0 +1,1378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  FFM — Family Finances Manager · annotated design prototype
+  Every ledger row state, with a written explanation of why it looks that way,
+  plus the recurring-bill rule and a live receipt matcher.
+  Self-contained: no build step, no dependencies.
+-->
+<style>
+  :root{color-scheme:light dark}
+  html,body{margin:0}
+  img{max-width:100%}
+  [hidden]{display:none!important}
+</style>
+<title>FFM Ledger Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ============ tokens ============ */
+:root{
+  --paper:#F6F3ED;
+  --surface:#FFFDF8;
+  --surface-2:#EEE9DE;
+  --surface-3:#E6E0D2;
+  --ink:#211E19;
+  --ink-2:#5C554A;
+  --ink-3:#8E8578;
+  --line:#E1DACC;
+  --line-2:#CDC4B1;
+  --accent:#A8620A;
+  --accent-2:#C9800F;
+  --accent-soft:rgba(168,98,10,.10);
+  --accent-line:rgba(168,98,10,.35);
+  --pos:#3D7A4B;
+  --pos-soft:rgba(61,122,75,.13);
+  --neg:#B23A2B;
+  --neg-soft:rgba(178,58,43,.11);
+  --info:#3F6288;
+  --shadow-sm:0 1px 2px rgba(46,36,18,.07);
+  --shadow-md:0 2px 4px rgba(46,36,18,.05),0 12px 28px rgba(46,36,18,.09);
+  --skeleton:linear-gradient(90deg,var(--surface-2) 0%,var(--surface-3) 45%,var(--surface-2) 90%);
+  --sans:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#171512;
+    --surface:#201D18;
+    --surface-2:#2A261E;
+    --surface-3:#353026;
+    --ink:#EEE8DB;
+    --ink-2:#B2A995;
+    --ink-3:#807869;
+    --line:#332E25;
+    --line-2:#474032;
+    --accent:#E9A63F;
+    --accent-2:#F5C173;
+    --accent-soft:rgba(233,166,63,.11);
+    --accent-line:rgba(233,166,63,.34);
+    --pos:#82B47D;
+    --pos-soft:rgba(130,180,125,.14);
+    --neg:#E28470;
+    --neg-soft:rgba(226,132,112,.13);
+    --info:#8FB0D6;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --shadow-md:0 2px 4px rgba(0,0,0,.3),0 14px 32px rgba(0,0,0,.42);
+    --skeleton:linear-gradient(90deg,var(--surface-2) 0%,var(--surface-3) 45%,var(--surface-2) 90%);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#171512;
+  --surface:#201D18;
+  --surface-2:#2A261E;
+  --surface-3:#353026;
+  --ink:#EEE8DB;
+  --ink-2:#B2A995;
+  --ink-3:#807869;
+  --line:#332E25;
+  --line-2:#474032;
+  --accent:#E9A63F;
+  --accent-2:#F5C173;
+  --accent-soft:rgba(233,166,63,.11);
+  --accent-line:rgba(233,166,63,.34);
+  --pos:#82B47D;
+  --pos-soft:rgba(130,180,125,.14);
+  --neg:#E28470;
+  --neg-soft:rgba(226,132,112,.13);
+  --info:#8FB0D6;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow-md:0 2px 4px rgba(0,0,0,.3),0 14px 32px rgba(0,0,0,.42);
+  --skeleton:linear-gradient(90deg,var(--surface-2) 0%,var(--surface-3) 45%,var(--surface-2) 90%);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1280px;margin:0 auto;padding:28px 22px 90px}
+h1,h2,h3{text-wrap:balance;margin:0}
+a{color:var(--accent)}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ============ masthead ============ */
+.masthead{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-end;justify-content:space-between;
+  padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:22px}
+.brand{display:flex;align-items:center;gap:13px}
+.brand .mark{font-family:var(--mono);font-weight:700;font-size:13.5px;line-height:1;letter-spacing:.16em;
+  color:var(--accent);border:1px solid var(--accent-line);border-radius:7px;background:var(--accent-soft);
+  height:36px;min-width:52px;display:inline-flex;align-items:center;justify-content:center;
+  padding:0 9px 0 11px;flex:none}
+.brand h1{font-size:26px;font-weight:600;letter-spacing:-.02em}
+.brand .sub{color:var(--ink-3);font-size:13.5px}
+.mast-right{display:flex;align-items:center;gap:10px}
+.tbtn{background:var(--surface);border:1px solid var(--line-2);color:var(--ink-2);
+  border-radius:7px;padding:6px 11px;font-size:12.5px;cursor:pointer;display:inline-flex;gap:7px;align-items:center}
+.tbtn:hover{border-color:var(--accent-line);color:var(--ink)}
+
+.lede{max-width:66ch;color:var(--ink-2);font-size:14.5px;margin:0 0 26px}
+.lede kbd{margin:0 1px}
+
+kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1px solid var(--line-2);
+  border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--ink);white-space:nowrap}
+
+/* ============ section headers ============ */
+.sec{margin-top:46px}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.sec-head h2{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.sec-head .rule{flex:1;height:1px;background:var(--line)}
+.sec-head .tag{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--ink-3);text-transform:uppercase}
+.sec-note{color:var(--ink-3);font-size:13.5px;max-width:70ch;margin:0 0 18px}
+
+/* ============ app shell ============ */
+.app{background:var(--surface);border:1px solid var(--line-2);border-radius:14px;
+  box-shadow:var(--shadow-md);overflow:hidden;position:relative}
+.app:focus{outline:none}
+.app.armed{border-color:var(--accent-line)}
+
+.topbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;min-height:78px;
+  padding:14px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.monthnav{display:flex;align-items:center;gap:5px}
+.mbtn{width:30px;height:30px;display:grid;place-items:center;background:transparent;border:1px solid transparent;
+  border-radius:7px;color:var(--ink-2);cursor:pointer;font-family:var(--mono);font-size:15px}
+.mbtn:hover{background:var(--surface);border-color:var(--line-2);color:var(--ink)}
+.mpick{display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line-2);
+  border-radius:9px;padding:8px 12px;cursor:pointer;color:var(--ink);height:38px}
+.mpick .month{font-family:var(--mono);font-size:16px;font-weight:500;letter-spacing:.01em;min-width:104px;text-align:center}
+.mpick .car{font-size:9px;color:var(--ink-3);line-height:1}
+.mpick:hover{border-color:var(--accent-line)}
+.mpick:hover .car{color:var(--accent)}
+.mpick[aria-expanded="true"]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.topbar .spacer{flex:1}
+.hh{display:flex;align-items:stretch}
+.hh div{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:2px 16px;border-left:1px solid var(--line)}
+.hh div:first-child{border-left:none}
+.hh span.k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.hh b{font-family:var(--mono);font-size:15.5px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+/* month picker */
+.mpop{position:fixed;z-index:70;display:none;width:318px;background:var(--surface);
+  border:1px solid var(--line-2);border-radius:12px;box-shadow:var(--shadow-md);padding:13px}
+.mpop.on{display:block}
+.mpop .yr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.mpop .yr b{font-family:var(--mono);font-size:13px;letter-spacing:.1em;font-weight:700}
+.mpop .yr span{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.mcell{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--paper);
+  border:1px solid var(--line);border-radius:8px;padding:8px 4px 7px;cursor:pointer;color:var(--ink);
+  font-family:var(--mono);font-size:13px;font-weight:500}
+.mcell:hover{border-color:var(--accent-line);background:var(--surface-2)}
+.mcell .n{font-size:9.5px;font-weight:400;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.mcell.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.mcell.on .n{color:var(--accent)}
+.mcell.now{box-shadow:inset 0 -2px 0 var(--info)}
+.mcell.fut .n{color:var(--accent-2)}
+.mpop .ft{font-family:var(--mono);font-size:10px;color:var(--ink-3);line-height:1.7;margin-top:10px;
+  padding-top:9px;border-top:1px solid var(--line)}
+.mpop .ft i{font-style:normal;color:var(--info)}
+.netdot{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11.5px;
+  border:1px solid var(--line-2);border-radius:999px;padding:3px 9px;cursor:pointer;background:var(--surface);color:var(--ink-2)}
+.netdot i{width:6px;height:6px;border-radius:50%;background:var(--pos);display:block}
+.netdot.off{color:var(--neg);border-color:var(--neg)}
+.netdot.off i{background:var(--neg)}
+
+/* ============ panels ============ */
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.panel{border-right:1px solid var(--line);min-width:0;position:relative}
+.panel:last-child{border-right:none}
+.panel::before{content:"";position:absolute;inset:0;pointer-events:none;
+  box-shadow:inset 0 0 0 0 var(--accent);transition:box-shadow .12s}
+.panel.active::before{box-shadow:inset 0 0 0 2px var(--accent-line)}
+.panel.active .p-name{color:var(--accent)}
+
+.p-head{padding:12px 14px 10px;border-bottom:1px solid var(--line)}
+.p-title{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.p-name{font-size:14px;font-weight:600;letter-spacing:-.01em}
+.p-role{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);border:1px solid var(--accent-line);border-radius:4px;padding:1px 5px;background:var(--accent-soft)}
+.p-key{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.sums{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.sum{background:var(--surface-2);padding:7px 10px}
+.sum .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--ink-3);text-transform:uppercase}
+.sum .v{font-family:var(--mono);font-size:14px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:1px}
+.sum.in .v{color:var(--pos)}
+.sum.out .v{color:var(--ink)}
+.sum.bal .v.neg{color:var(--neg)}
+
+.ledger{padding:6px 0 8px;max-height:430px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+
+/* ============ row ============ */
+.row{display:grid;grid-template-columns:34px 1fr;align-items:stretch;
+  border-left:3px solid transparent;padding:1px 10px 1px 0;position:relative}
+.row.focus{border-left-color:var(--accent);background:var(--accent-soft)}
+.gut{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);text-align:right;padding:11px 8px 0 0;
+  font-variant-numeric:tabular-nums;user-select:none}
+.row.focus .gut{color:var(--accent);font-weight:700}
+/* nonu keeps the gutter cell in the grid — collapsing it with display:none would
+   reflow .entry into the first track and crush the row. */
+.row.nogut{grid-template-columns:10px 1fr}
+.row.nogut .gut{padding-right:0;overflow:hidden}
+
+.entry{display:grid;grid-template-columns:26px 1fr auto;gap:11px;align-items:center;
+  background:var(--surface-2);border-radius:var(--r);padding:8px 12px;min-width:0;cursor:pointer;
+  border:1px solid transparent;transition:background .1s}
+.row:hover .entry{background:var(--surface-3)}
+.row.focus .entry{background:var(--surface-2);border-color:var(--accent-line)}
+.row.sel .entry{box-shadow:inset 3px 0 0 var(--info)}
+.row.deleted .entry{opacity:.5}
+.row.deleted .name b{text-decoration:line-through}
+.row.deleted .amt .v{text-decoration:line-through}
+
+.mark{width:26px;height:26px;position:relative;display:grid;place-items:center}
+.mark svg{position:absolute;inset:0;width:26px;height:26px;transform:rotate(-90deg)}
+.mark .disc{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:13px;line-height:1}
+.mark .disc.paid{background:var(--pos);color:#fff;box-shadow:0 0 0 3px var(--pos-soft)}
+.mark .disc.wait{background:var(--surface-3);color:var(--ink-3)}
+.mark .dot{width:7px;height:7px;border-radius:50%;background:var(--line-2)}
+.mark .dot.in{background:var(--pos)}
+
+.name{min-width:0}
+.name b{font-weight:600;font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.name .meta{font-family:var(--mono);font-size:11px;color:var(--ink-3);display:flex;gap:7px;align-items:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.name .meta .rec{color:var(--accent)}
+.lock{color:var(--info)}
+
+.amt{text-align:right;white-space:nowrap}
+.amt .v{font-family:var(--mono);font-size:14px;font-weight:500;font-variant-numeric:tabular-nums}
+.amt .v.in{color:var(--pos)}
+.amt .d{font-family:var(--mono);font-size:10.5px;font-variant-numeric:tabular-nums;margin-top:1px}
+.amt .d.up{color:var(--neg)}
+.amt .d.down{color:var(--pos)}
+.amt .d.flat{color:var(--ink-3)}
+
+/* skeleton + error rows */
+.sk-bar{height:9px;border-radius:4px;background:var(--skeleton);background-size:220% 100%;
+  animation:sh 1.15s linear infinite}
+.sk-disc{width:26px;height:26px;border-radius:50%;background:var(--skeleton);background-size:220% 100%;animation:sh 1.15s linear infinite}
+@keyframes sh{from{background-position:110% 0}to{background-position:-110% 0}}
+.row.err .entry{background:var(--neg-soft);border-color:var(--neg)}
+.retry{font-family:var(--mono);font-size:11px;background:var(--neg);color:#fff;border:none;
+  border-radius:6px;padding:4px 9px;cursor:pointer}
+.errtxt{display:block;font-size:12.5px;color:var(--neg);font-weight:500;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.errsub{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:1px}
+
+/* tooltip */
+.tip{position:absolute;z-index:40;background:var(--surface);border:1px solid var(--line-2);
+  border-radius:8px;box-shadow:var(--shadow-md);padding:9px 11px;font-family:var(--mono);font-size:11.5px;
+  color:var(--ink-2);pointer-events:none;max-width:290px;line-height:1.65}
+.tip b{color:var(--ink);font-weight:500}
+.tip .hr{height:1px;background:var(--line);margin:6px 0}
+
+/* ============ statusline ============ */
+.status{display:flex;align-items:center;gap:0;background:var(--surface-2);
+  border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;min-height:30px}
+.st{padding:6px 11px;color:var(--ink-2);border-right:1px solid var(--line);white-space:nowrap}
+.st.mode{background:var(--accent);color:var(--paper);font-weight:700;letter-spacing:.1em}
+.st.mode.cmd{background:var(--info);color:#fff}
+.st.mode.vis{background:var(--pos);color:#fff}
+.st.grow{flex:1;border-right:none;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis}
+.st.msg{color:var(--accent)}
+.st.msg.bad{color:var(--neg)}
+.st.right{border-right:none;border-left:1px solid var(--line)}
+.st.buf{color:var(--accent);font-weight:700;min-width:44px;text-align:right}
+
+.cmdbar{display:none;align-items:center;gap:0;border-top:1px solid var(--accent-line);background:var(--surface)}
+.cmdbar.on{display:flex}
+.cmdbar .pfx{font-family:var(--mono);font-size:13px;color:var(--accent);padding:0 4px 0 12px}
+.cmdbar input{flex:1;border:none;background:transparent;font-family:var(--mono);font-size:13px;
+  color:var(--ink);padding:9px 12px 9px 0}
+.cmdbar input:focus{outline:none}
+.cmdhint{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);padding-right:12px;white-space:nowrap}
+
+/* ============ modal ============ */
+.scrim{position:fixed;inset:0;background:rgba(20,16,10,.42);backdrop-filter:blur(2px);
+  display:none;place-items:center;z-index:100;padding:20px}
+.scrim.on{display:grid}
+.modal{background:var(--surface);border:1px solid var(--line-2);border-radius:13px;
+  box-shadow:var(--shadow-md);width:min(560px,100%);max-height:86vh;overflow:auto}
+.modal h3{font-size:15px;font-weight:600;padding:14px 16px 0}
+.modal .msub{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);padding:2px 16px 0}
+.modal .mbody{padding:14px 16px}
+.modal .mfoot{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;
+  border-top:1px solid var(--line);background:var(--surface-2);border-radius:0 0 12px 12px;flex-wrap:wrap}
+.btn{font-family:var(--sans);font-size:13px;border-radius:7px;padding:7px 13px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--surface);color:var(--ink)}
+.btn:hover{border-color:var(--accent-line)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--paper);font-weight:600}
+.btn.dgr{background:var(--neg);border-color:var(--neg);color:#fff;font-weight:600}
+.btn kbd{background:rgba(255,255,255,.18);border-color:transparent;color:inherit;margin-left:6px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+label.f{display:block}
+label.f .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:4px}
+input.i,select.i{width:100%;font-family:var(--mono);font-size:13px;background:var(--paper);color:var(--ink);
+  border:1px solid var(--line-2);border-radius:7px;padding:7px 9px}
+input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.warnbox{background:var(--neg-soft);border:1px solid var(--neg);border-radius:8px;padding:10px 12px;
+  font-size:13px;color:var(--ink);display:flex;gap:10px;align-items:flex-start}
+.warnbox .g{font-size:16px;line-height:1.2}
+.notebox{background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:8px;
+  padding:9px 11px;font-size:12.5px;color:var(--ink-2);margin-top:12px}
+
+/* ============ gallery ============ */
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;align-items:start}
+.spec{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px 14px 14px;
+  display:flex;flex-direction:column;gap:9px}
+.spec .lbl{display:flex;align-items:baseline;gap:8px}
+.spec .lbl .n{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.1em}
+.spec .lbl h4{margin:0;font-size:13px;font-weight:600}
+.spec .stage{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:7px 8px}
+.spec p{margin:0;font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.spec p code{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:4px;padding:0 4px;white-space:nowrap}
+.stage .row{padding-right:0}
+.stage .row .entry{cursor:default}
+
+/* ============ recurring config ============ */
+.cfg{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;overflow:hidden}
+.card .ch{padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2);
+  display:flex;align-items:center;gap:9px}
+.card .ch h3{font-size:13.5px;font-weight:600}
+.card .ch .badge{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3)}
+.card .cb{padding:14px}
+.stack{display:flex;flex-direction:column;gap:11px}
+.switch{display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;
+  border:1px solid var(--line-2);border-radius:8px;padding:9px 11px;background:var(--paper)}
+.switch input{accent-color:var(--accent);width:15px;height:15px}
+.switch .d{font-family:var(--mono);font-size:11px;color:var(--ink-3);display:block}
+
+.files{font-family:var(--mono);font-size:12px;display:flex;flex-direction:column;gap:1px;
+  border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.file{display:flex;align-items:center;gap:9px;padding:7px 10px;background:var(--paper)}
+.file .fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file .st{border:none;padding:0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.file.hit{background:var(--pos-soft)}
+.file.hit .st{color:var(--pos)}
+.file.ign{opacity:.72}
+.file.ign .st{color:var(--accent)}
+.file.no .st{color:var(--ink-3)}
+.verdict{margin-top:12px;font-family:var(--mono);font-size:12px;border-radius:8px;padding:10px 12px;
+  border:1px solid var(--pos);background:var(--pos-soft);color:var(--ink);line-height:1.6}
+.verdict.no{border-color:var(--accent-line);background:var(--accent-soft)}
+
+/* ============ keymap ============ */
+.keys{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.kgroup{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kgroup h4{margin:0 0 9px;font-size:11px;font-family:var(--mono);letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-3)}
+.krow{display:grid;grid-template-columns:88px 1fr;gap:10px;padding:4px 0;align-items:baseline;font-size:12.5px}
+.krow + .krow{border-top:1px solid var(--line)}
+.krow .d{color:var(--ink-2)}
+
+/* ============ misc ============ */
+.foot{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);
+  color:var(--ink-3);font-size:12.5px;max-width:70ch}
+@media (max-width:900px){
+  .panels{grid-template-columns:1fr}
+  .panel{border-right:none;border-bottom:1px solid var(--line)}
+  .cfg{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="brand">
+      <span class="mark">FFM</span>
+      <div>
+        <h1>Family Finances Manager</h1>
+        <div class="sub">Interactive design prototype &middot; example household data</div>
+      </div>
+    </div>
+    <div class="mast-right">
+      <button class="tbtn" id="themeBtn" type="button"><span id="themeIcon">◐</span><span id="themeTxt">Theme</span></button>
+      <button class="tbtn" id="helpBtn" type="button">Keymap <kbd>?</kbd></button>
+    </div>
+  </div>
+
+  <p class="lede">
+    A working model of the ledger, not a picture of one. Click into the app below and drive it from the
+    keyboard: <kbd>j</kbd><kbd>k</kbd> to move, <kbd>5j</kbd> to count, <kbd>H</kbd><kbd>L</kbd> to switch member panels,
+    <kbd>x</kbd> to select, <kbd>dd</kbd> to soft-delete, <kbd>u</kbd> to undo, <kbd>/</kbd> for the command bar.
+    Everything is also clickable. Amounts, dates and receipt filenames follow Brazilian conventions.
+  </p>
+
+  <!-- ================= APP ================= -->
+  <section class="sec" style="margin-top:0">
+    <div class="sec-head">
+      <span class="tag">01</span><h2>The ledger</h2><span class="rule"></span>
+      <span class="tag">FFM_001</span>
+    </div>
+    <p class="sec-note">
+      One continuous transactions table, sliced by month — click the month to jump anywhere in 2026. Each
+      household member gets a panel with its own INs/OUTs header; the focused panel carries the accent ring,
+      and the focused row carries the gutter zero. The <code style="font-family:var(--mono);font-size:12.5px">rnu</code>
+      at the far right of the statusline is the gutter mode: <b>r</b>elative <b>nu</b>mbers, as in Vim's
+      <code style="font-family:var(--mono);font-size:12.5px">:set relativenumber</code>. Click it to cycle.
+    </p>
+
+    <div class="app" id="app" tabindex="0">
+      <div class="topbar">
+        <div class="monthnav">
+          <button class="mbtn" id="prevM" title="Previous month (Ctrl-P)" type="button">‹</button>
+          <button class="mpick" id="monthBtn" type="button" aria-haspopup="dialog" aria-expanded="false"
+                  title="Pick a month">
+            <span class="month" id="monthLbl">jul / 2026</span><span class="car">▼</span>
+          </button>
+          <button class="mbtn" id="nextM" title="Next month (Ctrl-N)" type="button">›</button>
+        </div>
+        <span class="spacer"></span>
+        <div class="hh">
+          <div><span class="k">Household in</span><b id="hIn" style="color:var(--pos)">—</b></div>
+          <div><span class="k">Out</span><b id="hOut">—</b></div>
+          <div><span class="k">Net</span><b id="hNet">—</b></div>
+        </div>
+        <button class="netdot" id="netBtn" type="button" title="Toggle server reachability to demo the failure path"><i></i><span id="netTxt">server ok</span></button>
+      </div>
+
+      <div class="panels" id="panels"></div>
+
+      <div class="cmdbar" id="cmdbar">
+        <span class="pfx" id="cmdPfx">:</span>
+        <input id="cmdInput" autocomplete="off" spellcheck="false" aria-label="Command">
+        <span class="cmdhint">add · in · set nu|rnu|nonu · next · prev · undo · help</span>
+      </div>
+
+      <div class="status">
+        <div class="st mode" id="stMode">NORMAL</div>
+        <div class="st" id="stFile">~/ffm · jul/2026</div>
+        <div class="st" id="stMember">Rodrigo</div>
+        <div class="st grow msg" id="stMsg"></div>
+        <div class="st buf" id="stBuf"></div>
+        <div class="st right" id="stPos">1/1</div>
+        <div class="st right" id="stNu" style="cursor:pointer"
+             title="Line-number mode — rnu = relative (Vim's :set relativenumber), nu = absolute, nonu = off. Click to cycle.">rnu</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ROW STATES ================= -->
+  <section class="sec">
+    <div class="sec-head">
+      <span class="tag">02</span><h2>Row states</h2><span class="rule"></span>
+      <span class="tag">FFM_002 / FFM_003</span>
+    </div>
+    <p class="sec-note">
+      Every state a ledger row can be in. The row is one component; status mark, date glyph, delta and row
+      chrome each encode one fact, so a row never needs to be read to be understood.
+    </p>
+    <div class="gal" id="gallery"></div>
+  </section>
+
+  <!-- ================= RECURRING ================= -->
+  <section class="sec">
+    <div class="sec-head">
+      <span class="tag">03</span><h2>Recurring bill</h2><span class="rule"></span>
+      <span class="tag">DEFINED ONCE</span>
+    </div>
+    <p class="sec-note">
+      The rule is defined once and materialized into the ledger each period. Receipt tracking is opt-in: with it
+      on, the occurrence is only <em>paid</em> when a matching file exists on disk. The matcher below is live —
+      edit either pattern and watch the sample folder re-evaluate.
+    </p>
+
+    <div class="cfg">
+      <div class="card">
+        <div class="ch"><h3>Rule</h3><span class="badge">R · edit rule</span></div>
+        <div class="cb stack">
+          <div class="fgrid">
+            <label class="f"><span class="k">Description</span><input class="i" value="Energia · Enel SP"></label>
+            <label class="f"><span class="k">Member</span>
+              <select class="i"><option>Rodrigo (admin)</option><option>Ana</option><option>Household</option></select>
+            </label>
+          </div>
+          <div class="fgrid">
+            <label class="f"><span class="k">Amount</span><input class="i" value="R$ 343,62"></label>
+            <label class="f"><span class="k">Cadence</span>
+              <select class="i"><option>Monthly</option><option>Bimonthly</option><option>Quarterly</option><option>Yearly</option></select>
+            </label>
+          </div>
+          <div class="fgrid">
+            <label class="f"><span class="k">Due day</span><input class="i" value="15"></label>
+            <label class="f"><span class="k">Category</span><input class="i" value="utilities"></label>
+          </div>
+          <div class="fgrid">
+            <label class="f"><span class="k">Start date</span><input class="i" value="01/03/2024"></label>
+            <label class="f"><span class="k">End date</span><input class="i" value="—  (ongoing)"></label>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="trackOn" checked>
+            <span>Track receipt on disk
+              <span class="d">Off = no paid/unpaid state at all, just a plain transaction.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ch"><h3>Receipt matcher</h3><span class="badge">period 07/2026</span></div>
+        <div class="cb stack">
+          <label class="f"><span class="k">Folder</span><input class="i" id="fPath" value="~/Documents/contas/energia"></label>
+          <label class="f"><span class="k">Match regex</span><input class="i" id="fRe" value="^\d{4}\.\d{2}\.energia\.bill\.pdf$"></label>
+          <label class="f"><span class="k">Ignore regex</span><input class="i" id="fIg" value=".*_\.pdf$"></label>
+          <div>
+            <span class="k mono" style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:5px">Folder contents</span>
+            <div class="files" id="fileList"></div>
+          </div>
+          <div class="verdict" id="verdict"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= KEYMAP ================= -->
+  <section class="sec">
+    <div class="sec-head">
+      <span class="tag">04</span><h2>Keymap</h2><span class="rule"></span>
+      <span class="tag">NORMAL MODE</span>
+    </div>
+    <p class="sec-note">
+      Lowercase acts on the occurrence, uppercase on the broader rule or window — the same split Vim uses.
+      Nothing destructive fires from a single keystroke.
+    </p>
+    <div class="keys" id="keymap"></div>
+  </section>
+
+  <p class="foot">
+    Names, amounts and filenames are example data for the prototype. Two keys are proposals rather than
+    decisions from the spec: <kbd>p</kbd> toggles a transaction private (hidden from other members, never from
+    admin), and <kbd>g</kbd><kbd>g</kbd> / <kbd>G</kbd> jump to the first and last row.
+  </p>
+</div>
+
+<div class="mpop" id="mpop"></div>
+<div class="scrim" id="scrim"><div class="modal" id="modal"></div></div>
+<div class="tip" id="tip" style="display:none"></div>
+
+<script>
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+const brl = n => 'R$ ' + Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MN = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+let uid = 1000;
+
+/* ================= data ================= */
+function T(o){ return Object.assign({
+  id:++uid, kind:'out', title:'', sub:'', amount:0, day:1, status:'plain',
+  progress:null, due:null, delta:null, recurring:false, tracked:false,
+  pattern:null, private:false, deleted:false, restored:false, state:'ok'
+}, o); }
+
+/* Hand-authored months carry the narrative from the sketches (the +20% energia,
+   the pending Água, the private rows). The rest of 2026 is generated below. */
+const AUTHORED = {
+  4:[[
+      T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
+      T({title:'Energia · Enel SP', amount:281.40, day:12, status:'paid', recurring:true, tracked:true, delta:-6, due:'15/05/2026', pattern:'2026.05.energia.bill.pdf'}),
+      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/05/2026', pattern:'2026.05.vivo.fibra.pdf'}),
+      T({title:'Condomínio', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/05/2026', pattern:'2026.05.condominio.pdf'}),
+      T({title:'Mercado · Pão de Açúcar', amount:642.18, day:14}),
+      T({title:'Combustível · Shell', amount:310.00, day:19}),
+    ],[
+      T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
+      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/05/2026', pattern:'2026.05.unimed.pdf'}),
+      T({title:'Escola · Materiais', amount:388.00, day:11}),
+      T({title:'Farmácia · Drogasil', amount:126.55, day:16}),
+      T({title:'Academia · Smart Fit', amount:119.90, day:20, recurring:true}),
+    ]],
+  5:[[
+      T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
+      T({kind:'in', title:'Freelance', sub:'Auditoria Marotta', amount:2400, day:22, status:'in'}),
+      T({title:'Energia · Enel SP', amount:286.30, day:13, status:'paid', recurring:true, tracked:true, delta:2, due:'15/06/2026', pattern:'2026.06.energia.bill.pdf'}),
+      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/06/2026', pattern:'2026.06.vivo.fibra.pdf'}),
+      T({title:'Condomínio', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/06/2026', pattern:'2026.06.condominio.pdf'}),
+      T({title:'IPTU · parcela 6/10', amount:412.70, day:15, recurring:true}),
+      T({title:'Mercado · Pão de Açúcar', amount:701.44, day:14}),
+      T({title:'Combustível · Shell', amount:310.00, day:18}),
+      T({title:'Uber', amount:88.30, day:24}),
+    ],[
+      T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
+      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/06/2026', pattern:'2026.06.unimed.pdf'}),
+      T({title:'Escola · Mensalidade', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/06/2026', pattern:'2026.06.escola.pdf'}),
+      T({title:'Farmácia · Drogasil', amount:214.90, day:18}),
+      T({title:'Academia · Smart Fit', amount:119.90, day:20, recurring:true}),
+      T({title:'Presente · aniversário', amount:260.00, day:27, private:true}),
+    ]],
+  6:[[
+      T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
+      T({title:'Energia · Enel SP', amount:343.62, day:11, status:'paid', recurring:true, tracked:true, delta:20, due:'15/07/2026', pattern:'2026.07.energia.bill.pdf'}),
+      T({title:'Água · Sabesp', amount:0, day:0, status:'pending', progress:0.75, recurring:true, tracked:true, due:'18/07/2026', pattern:'2026.07.sabesp.bill_.pdf'}),
+      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/07/2026', pattern:'2026.07.vivo.fibra.pdf'}),
+      T({title:'Condomínio', amount:965.00, day:8, status:'paid', recurring:true, tracked:true, delta:5, due:'08/07/2026', pattern:'2026.07.condominio.pdf'}),
+      T({title:'IPTU · parcela 7/10', amount:412.70, day:15, recurring:true}),
+      T({title:'Mercado · Pão de Açúcar', amount:658.90, day:13, delta:-6}),
+      T({title:'Combustível · Shell', amount:298.40, day:17, delta:-4}),
+      T({title:'Netflix', amount:59.90, day:21, recurring:true}),
+      T({title:'Uber', amount:112.60, day:25, delta:27}),
+    ],[
+      T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
+      T({kind:'in', title:'Dividendos', sub:'corretora', amount:318.44, day:16, status:'in'}),
+      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/07/2026', pattern:'2026.07.unimed.pdf'}),
+      T({title:'Escola · Mensalidade', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/07/2026', pattern:'2026.07.escola.pdf'}),
+      T({title:'Farmácia · Drogasil', amount:98.70, day:19, delta:-54}),
+      T({title:'Academia · Smart Fit', amount:119.90, day:20, recurring:true}),
+      T({title:'Spotify Família', amount:34.90, day:22, recurring:true}),
+      T({title:'Consulta · dermatologista', amount:450.00, day:23, private:true}),
+    ]]
+};
+
+/* ---- the rest of 2026, materialized from the same recurring rules ---- */
+const TODAY_M = 8, TODAY_D = 7;            // 07/09/2026
+const slug = s => s.split(' · ')[0].toLowerCase()
+  .normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'.');
+
+const RULES = [[
+  {kind:'in', title:'Salário', amount:11800, day:5, status:'in'},
+  {title:'Condomínio', base:920, day:8, due:8, rec:1, track:1, v:.04},
+  {title:'Internet · Vivo Fibra', base:139.90, day:10, due:10, rec:1, track:1, v:0},
+  {title:'Energia · Enel SP', base:300, day:11, due:15, rec:1, track:1, v:.17},
+  {title:'Água · Sabesp', base:108, day:14, due:18, rec:1, track:1, v:.14},
+  {title:'IPTU · parcela {n}/10', key:'IPTU', base:412.70, day:15, rec:1, v:0, months:[0,1,2,3,4,5,6,7,8,9]},
+  {title:'Netflix', base:59.90, day:21, rec:1, v:0},
+  {title:'Mercado · Pão de Açúcar', base:665, day:13, v:.13},
+  {title:'Combustível · Shell', base:302, day:17, v:.15},
+  {title:'Uber', base:98, day:25, v:.32},
+],[
+  {kind:'in', title:'Salário', amount:9400, day:5, status:'in'},
+  {title:'Plano de saúde · Unimed', base:1148, day:7, due:7, rec:1, track:1, v:.02},
+  {title:'Escola · Mensalidade', base:1690, day:9, due:9, rec:1, track:1, v:0, months:[1,2,3,4,5,6,7,8,9,10,11]},
+  {title:'Academia · Smart Fit', base:119.90, day:20, rec:1, v:0},
+  {title:'Spotify Família', base:34.90, day:22, rec:1, v:0},
+  {title:'Farmácia · Drogasil', base:152, day:19, v:.48},
+]];
+
+function makeMonth(mi){
+  let s = (mi + 1) * 7919;
+  const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  const mm = String(mi + 1).padStart(2, '0');
+  const future = mi > TODAY_M, now = mi === TODAY_M;
+  return RULES.map(list => list.filter(r => !r.months || r.months.includes(mi)).map(r => {
+    if(r.kind === 'in') return T({kind:'in', status:'in', title:r.title, amount:r.amount, day:r.day});
+    const amount = +(r.base * (1 + (rnd()*2 - 1) * r.v)).toFixed(2);
+    const title = r.title.replace('{n}', mi + 1);
+    const settled = !future && (!now || r.day <= TODAY_D);
+    if(r.track){
+      const due = String(r.due).padStart(2,'0') + '/' + mm + '/2026';
+      if(settled) return T({title, key:r.key, amount, day:r.day, status:'paid', recurring:true,
+        tracked:true, due, pattern:'2026.' + mm + '.' + slug(r.title) + '.bill.pdf'});
+      const span = future ? .04 : Math.max(.08, Math.min(.97, TODAY_D / r.due));
+      return T({title, key:r.key, amount:0, day:0, status:'pending', progress:span, recurring:true,
+        tracked:true, due, pattern:'2026.' + mm + '.' + slug(r.title) + '.bill_.pdf'});
+    }
+    if(future && !r.rec) return null;                 // variable spends aren't projected
+    if(now && r.day > TODAY_D && !r.rec) return null;
+    return T({title, key:r.key, amount:future ? amount : amount, day:r.day, recurring:!!r.rec});
+  }).filter(Boolean));
+}
+
+const MONTHS = Array.from({length:12}, (_, mi) => ({
+  key: String(mi+1).padStart(2,'0') + '/2026',
+  label: MN[mi] + ' / 2026',
+  future: mi > TODAY_M,
+  now: mi === TODAY_M,
+  m: AUTHORED[mi] || makeMonth(mi)
+}));
+
+/* month-over-month deltas are derived, not authored — the same window the app would run */
+const mkey = t => t.key || t.title.replace(/ · parcela \d+\/10$/, '');
+MONTHS.forEach((M, i) => {
+  if(i === 0) return;
+  M.m.forEach((rows, p) => rows.forEach(t => {
+    if(t.kind === 'in' || t.status === 'pending' || !t.amount) { t.delta = null; return; }
+    const prev = MONTHS[i-1].m[p].find(x => mkey(x) === mkey(t) && x.amount);
+    t.delta = prev ? Math.round((t.amount - prev.amount) / prev.amount * 100) : null;
+  }));
+});
+
+const MEMBERS = [
+  { name:'Rodrigo', role:'admin', key:'H' },
+  { name:'Ana',     role:null,    key:'L' }
+];
+
+/* ================= state ================= */
+const S = {
+  mi: 6, panel: 0, focus: [1,1], nu: 'rnu', online: true,
+  sel: [new Set(), new Set()], undo: [], msg:'', msgBad:false,
+  buf:'', count:'', mode:'NORMAL'
+};
+const rowsOf = p => MONTHS[S.mi].m[p];
+const cur = () => rowsOf(S.panel)[S.focus[S.panel]];
+
+/* ================= row markup ================= */
+function markHTML(t){
+  if(t.state === 'skeleton') return '<div class="mark"><div class="sk-disc"></div></div>';
+  if(t.kind === 'in') return '<div class="mark"><span class="dot in"></span></div>';
+  if(t.status === 'paid')
+    return '<div class="mark"><div class="disc paid" aria-label="paid, receipt found">✓</div></div>';
+  if(t.status === 'pending'){
+    const p = t.progress == null ? .5 : t.progress, C = 2*Math.PI*10.5;
+    const col = p >= 1 ? 'var(--neg)' : p >= .66 ? 'var(--accent)' : 'var(--pos)';
+    return '<div class="mark">'
+      + '<svg viewBox="0 0 26 26" aria-hidden="true">'
+      + '<circle cx="13" cy="13" r="10.5" fill="none" stroke="var(--line-2)" stroke-width="2.5"></circle>'
+      + '<circle cx="13" cy="13" r="10.5" fill="none" stroke="' + col + '" stroke-width="2.5" stroke-linecap="round"'
+      + ' stroke-dasharray="' + C + '" stroke-dashoffset="' + (C*(1-p)) + '"></circle></svg>'
+      + '<div class="disc wait" style="width:17px;height:17px;font-size:10px">✓</div></div>';
+  }
+  return '<div class="mark"><span class="dot"></span></div>';
+}
+
+function metaHTML(t){
+  const bits = [];
+  if(t.status === 'paid') bits.push('<span>🏁 ' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
+  else if(t.status === 'pending') bits.push('<span class="rec">◷ vence ' + t.due + '</span>');
+  else if(t.day) bits.push('<span>' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
+  if(t.recurring && t.status !== 'pending') bits.push('<span class="rec">↻</span>');
+  if(t.private) bits.push('<span class="lock" title="hidden from other members">🔒 private</span>');
+  if(t.deleted) bits.push('<span style="color:var(--neg)">deleted</span>');
+  if(t.restored) bits.push('<span style="color:var(--info)" title="supersedes the deleted row">↩ #' + t.restored + '</span>');
+  return bits.join('');
+}
+const pad = n => String(n).padStart(2,'0');
+
+function deltaHTML(t){
+  if(t.delta == null || t.delta === 0 && t.status === 'plain') {
+    return t.delta === 0 ? '<div class="d flat">— 0%</div>' : '';
+  }
+  if(t.delta === 0) return '<div class="d flat">— 0%</div>';
+  const up = t.delta > 0;
+  return '<div class="d ' + (up?'up':'down') + '">' + (up?'▲':'▼') + ' ' + (up?'+':'') + t.delta + '%</div>';
+}
+
+function entryHTML(t){
+  if(t.state === 'skeleton'){
+    return '<div class="entry">' + markHTML(t)
+      + '<div class="name"><div class="sk-bar" style="width:56%"></div>'
+      + '<div class="sk-bar" style="width:32%;height:7px;margin-top:6px"></div></div>'
+      + '<div class="amt"><div class="sk-bar" style="width:74px"></div></div></div>';
+  }
+  if(t.state === 'error'){
+    return '<div class="entry">' + '<div class="mark"><div class="disc" style="background:var(--neg);color:#fff">!</div></div>'
+      + '<div class="name"><span class="errtxt">Could not save “' + esc(t.title) + '”</span>'
+      + '<span class="errsub">server unreachable · nothing was written</span></div>'
+      + '<div class="amt"><button class="retry" data-retry="' + t.id + '" type="button">Try Again</button></div></div>';
+  }
+  return '<div class="entry">' + markHTML(t)
+    + '<div class="name"><b>' + esc(t.title) + '</b><div class="meta">' + metaHTML(t) + '</div></div>'
+    + '<div class="amt"><div class="v' + (t.kind==='in'?' in':'') + '">'
+    + (t.kind==='in'?'+ ':'') + (t.status==='pending' && !t.amount ? 'R$ __,__' : brl(t.amount))
+    + '</div>' + deltaHTML(t) + '</div></div>';
+}
+
+function gutter(i, fi){
+  if(S.nu === 'nonu') return '';
+  if(S.nu === 'nu') return String(i+1);
+  return i === fi ? '0' : String(Math.abs(i - fi));
+}
+
+function rowHTML(t, i, fi, p){
+  const cls = ['row'];
+  if(i === fi && p === S.panel) cls.push('focus');
+  if(S.sel[p].has(t.id)) cls.push('sel');
+  if(t.deleted) cls.push('deleted');
+  if(t.state === 'error') cls.push('err');
+  if(S.nu === 'nonu') cls.push('nogut');
+  return '<div class="' + cls.join(' ') + '" data-p="' + p + '" data-i="' + i + '" data-id="' + t.id + '">'
+    + '<div class="gut">' + gutter(i, fi) + '</div>' + entryHTML(t) + '</div>';
+}
+
+/* ================= render ================= */
+function totals(p){
+  const rs = rowsOf(p).filter(t => !t.deleted && t.state === 'ok');
+  const i = rs.filter(t=>t.kind==='in').reduce((a,b)=>a+b.amount,0);
+  const o = rs.filter(t=>t.kind==='out').reduce((a,b)=>a+b.amount,0);
+  return {i,o,b:i-o};
+}
+
+function render(){
+  const M = MONTHS[S.mi];
+  $('#monthLbl').textContent = M.label;
+  $('#panels').innerHTML = MEMBERS.map((mem,p) => {
+    const t = totals(p), fi = S.focus[p];
+    return '<div class="panel' + (p===S.panel?' active':'') + '" data-panel="' + p + '">'
+      + '<div class="p-head"><div class="p-title">'
+      + '<span class="p-name">' + mem.name + '</span>'
+      + (mem.role ? '<span class="p-role">' + mem.role + '</span>' : '')
+      + '<span class="p-key">' + (p===0?'H':'L') + '</span></div>'
+      + '<div class="sums">'
+      + '<div class="sum in"><div class="k">INs</div><div class="v">' + brl(t.i) + '</div></div>'
+      + '<div class="sum out"><div class="k">OUTs</div><div class="v">' + brl(t.o) + '</div></div>'
+      + '<div class="sum bal"><div class="k">Balance</div><div class="v' + (t.b<0?' neg':'') + '">'
+      + (t.b<0?'− ':'') + brl(t.b) + '</div></div>'
+      + '</div></div>'
+      + '<div class="ledger">' + rowsOf(p).map((r,i)=>rowHTML(r,i,fi,p)).join('') + '</div></div>';
+  }).join('');
+
+  const a = totals(0), b = totals(1);
+  $('#hIn').textContent = brl(a.i+b.i);
+  $('#hOut').textContent = brl(a.o+b.o);
+  const net = a.b+b.b;
+  $('#hNet').textContent = (net<0?'− ':'') + brl(net);
+  $('#hNet').style.color = net<0 ? 'var(--neg)' : 'var(--ink)';
+
+  $('#stFile').textContent = '~/ffm · ' + M.key;
+  $('#stMember').textContent = MEMBERS[S.panel].name + (MEMBERS[S.panel].role ? ' (admin)' : '');
+  $('#stPos').textContent = (S.focus[S.panel]+1) + '/' + rowsOf(S.panel).length;
+  $('#stNu').textContent = S.nu;
+  $('#stBuf').textContent = S.count + S.buf;
+  $('#stMode').textContent = S.mode;
+  $('#stMode').className = 'st mode' + (S.mode==='COMMAND'?' cmd':'') + (S.mode==='VISUAL'?' vis':'');
+  const nsel = S.sel[0].size + S.sel[1].size;
+  const msg = S.msg || (nsel ? nsel + ' row' + (nsel>1?'s':'') + ' selected' : '');
+  $('#stMsg').textContent = msg;
+  $('#stMsg').className = 'st grow msg' + (S.msgBad?' bad':'');
+
+  const fr = document.querySelector('.panel[data-panel="' + S.panel + '"] .row.focus');
+  if(fr) fr.scrollIntoView({block:'nearest'});
+}
+
+function say(m, bad){ S.msg = m; S.msgBad = !!bad; render();
+  clearTimeout(say._t); say._t = setTimeout(()=>{ S.msg=''; S.msgBad=false; render(); }, 3200); }
+
+/* ================= actions ================= */
+function move(d){
+  const n = Math.max(1, parseInt(S.count||'1',10));
+  const len = rowsOf(S.panel).length;
+  S.focus[S.panel] = Math.min(len-1, Math.max(0, S.focus[S.panel] + d*n));
+  S.count=''; render();
+}
+function switchPanel(p){
+  if(p===S.panel) return;
+  S.panel = p; S.count=''; render();
+  say('panel → ' + MEMBERS[p].name);
+}
+function toggleSel(){
+  const t = cur(); if(!t) return;
+  S.sel[S.panel].has(t.id) ? S.sel[S.panel].delete(t.id) : S.sel[S.panel].add(t.id);
+  render();
+}
+function togglePrivate(){
+  const t = cur(); if(!t) return;
+  t.private = !t.private;
+  S.undo.push({k:'private', p:S.panel, id:t.id});
+  say(t.private ? 'hidden from other members (admin still sees it)' : 'visible to the household');
+}
+function softDelete(){
+  const t = cur(); if(!t || t.deleted) return;
+  t.deleted = true;
+  S.undo.push({k:'delete', p:S.panel, id:t.id});
+  closeModal();
+  say('“' + t.title + '” marked deleted · row kept · u to restore');
+}
+function doUndo(){
+  const a = S.undo.pop();
+  if(!a){ say('already at oldest change', true); return; }
+  const list = rowsOf(a.p);
+  if(a.k === 'delete'){
+    const old = list.find(x=>x.id===a.id);
+    const i = list.indexOf(old);
+    const fresh = T(Object.assign({}, old, {id:++uid, deleted:false, restored:old.id}));
+    list.splice(i+1, 0, fresh);
+    S.panel = a.p; S.focus[a.p] = i+1;
+    say('restored as #' + fresh.id + ' → supersedes #' + old.id);
+  } else if(a.k === 'add'){
+    const i = list.findIndex(x=>x.id===a.id);
+    if(i>-1) list.splice(i,1);
+    S.focus[a.p] = Math.max(0, Math.min(S.focus[a.p], list.length-1));
+    say('add undone');
+  } else if(a.k === 'private'){
+    const t = list.find(x=>x.id===a.id); if(t) t.private = !t.private;
+    say('privacy undone');
+  } else if(a.k === 'edit'){
+    const t = list.find(x=>x.id===a.id); if(t) Object.assign(t, a.prev);
+    say('edit undone');
+  }
+  render();
+}
+
+function insertRow(after, data){
+  const list = rowsOf(S.panel);
+  const at = Math.min(list.length, Math.max(0, S.focus[S.panel] + (after?1:0)));
+  const row = T(Object.assign({state:'skeleton'}, data));
+  list.splice(at, 0, row);
+  S.focus[S.panel] = at;
+  render();
+  setTimeout(() => {
+    if(S.online){ row.state = 'ok'; S.undo.push({k:'add', p:S.panel, id:row.id}); say('added #' + row.id); }
+    else { row.state = 'error'; say('server unreachable · nothing written', true); }
+    render();
+  }, 780);
+  return row;
+}
+
+/* ================= command bar ================= */
+function openCmd(pfx){
+  S.mode='COMMAND'; $('#cmdPfx').textContent = pfx; $('#cmdbar').classList.add('on');
+  $('#cmdInput').value=''; $('#cmdInput').focus(); render();
+}
+function closeCmd(){ S.mode='NORMAL'; $('#cmdbar').classList.remove('on'); $('#app').focus(); render(); }
+
+function runCmd(raw){
+  const s = raw.trim(); if(!s){ closeCmd(); return; }
+  const [c, ...rest] = s.split(/\s+/);
+  const cmd = c.toLowerCase();
+  if(cmd === 'add' || cmd === 'in'){
+    const amt = parseFloat(String(rest[0]||'').replace(',','.'));
+    if(!isFinite(amt)){ say('need an amount: ' + cmd + ' 50 mercado publix', true); return; }
+    const cat = rest[1] || 'sem categoria';
+    const desc = rest.slice(2).join(' ');
+    const now = new Date();
+    insertRow(true, {
+      kind: cmd==='in' ? 'in' : 'out',
+      status: cmd==='in' ? 'in' : 'plain',
+      title: (desc ? cat + ' · ' + desc : cat).replace(/^\w/, m=>m.toUpperCase()),
+      amount: amt, day: Math.min(28, now.getDate())
+    });
+    closeCmd(); return;
+  }
+  if(cmd === 'set'){
+    const v = (rest[0]||'').toLowerCase();
+    if(['nu','rnu','nonu'].includes(v)){ S.nu=v; closeCmd(); say('line numbers → ' + v); }
+    else say('set nu | set rnu | set nonu', true);
+    return;
+  }
+  if(cmd === 'next'){ closeCmd(); month(1); return; }
+  if(cmd === 'prev'){ closeCmd(); month(-1); return; }
+  if(cmd === 'undo'){ closeCmd(); doUndo(); return; }
+  if(cmd === 'help' || cmd === 'h'){ closeCmd(); helpModal(); return; }
+  say('not a command: ' + cmd + '  (try help)', true);
+}
+
+function goMonth(n){
+  if(n < 0){ say('2025 is not loaded in this prototype', true); return; }
+  if(n > MONTHS.length-1){ say('2027 is not loaded in this prototype', true); return; }
+  S.mi = n;
+  S.focus = [Math.max(0, Math.min(S.focus[0], MONTHS[n].m[0].length-1)),
+             Math.max(0, Math.min(S.focus[1], MONTHS[n].m[1].length-1))];
+  render();
+  say(MONTHS[n].label + (MONTHS[n].future ? ' · projected from the recurring rules' : ''));
+}
+function month(d){ goMonth(S.mi + d); }
+
+/* ================= modals ================= */
+function openModal(html){ $('#modal').innerHTML = html; $('#scrim').classList.add('on'); }
+function closeModal(){ $('#scrim').classList.remove('on'); $('#app').focus(); }
+
+function confirmDelete(){
+  const t = cur(); if(!t) return;
+  if(t.deleted){ say('already deleted', true); return; }
+  openModal(
+    '<h3>Delete this transaction?</h3><div class="msub">dd · soft delete</div><div class="mbody">'
+    + '<div class="warnbox"><span class="g">⚠</span><div>'
+    + '<b>' + esc(t.title) + '</b> · ' + brl(t.amount) + '<br>'
+    + '<span style="color:var(--ink-2);font-size:12.5px">The row is kept and marked with a deletion date. '
+    + 'Restoring inserts a new row that references this one, so the history stays intact.</span></div></div>'
+    + '<div class="notebox">Nothing is removed from the database. <kbd>u</kbd> restores it.</div></div>'
+    + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
+    + '<button class="btn dgr" data-act="del" type="button">Delete <kbd>y</kbd></button></div>');
+}
+
+function editOccurrence(){
+  const t = cur(); if(!t) return;
+  openModal(
+    '<h3>Edit occurrence</h3><div class="msub">e · this month only'
+    + (t.recurring ? ' · overrides the rule for ' + MONTHS[S.mi].key : '') + '</div>'
+    + '<div class="mbody"><div class="stack">'
+    + '<label class="f"><span class="k">Description</span><input class="i" id="eT" value="' + esc(t.title) + '"></label>'
+    + '<div class="fgrid">'
+    + '<label class="f"><span class="k">Amount</span><input class="i" id="eA" value="' + (t.amount ? t.amount.toFixed(2).replace('.',',') : '') + '"></label>'
+    + '<label class="f"><span class="k">Day</span><input class="i" id="eD" value="' + (t.day||'') + '"></label>'
+    + '</div>'
+    + '<label class="switch"><input type="checkbox" id="eP"' + (t.private?' checked':'') + '>'
+    + '<span>Hidden from other members<span class="d">The admin always sees it.</span></span></label>'
+    + '</div>' + (t.recurring
+      ? '<div class="notebox">Generated by a recurring rule. <kbd>R</kbd> edits the rule itself, for every future occurrence.</div>'
+      : '') + '</div>'
+    + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
+    + '<button class="btn pri" data-act="saveOcc" type="button">Save</button></div>');
+  setTimeout(()=>$('#eT') && $('#eT').focus(), 30);
+}
+
+function editRule(){
+  const t = cur();
+  if(!t) return;
+  if(!t.recurring){ say('not generated from a recurring rule', true); return; }
+  openModal(
+    '<h3>Edit recurring rule</h3><div class="msub">R · ' + esc(t.title) + ' · applies to every future occurrence</div>'
+    + '<div class="mbody"><div class="stack">'
+    + '<div class="fgrid">'
+    + '<label class="f"><span class="k">Amount</span><input class="i" value="' + (t.amount?t.amount.toFixed(2).replace('.',','):'variable') + '"></label>'
+    + '<label class="f"><span class="k">Cadence</span><select class="i"><option>Monthly</option><option>Bimonthly</option><option>Yearly</option></select></label>'
+    + '</div><div class="fgrid">'
+    + '<label class="f"><span class="k">Start date</span><input class="i" value="01/03/2024"></label>'
+    + '<label class="f"><span class="k">End date</span><input class="i" value="—  (ongoing)"></label>'
+    + '</div>'
+    + '<label class="switch"><input type="checkbox"' + (t.tracked?' checked':'') + '>'
+    + '<span>Track receipt on disk<span class="d">'
+    + (t.pattern ? '~/Documents/contas · ' + esc(t.pattern) : 'no path set yet') + '</span></span></label>'
+    + '</div><div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div></div>'
+    + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
+    + '<button class="btn pri" data-act="close" type="button">Save rule</button></div>');
+}
+
+function helpModal(){
+  openModal('<h3>Keymap</h3><div class="msub">normal mode</div><div class="mbody">'
+    + '<div class="keys" style="grid-template-columns:1fr">' + KEYHTML + '</div></div>'
+    + '<div class="mfoot"><button class="btn pri" data-act="close" type="button">Close <kbd>Esc</kbd></button></div>');
+}
+
+/* ================= keyboard ================= */
+const DIGIT = /^[0-9]$/;
+document.addEventListener('keydown', e => {
+  const inField = e.target.closest('input,select,textarea');
+
+  if(mpop.classList.contains('on')){
+    if(e.key === 'Escape'){ e.preventDefault(); closePicker(); $('#app').focus(); return; }
+  }
+  if(inField && e.target.id === 'cmdInput'){
+    if(e.key === 'Enter'){ e.preventDefault(); runCmd($('#cmdInput').value); }
+    if(e.key === 'Escape'){ e.preventDefault(); closeCmd(); say('cancelled'); }
+    return;
+  }
+  if($('#scrim').classList.contains('on')){
+    if(e.key === 'Escape'){ e.preventDefault(); closeModal(); }
+    if(!inField && (e.key === 'y' || e.key === 'Y') && $('#modal').querySelector('[data-act="del"]')){
+      e.preventDefault(); softDelete();
+    }
+    return;
+  }
+  if(inField) return;
+
+  if(e.ctrlKey && (e.key === 'p' || e.key === 'n')){ e.preventDefault(); month(e.key==='n'?1:-1); return; }
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+
+  const k = e.key;
+
+  if(DIGIT.test(k) && !(k === '0' && !S.count)){ S.count += k; render(); e.preventDefault(); return; }
+
+  if(S.buf === 'd'){
+    S.buf=''; e.preventDefault();
+    if(k === 'd') confirmDelete(); else { render(); say('d' + k + ' is not a motion', true); }
+    return;
+  }
+  if(S.buf === 'g'){
+    S.buf=''; e.preventDefault();
+    if(k === 'g'){ S.focus[S.panel]=0; S.count=''; render(); } else render();
+    return;
+  }
+
+  switch(k){
+    case 'j': case 'ArrowDown': e.preventDefault(); move(1); break;
+    case 'k': case 'ArrowUp':   e.preventDefault(); move(-1); break;
+    case 'd': e.preventDefault(); S.buf='d'; render(); break;
+    case 'g': e.preventDefault(); S.buf='g'; render(); break;
+    case 'G': e.preventDefault(); S.focus[S.panel]=rowsOf(S.panel).length-1; S.count=''; render(); break;
+    case 'H': e.preventDefault(); switchPanel(0); break;
+    case 'L': e.preventDefault(); switchPanel(1); break;
+    case 'x': e.preventDefault(); toggleSel(); break;
+    case 'p': e.preventDefault(); togglePrivate(); break;
+    case 'u': e.preventDefault(); doUndo(); break;
+    case 'e': e.preventDefault(); editOccurrence(); break;
+    case 'R': e.preventDefault(); editRule(); break;
+    case 'a': e.preventDefault(); openCmd(':'); $('#cmdInput').value='add '; break;
+    case 'i': e.preventDefault(); openCmd(':'); $('#cmdInput').value='add '; break;
+    case '/': case ':': e.preventDefault(); openCmd(k); break;
+    case '?': e.preventDefault(); helpModal(); break;
+    case 'Escape': e.preventDefault(); S.count=''; S.buf='';
+      S.sel=[new Set(),new Set()]; render(); break;
+  }
+});
+
+/* ================= mouse ================= */
+$('#panels').addEventListener('click', e => {
+  const rt = e.target.closest('[data-retry]');
+  if(rt){
+    const id = +rt.dataset.retry;
+    for(let p=0;p<2;p++){ const t = rowsOf(p).find(x=>x.id===id);
+      if(t){ t.state='skeleton'; render();
+        setTimeout(()=>{ if(S.online){ t.state='ok'; S.undo.push({k:'add',p,id:t.id}); say('added #'+t.id); }
+          else { t.state='error'; say('still unreachable', true); } render(); }, 780); } }
+    return;
+  }
+  const row = e.target.closest('.row');
+  if(row){ S.panel = +row.dataset.p; S.focus[S.panel] = +row.dataset.i; S.count=''; render(); $('#app').focus(); return; }
+  const pan = e.target.closest('.panel');
+  if(pan) switchPanel(+pan.dataset.panel);
+});
+
+/* hover tooltip on recurring rows */
+const tip = $('#tip');
+$('#panels').addEventListener('mousemove', e => {
+  const row = e.target.closest('.row');
+  if(!row){ tip.style.display='none'; return; }
+  const t = rowsOf(+row.dataset.p)[+row.dataset.i];
+  if(!t || !t.recurring || t.state !== 'ok'){ tip.style.display='none'; return; }
+  tip.innerHTML = '<b>' + esc(t.title) + '</b><div class="hr"></div>'
+    + 'Due: ' + (t.due || 'day ' + pad(t.day) + ' each month') + '<br>'
+    + 'Cadence: monthly · since 01/03/2024<br>'
+    + (t.tracked
+        ? 'Receipt: ' + esc(t.pattern || '—') + '<br>' + (t.status==='paid'
+            ? '<span style="color:var(--pos)">found on disk → paid</span>'
+            : '<span style="color:var(--accent)">not found yet → unpaid</span>')
+        : '<span style="color:var(--ink-3)">tracking off · no paid state</span>');
+  tip.style.display='block';
+  const r = tip.getBoundingClientRect();
+  let x = e.clientX + 14, y = e.clientY + 16;
+  if(x + r.width > innerWidth - 10) x = e.clientX - r.width - 14;
+  if(y + r.height > innerHeight - 10) y = e.clientY - r.height - 14;
+  tip.style.left = (x + scrollX) + 'px'; tip.style.top = (y + scrollY) + 'px';
+});
+$('#panels').addEventListener('mouseleave', () => tip.style.display='none');
+
+$('#scrim').addEventListener('click', e => {
+  if(e.target === $('#scrim')){ closeModal(); return; }
+  const b = e.target.closest('[data-act]'); if(!b) return;
+  const a = b.dataset.act;
+  if(a === 'close') closeModal();
+  if(a === 'del') softDelete();
+  if(a === 'saveOcc'){
+    const t = cur(); if(!t){ closeModal(); return; }
+    const prev = {title:t.title, amount:t.amount, day:t.day, private:t.private};
+    t.title = $('#eT').value || t.title;
+    const amt = parseFloat($('#eA').value.replace(/\./g,'').replace(',','.'));
+    if(isFinite(amt)) t.amount = amt;
+    const d = parseInt($('#eD').value,10); if(d>=1 && d<=31) t.day = d;
+    t.private = $('#eP').checked;
+    S.undo.push({k:'edit', p:S.panel, id:t.id, prev});
+    closeModal(); say('occurrence updated');
+  }
+});
+
+$('#prevM').onclick = () => month(-1);
+$('#nextM').onclick = () => month(1);
+$('#helpBtn').onclick = helpModal;
+
+/* ---- month picker ---- */
+const mpop = $('#mpop'), mbtn = $('#monthBtn');
+function monthNet(i){
+  return MONTHS[i].m.reduce((a, rows) => a + rows.reduce((b,t) =>
+    b + (t.deleted || t.state !== 'ok' ? 0 : (t.kind === 'in' ? t.amount : -t.amount)), 0), 0);
+}
+function drawPicker(){
+  mpop.innerHTML = '<div class="yr"><b>2026</b><span>select month</span></div><div class="mgrid">'
+    + MONTHS.map((M,i) => {
+        const net = monthNet(i);
+        const cls = ['mcell']; if(i===S.mi) cls.push('on'); if(M.now) cls.push('now'); if(M.future) cls.push('fut');
+        return '<button class="' + cls.join(' ') + '" data-m="' + i + '" type="button">' + MN[i]
+          + '<span class="n">' + (M.future ? 'projected' : (net<0?'−':'+') + Math.round(Math.abs(net)/1000) + 'k')
+          + '</span></button>';
+      }).join('')
+    + '</div><div class="ft"><i style="display:inline-block;width:14px;height:3px;background:var(--info);'
+    + 'border-radius:2px;vertical-align:middle"></i> current month · 09/2026<br>'
+    + 'projected = recurring rules only, not yet materialized</div>';
+}
+function openPicker(){
+  drawPicker(); mpop.classList.add('on'); mbtn.setAttribute('aria-expanded','true');
+  const r = mbtn.getBoundingClientRect(), w = 318;
+  let x = Math.min(r.left, innerWidth - w - 12);
+  let y = r.bottom + 8;
+  if(y + mpop.offsetHeight > innerHeight - 10) y = Math.max(10, r.top - mpop.offsetHeight - 8);
+  mpop.style.left = Math.max(10, x) + 'px'; mpop.style.top = y + 'px';
+}
+function closePicker(){ mpop.classList.remove('on'); mbtn.setAttribute('aria-expanded','false'); }
+mbtn.onclick = e => { e.stopPropagation();
+  mpop.classList.contains('on') ? closePicker() : openPicker(); };
+mpop.addEventListener('click', e => {
+  const c = e.target.closest('[data-m]'); if(!c) return;
+  closePicker(); goMonth(+c.dataset.m); $('#app').focus();
+});
+document.addEventListener('click', e => {
+  if(mpop.classList.contains('on') && !e.target.closest('#mpop,#monthBtn')) closePicker();
+});
+addEventListener('resize', closePicker);
+
+$('#stNu').onclick = () => {
+  const order = ['rnu','nu','nonu'];
+  S.nu = order[(order.indexOf(S.nu) + 1) % 3];
+  render();
+  say('line numbers → ' + ({rnu:'relative', nu:'absolute', nonu:'off'})[S.nu]);
+};
+$('#cmdInput').addEventListener('blur', () => { if(S.mode==='COMMAND') closeCmd(); });
+$('#netBtn').onclick = () => {
+  S.online = !S.online;
+  $('#netBtn').classList.toggle('off', !S.online);
+  $('#netTxt').textContent = S.online ? 'server ok' : 'server down';
+  say(S.online ? 'server reachable' : 'server down · adds will fail', !S.online);
+};
+
+/* ================= theme ================= */
+(function(){
+  let saved = null;
+  try{ saved = localStorage.getItem('ffm-theme'); }catch(err){}
+  if(saved) document.documentElement.setAttribute('data-theme', saved);
+  const sync = () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    $('#themeIcon').textContent = cur === 'dark' ? '●' : cur === 'light' ? '○' : '◐';
+    $('#themeTxt').textContent = cur ? (cur[0].toUpperCase()+cur.slice(1)) : 'System';
+  };
+  sync();
+  $('#themeBtn').onclick = () => {
+    const order = [null,'light','dark'];
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = order[(order.indexOf(cur)+1) % 3];
+    if(next) document.documentElement.setAttribute('data-theme', next);
+    else document.documentElement.removeAttribute('data-theme');
+    try{ next ? localStorage.setItem('ffm-theme', next) : localStorage.removeItem('ffm-theme'); }catch(err){}
+    sync();
+  };
+})();
+
+/* ================= gallery ================= */
+function specRow(t, opts){
+  opts = opts || {};
+  const cls = ['row'];
+  if(opts.focus) cls.push('focus');
+  if(opts.sel) cls.push('sel');
+  if(t.deleted) cls.push('deleted');
+  if(t.state === 'error') cls.push('err');
+  const g = opts.gut == null ? '' : opts.gut;
+  return '<div class="' + cls.join(' ') + '"><div class="gut">' + g + '</div>' + entryHTML(t) + '</div>';
+}
+
+const SPECS = [
+  { n:'a', h:'Due, time still running',
+    r:()=>specRow(T({title:'Água · Sabesp', status:'pending', progress:.75, amount:0, recurring:true, tracked:true, due:'18/07/2026'})),
+    p:'The ring is elapsed time between the period start and the due date. Three-quarters round means there is still room, but not much. It fills <code>green → amber → red</code> as the date closes in.' },
+  { n:'b', h:'Hover reveals the rule',
+    r:()=>specRow(T({title:'Água · Sabesp', status:'pending', progress:.75, amount:0, recurring:true, tracked:true, due:'18/07/2026'}))
+      + '<div class="tip" style="position:static;display:block;margin:8px 0 0 34px"><b>Água · Sabesp</b><div class="hr"></div>Due: 18/07/2026<br>Cadence: monthly · since 01/03/2024<br>Receipt: 2026.07.sabesp.bill_.pdf<br><span style="color:var(--accent)">not found yet → unpaid</span></div>',
+    p:'Hovering a recurring row shows its definition — due date, cadence, and which file the tracker is looking for — without opening anything.' },
+  { n:'c', h:'Scheduled, not yet paid',
+    r:()=>specRow(T({title:'Energia · Enel SP', status:'pending', progress:.4, amount:343.62, day:11, recurring:true, tracked:true, due:'15/07/2026'})),
+    p:'The receipt on disk still carries the underscore — <code>2026.07.energia.bill_.pdf</code> — so it is scheduled, not settled. The ignore regex catches it and the occurrence stays unpaid.' },
+  { n:'d', h:'Paid, receipt confirmed',
+    r:()=>specRow(T({title:'Energia · Enel SP', status:'paid', amount:343.62, day:11, recurring:true, tracked:true, delta:20})),
+    p:'The underscore is gone — <code>2026.07.energia.bill.pdf</code> matched. Solid green mark, checkered-flag date. This is the only way a tracked row becomes paid; there is no manual tick.' },
+  { n:'e', h:'Month-over-month delta',
+    r:()=>'<div class="stage" style="border:none;padding:0;display:flex;flex-direction:column;gap:4px">'
+      + specRow(T({title:'Uber', status:'plain', amount:112.60, day:25, delta:27}))
+      + specRow(T({title:'Farmácia · Drogasil', status:'plain', amount:98.70, day:19, delta:-54}))
+      + specRow(T({title:'Internet · Vivo Fibra', status:'paid', amount:139.90, day:10, recurring:true, tracked:true, delta:0})) + '</div>',
+    p:'Against the same line last month. Red up, green down, grey dash for unchanged — a window function, not a manual diff.' },
+  { n:'f', h:'Untracked recurring',
+    r:()=>specRow(T({title:'Netflix', status:'plain', amount:59.90, day:21, recurring:true})),
+    p:'Tracking opted out. There is no filesystem proof either way, so the row carries no paid/unpaid state at all — just the recurrence glyph <code>↻</code> and a hollow mark.' },
+  { n:'g', h:'Income',
+    r:()=>specRow(T({kind:'in', title:'Salário', status:'in', amount:11800, day:5})),
+    p:'INs are the same component with a positive amount and a filled dot. They sum into the panel header rather than reading as a bill.' },
+  { n:'h', h:'Focused row',
+    r:()=>'<div style="display:flex;flex-direction:column;gap:2px">'
+      + specRow(T({title:'Condomínio', status:'paid', amount:965, day:8, recurring:true, tracked:true, delta:5}), {gut:'1'})
+      + specRow(T({title:'IPTU · parcela 7/10', status:'plain', amount:412.70, day:15, recurring:true}), {gut:'0', focus:true})
+      + specRow(T({title:'Mercado · Pão de Açúcar', status:'plain', amount:658.90, day:13, delta:-6}), {gut:'1'}) + '</div>',
+    p:'Gutter zero, accent rail, tinted ground. Relative numbers above and below make <code>3j</code> land where you meant.' },
+  { n:'i', h:'Selected',
+    r:()=>specRow(T({title:'Mercado · Pão de Açúcar', status:'plain', amount:658.90, day:13, delta:-6}), {gut:'2', sel:true}),
+    p:'<code>x</code> checks the row for a later batch operation. It is a marker, never a delete — the count sits in the statusline.' },
+  { n:'j', h:'Private',
+    r:()=>specRow(T({title:'Consulta · dermatologista', status:'plain', amount:450, day:23, private:true}), {gut:'4'}),
+    p:'Hidden from the other member, never from the admin. Everything is shared by default; this is the deliberate exception.' },
+  { n:'k', h:'Soft deleted',
+    r:()=>specRow(T({title:'Uber', status:'plain', amount:112.60, day:25, deleted:true}), {gut:'3'}),
+    p:'The row stays. It gets a status and a deletion date, dims, and strikes through. Nothing is removed from the database, ever.' },
+  { n:'l', h:'Restored',
+    r:()=>specRow(T({title:'Uber', status:'plain', amount:112.60, day:25, restored:1042}), {gut:'3'}),
+    p:'Undo inserts a <em>new</em> row pointing at the one it supersedes, so each transaction carries a traceable chain back through its prior versions.' },
+  { n:'m', h:'Optimistic skeleton',
+    r:()=>specRow(T({state:'skeleton'}), {gut:'0'}),
+    p:'Submitted and in flight. The skeleton takes the row\'s exact geometry so nothing shifts when the server\'s HTML fragment lands.' },
+  { n:'n', h:'Failed, retryable',
+    r:()=>specRow(T({title:'Mercado 84,20', state:'error'}), {gut:'0'}),
+    p:'The skeleton resolves to an error row instead of a real one. <b>Try Again</b> resubmits the original action — the wording says what happened and that nothing was written.' }
+];
+
+$('#gallery').innerHTML = SPECS.map(s =>
+  '<div class="spec"><div class="lbl"><span class="n">' + s.n + '</span><h4>' + s.h + '</h4></div>'
+  + '<div class="stage">' + s.r() + '</div><p>' + s.p + '</p></div>').join('');
+
+/* ================= receipt matcher ================= */
+const FILES = [
+  '2026.05.energia.bill.pdf',
+  '2026.06.energia.bill.pdf',
+  '2026.07.energia.bill_.pdf',
+  '2026.07.energia.bill.pdf',
+  '2026.07.energia.leitura.jpg',
+  'comprovante-pix.png',
+  '.DS_Store'
+];
+function matchFiles(){
+  let re, ig, bad = '';
+  try{ re = new RegExp($('#fRe').value); }catch(err){ bad = 'match regex: ' + err.message; }
+  try{ ig = new RegExp($('#fIg').value); }catch(err){ bad = bad || ('ignore regex: ' + err.message); }
+  const on = $('#trackOn').checked;
+  const rows = FILES.map(f => {
+    if(!on || bad) return {f, s:'—', c:'no'};
+    if(ig && ig.test(f)) return {f, s:'ignored', c:'ign'};
+    if(re && re.test(f)) return {f, s:'match', c:'hit'};
+    return {f, s:'—', c:'no'};
+  });
+  $('#fileList').innerHTML = rows.map(r =>
+    '<div class="file ' + r.c + '"><span class="fn">' + esc(r.f) + '</span><span class="st">' + r.s + '</span></div>').join('');
+
+  const v = $('#verdict');
+  if(!on){ v.className='verdict no'; v.innerHTML = 'Tracking off — this bill is recorded as a plain transaction with <b>no paid/unpaid state</b>.'; return; }
+  if(bad){ v.className='verdict no'; v.style.borderColor='var(--neg)'; v.style.background='var(--neg-soft)';
+    v.textContent = 'Invalid pattern · ' + bad; return; }
+  v.style.borderColor=''; v.style.background='';
+  const hits = rows.filter(r => r.c === 'hit' && r.f.includes('2026.07'));
+  if(hits.length){ v.className='verdict';
+    v.innerHTML = 'Period 07/2026 → <b>' + esc(hits[0].f) + '</b> found on disk.<br>Occurrence marked <b style="color:var(--pos)">paid</b>.'; }
+  else { v.className='verdict no';
+    v.innerHTML = 'Period 07/2026 → no matching file yet.<br>Occurrence stays <b style="color:var(--accent)">unpaid</b>, due ring keeps filling.'; }
+}
+['fRe','fIg','trackOn'].forEach(id => {
+  $('#'+id).addEventListener('input', matchFiles);
+  $('#'+id).addEventListener('change', matchFiles);
+});
+matchFiles();
+
+/* ================= keymap ================= */
+const KEYGROUPS = [
+  ['Move', [['j / k','row down / up'],['5j · 7k','counted motion'],['gg / G','first / last row'],['H / L','focus member panel, left / right'],['Ctrl-P / Ctrl-N','previous / next month']]],
+  ['Act',  [['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence'],['R','edit the recurring rule behind it'],['p','toggle private (proposal)']]],
+  ['Undo', [['dd','delete — opens a confirmation'],['y','confirm in the delete modal'],['u','undo the last change'],['Esc','clear count, buffer and selection']]],
+  ['Type', [['/ or :','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':set rnu | nu | nonu','gutter: relative · absolute · off'],['?','this keymap']]]
+];
+const KEYHTML = KEYGROUPS.map(([g, rows]) =>
+  '<div class="kgroup"><h4>' + g + '</h4>' + rows.map(([k,d]) =>
+    '<div class="krow"><kbd>' + esc(k) + '</kbd><span class="d">' + esc(d) + '</span></div>').join('') + '</div>').join('');
+$('#keymap').innerHTML = KEYHTML;
+
+/* ================= go ================= */
+render();
+$('#app').addEventListener('focus', ()=> $('#app').classList.add('armed'));
+$('#app').addEventListener('blur',  ()=> $('#app').classList.remove('armed'));
+</script>
+
+</body>
+</html>
