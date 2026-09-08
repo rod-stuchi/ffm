@@ -1,7 +1,8 @@
 # FFM — Family Finances Manager
 
-A shared household ledger for two people, replacing a spreadsheet. Keyboard-first,
-Vim-inspired, fully usable with a mouse.
+A shared household ledger, replacing a spreadsheet. Multi-user by design — one
+person, a couple, or the whole family. Keyboard-first, Vim-inspired, fully
+usable with a mouse.
 
 **Read `design/overview.md` for the product rationale.** This file is the working
 agreement: what has been decided, what is still open, and the rules that keep the
@@ -15,7 +16,7 @@ codebase coherent.
 |---|---|---|
 | Web | **Axum** | Mature, Tokio team |
 | DB access | **SQLx** | Compile-time checked queries against the real schema |
-| Store | **SQLite (WAL)** | Single file, two users, no separate process |
+| Store | **SQLite (WAL)** | Single file, one process per household, no separate process to run |
 | Templates | **Askama** | Compile-time checked against the structs passed in |
 | Interactivity | **HTMX** | HTML fragments over the wire, no JSON API |
 | Styling | **Tailwind** | No global stylesheet to collide |
@@ -181,19 +182,99 @@ JS only because it has no template layer.
 - **Re-attribution needs a fresh sort key** in the destination member's ordering
   (append = after the current max).
 - **Rolling two-month backup** of the SQLite file.
+- **Members are real accounts, not just an attribution label.** `members` gets
+  `password_hash` and `role` (0 = admin). No self-registration — an admin creates
+  the row. See `design/spec.md` for the full session/auth model.
+- **Personal display preferences live in the database, not in `ffm.toml`.** Theme
+  and line-number style are per-`member_id` rows (`member_settings`), set at
+  onboarding and editable via `:theme`/`:set` or a `:profile` form — never in the
+  shared config file, which household members would fight over the moment
+  there's more than one person's taste to account for.
+  `ffm.toml` stays process-level: DB path, backup, receipt-vault root, layout
+  thresholds.
+- **Focused member ≠ logged-in member.** Focus (`H`/`L`/`gt`) decides who a *new
+  transaction* is attributed to; login decides whose *settings and private rows*
+  you can see and edit. `:profile` and privacy checks use the session's member
+  id, never the focused pane's — otherwise focusing your spouse's pane would let
+  you edit their preferences or expose what `private` hides from them.
 
 ### Recurring rules
 
 - Defined once, **materialized** into the ledger as real rows each period.
-- Receipt tracking is **opt-in per rule**: a filesystem path, a match regex, and
-  an ignore regex, active over the rule's start-date → end-date (end-date nullable
-  = ongoing).
-- **A tracked occurrence is `paid` only when a matching file exists on disk.**
-  There is no manual tick. The established convention: `2026.07.energia.bill_.pdf`
-  (trailing underscore) is *scheduled*, caught by the ignore regex;
-  `2026.07.energia.bill.pdf` is *paid*.
-- **An untracked recurring bill has no paid/unpaid state at all** — no filesystem
-  proof either way, so it is just a plain transaction with a recurrence glyph.
+- Receipt tracking is **opt-in per rule** — no regex, no pattern, no traversal.
+  A tracked rule carries three free-text taxonomy fields — `bucket` (required),
+  `bill_name` (required), `instance` (optional) — used only to compute where
+  its files live. `instance` exists to disambiguate the same bill name across
+  two properties/accounts (two houses, each with their own power bill); if
+  there's only one, it's skipped entirely rather than named — "Power" alone is
+  enough.
+- **`bucket` / `bill_name` / `instance` are a per-member tag cloud, not a
+  category table.** Autocompleted from `SELECT DISTINCT ... WHERE member_id = ?`
+  over the logged-in member's own rules, no separate taxonomy entity to manage.
+  Scoped per member on purpose — a kid's "Mesada" / school-cafeteria categories
+  have nothing to do with a parent's "Consumption / Power," and a shared
+  dropdown would just be noise for both. Nothing stops two members typing the
+  same string (e.g. both calling something "Consumption"), it just isn't
+  suggested across accounts.
+- **Path is fully computed, never authored**:
+  `{member_uuid}-{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}.{ext}`
+  — the `instance` segment is only present when the rule has one. Slugified
+  (lowercase, spaces → `_`). Renaming a rule's taxonomy fields must move its
+  existing files to the new path — it isn't just a label edit.
+  `bucket`/`bill_name`/`instance` may not slugify to `delete` or start with
+  `.` — reserved for the soft-delete folder below.
+- **Three file kinds per period, each a separate fact:**
+  - `{month}_barcode.{ext}` — the bill itself, as issued by the company (line
+    items, amount, due date). Purely informational; its presence never changes
+    the paid/scheduled state.
+  - `{month}_scheduled.{ext}` — **optional.** Proof that a payment was set up
+    ahead of the due date. Skipped entirely if the bill is just paid same-day
+    out of balance — scheduling is a promise, not a required step.
+  - `{month}.{ext}` — the definitive proof of payment. Its presence is `paid`,
+    full stop.
+- **A scheduled payment still unconfirmed past its due date is a distinct,
+  warning-coloured state** — not a generic `pending`. A
+  `{month}_scheduled.{ext}` file with no `{month}.{ext}` and a due date already
+  passed means a promise wasn't verified as kept; flag it, don't silently treat
+  it the same as "nothing happened yet."
+- **Uploading the final receipt supersedes the scheduled file automatically.**
+  The system moves `{month}_scheduled.{ext}` into `.delete/` the moment
+  `{month}.{ext}` is uploaded — the promise is resolved, only the definitive
+  receipt is left standing. This is a system-triggered soft delete, logged the
+  same as a manual one (so `u` on the receipt upload restores the scheduled
+  file too), just tagged with a different reason so the audit trail shows it
+  was superseded, not deleted on purpose.
+- **`paid` is still "a matching file exists on disk," checked by exact path, not
+  traversal.** No manual tick for tracked rules — full stop. The filesystem
+  stays authoritative on purpose: the vault is meant to be human-browsable and
+  manipulable directly, and a DB flag that could silently disagree with what's
+  actually in the folder is exactly the failure mode this app avoids everywhere
+  else. A DB row still accompanies every upload (uploader, timestamp, kind,
+  original filename) but only as metadata/audit for undo — it never decides
+  paid/not-paid.
+- **Extensions are the closed, case-insensitive set**: `pdf`, `jpg`, `png`,
+  `txt` — whatever the uploaded file actually was, not fixed per rule.
+- **Upload, view, delete are scoped to recurring-rule occurrences only** — a
+  one-off transaction has no taxonomy to file itself under, so it gets no
+  attachment feature.
+- **Upload is three distinct actions — add barcode / add scheduled / add
+  receipt** — not one upload plus a question, since each file kind has its own
+  fixed name and its own effect on state. The file is renamed to the
+  deterministic convention on disk; the user's original filename is kept as
+  metadata only.
+- **Deleting any of the three files is a soft delete.** The file moves into a
+  `.delete/` subfolder alongside where it lived — never removed from disk —
+  and a DB row records the move (old path, `deleted_at`, `deleted_by`, reason)
+  so `u` can put it back. Same "nothing is destroyed" rule as everything else
+  in this app.
+- **An untracked recurring bill gets an optional manual `paid` checkbox** — the
+  one manual tick in the whole model, and only because there's no filesystem
+  proof to contradict it. A *tracked* rule never gets this checkbox; the rule
+  above is absolute for it.
+- **The paid marks are visually distinct from each other** — file-verified
+  paid, manually-asserted paid (untracked only), and scheduled-overdue-warning
+  are three different colours/shades, never sharing a mark. Designs need
+  updating for this.
 
 ### Sort and search semantics
 
@@ -216,12 +297,20 @@ JS only because it has no template layer.
 1. **Materialization trigger.** App start, a scheduled task, or lazily on first
    view of a month? This shapes the recurring table. The mock generates months on
    the fly, which is exactly what the real app must *not* do.
-2. **Receipt tracker parameter set.** Blocked on sharing the existing Go CLI.
-   Leave those columns deliberately loose in migration 1.
-3. **Concurrency.** Everything about the optimistic-UI flow is single-user in the
+2. **Concurrency.** Everything about the optimistic-UI flow is single-user in the
    mock. The interesting cases only exist with a server: Ana deletes a row while
    Rodrigo has its edit modal open; both add in the same second.
-4. **Auth / current user.** Not modelled at all yet.
+3. **Seasonal / interval-limited recurring rules.** Some bills only apply part
+   of the year (e.g. a tax tracked January–October). ffm's rule already has
+   start/end dates; a months-of-year allow-list on top of that is not yet
+   designed. Nice-to-have, not blocking.
+4. **Split mode assumes exactly two panes.** "The unfocused pane," `H`/`L`
+   moving focus left/right — the whole layout is binary by construction, which
+   was fine when this was framed as a two-person app. It doesn't obviously
+   generalize to a household of four or six: a scrollable row of panes? pick
+   which one other member to compare against? fall back to tabs above some
+   member count? Not designed yet — revisit when a household bigger than two
+   is an actual case, not a hypothetical.
 
 ---
 
@@ -232,6 +321,17 @@ JS only because it has no template layer.
   `:add` must **send the focused member id as a parameter**. Never keep a
   server-side session idea of "current member" — it drifts the moment the app is
   open in two windows.
+- **Sessions are server-side, not a bare signed cookie.** A `sessions` table
+  (`id`, `member_id`, `created_at`, `last_seen_at`) backs an opaque `HttpOnly`
+  session cookie, so a single lost/stolen device can be logged out without
+  rotating a secret that would log out the whole household. Sized for a
+  LAN/Tailscale-only deployment: long-lived sliding sessions, no lockout or rate
+  limiting, `SameSite=Lax` plus checking HTMX's own `HX-Request` header is enough
+  CSRF defense at this scale. Revisit all of this if this is ever exposed to the
+  open internet.
+- **No self-registration.** An admin (role 0) creates a member row and sets its
+  initial password — household membership is closed, the same way `ffm.toml`
+  editing is admin-only.
 - **Mutations follow one optimistic flow.** Submit → insert an animated skeleton
   row immediately → the server's fragment replaces it with either the real row or
   an error row carrying a **Try Again** that resubmits the original action.

@@ -6,7 +6,7 @@
 <!--
   FFM — Family Finances Manager · annotated design prototype
   Every ledger row state, with a written explanation of why it looks that way,
-  plus the recurring-bill rule and a live receipt matcher.
+  plus the recurring-bill rule and a live receipt taxonomy.
   Self-contained: no build step, no dependencies.
 -->
 <style>
@@ -242,8 +242,11 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .mark{width:26px;height:26px;position:relative;display:grid;place-items:center}
 .mark svg{position:absolute;inset:0;width:26px;height:26px;transform:rotate(-90deg)}
 .mark .disc{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:13px;line-height:1}
-.mark .disc.paid{background:var(--pos);color:#fff;box-shadow:0 0 0 3px var(--pos-soft)}
+.mark .disc.paid{background:var(--pos);color:var(--paper);box-shadow:0 0 0 3px var(--pos-soft)}
 .mark .disc.wait{background:var(--surface-3);color:var(--ink-3)}
+.mark .disc.manual{background:transparent;border:2px solid var(--pos);color:var(--pos)}
+.mark .disc.sched{background:var(--surface-3);color:var(--info)}
+.mark .disc.sched-over{background:var(--neg);color:var(--paper)}
 .mark .dot{width:7px;height:7px;border-radius:50%;background:var(--line-2)}
 .mark .dot.in{background:var(--pos)}
 
@@ -496,8 +499,10 @@ input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:
     </div>
     <p class="sec-note">
       The rule is defined once and materialized into the ledger each period. Receipt tracking is opt-in: with it
-      on, the occurrence is only <em>paid</em> when a matching file exists on disk. The matcher below is live —
-      edit either pattern and watch the sample folder re-evaluate.
+      on, the occurrence is only <em>paid</em> when a receipt file exists at a computed path — no regex, no folder
+      to scan. The taxonomy below is live: type a bucket and bill name and watch the path compute itself.
+      <code style="font-family:var(--mono);font-size:12.5px">instance</code> is optional, needed only to tell two
+      properties or accounts apart.
     </p>
 
     <div class="cfg">
@@ -527,20 +532,27 @@ input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:
           <label class="switch">
             <input type="checkbox" id="trackOn" checked>
             <span>Track receipt on disk
-              <span class="d">Off = no paid/unpaid state at all, just a plain transaction.</span>
+              <span class="d">Off = no filesystem proof — you can still tick a manual "paid" box, shown in a different colour from a verified receipt.</span>
             </span>
           </label>
         </div>
       </div>
 
       <div class="card">
-        <div class="ch"><h3>Receipt matcher</h3><span class="badge">period 07/2026</span></div>
+        <div class="ch"><h3>Receipt taxonomy</h3><span class="badge">period 07/2026</span></div>
         <div class="cb stack">
-          <label class="f"><span class="k">Folder</span><input class="i" id="fPath" value="~/Documents/contas/energia"></label>
-          <label class="f"><span class="k">Match regex</span><input class="i" id="fRe" value="^\d{4}\.\d{2}\.energia\.bill\.pdf$"></label>
-          <label class="f"><span class="k">Ignore regex</span><input class="i" id="fIg" value=".*_\.pdf$"></label>
+          <div class="fgrid">
+            <label class="f"><span class="k">Bucket</span><input class="i" id="txBucket" value="Consumption"></label>
+            <label class="f"><span class="k">Bill name</span><input class="i" id="txBill" value="Power"></label>
+          </div>
+          <label class="f"><span class="k">Instance <span style="text-transform:none;font-weight:400;color:var(--ink-3)">— only if you have more than one</span></span>
+            <input class="i" id="txInstance" placeholder="e.g. House 8898 — leave blank if there's only one"></label>
           <div>
-            <span class="k mono" style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:5px">Folder contents</span>
+            <span class="k mono" style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:5px">Computed path</span>
+            <div class="files"><div class="file"><span class="fn mono" id="txPath" style="color:var(--ink-2)"></span></div></div>
+          </div>
+          <div>
+            <span class="k mono" style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:5px">Files this period</span>
             <div class="files" id="fileList"></div>
           </div>
           <div class="verdict" id="verdict"></div>
@@ -593,14 +605,14 @@ function T(o){ return Object.assign({
 const AUTHORED = {
   4:[[
       T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
-      T({title:'Energia · Enel SP', amount:281.40, day:12, status:'paid', recurring:true, tracked:true, delta:-6, due:'15/05/2026', pattern:'2026.05.energia.bill.pdf'}),
-      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/05/2026', pattern:'2026.05.vivo.fibra.pdf'}),
-      T({title:'Condomínio', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/05/2026', pattern:'2026.05.condominio.pdf'}),
+      T({title:'Energia · Enel SP', amount:281.40, day:12, status:'paid', recurring:true, tracked:true, delta:-6, due:'15/05/2026', pattern:'energia/2026/05.pdf'}),
+      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/05/2026', pattern:'vivo_fibra/2026/05.pdf'}),
+      T({title:'Condomínio', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/05/2026', pattern:'condominio/2026/05.pdf'}),
       T({title:'Mercado · Pão de Açúcar', amount:642.18, day:14}),
       T({title:'Combustível · Shell', amount:310.00, day:19}),
     ],[
       T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
-      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/05/2026', pattern:'2026.05.unimed.pdf'}),
+      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/05/2026', pattern:'unimed/2026/05.pdf'}),
       T({title:'Escola · Materiais', amount:388.00, day:11}),
       T({title:'Farmácia · Drogasil', amount:126.55, day:16}),
       T({title:'Academia · Smart Fit', amount:119.90, day:20, recurring:true}),
@@ -608,37 +620,37 @@ const AUTHORED = {
   5:[[
       T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
       T({kind:'in', title:'Freelance', sub:'Auditoria Marotta', amount:2400, day:22, status:'in'}),
-      T({title:'Energia · Enel SP', amount:286.30, day:13, status:'paid', recurring:true, tracked:true, delta:2, due:'15/06/2026', pattern:'2026.06.energia.bill.pdf'}),
-      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/06/2026', pattern:'2026.06.vivo.fibra.pdf'}),
-      T({title:'Condomínio', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/06/2026', pattern:'2026.06.condominio.pdf'}),
+      T({title:'Energia · Enel SP', amount:286.30, day:13, status:'paid', recurring:true, tracked:true, delta:2, due:'15/06/2026', pattern:'energia/2026/06.pdf'}),
+      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/06/2026', pattern:'vivo_fibra/2026/06.pdf'}),
+      T({title:'Condomínio', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/06/2026', pattern:'condominio/2026/06.pdf'}),
       T({title:'IPTU · parcela 6/10', amount:412.70, day:15, recurring:true}),
       T({title:'Mercado · Pão de Açúcar', amount:701.44, day:14}),
       T({title:'Combustível · Shell', amount:310.00, day:18}),
       T({title:'Uber', amount:88.30, day:24}),
     ],[
       T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
-      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/06/2026', pattern:'2026.06.unimed.pdf'}),
-      T({title:'Escola · Mensalidade', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/06/2026', pattern:'2026.06.escola.pdf'}),
+      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/06/2026', pattern:'unimed/2026/06.pdf'}),
+      T({title:'Escola · Mensalidade', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/06/2026', pattern:'escola/2026/06.pdf'}),
       T({title:'Farmácia · Drogasil', amount:214.90, day:18}),
       T({title:'Academia · Smart Fit', amount:119.90, day:20, recurring:true}),
       T({title:'Presente · aniversário', amount:260.00, day:27, private:true}),
     ]],
   6:[[
       T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
-      T({title:'Energia · Enel SP', amount:343.62, day:11, status:'paid', recurring:true, tracked:true, delta:20, due:'15/07/2026', pattern:'2026.07.energia.bill.pdf'}),
-      T({title:'Água · Sabesp', amount:0, day:0, status:'pending', progress:0.75, recurring:true, tracked:true, due:'18/07/2026', pattern:'2026.07.sabesp.bill_.pdf'}),
-      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/07/2026', pattern:'2026.07.vivo.fibra.pdf'}),
-      T({title:'Condomínio', amount:965.00, day:8, status:'paid', recurring:true, tracked:true, delta:5, due:'08/07/2026', pattern:'2026.07.condominio.pdf'}),
+      T({title:'Energia · Enel SP', amount:343.62, day:11, status:'paid', recurring:true, tracked:true, delta:20, due:'15/07/2026', pattern:'energia/2026/07.pdf'}),
+      T({title:'Água · Sabesp', amount:108.40, day:0, status:'scheduled-overdue', recurring:true, tracked:true, due:'18/07/2026', pattern:'sabesp/2026/07_scheduled.pdf'}),
+      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/07/2026', pattern:'vivo_fibra/2026/07.pdf'}),
+      T({title:'Condomínio', amount:965.00, day:8, status:'paid', recurring:true, tracked:true, delta:5, due:'08/07/2026', pattern:'condominio/2026/07.pdf'}),
       T({title:'IPTU · parcela 7/10', amount:412.70, day:15, recurring:true}),
       T({title:'Mercado · Pão de Açúcar', amount:658.90, day:13, delta:-6}),
       T({title:'Combustível · Shell', amount:298.40, day:17, delta:-4}),
-      T({title:'Netflix', amount:59.90, day:21, recurring:true}),
+      T({title:'Netflix', amount:59.90, day:21, recurring:true, status:'manual-paid'}),
       T({title:'Uber', amount:112.60, day:25, delta:27}),
     ],[
       T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
       T({kind:'in', title:'Dividendos', sub:'corretora', amount:318.44, day:16, status:'in'}),
-      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/07/2026', pattern:'2026.07.unimed.pdf'}),
-      T({title:'Escola · Mensalidade', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/07/2026', pattern:'2026.07.escola.pdf'}),
+      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/07/2026', pattern:'unimed/2026/07.pdf'}),
+      T({title:'Escola · Mensalidade', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/07/2026', pattern:'escola/2026/07.pdf'}),
       T({title:'Farmácia · Drogasil', amount:98.70, day:19, delta:-54}),
       T({title:'Academia · Smart Fit', amount:119.90, day:20, recurring:true}),
       T({title:'Spotify Família', amount:34.90, day:22, recurring:true}),
@@ -649,7 +661,7 @@ const AUTHORED = {
 /* ---- the rest of 2026, materialized from the same recurring rules ---- */
 const TODAY_M = 8, TODAY_D = 7;            // 07/09/2026
 const slug = s => s.split(' · ')[0].toLowerCase()
-  .normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'.');
+  .normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_');
 
 const RULES = [[
   {kind:'in', title:'Salário', amount:11800, day:5, status:'in'},
@@ -684,10 +696,10 @@ function makeMonth(mi){
     if(r.track){
       const due = String(r.due).padStart(2,'0') + '/' + mm + '/2026';
       if(settled) return T({title, key:r.key, amount, day:r.day, status:'paid', recurring:true,
-        tracked:true, due, pattern:'2026.' + mm + '.' + slug(r.title) + '.bill.pdf'});
+        tracked:true, due, pattern:slug(r.title) + '/2026/' + mm + '.pdf'});
       const span = future ? .04 : Math.max(.08, Math.min(.97, TODAY_D / r.due));
       return T({title, key:r.key, amount:0, day:0, status:'pending', progress:span, recurring:true,
-        tracked:true, due, pattern:'2026.' + mm + '.' + slug(r.title) + '.bill_.pdf'});
+        tracked:true, due, pattern:slug(r.title) + '/2026/' + mm + '_scheduled.pdf'});
     }
     if(future && !r.rec) return null;                 // variable spends aren't projected
     if(now && r.day > TODAY_D && !r.rec) return null;
@@ -734,6 +746,8 @@ function markHTML(t){
   if(t.kind === 'in') return '<div class="mark"><span class="dot in"></span></div>';
   if(t.status === 'paid')
     return '<div class="mark"><div class="disc paid" aria-label="paid, receipt found">✓</div></div>';
+  if(t.status === 'manual-paid')
+    return '<div class="mark"><div class="disc manual" aria-label="marked paid manually, no file to prove it">✓</div></div>';
   if(t.status === 'pending'){
     const p = t.progress == null ? .5 : t.progress, C = 2*Math.PI*10.5;
     const col = p >= 1 ? 'var(--neg)' : p >= .66 ? 'var(--accent)' : 'var(--pos)';
@@ -744,15 +758,30 @@ function markHTML(t){
       + ' stroke-dasharray="' + C + '" stroke-dashoffset="' + (C*(1-p)) + '"></circle></svg>'
       + '<div class="disc wait" style="width:17px;height:17px;font-size:10px">✓</div></div>';
   }
+  if(t.status === 'scheduled' || t.status === 'scheduled-overdue'){
+    const overdue = t.status === 'scheduled-overdue';
+    const col = overdue ? 'var(--neg)' : 'var(--info)';
+    const p = overdue ? 1 : (t.progress == null ? .5 : t.progress), C = 2*Math.PI*10.5;
+    return '<div class="mark" aria-label="' + (overdue ? 'scheduled payment, due date passed, no receipt yet' : 'payment scheduled, not yet due') + '">'
+      + '<svg viewBox="0 0 26 26" aria-hidden="true">'
+      + '<circle cx="13" cy="13" r="10.5" fill="none" stroke="var(--line-2)" stroke-width="2.5"></circle>'
+      + '<circle cx="13" cy="13" r="10.5" fill="none" stroke="' + col + '" stroke-width="2.5" stroke-linecap="round"'
+      + ' stroke-dasharray="' + C + '" stroke-dashoffset="' + (C*(1-p)) + '"></circle></svg>'
+      + '<div class="disc ' + (overdue ? 'sched-over' : 'sched') + '" style="width:17px;height:17px;font-size:9px">'
+      + (overdue ? '!' : '◷') + '</div></div>';
+  }
   return '<div class="mark"><span class="dot"></span></div>';
 }
 
 function metaHTML(t){
   const bits = [];
   if(t.status === 'paid') bits.push('<span>🏁 ' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
+  else if(t.status === 'manual-paid') bits.push('<span style="color:var(--pos)">✓ marcado como pago (sem comprovante)</span>');
+  else if(t.status === 'scheduled') bits.push('<span style="color:var(--info)">◷ agendado · vence ' + t.due + '</span>');
+  else if(t.status === 'scheduled-overdue') bits.push('<span style="color:var(--neg)">⚠ agendado, sem comprovante · venceu ' + t.due + '</span>');
   else if(t.status === 'pending') bits.push('<span class="rec">◷ vence ' + t.due + '</span>');
   else if(t.day) bits.push('<span>' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
-  if(t.recurring && t.status !== 'pending') bits.push('<span class="rec">↻</span>');
+  if(t.recurring && !['pending','scheduled','scheduled-overdue'].includes(t.status)) bits.push('<span class="rec">↻</span>');
   if(t.private) bits.push('<span class="lock" title="hidden from other members">🔒 private</span>');
   if(t.deleted) bits.push('<span style="color:var(--neg)">deleted</span>');
   if(t.restored) bits.push('<span style="color:var(--info)" title="supersedes the deleted row">↩ #' + t.restored + '</span>');
@@ -777,7 +806,7 @@ function entryHTML(t){
       + '<div class="amt"><div class="sk-bar" style="width:74px"></div></div></div>';
   }
   if(t.state === 'error'){
-    return '<div class="entry">' + '<div class="mark"><div class="disc" style="background:var(--neg);color:#fff">!</div></div>'
+    return '<div class="entry">' + '<div class="mark"><div class="disc" style="background:var(--neg);color:var(--paper)">!</div></div>'
       + '<div class="name"><span class="errtxt">Could not save “' + esc(t.title) + '”</span>'
       + '<span class="errsub">server unreachable · nothing was written</span></div>'
       + '<div class="amt"><button class="retry" data-retry="' + t.id + '" type="button">Try Again</button></div></div>';
@@ -1034,7 +1063,7 @@ function editRule(){
     + '</div>'
     + '<label class="switch"><input type="checkbox"' + (t.tracked?' checked':'') + '>'
     + '<span>Track receipt on disk<span class="d">'
-    + (t.pattern ? '~/Documents/contas · ' + esc(t.pattern) : 'no path set yet') + '</span></span></label>'
+    + (t.pattern ? 'computed path · ' + esc(t.pattern) : 'no taxonomy set yet') + '</span></span></label>'
     + '</div><div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div></div>'
     + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
     + '<button class="btn pri" data-act="close" type="button">Save rule</button></div>');
@@ -1132,14 +1161,19 @@ $('#panels').addEventListener('mousemove', e => {
   if(!row){ tip.style.display='none'; return; }
   const t = rowsOf(+row.dataset.p)[+row.dataset.i];
   if(!t || !t.recurring || t.state !== 'ok'){ tip.style.display='none'; return; }
+  let trackedLine;
+  if(t.status === 'paid') trackedLine = '<span style="color:var(--pos)">receipt on disk → paid</span>';
+  else if(t.status === 'scheduled') trackedLine = '<span style="color:var(--info)">scheduled file on disk → not due yet</span>';
+  else if(t.status === 'scheduled-overdue') trackedLine = '<span style="color:var(--neg)">scheduled, due date passed, no receipt yet</span>';
+  else trackedLine = '<span style="color:var(--accent)">no file yet → unpaid</span>';
   tip.innerHTML = '<b>' + esc(t.title) + '</b><div class="hr"></div>'
     + 'Due: ' + (t.due || 'day ' + pad(t.day) + ' each month') + '<br>'
     + 'Cadence: monthly · since 01/03/2024<br>'
     + (t.tracked
-        ? 'Receipt: ' + esc(t.pattern || '—') + '<br>' + (t.status==='paid'
-            ? '<span style="color:var(--pos)">found on disk → paid</span>'
-            : '<span style="color:var(--accent)">not found yet → unpaid</span>')
-        : '<span style="color:var(--ink-3)">tracking off · no paid state</span>');
+        ? 'Path: ' + esc(t.pattern || '—') + '<br>' + trackedLine
+        : (t.status === 'manual-paid'
+            ? '<span style="color:var(--pos)">marked paid manually — no file to prove it</span>'
+            : '<span style="color:var(--ink-3)">tracking off · no paid state</span>'));
   tip.style.display='block';
   const r = tip.getBoundingClientRect();
   let x = e.clientX + 14, y = e.clientY + 16;
@@ -1260,53 +1294,59 @@ function specRow(t, opts){
 }
 
 const SPECS = [
-  { n:'a', h:'Due, time still running',
+  { n:'a', h:'Pending, time still running',
     r:()=>specRow(T({title:'Água · Sabesp', status:'pending', progress:.75, amount:0, recurring:true, tracked:true, due:'18/07/2026'})),
-    p:'The ring is elapsed time between the period start and the due date. Three-quarters round means there is still room, but not much. It fills <code>green → amber → red</code> as the date closes in.' },
+    p:'Neither a scheduled file nor a receipt exists yet. The ring is elapsed time between the period start and the due date. Three-quarters round means there is still room, but not much. It fills <code>green → amber → red</code> as the date closes in.' },
   { n:'b', h:'Hover reveals the rule',
     r:()=>specRow(T({title:'Água · Sabesp', status:'pending', progress:.75, amount:0, recurring:true, tracked:true, due:'18/07/2026'}))
-      + '<div class="tip" style="position:static;display:block;margin:8px 0 0 34px"><b>Água · Sabesp</b><div class="hr"></div>Due: 18/07/2026<br>Cadence: monthly · since 01/03/2024<br>Receipt: 2026.07.sabesp.bill_.pdf<br><span style="color:var(--accent)">not found yet → unpaid</span></div>',
-    p:'Hovering a recurring row shows its definition — due date, cadence, and which file the tracker is looking for — without opening anything.' },
-  { n:'c', h:'Scheduled, not yet paid',
-    r:()=>specRow(T({title:'Energia · Enel SP', status:'pending', progress:.4, amount:343.62, day:11, recurring:true, tracked:true, due:'15/07/2026'})),
-    p:'The receipt on disk still carries the underscore — <code>2026.07.energia.bill_.pdf</code> — so it is scheduled, not settled. The ignore regex catches it and the occurrence stays unpaid.' },
-  { n:'d', h:'Paid, receipt confirmed',
+      + '<div class="tip" style="position:static;display:block;margin:8px 0 0 34px"><b>Água · Sabesp</b><div class="hr"></div>Due: 18/07/2026<br>Cadence: monthly · since 01/03/2024<br>Path: sabesp/2026/07.pdf<br><span style="color:var(--accent)">no file yet → unpaid</span></div>',
+    p:'Hovering a recurring row shows its definition — due date, cadence, and the exact computed path being checked — without opening anything.' },
+  { n:'c', h:'Scheduled, not yet due',
+    r:()=>specRow(T({title:'Energia · Enel SP', status:'scheduled', amount:343.62, day:11, recurring:true, tracked:true, due:'15/07/2026', progress:.4})),
+    p:'A <code>_scheduled</code> file exists — proof a payment was set up ahead of the due date. It is optional: a same-day payment out of the balance skips straight to the receipt, no scheduling step to record. Calendar glyph, <code>--info</code> ring.' },
+  { n:'d', h:'Scheduled, now overdue',
+    r:()=>specRow(T({title:'Água · Sabesp', status:'scheduled-overdue', amount:108.40, day:14, recurring:true, tracked:true, due:'18/07/2026'})),
+    p:'The due date passed and no receipt landed — a promise that was never confirmed kept. This is a distinct warning state, not the same grey <code>pending</code> ring: something here needs checking.' },
+  { n:'e', h:'Paid, receipt confirmed',
     r:()=>specRow(T({title:'Energia · Enel SP', status:'paid', amount:343.62, day:11, recurring:true, tracked:true, delta:20})),
-    p:'The underscore is gone — <code>2026.07.energia.bill.pdf</code> matched. Solid green mark, checkered-flag date. This is the only way a tracked row becomes paid; there is no manual tick.' },
-  { n:'e', h:'Month-over-month delta',
+    p:'The receipt file exists at the computed path — <code>energia/2026/07.pdf</code>. Solid green mark, checkered-flag date. This is the only way a tracked row becomes paid; there is no manual tick. If a scheduled file existed for this period, uploading the receipt just moved it into <code>.delete/</code>.' },
+  { n:'f', h:'Month-over-month delta',
     r:()=>'<div class="stage" style="border:none;padding:0;display:flex;flex-direction:column;gap:4px">'
       + specRow(T({title:'Uber', status:'plain', amount:112.60, day:25, delta:27}))
       + specRow(T({title:'Farmácia · Drogasil', status:'plain', amount:98.70, day:19, delta:-54}))
       + specRow(T({title:'Internet · Vivo Fibra', status:'paid', amount:139.90, day:10, recurring:true, tracked:true, delta:0})) + '</div>',
     p:'Against the same line last month. Red up, green down, grey dash for unchanged — a window function, not a manual diff.' },
-  { n:'f', h:'Untracked recurring',
+  { n:'g', h:'Untracked recurring',
     r:()=>specRow(T({title:'Netflix', status:'plain', amount:59.90, day:21, recurring:true})),
     p:'Tracking opted out. There is no filesystem proof either way, so the row carries no paid/unpaid state at all — just the recurrence glyph <code>↻</code> and a hollow mark.' },
-  { n:'g', h:'Income',
+  { n:'h', h:'Manually marked paid',
+    r:()=>specRow(T({title:'Spotify Família', status:'manual-paid', amount:34.90, day:22, recurring:true})),
+    p:'The one manual tick in the whole model, and only because there is no filesystem proof to contradict it — this rule was never tracking-enabled. Outlined green disc, not the solid fill of a file-verified <code>paid</code>: asserted, not proven. A tracked rule never gets this checkbox.' },
+  { n:'i', h:'Income',
     r:()=>specRow(T({kind:'in', title:'Salário', status:'in', amount:11800, day:5})),
     p:'INs are the same component with a positive amount and a filled dot. They sum into the panel header rather than reading as a bill.' },
-  { n:'h', h:'Focused row',
+  { n:'j', h:'Focused row',
     r:()=>'<div style="display:flex;flex-direction:column;gap:2px">'
       + specRow(T({title:'Condomínio', status:'paid', amount:965, day:8, recurring:true, tracked:true, delta:5}), {gut:'1'})
       + specRow(T({title:'IPTU · parcela 7/10', status:'plain', amount:412.70, day:15, recurring:true}), {gut:'0', focus:true})
       + specRow(T({title:'Mercado · Pão de Açúcar', status:'plain', amount:658.90, day:13, delta:-6}), {gut:'1'}) + '</div>',
     p:'Gutter zero, accent rail, tinted ground. Relative numbers above and below make <code>3j</code> land where you meant.' },
-  { n:'i', h:'Selected',
+  { n:'k', h:'Selected',
     r:()=>specRow(T({title:'Mercado · Pão de Açúcar', status:'plain', amount:658.90, day:13, delta:-6}), {gut:'2', sel:true}),
     p:'<code>x</code> checks the row for a later batch operation. It is a marker, never a delete — the count sits in the statusline.' },
-  { n:'j', h:'Private',
+  { n:'l', h:'Private',
     r:()=>specRow(T({title:'Consulta · dermatologista', status:'plain', amount:450, day:23, private:true}), {gut:'4'}),
     p:'Hidden from the other member, never from the admin. Everything is shared by default; this is the deliberate exception.' },
-  { n:'k', h:'Soft deleted',
+  { n:'m', h:'Soft deleted',
     r:()=>specRow(T({title:'Uber', status:'plain', amount:112.60, day:25, deleted:true}), {gut:'3'}),
     p:'The row stays. It gets a status and a deletion date, dims, and strikes through. Nothing is removed from the database, ever.' },
-  { n:'l', h:'Restored',
+  { n:'n', h:'Restored',
     r:()=>specRow(T({title:'Uber', status:'plain', amount:112.60, day:25, restored:1042}), {gut:'3'}),
     p:'Undo inserts a <em>new</em> row pointing at the one it supersedes, so each transaction carries a traceable chain back through its prior versions.' },
-  { n:'m', h:'Optimistic skeleton',
+  { n:'o', h:'Optimistic skeleton',
     r:()=>specRow(T({state:'skeleton'}), {gut:'0'}),
     p:'Submitted and in flight. The skeleton takes the row\'s exact geometry so nothing shifts when the server\'s HTML fragment lands.' },
-  { n:'n', h:'Failed, retryable',
+  { n:'p', h:'Failed, retryable',
     r:()=>specRow(T({title:'Mercado 84,20', state:'error'}), {gut:'0'}),
     p:'The skeleton resolves to an error row instead of a real one. <b>Try Again</b> resubmits the original action — the wording says what happened and that nothing was written.' }
 ];
@@ -1315,46 +1355,62 @@ $('#gallery').innerHTML = SPECS.map(s =>
   '<div class="spec"><div class="lbl"><span class="n">' + s.n + '</span><h4>' + s.h + '</h4></div>'
   + '<div class="stage">' + s.r() + '</div><p>' + s.p + '</p></div>').join('');
 
-/* ================= receipt matcher ================= */
-const FILES = [
-  '2026.05.energia.bill.pdf',
-  '2026.06.energia.bill.pdf',
-  '2026.07.energia.bill_.pdf',
-  '2026.07.energia.bill.pdf',
-  '2026.07.energia.leitura.jpg',
-  'comprovante-pix.png',
-  '.DS_Store'
-];
-function matchFiles(){
-  let re, ig, bad = '';
-  try{ re = new RegExp($('#fRe').value); }catch(err){ bad = 'match regex: ' + err.message; }
-  try{ ig = new RegExp($('#fIg').value); }catch(err){ bad = bad || ('ignore regex: ' + err.message); }
-  const on = $('#trackOn').checked;
-  const rows = FILES.map(f => {
-    if(!on || bad) return {f, s:'—', c:'no'};
-    if(ig && ig.test(f)) return {f, s:'ignored', c:'ign'};
-    if(re && re.test(f)) return {f, s:'match', c:'hit'};
-    return {f, s:'—', c:'no'};
-  });
-  $('#fileList').innerHTML = rows.map(r =>
-    '<div class="file ' + r.c + '"><span class="fn">' + esc(r.f) + '</span><span class="st">' + r.s + '</span></div>').join('');
+/* ================= receipt taxonomy ================= */
+const slugify = s => (s||'').trim().toLowerCase()
+  .normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+
+const DEMO_FILES = { barcode:true, scheduled:false, receipt:false };
+
+function computeBase(){
+  const bucket = slugify($('#txBucket').value) || '…';
+  const bill = slugify($('#txBill').value) || '…';
+  const inst = slugify($('#txInstance').value);
+  const parts = ['rodrigo-a1b2c3', bucket, bill];
+  if(inst) parts.push(inst);
+  parts.push('2026');
+  return parts.join('/');
+}
+
+function fileRow(kind, label, present){
+  const action = present
+    ? '<span class="st">on disk</span>'
+    : '<button class="btn" data-add="' + kind + '" type="button" style="padding:2px 8px;font-size:10.5px">+ add</button>';
+  return '<div class="file ' + (present?'hit':'no') + '"><span class="fn">' + label + '.pdf</span>' + action + '</div>';
+}
+
+function renderTaxonomy(){
+  const base = computeBase();
+  $('#txPath').textContent = base + '/07{ _barcode | _scheduled | }.pdf';
+  $('#fileList').innerHTML =
+    fileRow('barcode', '07_barcode', DEMO_FILES.barcode) +
+    fileRow('scheduled', '07_scheduled', DEMO_FILES.scheduled) +
+    fileRow('receipt', '07', DEMO_FILES.receipt);
 
   const v = $('#verdict');
-  if(!on){ v.className='verdict no'; v.innerHTML = 'Tracking off — this bill is recorded as a plain transaction with <b>no paid/unpaid state</b>.'; return; }
-  if(bad){ v.className='verdict no'; v.style.borderColor='var(--neg)'; v.style.background='var(--neg-soft)';
-    v.textContent = 'Invalid pattern · ' + bad; return; }
-  v.style.borderColor=''; v.style.background='';
-  const hits = rows.filter(r => r.c === 'hit' && r.f.includes('2026.07'));
-  if(hits.length){ v.className='verdict';
-    v.innerHTML = 'Period 07/2026 → <b>' + esc(hits[0].f) + '</b> found on disk.<br>Occurrence marked <b style="color:var(--pos)">paid</b>.'; }
-  else { v.className='verdict no';
-    v.innerHTML = 'Period 07/2026 → no matching file yet.<br>Occurrence stays <b style="color:var(--accent)">unpaid</b>, due ring keeps filling.'; }
+  if(DEMO_FILES.receipt){
+    v.className = 'verdict';
+    v.innerHTML = 'Receipt on disk → occurrence is <b style="color:var(--pos)">paid</b>.'
+      + (DEMO_FILES.scheduled ? ' The scheduled file was superseded — moved to <code>.delete/</code> automatically.' : '');
+  } else if(DEMO_FILES.scheduled){
+    v.className = 'verdict no';
+    v.innerHTML = 'Scheduled file on disk, due date not yet passed → <b style="color:var(--info)">scheduled</b>, not paid yet.';
+  } else {
+    v.className = 'verdict no';
+    v.innerHTML = 'No scheduled or receipt file yet → <b style="color:var(--accent)">pending</b>. No regex, no traversal — just three exact paths, checked directly.';
+  }
 }
-['fRe','fIg','trackOn'].forEach(id => {
-  $('#'+id).addEventListener('input', matchFiles);
-  $('#'+id).addEventListener('change', matchFiles);
+['txBucket','txBill','txInstance'].forEach(id => $('#'+id).addEventListener('input', renderTaxonomy));
+$('#fileList').addEventListener('click', e => {
+  const b = e.target.closest('[data-add]'); if(!b) return;
+  const kind = b.dataset.add;
+  DEMO_FILES[kind] = true;
+  if(kind === 'receipt' && DEMO_FILES.scheduled) DEMO_FILES.scheduled = false;
+  renderTaxonomy();
 });
-matchFiles();
+$('#trackOn').addEventListener('change', () => {
+  $('#verdict').style.opacity = $('#trackOn').checked ? '1' : '.5';
+});
+renderTaxonomy();
 
 /* ================= keymap ================= */
 const KEYGROUPS = [
