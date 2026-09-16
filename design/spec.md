@@ -136,7 +136,7 @@ Nothing destructive fires from a single keystroke.
 | `a` / `i` | add after / before the current row |
 | `x` | toggle selection for a batch operation |
 | `e` | edit this occurrence |
-| `R` | edit the recurring rule behind it |
+| `R` | edit the recurring rule behind it — or, on a row that isn't recurring yet, create one starting here |
 | `gd` | show due/cadence/receipt details for the focused row *(proposal, not in the original spec)* |
 | `p` | toggle private *(proposal, not in the original spec)* |
 
@@ -240,12 +240,29 @@ for this row"*.
   the form and the one that starts focused and pre-selected — type over it
   immediately, no click or tab required.
 - **`Enter` never reaches a destructive confirmation.** It fires whatever
-  the modal's own primary button does, which makes it Save on the
-  edit-occurrence form and Close on a modal with nothing to save (help, edit
-  rule) — but the delete-confirmation modal has no primary button for it to
-  find, on purpose. Its only "yes" stays the explicit `y` keypress (see
+  the modal's own primary button does — Save on the edit-occurrence form,
+  Save/Create on the rule form, Close on a modal with nothing to save
+  (help) — but the delete-confirmation modal has no primary button for it
+  to find, on purpose. Its only "yes" stays the explicit `y` keypress (see
   Undo above), so `Enter` can never become an accidental way to confirm a
   delete.
+- **The rule form's End date and Total installments stay in sync**, per
+  CLAUDE.md's Recurring rules section — typing one recomputes the other
+  (assuming monthly cadence; that's the only cadence actually wired today).
+  End date alone, with installments left blank, is the correct way to give
+  an ordinary open-ended bill a stopping point without implying it was ever
+  a fixed-length loan.
+- **Due date moved from the occurrence form to the rule form.** The
+  edit-occurrence form's Day field only renders at all for a non-recurring
+  row; a recurring row's due day is edited on the rule (`R`) instead, so
+  there's exactly one control for that fact, never two disagreeing about
+  which one a future materialized period actually follows.
+- **Bucket is the identical combobox in both forms** — same per-member
+  datalist, same "pick one of yours or type a new one" behaviour, in the
+  occurrence form and the rule form alike. The rule form's Bucket starts
+  blank when creating a new rule specifically (not when editing an
+  existing one), regardless of what the anchor transaction was tagged
+  with before it became a rule.
 - **Day only ever holds digits.** Any edit that would leave it holding
   anything else is rejected outright, snapping back to the field's last
   valid value rather than to some filtered version of what was just typed.

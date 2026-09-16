@@ -211,6 +211,32 @@ JS only because it has no template layer.
 
 ### Recurring rules
 
+- **Created by turning an existing occurrence into the rule's first one —
+  there is no separate "new rule" form.** `R` on a row that isn't recurring
+  yet opens the same rule editor a recurring row's `R` does, just in
+  creation mode: same fields, pre-filled from the transaction you're
+  looking at (amount, day → start date, a bill-name guess from the title),
+  a "Create rule" button instead of "Save rule". Saving flips that
+  transaction's `recurring` flag and gives it the new rule's fields — it
+  *becomes* the anchor occurrence, never a separate parallel row — which is
+  what keeps materialization's `UNIQUE(rule_id, period)` idempotency intact
+  for the period it's already in; inserting a second row for that same
+  month would violate the very constraint that makes materialization safe
+  to run hourly.
+- **The due date lives on the rule, not the occurrence, once a row is
+  recurring.** `R`'s Due date field (day-of-month) is the one place it's
+  editable; `e`'s Day field disappears entirely for a recurring row, rather
+  than offering a second control for the same fact with no rule for which
+  one wins on the next materialized period. A non-recurring row has no rule
+  to hold a due date, so `e`'s Day field is exactly where it stays.
+- **Bucket is the same per-member autocomplete everywhere it appears** —
+  the rule form's Bucket field and the occurrence form's Bucket field both
+  read the identical `SELECT DISTINCT bucket WHERE member_id = ?` tag
+  cloud (see Categorization & grouping below), not two separately-behaving
+  widgets that happen to share a label. Creating a new rule starts Bucket
+  empty regardless of whatever the anchor transaction happened to be
+  tagged with — a fresh rule gets an explicit choice, not an inherited
+  guess.
 - Defined once, **materialized** into the ledger as real rows each period.
 - Receipt tracking is **opt-in per rule** — no regex, no pattern, no traversal.
   A tracked rule uses its `bucket` / `bill_name` — general-purpose fields, see
@@ -292,14 +318,21 @@ JS only because it has no template layer.
   paid, manually-asserted paid (untracked only), and scheduled-overdue-warning
   are three different colours/shades, never sharing a mark. Designs need
   updating for this.
-- **A finite, non-cyclic rule (e.g. a car loan) gets `total_installments`**
-  (nullable int; null = ongoing, matching existing behaviour). `end_date` is
-  derived from `start_date + cadence × total_installments` and is editable two
-  ways that stay in sync — type a new installment count, or pick a new end
-  date, either recomputes the other. This is a different shape from a cyclic
-  seasonal bill (an annual tax tracked only Jan–Oct, forever): cyclic bills
-  repeat every year and remain open item 3 below; installment rules run once
-  and end permanently. Don't conflate the two.
+- **`end_date` is a plain, independently-settable field on every rule** —
+  nullable, null meaning ongoing — not exclusive to installment loans. This
+  is how an ordinary open-ended bill gets cancelled: CPFL stops after July,
+  set `end_date = 31/07`, nothing about `total_installments` involved. A
+  **finite, non-cyclic rule** (e.g. a car loan) additionally gets
+  `total_installments` (nullable int; null = ongoing), and *for that rule*
+  `end_date` is derived from `start_date + cadence × total_installments` and
+  stays editable two ways in sync — type a new installment count, or pick a
+  new end date, either recomputes the other. Setting `end_date` alone, with
+  no installment count, is the correct move for "this ends, but it was never
+  a fixed-length loan to begin with." This is a different shape from a
+  cyclic seasonal bill (an annual tax tracked only Jan–Oct, forever): cyclic
+  bills repeat every year and remain open item 3 below; a rule with an
+  `end_date` — installment-derived or set directly — runs once and ends
+  permanently. Don't conflate the two.
 - **Installment progress displays as a bare `{paid}/{total}` badge** (e.g.
   `7/12`), not baked into the transaction title — the same meta slot the
   due-date and recurring glyphs already occupy.

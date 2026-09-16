@@ -262,6 +262,27 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 .row.focus .fbadge .flabel{max-width:72px;opacity:1}
 .row.focus .fbadge:hover .flabel{color:var(--ink-2)}
 
+/* P — file preview carousel. Reuses the exact same stroke icons the file
+   rail already uses, just bigger, so the carousel reads as "the same file
+   controls, zoomed in" rather than a second icon language to learn. */
+.pv-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pv-kind{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.pv-pos{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.pv-stage{display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 16px;
+  margin-top:10px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:10px}
+.pv-stage .ficon.lg{width:52px;height:52px;color:var(--ink-2)}
+.pv-stage .ficon.lg svg{width:52px;height:52px;fill:none;stroke:currentColor;stroke-width:1.3;
+  stroke-linecap:round;stroke-linejoin:round}
+.pv-path{font-family:var(--mono);font-size:12px;color:var(--ink-2);text-align:center;word-break:break-all}
+.pv-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px}
+.pv-nav .btn[disabled]{opacity:.4;cursor:default}
+.pv-nav .btn[disabled]:hover{border-color:var(--line-2)}
+.pv-dots{display:flex;gap:6px}
+.pv-dot{width:26px;height:26px;border-radius:7px;border:1px solid var(--line-2);background:var(--surface);
+  display:grid;place-items:center;cursor:pointer;color:var(--ink-2);font-family:var(--sans)}
+.pv-dot:hover{border-color:var(--accent-line)}
+.pv-dot.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+
 .name{min-width:0}
 .name b{font-weight:600;font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .name .meta{font-family:var(--mono);font-size:11px;color:var(--ink-3);display:flex;gap:7px;align-items:center;
@@ -784,7 +805,8 @@ const S = {
      logged in, only whether their admin rights are currently in effect —
      "preview my own experience with them switched off", not "become someone
      else". See isAdminNow() and isPrivacyHidden() below. */
-  previewNonAdmin: false
+  previewNonAdmin: false,
+  filePreview: null   // {p, i, n} while the P file-preview carousel is open
 };
 /* The one thing this toggle actually changes: whether the logged-in member
    (always MEMBERS[0]) currently has admin rights in effect. Never a stand-in
@@ -1286,6 +1308,8 @@ function metaHTML(t){
   return bits.join('');
 }
 const pad = n => String(n).padStart(2,'0');
+const slugify = s => (s||'').trim().toLowerCase()
+  .normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 
 /* ================= file badges =================
    Fixed numbering by kind, always: 1 bill, 2 scheduled, 3 receipt — never
@@ -1315,6 +1339,61 @@ function openFile(t, n){
   const path = kind && t[kind.field];
   if(!path){ say('no ' + (kind ? kind.label : 'file') + ' on file for this row', true); return; }
   window.open(path, '_blank');
+}
+
+/* P — an in-app carousel over the focused row's files, alongside (not
+   instead of) g1/g2/g3 and clicking a badge, which still open a new tab.
+   Flipping through bill → scheduled → receipt without losing the ledger
+   underneath earns its keep even though every one of these file types
+   already renders natively in a browser tab on its own. */
+function openFilePreview(startN){
+  const t = cur(); if(!t) return;
+  const existing = FILE_KINDS.filter(k => t[k.field]);
+  if(!existing.length){ say('no files on this row', true); return; }
+  const wantKind = startN && FILE_KINDS.find(k => k.n === startN);
+  const n = (wantKind && t[wantKind.field]) ? startN : existing[0].n;
+  S.filePreview = { p: S.panel, i: S.focus[S.panel], n };
+  renderFilePreview();
+}
+function renderFilePreview(){
+  const fp = S.filePreview; if(!fp) return;
+  const t = view(fp.p)[fp.i];
+  const existing = FILE_KINDS.filter(k => t[k.field]);
+  const kind = FILE_KINDS.find(k => k.n === fp.n);
+  const idx = existing.findIndex(k => k.n === fp.n);
+  openModal(
+    '<h3>File preview</h3>'
+    + '<div class="msub">P · ' + esc(t.title) + '</div>'
+    + '<div class="mbody"><div class="pv-head"><span class="pv-kind">' + esc(kind.label) + '</span>'
+    + '<span class="pv-pos">' + (idx+1) + ' of ' + existing.length + '</span></div>'
+    + '<div class="pv-stage"><span class="ficon lg">' + fileIconSVG(kind.kind) + '</span>'
+    + '<div class="pv-path">' + esc(t[kind.field]) + '</div></div>'
+    + '<div class="pv-nav">'
+    + '<button class="btn" data-pv="prev" type="button" ' + (idx===0?'disabled':'') + '>‹ <kbd>h</kbd></button>'
+    + '<div class="pv-dots">' + FILE_KINDS.filter(k => t[k.field]).map(k =>
+        '<button class="pv-dot' + (k.n===fp.n?' on':'') + '" data-pv-n="' + k.n + '" type="button" title="' + esc(k.label) + '"><kbd>' + k.n + '</kbd></button>').join('')
+    + '</div>'
+    + '<button class="btn" data-pv="next" type="button" ' + (idx===existing.length-1?'disabled':'') + '><kbd>l</kbd> ›</button>'
+    + '</div></div>'
+    + '<div class="mfoot"><button class="btn" data-act="close" type="button">Close <kbd>Esc</kbd></button>'
+    + '<button class="btn pri" data-pv="open" type="button">Open in new tab ↗</button></div>');
+}
+function previewStep(d){
+  const fp = S.filePreview; if(!fp) return;
+  const t = view(fp.p)[fp.i];
+  const existing = FILE_KINDS.filter(k => t[k.field]);
+  const idx = existing.findIndex(k => k.n === fp.n);
+  const next = Math.min(existing.length - 1, Math.max(0, idx + d));
+  fp.n = existing[next].n;
+  renderFilePreview();
+}
+function previewGoTo(n){
+  const fp = S.filePreview; if(!fp) return;
+  const t = view(fp.p)[fp.i];
+  const kind = FILE_KINDS.find(k => k.n === n);
+  if(!t[kind.field]){ say('no ' + kind.label + ' on file for this row', true); return; }
+  fp.n = n;
+  renderFilePreview();
 }
 
 function deltaHTML(t){
@@ -1807,7 +1886,7 @@ function month(d){ goMonth(S.mi + d); }
 
 /* ================= modals ================= */
 function openModal(html){ $('#modal').innerHTML = html; $('#scrim').classList.add('on'); }
-function closeModal(){ $('#scrim').classList.remove('on'); $('#app').focus(); }
+function closeModal(){ $('#scrim').classList.remove('on'); S.filePreview = null; $('#app').focus(); }
 
 /* Ctrl+hjkl moves focus between a modal's fields by screen position rather
    than DOM order, so it keeps working unchanged no matter how a given
@@ -1935,13 +2014,18 @@ function maskAmount(el, amount){
 function editOccurrence(){
   const t = cur(); if(!t) return;
   const buckets = bucketsFor(S.panel);
+  /* The due date is the rule's property once a row is recurring — R edits
+     it there now (see editRule's Due date field), so it has no business
+     staying editable per-occurrence too: two controls for the same fact,
+     one of them silent about which one wins. A non-recurring row has no
+     rule to hold it, so Day stays right here, same as always. */
   openModal(
     '<h3>Edit occurrence</h3><div class="msub">e · this month only'
     + (t.recurring ? ' · overrides the rule for ' + MONTHS[S.mi].key : '') + '</div>'
     + '<div class="mbody"><div class="stack">'
-    + '<div class="fgrid3">'
+    + '<div class="' + (t.recurring ? 'fgrid' : 'fgrid3') + '">'
     + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span><input class="i" id="eA" value=""></div></label>'
-    + '<label class="f"><span class="k">Day</span><input class="i" id="eD" value="' + (t.day||'') + '"></label>'
+    + (t.recurring ? '' : '<label class="f"><span class="k">Day</span><input class="i" id="eD" value="' + (t.day||'') + '"></label>')
     + '<label class="f"><span class="k">Member</span><select class="i" id="eM">'
     + MEMBERS.map((m,i) => '<option value="' + i + '"' + (i===S.panel?' selected':'') + '>' + m.name + '</option>').join('')
     + '</select></label>'
@@ -1954,56 +2038,123 @@ function editOccurrence(){
     + '<label class="switch"><input type="checkbox" id="eP"' + (t.private?' checked':'') + '>'
     + '<span>Hidden from other members<span class="d">The admin always sees it.</span></span></label>'
     + '</div>' + (t.recurring
-      ? '<div class="notebox">Generated by a recurring rule. <kbd>R</kbd> edits the rule itself, for every future occurrence.</div>'
+      ? '<div class="notebox">Generated by a recurring rule. <kbd>R</kbd> edits the rule itself — including its due date — for every future occurrence.</div>'
       : '') + '</div>'
     + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
     + '<button class="btn pri" data-act="saveOcc" type="button">Save</button></div>');
   maskAmount($('#eA'), t.amount);
-  restrictToNumeric($('#eD'), false);
+  if(!t.recurring) restrictToNumeric($('#eD'), false);
   setTimeout(()=>{ const el = $('#eA'); if(el){ el.focus(); el.select(); } }, 30);
+}
+
+/* A row's due day-of-month, for the rule form's Due date field. t.day is
+   the *paid-on* day — 0/blank until a payment actually lands (see "An
+   unpaid row sorts by its due day" in spec.md), so it's frequently empty
+   on exactly the pending rows someone would open this form to check.
+   t.due (e.g. "18/07/2026") already carries the real due day for the
+   current occurrence, so prefer that; only fall back to t.day once a row
+   has been paid and its own due string is no longer being carried. */
+function dueDay(t){
+  const d = parseDMY(t.due);
+  return d ? d.d : (t.day || null);
+}
+/* ---- small dd/mm/yyyy date helpers, used only by the rule form's
+   end-date ↔ installments sync below. Deliberately simple (whole months,
+   day-of-month clamped to the shorter of the two) — good enough for a
+   monthly household bill, not a general calendar library. */
+function parseDMY(s){
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((s||'').trim());
+  if(!m) return null;
+  const d = +m[1], mo = +m[2], y = +m[3];
+  if(mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return {d, m:mo, y};
+}
+const daysInMonth = (m, y) => new Date(y, m, 0).getDate();
+function addMonths(date, n){
+  let total = (date.y * 12 + (date.m - 1)) + n;
+  const y = Math.floor(total / 12), m = (total % 12) + 1;
+  return {d: Math.min(date.d, daysInMonth(m, y)), m, y};
+}
+function monthsBetween(a, b){
+  return (b.y - a.y) * 12 + (b.m - a.m) + (b.d >= a.d ? 0 : -1);
+}
+const fmtDMY = date => pad(date.d) + '/' + pad(date.m) + '/' + date.y;
+
+/* Bidirectional end-date ↔ installment sync (CLAUDE.md's Recurring rules
+   section: "editable two ways that stay in sync"). Setting .value from
+   code doesn't fire 'input', so each side updating the other can't loop. */
+function wireInstallmentSync(startEl, endEl, instEl){
+  endEl.addEventListener('input', () => {
+    const start = parseDMY(startEl.value), end = parseDMY(endEl.value);
+    if(!start || !end){ if(!endEl.value.trim()) instEl.value = ''; return; }
+    const n = monthsBetween(start, end) + 1;
+    instEl.value = n > 0 ? n : '';
+  });
+  instEl.addEventListener('input', () => {
+    const start = parseDMY(startEl.value), n = parseInt(instEl.value, 10);
+    if(!start || !isFinite(n) || n < 1){ if(!instEl.value.trim()) endEl.value = ''; return; }
+    endEl.value = fmtDMY(addMonths(start, n - 1));
+  });
 }
 
 function editRule(){
   const t = cur();
   if(!t) return;
-  if(!t.recurring){ say('not generated from a recurring rule', true); return; }
+  const creating = !t.recurring;
+  const buckets = bucketsFor(S.panel);
+  const [curM, curY] = MONTHS[S.mi].key.split('/').map(Number);
+  const start = creating ? { d: t.day || 1, m: curM, y: curY } : (t.ruleStart || { d: 1, m: 3, y: 2024 });
   openModal(
-    '<h3>Edit recurring rule</h3><div class="msub">R · ' + esc(t.title) + ' · applies to every future occurrence</div>'
+    '<h3>' + (creating ? 'Create recurring rule' : 'Edit recurring rule') + '</h3>'
+    + '<div class="msub">R · ' + esc(t.title) + ' · '
+    + (creating ? 'turns this into a recurring rule, starting here' : 'applies to every future occurrence') + '</div>'
     + '<div class="mbody"><div class="stack">'
     + '<div class="fgrid">'
-    + '<label class="f"><span class="k">Amount</span><input class="i" value="' + (t.amount?t.amount.toFixed(2).replace('.',','):'variable') + '"></label>'
-    + '<label class="f"><span class="k">Cadence</span><select class="i"><option>Monthly</option><option>Bimonthly</option><option>Yearly</option></select></label>'
+    + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span><input class="i" id="rAmount" value=""></div></label>'
+    + '<label class="f"><span class="k">Cadence</span><select class="i" id="rCadence"><option>Monthly</option><option>Bimonthly</option><option>Yearly</option></select></label>'
     + '</div><div class="fgrid">'
-    + '<label class="f"><span class="k">Start date</span><input class="i" value="01/03/2024"></label>'
-    + '<label class="f"><span class="k">End date</span><input class="i" value="'
-    + (t.totalInstallments ? (t.installmentsPaid||0) + '/' + t.totalInstallments + ' installments' : '—  (ongoing)') + '"></label>'
+    + '<label class="f"><span class="k">Start date</span><input class="i" id="rStart" value="' + fmtDMY(start) + '"></label>'
+    + '<label class="f"><span class="k">Due date <span style="text-transform:none;font-weight:400">day of month, every period</span></span>'
+    + '<input class="i" id="rDue" value="' + (dueDay(t) || '') + '"></label>'
+    + '</div><div class="fgrid">'
+    + '<label class="f"><span class="k">End date <span style="text-transform:none;font-weight:400">optional — blank means ongoing</span></span>'
+    + '<input class="i" id="rEnd" value="' + (t.ruleEnd ? fmtDMY(t.ruleEnd) : '') + '" placeholder="blank = ongoing"></label>'
+    + '<label class="f"><span class="k">Total installments <span style="text-transform:none;font-weight:400">optional — fixed-length, e.g. a loan</span></span>'
+    + '<input class="i" id="rInstallments" value="' + (t.totalInstallments || '') + '" placeholder="leave blank if ongoing"></label>'
     + '</div>'
-    + '<div class="fgrid">'
-    + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">any transaction can have one</span></span>'
-    + '<input class="i" value="' + esc(t.bucket || '') + '" placeholder="e.g. Consumption"></label>'
-    + '<label class="f"><span class="k">Bill name</span><input class="i" value="' + esc(t.billName || t.title.split(' · ')[0]) + '"></label>'
-    + '</div>'
-    + '<label class="f"><span class="k">Total installments <span style="text-transform:none;font-weight:400">optional — for a fixed-length rule, e.g. a loan</span></span>'
-    + '<input class="i" value="' + (t.totalInstallments || '') + '" placeholder="leave blank if ongoing"></label>'
     + (t.totalInstallments
       ? '<div class="notebox">' + (t.installmentsPaid||0) + ' of ' + t.totalInstallments + ' paid. Editing this '
         + 'count or the end date recomputes the other. Paying several off early? Shorten this number and record '
         + 'the lump sum as its own one-off entry — there is no separate "pay off early" action.</div>'
       : '')
-    + '<label class="switch"><input type="checkbox"' + (t.tracked?' checked':'') + '>'
+    + '<div class="fgrid">'
+    + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">any transaction can have one</span></span>'
+    + '<input class="i" id="rBucket" list="rBucketList" value="' + (creating ? '' : esc(t.bucket || '')) + '" placeholder="e.g. Consumption" autocomplete="off">'
+    + '<datalist id="rBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist>'
+    + '</label>'
+    + '<label class="f"><span class="k">Bill name</span><input class="i" id="rBillName" value="' + esc(t.billName || t.title.split(' · ')[0]) + '"></label>'
+    + '</div>'
+    + '<label class="switch"><input type="checkbox" id="rTracked"' + (t.tracked?' checked':'') + '>'
     + '<span>Track receipt on disk<span class="d">'
     + (t.tracked ? 'no manual tick — paid only when a file exists at the computed path'
         : 'off = no filesystem proof; a manual "paid" checkbox appears instead') + '</span></span></label>'
     + (t.tracked
       ? '<label class="f"><span class="k">Instance <span style="text-transform:none;font-weight:400">optional — only if more than one</span></span>'
-        + '<input class="i" value="' + esc(t.instance || '') + '" placeholder="e.g. House 8898"></label>'
+        + '<input class="i" id="rInstance" value="' + esc(t.instance || '') + '" placeholder="e.g. House 8898"></label>'
         + '<div class="notebox mono" style="font-family:var(--mono);font-size:11.5px">path: ' + esc(t.pattern || '—')
         + ' · <span style="color:var(--ink-3)">no regex — bucket / bill name / instance compute it</span></div>'
-      : '<label class="switch"><input type="checkbox"' + (t.status==='manual-paid'?' checked':'') + '>'
+      : '<label class="switch"><input type="checkbox" id="rManualPaid"' + (t.status==='manual-paid'?' checked':'') + '>'
         + '<span>Mark this month paid manually<span class="d">no file to prove it — shown in a different colour from a verified receipt</span></span></label>')
-    + '</div><div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div></div>'
+    + '</div>' + (creating
+      ? '<div class="notebox">This occurrence becomes the rule’s first — future months materialize on their own from here. Past months are never generated retroactively.</div>'
+      : '<div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div>') + '</div>'
     + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
-    + '<button class="btn pri" data-act="close" type="button">Save rule</button></div>');
+    + '<button class="btn pri" data-act="saveRule" type="button">' + (creating ? 'Create rule' : 'Save rule') + '</button></div>');
+  maskAmount($('#rAmount'), t.amount);
+  restrictToNumeric($('#rInstallments'), false);
+  restrictToNumeric($('#rDue'), false);
+  wireInstallmentSync($('#rStart'), $('#rEnd'), $('#rInstallments'));
+  setTimeout(()=>{ const el = $('#rAmount'); if(el){ el.focus(); el.select(); } }, 30);
 }
 
 function helpModal(){
@@ -2063,6 +2214,14 @@ document.addEventListener('keydown', e => {
   }
   if($('#scrim').classList.contains('on')){
     if(e.key === 'Escape'){ e.preventDefault(); closeModal(); }
+    /* The carousel has no fields to type into, so h/l/1/2/3 are safe to
+       claim outright here — same numbering as g1/g2/g3, same "no file of
+       that kind" no-op elsewhere in the app. */
+    if(S.filePreview){
+      if(e.key === 'h'){ e.preventDefault(); previewStep(-1); return; }
+      if(e.key === 'l'){ e.preventDefault(); previewStep(1); return; }
+      if(e.key === '1' || e.key === '2' || e.key === '3'){ e.preventDefault(); previewGoTo(+e.key); return; }
+    }
     if(!inField && (e.key === 'y' || e.key === 'Y') && $('#modal').querySelector('[data-act="del"]')){
       e.preventDefault(); softDelete();
     }
@@ -2078,7 +2237,8 @@ document.addEventListener('keydown', e => {
        blurs it (which is also what dismisses an open suggestion list),
        leaving the value it just picked in place. A second Enter — now from
        anywhere else — saves for real. */
-    if(e.key === 'Enter' && document.activeElement && document.activeElement.id === 'eB'){
+    if(e.key === 'Enter' && document.activeElement
+        && (document.activeElement.id === 'eB' || document.activeElement.id === 'rBucket')){
       e.preventDefault();
       document.activeElement.blur();
       return;
@@ -2169,6 +2329,7 @@ document.addEventListener('keydown', e => {
     case 'L': e.preventDefault(); switchPanel(1); break;
     case 'x': e.preventDefault(); toggleSel(); break;
     case 'p': e.preventDefault(); togglePrivate(); break;
+    case 'P': e.preventDefault(); openFilePreview(); break;
     case 'u': e.preventDefault(); doUndo(); break;
     case 'e': e.preventDefault(); editOccurrence(); break;
     case 'R': e.preventDefault(); editRule(); break;
@@ -2287,6 +2448,16 @@ function showDetailsForFocused(){
 
 $('#scrim').addEventListener('click', e => {
   if(e.target === $('#scrim')){ closeModal(); return; }
+  const pvN = e.target.closest('[data-pv-n]');
+  if(pvN){ previewGoTo(+pvN.dataset.pvN); return; }
+  const pv = e.target.closest('[data-pv]');
+  if(pv){
+    const fp = S.filePreview;
+    if(pv.dataset.pv === 'prev') previewStep(-1);
+    else if(pv.dataset.pv === 'next') previewStep(1);
+    else if(pv.dataset.pv === 'open' && fp){ openFile(view(fp.p)[fp.i], fp.n); }
+    return;
+  }
   const b = e.target.closest('[data-act]'); if(!b) return;
   const a = b.dataset.act;
   if(a === 'close') closeModal();
@@ -2298,7 +2469,8 @@ $('#scrim').addEventListener('click', e => {
     t.title = $('#eT').value || t.title;
     const cents = parseInt($('#eA').dataset.cents || '0', 10);
     if(isFinite(cents)) t.amount = cents / Math.pow(10, curFmt().decimals);
-    const d = parseInt($('#eD').value,10); if(d>=1 && d<=31) t.day = d;
+    const eD = $('#eD'); // absent for a recurring row — its day lives on the rule now
+    if(eD){ const d = parseInt(eD.value,10); if(d>=1 && d<=31) t.day = d; }
     t.private = $('#eP').checked;
     t.bucket = $('#eB').value.trim() || null;
     S.undo.push({k:'edit', p:S.panel, id:t.id, prev});
@@ -2306,6 +2478,60 @@ $('#scrim').addEventListener('click', e => {
     closeModal();
     if(want !== S.panel){ S.sel[S.panel] = new Set(); sendRow(want - S.panel); }
     else say('occurrence updated');
+  }
+  if(a === 'saveRule'){
+    const t = cur(); if(!t){ closeModal(); return; }
+    const creating = !t.recurring;
+    const prev = {recurring:t.recurring, amount:t.amount, day:t.day, bucket:t.bucket, billName:t.billName,
+      totalInstallments:t.totalInstallments, installmentsPaid:t.installmentsPaid, tracked:t.tracked,
+      instance:t.instance, pattern:t.pattern, status:t.status, progress:t.progress, due:t.due,
+      ruleStart:t.ruleStart, ruleEnd:t.ruleEnd};
+    const cents = parseInt($('#rAmount').dataset.cents || '0', 10);
+    if(isFinite(cents)) t.amount = cents / Math.pow(10, curFmt().decimals);
+    const dueD = parseInt($('#rDue').value, 10);
+    if(dueD>=1 && dueD<=31){
+      /* t.day is the paid-on day and stays whatever it already was (0
+         until actually paid) — changing the rule's due day shouldn't
+         retroactively invent a payment. t.due is the display string for
+         the current occurrence's due date, so that's what a new due day
+         actually needs to move; a not-yet-paid row (t.day falsy) picks up
+         the new day directly too, since it has no paid-on date to protect. */
+      if(!t.day) t.day = dueD;
+      const dm = parseDMY(t.due);
+      if(dm) t.due = pad(dueD) + '/' + pad(dm.m) + '/' + dm.y;
+    }
+    t.bucket = $('#rBucket').value.trim() || null;
+    t.billName = $('#rBillName').value.trim() || t.title.split(' · ')[0];
+    const inst = parseInt($('#rInstallments').value, 10);
+    t.totalInstallments = (isFinite(inst) && inst > 0) ? inst : null;
+    if(creating) t.installmentsPaid = t.totalInstallments ? 1 : 0;
+    const startD = parseDMY($('#rStart').value); if(startD) t.ruleStart = startD;
+    t.ruleEnd = parseDMY($('#rEnd').value);
+    t.tracked = $('#rTracked').checked;
+    if(t.tracked){
+      /* A simplified stand-in for CLAUDE.md's full computed path
+         ({member_uuid}-{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}.{ext})
+         — matches the shorter illustrative form the seed data already uses
+         elsewhere in this mock (no member folder, no bucket segment). */
+      t.instance = $('#rInstance').value.trim() || null;
+      const [mm, yyyy] = MONTHS[S.mi].key.split('/');
+      t.pattern = slugify(t.billName) + (t.instance ? '/' + slugify(t.instance) : '') + '/' + yyyy + '/' + mm + '.pdf';
+      if(t.status !== 'paid'){
+        t.status = 'pending';
+        if(t.progress == null) t.progress = .25;
+        if(!t.due) t.due = pad(t.day || 1) + '/' + MONTHS[S.mi].key;
+      }
+    } else {
+      t.instance = null; t.pattern = null;
+      if($('#rManualPaid') && $('#rManualPaid').checked) t.status = 'manual-paid';
+      else if(t.status === 'manual-paid') t.status = undefined;
+    }
+    t.recurring = true;
+    S.undo.push({k:'edit', p:S.panel, id:t.id, prev});
+    closeModal();
+    say(creating
+      ? 'recurring rule created from “' + t.title + '” · future months materialize on their own'
+      : 'rule updated');
   }
 });
 
