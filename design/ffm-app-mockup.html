@@ -1747,8 +1747,38 @@ function confirmDelete(){
     + '<button class="btn dgr" data-act="del" type="button">Delete <kbd>y</kbd></button></div>');
 }
 
+/* The per-member "tag cloud" from CLAUDE.md/spec.md: bucket is free text,
+   autocompleted from this member's own prior rows — SELECT DISTINCT bucket
+   WHERE member_id = ?, approximated here across every mocked month rather
+   than only the one currently in view, since the real query isn't scoped to
+   a visible month either. */
+function bucketsFor(p){
+  const set = new Set();
+  MONTHS.forEach(mo => mo.m[p].forEach(t => { if(t.bucket) set.add(t.bucket); }));
+  return Array.from(set).sort();
+}
+/* Rejects a keystroke (or paste/autofill, via the input event rather than
+   keydown) outright rather than trying to salvage it — reverting to the
+   last known-valid value, not a filtered version of the new one. That
+   distinction matters whenever the edit also destroys existing valid text:
+   select-all then type a single letter replaces the whole field with just
+   "a", and filtering *that* down to digits leaves nothing to recover — the
+   prior value is already gone by the time this handler runs. Keeping our
+   own last-valid copy sidesteps that entirely. Day is digits only; amount
+   is digits plus a single decimal comma, matching how the value is already
+   formatted for display (11800,00). */
+function restrictToNumeric(el, allowComma){
+  const pattern = allowComma ? /^[0-9]*,?[0-9]*$/ : /^[0-9]*$/;
+  let last = el.value;
+  el.addEventListener('input', () => {
+    if(pattern.test(el.value)) last = el.value;
+    else el.value = last;
+  });
+}
+
 function editOccurrence(){
   const t = cur(); if(!t) return;
+  const buckets = bucketsFor(S.panel);
   openModal(
     '<h3>Edit occurrence</h3><div class="msub">e · this month only'
     + (t.recurring ? ' · overrides the rule for ' + MONTHS[S.mi].key : '') + '</div>'
@@ -1761,8 +1791,10 @@ function editOccurrence(){
     + '</select></label>'
     + '</div>'
     + '<label class="f"><span class="k">Description</span><input class="i" id="eT" value="' + esc(t.title) + '"></label>'
-    + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">optional</span></span>'
-    + '<input class="i" id="eB" value="' + esc(t.bucket || '') + '" placeholder="e.g. Groceries"></label>'
+    + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">optional — pick one of yours, or type a new one</span></span>'
+    + '<input class="i" id="eB" list="eBucketList" value="' + esc(t.bucket || '') + '" placeholder="e.g. Groceries" autocomplete="off">'
+    + '<datalist id="eBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist>'
+    + '</label>'
     + '<label class="switch"><input type="checkbox" id="eP"' + (t.private?' checked':'') + '>'
     + '<span>Hidden from other members<span class="d">The admin always sees it.</span></span></label>'
     + '</div>' + (t.recurring
@@ -1770,6 +1802,8 @@ function editOccurrence(){
       : '') + '</div>'
     + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
     + '<button class="btn pri" data-act="saveOcc" type="button">Save</button></div>');
+  restrictToNumeric($('#eA'), true);
+  restrictToNumeric($('#eD'), false);
   setTimeout(()=>{ const el = $('#eA'); if(el){ el.focus(); el.select(); } }, 30);
 }
 
@@ -1877,6 +1911,43 @@ document.addEventListener('keydown', e => {
       e.preventDefault(); softDelete();
     }
     if(e.ctrlKey && MODAL_DIRS[e.key]){ e.preventDefault(); modalFocusMove(MODAL_DIRS[e.key]); }
+    /* Enter on the bucket combobox is never "save the form" — it's
+       ambiguous with "confirm the highlighted <datalist> suggestion", and
+       browsers don't agree on which one wins. Chrome swallows that Enter
+       inside its own suggestion-list handling before it ever reaches this
+       listener; Safari doesn't, so the very keystroke meant to pick a
+       bucket value falls through and closes the whole modal instead. Rather
+       than guess at Safari's exact event sequence, this field is simply
+       carved out of the generic Enter-saves rule below: Enter here only
+       blurs it (which is also what dismisses an open suggestion list),
+       leaving the value it just picked in place. A second Enter — now from
+       anywhere else — saves for real. */
+    if(e.key === 'Enter' && document.activeElement && document.activeElement.id === 'eB'){
+      e.preventDefault();
+      document.activeElement.blur();
+      return;
+    }
+    /* Enter = whatever the modal's own primary button does — saveOcc for
+       the edit-occurrence form, Close for a modal with no real save action
+       (help, edit rule). Deliberately no fallback to .dgr: the delete
+       confirm's only "yes" is the explicit y keypress above, so Enter never
+       becomes an accidental way to confirm a destructive action. */
+    if(e.key === 'Enter'){
+      const primary = $('#modal').querySelector('[data-act="saveOcc"], .mfoot .btn.pri');
+      if(primary){
+        e.preventDefault();
+        /* Blur whatever field is focused before tearing the modal down —
+           a datalist-backed input (Bucket) can have its native suggestion
+           popup open, and that popup is browser chrome outside the page's
+           own DOM/CSS. Removing the field from under it without blurring
+           first can leave it visually stuck on screen with nothing left to
+           anchor to. Blurring is what a browser already treats as "dismiss
+           the suggestions", so doing it explicitly, before the field is
+           gone, is what actually closes it. */
+        if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        primary.click();
+      }
+    }
     return;
   }
   if(inField) return;

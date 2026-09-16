@@ -225,6 +225,8 @@ for this row"*.
 | Key | Action |
 |---|---|
 | `Ctrl-H` / `Ctrl-J` / `Ctrl-K` / `Ctrl-L` | move focus between a modal's fields, left / down / up / right |
+| `Enter` | trigger the modal's primary action — Save on the edit-occurrence form |
+| `Esc` | cancel, no changes written |
 
 - **Directional, not tab order.** These move by where a field actually sits
   on screen, not by DOM sequence — so a field grid (amount / day / member,
@@ -235,6 +237,40 @@ for this row"*.
   It's the field most edits actually touch, so it's both the first thing on
   the form and the one that starts focused and pre-selected — type over it
   immediately, no click or tab required.
+- **`Enter` never reaches a destructive confirmation.** It fires whatever
+  the modal's own primary button does, which makes it Save on the
+  edit-occurrence form and Close on a modal with nothing to save (help, edit
+  rule) — but the delete-confirmation modal has no primary button for it to
+  find, on purpose. Its only "yes" stays the explicit `y` keypress (see
+  Undo above), so `Enter` can never become an accidental way to confirm a
+  delete.
+- **Amount and day only ever hold digits** (amount also allows one decimal
+  comma) — any edit that would leave the field holding anything else is
+  rejected outright, snapping back to the field's last valid value rather
+  than to some filtered version of what was just typed. That distinction
+  matters the moment the rejected edit also erases existing text — select
+  all and type one letter over "50,00", say — where filtering the new value
+  down to digits has nothing left to recover; only remembering the value
+  from before the edit gets it back. There's nothing to validate on save
+  because there's nothing invalid to hold in the first place.
+- **A datalist's native suggestion popup is browser chrome, not page DOM** —
+  closing the modal while it's open (`Enter` on the Bucket field) blurs the
+  focused field first, on purpose, before the field is torn down. Skipping
+  that step can leave the popup visually stuck on screen with nothing left
+  to anchor to, since removing its input from under it isn't the same thing
+  as the browser's own "dismiss the suggestions" trigger, which is losing
+  focus.
+- **`Enter` on the bucket field itself never saves the form — it only
+  blurs it.** That key is inherently double-booked on a combobox: it's also
+  how you confirm the highlighted `<datalist>` suggestion, and browsers
+  don't agree on which meaning wins. Chromium swallows that keystroke inside
+  its own suggestion-list handling before this app ever sees it; Safari
+  doesn't, so the same Enter that was only meant to pick a bucket value also
+  fell through and saved the whole form — closing it before the rest of the
+  edit was even reviewed. Carving this one field out of the generic
+  "Enter saves" rule sidesteps the disagreement outright rather than trying
+  to detect it: Enter here always just confirms the field and blurs; a
+  second Enter, now from anywhere else, saves for real.
 
 ### Deliberate deviations from Vim
 
@@ -421,6 +457,14 @@ stored file's extension mirrors whatever was actually uploaded.
 per member (see Receipt tracking & files above for how tracked rules also use
 them, plus `instance`, to compute storage paths). Grouping turns them into a
 view.
+
+- **The bucket field is a native combobox** (an `<input>` paired with a
+  `<datalist>`), not a `<select>`. A real `<select>` would force one of the
+  member's existing values and make typing a brand-new one impossible; a
+  plain text input would drop the "pick one you've already used" affordance
+  autocomplete is there for. The datalist is exactly "existing value or type
+  a new one" with no extra markup — the same widget browsers already use for
+  address/search autocomplete.
 
 ### Folds, not a new widget
 
