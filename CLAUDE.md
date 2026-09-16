@@ -197,6 +197,17 @@ JS only because it has no template layer.
   you can see and edit. `:profile` and privacy checks use the session's member
   id, never the focused pane's — otherwise focusing your spouse's pane would let
   you edit their preferences or expose what `private` hides from them.
+- **An admin can preview their own session with admin rights switched off —
+  this is not impersonation.** It never changes *who* is logged in: still the
+  same member, own pane, own edits, own private rows all fully visible and
+  editable throughout. The one thing it changes is whether admin-only
+  visibility and actions are currently in effect — other members' `private`
+  rows go back to actually being hidden (the same rule any non-admin already
+  faces) and admin-only config (`ffm.toml`, household currency) becomes
+  inaccessible, exactly as if this member held no admin role at all. No
+  session swap, no acting-as-someone-else, no writes attributed to anyone
+  else — see `design/spec.md`'s Auth & sessions section for the full
+  reasoning and why that distinction ruled out "impersonate" as the name.
 
 ### Recurring rules
 
@@ -484,8 +495,23 @@ JS only because it has no template layer.
 
 ## Conventions
 
-- **Locale is pt-BR.** Money as `R$ 1.234,56` (dot thousands, comma decimal),
-  dates as `dd/mm/yyyy`. Format server-side; do not push locale logic into Alpine.
+- **Locale is pt-BR — except currency, which is household-wide config.**
+  Dates stay `dd/mm/yyyy` unconditionally. Money's *symbol and number
+  format* (decimal/thousands separator, digit grouping) come from
+  `ffm.toml`'s `[locale] currency` — admin-only, one value for the whole
+  household, **never a per-member preference like theme**. Every member's
+  transactions land in the same shared totals (INs/OUTs/NET, balances); a
+  per-member currency would mean either fake, unbacked exchange-rate
+  conversion or two members seeing different-looking numbers for the exact
+  same total. Picking a currency picks its whole conventional format as one
+  preset (choosing USD switches to dot-decimal/comma-thousands, not just
+  the `$` glyph) — there's no independent "keep comma-decimal but show $"
+  combination. See `design/spec.md`'s Configuration section for the schema
+  and the supported set. This still isn't a signup-flow setting: there is
+  no self-registration (see Data model, below), so it's set the same way
+  `layout`/`privacy` are — by the admin, in `ffm.toml`, whenever the
+  household is first configured. Format server-side; do not push locale
+  logic into Alpine.
 - **Copy is written from the user's side of the screen.** Name things by what
   people recognise, active voice, a control says exactly what happens. Errors
   explain what went wrong and how to fix it.

@@ -183,7 +183,14 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .p-title{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .p-name{font-size:14px;font-weight:600;letter-spacing:-.01em}
 .p-role{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--accent);border:1px solid var(--accent-line);border-radius:4px;padding:1px 5px;background:var(--accent-soft)}
+  color:var(--accent);border:1px solid var(--accent-line);border-radius:4px;padding:1px 5px;background:var(--accent-soft);
+  cursor:pointer}
+/* Preview state gets its own colour channel (info, not accent) on purpose —
+   accent already means "you are here" everywhere else in this app (focus
+   rail, gutter zero, mode badge); reusing it here would make "I'm admin"
+   and "I'm previewing as non-admin" look like the same kind of fact when
+   they're opposites. */
+.p-role.preview{color:var(--info);border-color:var(--info);background:transparent}
 .p-key{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
 .sums{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);
   border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -353,6 +360,13 @@ label.f .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-tran
 input.i,select.i{width:100%;font-family:var(--mono);font-size:13px;background:var(--paper);color:var(--ink);
   border:1px solid var(--line-2);border-radius:7px;padding:7px 9px}
 input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+/* the currency symbol sits outside the editable text on purpose — the
+   masked amount field's value is always a pure number, never a string
+   with a symbol baked in, so there's nothing to strip back out on save. */
+.amtfield{position:relative}
+.amtfield .cur{position:absolute;left:9px;top:50%;transform:translateY(-50%);
+  font-family:var(--mono);font-size:13px;color:var(--ink-3);pointer-events:none}
+.amtfield input.i{padding-left:30px}
 .warnbox{background:var(--neg-soft);border:1px solid var(--neg);border-radius:8px;padding:10px 12px;
   font-size:13px;color:var(--ink);display:flex;gap:10px;align-items:flex-start}
 .warnbox .g{font-size:16px;line-height:1.2}
@@ -559,7 +573,43 @@ body{height:100dvh;overflow:hidden;display:flex;flex-direction:column;background
 <script>
 /* ================= helpers ================= */
 const $ = s => document.querySelector(s);
-const brl = n => 'R$ ' + Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+/* Currency is household-wide, admin-only config (ffm.toml's [locale] table,
+   simulated here as CFG.currency) — never a per-member preference. Every
+   member's transactions land in the same shared totals, so letting members
+   pick different currencies would mean either fake, unbacked "conversion"
+   or two different-looking numbers claiming to be the same total. One
+   value, same tier as storage/layout, is what keeps that coherent. This
+   table is the single source every money format and the edit-modal's
+   amount mask both read from — change CFG.currency and both follow, with
+   nothing hardcoded to Brazilian formatting left behind. */
+const CURRENCIES = {
+  BRL: { symbol:'R$', decimals:2, dec:',', grp:'.' },
+  USD: { symbol:'$',  decimals:2, dec:'.', grp:',' },
+  EUR: { symbol:'€',  decimals:2, dec:',', grp:'.' },
+  GBP: { symbol:'£',  decimals:2, dec:'.', grp:',' }
+};
+const curFmt = () => CURRENCIES[CFG.currency] || CURRENCIES.BRL;
+const groupThousands = (intStr, grp) => intStr.replace(/\B(?=(\d{3})+(?!\d))/g, grp);
+/* cents (or whatever the currency's smallest unit is) → a display string,
+   using that currency's own decimal/grouping separators — not always a dot
+   and a comma the way pt-BR formatting alone would assume. */
+function minorUnitsToDisplay(units, f){
+  const neg = units < 0; units = Math.abs(units);
+  const div = Math.pow(10, f.decimals);
+  const intPart = Math.floor(units / div).toString();
+  const fracPart = f.decimals ? f.dec + (units % div).toString().padStart(f.decimals, '0') : '';
+  return (neg ? '-' : '') + groupThousands(intPart, f.grp) + fracPart;
+}
+const fmtMoney = n => {
+  const f = curFmt();
+  return f.symbol + ' ' + minorUnitsToDisplay(Math.round(Math.abs(n) * Math.pow(10, f.decimals)), f);
+};
+/* The "no amount yet" placeholder (R$ __,__) is itself a money format, so it
+   has to follow the same currency swap as everything else — a USD symbol
+   next to a comma-decimal blank would be exactly the kind of half-dynamic
+   inconsistency this currency setting is supposed to rule out everywhere. */
+const emptyAmountPlaceholder = () => { const f = curFmt(); return f.symbol + ' __' + f.dec + '__'; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const MN = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 let uid = 1000;
@@ -728,8 +778,32 @@ const S = {
   sel: [new Set(), new Set()], undo: [], msg:'', msgBad:false,
   buf:'', count:'', mode:'NORMAL',
   q:'', qre:null, origin:{panel:0, focus:0},
-  foldClosed: [new Set(), new Set()]   // per-panel set of closed bucket names, :group bucket
+  foldClosed: [new Set(), new Set()],   // per-panel set of closed bucket names, :group bucket
+  /* The logged-in member is always MEMBERS[0] (Rodrigo) in this mock — there
+     is only ever one real session. previewNonAdmin doesn't change *who* is
+     logged in, only whether their admin rights are currently in effect —
+     "preview my own experience with them switched off", not "become someone
+     else". See isAdminNow() and isPrivacyHidden() below. */
+  previewNonAdmin: false
 };
+/* The one thing this toggle actually changes: whether the logged-in member
+   (always MEMBERS[0]) currently has admin rights in effect. Never a stand-in
+   for "who is logged in" — that stays Rodrigo either way. */
+function isAdminNow(){ return MEMBERS[0].role === 'admin' && !S.previewNonAdmin; }
+/* A private row is hidden from other members but never from its own owner
+   or the admin — this is the one rule that actually changes visible
+   behaviour when admin rights are switched off in preview. Rodrigo's own
+   pane (p===0) is never affected: owning a row already grants visibility,
+   independent of role. */
+function isPrivacyHidden(p, t){ return !!(t && t.private && p !== 0 && !isAdminNow()); }
+function togglePreview(){
+  S.previewNonAdmin = !S.previewNonAdmin;
+  clampFocusToVisible(0); clampFocusToVisible(1);
+  render();
+  say(S.previewNonAdmin
+    ? 'previewing as a non-admin member · other members’ private rows and admin-only config are hidden'
+    : 'admin rights restored');
+}
 
 /* ================= search =================
    `/` searches the ledger — the rows in view for the current month. It is not
@@ -737,7 +811,7 @@ const S = {
    that would be a different verb (`:grep`). */
 function hay(t){
   return [t.title, t.day ? pad(t.day) + '/' + MONTHS[S.mi].key : '', t.due || '',
-          brl(t.amount), t.private ? 'private' : '',
+          fmtMoney(t.amount), t.private ? 'private' : '',
           t.recurring ? 'recurring' : '', t.status].join(' ');
 }
 function setQuery(q){
@@ -825,8 +899,15 @@ function allBucketsOf(p){
   return [...s];
 }
 function isFoldedOut(p, i){
+  const t = view(p)[i];
+  /* Privacy-hidden rows are skipped by the exact same mechanism as a
+     closed fold — the one thing that already knows how to keep move(),
+     clampFocusToVisible() and the gutter's index math correct while
+     stepping over rows a plain rows.filter() would otherwise renumber
+     out from under S.focus. */
+  if(isPrivacyHidden(p, t)) return true;
   if(CFG.group !== 'bucket') return false;
-  const b = bucketOf(view(p)[i]);
+  const b = bucketOf(t);
   return !!b && S.foldClosed[p].has(b);
 }
 function clampFocusToVisible(p){
@@ -840,6 +921,11 @@ function groupedHTML(p, fi){
   const rows = view(p);
   const ins = [], groups = new Map();
   rows.forEach((t, i) => {
+    /* A privacy-hidden row skips both the flat list and grouping entirely —
+       not just its row, but its bucket's count and subtotal too. Baking its
+       amount into a subtotal a restricted viewer CAN see would leak its
+       existence through arithmetic, which defeats the point of hiding it. */
+    if(isPrivacyHidden(p, t)) return;
     const b = bucketOf(t);
     if(!b){ ins.push(rowHTML(t, i, fi, p)); return; }
     if(!groups.has(b)) groups.set(b, []);
@@ -856,7 +942,7 @@ function groupedHTML(p, fi){
       + '<span class="fchev">▸</span>'
       + '<span class="fname' + (b==='Uncategorized'?' unc':'') + '">' + esc(b) + '</span>'
       + '<span class="fcount">' + items.length + ' item' + (items.length>1?'s':'') + '</span>'
-      + '<span class="fsum">' + brl(sum) + '</span></div>'
+      + '<span class="fsum">' + fmtMoney(sum) + '</span></div>'
       + '<div class="frows">' + items.map(({t,i}) => rowHTML(t, i, fi, p)).join('') + '</div></div>';
   }).join('');
 }
@@ -983,12 +1069,18 @@ show_recurring = true
 # the admin (role 0) always sees all
 # "household" | "private"
 default_visibility = "household"
+
+[locale]
+# household-wide, admin-only — every member's transactions
+# share the same totals, so this isn't a per-member taste
+# setting the way theme is. "BRL" | "USD" | "EUR" | "GBP"
+currency = "BRL"
 `;
 
 const CFG = { panes:'auto', min_split_width:900, max_width:900, gap:16,
   line_numbers:'relative', show_delta:true, show_recurring:true,
   default_visibility:'household', sort:'manual', search_scope:'pane',
-  theme:'ffm', theme_over:{}, group:'none' };
+  theme:'ffm', theme_over:{}, group:'none', currency:'BRL' };
 
 const SCHEMA = {
   'layout.panes':            ['auto','split','tabs'],
@@ -1000,7 +1092,8 @@ const SCHEMA = {
   'ledger.line_numbers':     ['relative','absolute','none'],
   'ledger.show_delta':       'bool',
   'ledger.show_recurring':   'bool',
-  'privacy.default_visibility': ['household','private']
+  'privacy.default_visibility': ['household','private'],
+  'locale.currency':         Object.keys(CURRENCIES)
 };
 const NU = { relative:'rnu', absolute:'nu', none:'nonu' };
 const NU_R = { rnu:'relative', nu:'absolute', nonu:'none' };
@@ -1131,7 +1224,10 @@ function writeBackLineNumbers(){
   writeBackKey('line_numbers', CFG.line_numbers, 'ledger.line_numbers');
 }
 
-function openCfg(){ S.cfg = true; render(); setTimeout(()=>{ $('#cfgText').focus(); drawGut(); }, 20); }
+function openCfg(){
+  if(!isAdminNow()){ say('ffm.toml is admin-only', true); return; }
+  S.cfg = true; render(); setTimeout(()=>{ $('#cfgText').focus(); drawGut(); }, 20);
+}
 function closeCfg(){ S.cfg = false; render(); $('#app').focus(); }
 
 function gotoTab(dir){
@@ -1249,7 +1345,7 @@ function entryHTML(t, p, i){
     + fileBadgesHTML(t, p, i)
     + '<div class="amt"><div class="v' + (t.kind==='in'?' in':'') + '">'
     + (t.kind==='in'?'+ ':'')
-    + (t.status==='pending' && !t.amount ? 'R$ __,__' : hl(brl(t.amount)))
+    + (t.status==='pending' && !t.amount ? emptyAmountPlaceholder() : hl(fmtMoney(t.amount)))
     + '</div>' + deltaHTML(t) + '</div></div>';
 }
 
@@ -1273,7 +1369,12 @@ function rowHTML(t, i, fi, p){
 
 /* ================= render ================= */
 function totals(p){
-  const rs = rowsOf(p).filter(t => !t.deleted && t.state === 'ok');
+  /* Excluding a privacy-hidden row here, not just from the row list, is what
+     keeps a restricted viewer's numbers internally consistent — pane totals,
+     the tab-bar balance and the household header all read from this one
+     function, so there's nowhere left for a hidden row's amount to leak
+     through as an unexplained gap between what's shown and what's listed. */
+  const rs = rowsOf(p).filter(t => !t.deleted && t.state === 'ok' && !isPrivacyHidden(p, t));
   const i = rs.filter(t=>t.kind==='in').reduce((a,b)=>a+b.amount,0);
   const o = rs.filter(t=>t.kind==='out').reduce((a,b)=>a+b.amount,0);
   return {i,o,b:i-o};
@@ -1287,39 +1388,52 @@ function render(){
   app.classList.toggle('tabs', lay === 'tabs');
   app.classList.toggle('cfgopen', S.cfg);
   $('#monthLbl').textContent = M.label;
+  /* A real non-admin member never sees a control for a file they can't
+     open — hiding it, not just disabling it, is what "previewing as a
+     non-admin" is supposed to show. */
+  $('#cfgBtn').hidden = !isAdminNow();
 
   $('#tabbar').innerHTML = lay !== 'tabs' ? '' : MEMBERS.map((mem,p) => {
     const t = totals(p);
     return '<button class="tab' + (p===S.panel?' on':'') + '" data-t="' + p + '" type="button">'
       + '<span class="idx">' + (p+1) + '</span><span class="nm">' + mem.name + '</span>'
-      + '<span class="bal">' + (t.b<0?'− ':'') + brl(t.b) + '</span></button>';
+      + '<span class="bal">' + (t.b<0?'− ':'') + fmtMoney(t.b) + '</span></button>';
   }).join('') + '<span class="hint">gt · gT</span>';
   $('#panels').innerHTML = MEMBERS.map((mem,p) => {
     const t = totals(p), fi = S.focus[p];
     return '<div class="panel' + (p===S.panel?' active':'') + '" data-panel="' + p + '">'
       + '<div class="p-head"><div class="p-title">'
       + '<span class="p-name">' + mem.name + '</span>'
-      + (mem.role ? '<span class="p-role">' + mem.role + '</span>' : '')
+      + (mem.role ? '<span class="p-role' + (isAdminNow() ? '' : ' preview') + '" data-role-toggle'
+          + ' title="' + (isAdminNow() ? 'Preview as a non-admin member' : 'Return to admin') + '">'
+          + (isAdminNow() ? mem.role : 'preview') + '</span>' : '')
       + '<span class="p-key">' + (p===0?'H':'L') + '</span></div>'
       + '<div class="sums">'
-      + '<div class="sum in"><div class="k">INs</div><div class="v">' + brl(t.i) + '</div></div>'
-      + '<div class="sum out"><div class="k">OUTs</div><div class="v">' + brl(t.o) + '</div></div>'
+      + '<div class="sum in"><div class="k">INs</div><div class="v">' + fmtMoney(t.i) + '</div></div>'
+      + '<div class="sum out"><div class="k">OUTs</div><div class="v">' + fmtMoney(t.o) + '</div></div>'
       + '<div class="sum bal"><div class="k">Balance</div><div class="v' + (t.b<0?' neg':'') + '">'
-      + (t.b<0?'− ':'') + brl(t.b) + '</div></div>'
+      + (t.b<0?'− ':'') + fmtMoney(t.b) + '</div></div>'
       + '</div></div>'
       + '<div class="ledger">' + (CFG.group === 'bucket' ? groupedHTML(p, fi)
-          : view(p).map((r,i)=>rowHTML(r,i,fi,p)).join('')) + '</div></div>';
+          : view(p).map((r,i)=>isPrivacyHidden(p,r)?'':rowHTML(r,i,fi,p)).join('')) + '</div></div>';
   }).join('');
 
   const a = totals(0), b = totals(1);
-  $('#hIn').textContent = brl(a.i+b.i);
-  $('#hOut').textContent = brl(a.o+b.o);
+  $('#hIn').textContent = fmtMoney(a.i+b.i);
+  $('#hOut').textContent = fmtMoney(a.o+b.o);
   const net = a.b+b.b;
-  $('#hNet').textContent = (net<0?'− ':'') + brl(net);
+  $('#hNet').textContent = (net<0?'− ':'') + fmtMoney(net);
   $('#hNet').style.color = net<0 ? 'var(--neg)' : 'var(--ink)';
 
   $('#stFile').textContent = '~/ffm · ' + M.key;
-  $('#stMember').textContent = MEMBERS[S.panel].name + (MEMBERS[S.panel].role ? ' (admin)' : '');
+  /* The logged-in member, not whichever pane H/L happens to have focused —
+     "focused member ≠ logged-in member" (see CLAUDE.md's Server-side
+     rules): Rodrigo stays logged in, with his own role in effect, even
+     while H/L has him looking at Ana's pane. This used to read
+     MEMBERS[S.panel], which meant the statusline's "(admin)" silently
+     depended on which pane you'd last focused — accidentally true today
+     only because the admin's own pane happens to sit at index 0. */
+  $('#stMember').textContent = MEMBERS[0].name + (isAdminNow() ? ' (admin)' : ' (previewing as member)');
   $('#stPos').textContent = (S.focus[S.panel]+1) + '/' + rowsOf(S.panel).length;
   $('#stNu').textContent = S.nu;
   $('#stSort').textContent = CFG.sort;
@@ -1654,7 +1768,27 @@ function runCmd(raw){
     closeCmd(); say('theme → ' + n + ' · written to ffm.toml');
     return;
   }
+  /* Household-wide and admin-only, same as :sort/:set — never a per-member
+     command, since it changes what every member's shared totals look like,
+     not just this member's taste. Every fmtMoney() call and the edit-modal
+     amount mask both read CFG.currency, so this one write-back is enough
+     to make the whole app follow — no per-call-site currency logic to
+     keep in sync. */
+  if(cmd === 'currency'){
+    if(!isAdminNow()){ say('currency is admin-only', true); return; }
+    const n = (rest[0] || '').toUpperCase();
+    if(!CURRENCIES[n]){ say('currency ' + Object.keys(CURRENCIES).join(' | '), true); return; }
+    CFG.currency = n;
+    writeBackKey('currency', n, 'locale.currency');
+    render();
+    closeCmd(); say('currency → ' + n + ' · written to ffm.toml');
+    return;
+  }
   if(cmd === 'config' || cmd === 'cfg'){ closeCmd(); openCfg(); return; }
+  /* Keyboard equivalent of clicking the ADMIN/PREVIEW badge — see
+     togglePreview() and the row-component note on why this is "switch my
+     own rights off", never "log in as somebody else". */
+  if(cmd === 'preview'){ closeCmd(); togglePreview(); return; }
   if(cmd === 'q' && S.cfg){ closeCmd(); closeCfg(); return; }
   if(cmd === 'help' || cmd === 'h'){ closeCmd(); helpModal(); return; }
   say('not a command: ' + cmd + '  (try help)', true);
@@ -1739,7 +1873,7 @@ function confirmDelete(){
   openModal(
     '<h3>Delete this transaction?</h3><div class="msub">dd · soft delete</div><div class="mbody">'
     + '<div class="warnbox"><span class="g">⚠</span><div>'
-    + '<b>' + esc(t.title) + '</b> · ' + brl(t.amount) + '<br>'
+    + '<b>' + esc(t.title) + '</b> · ' + fmtMoney(t.amount) + '<br>'
     + '<span style="color:var(--ink-2);font-size:12.5px">The row is kept and marked with a deletion date. '
     + 'Restoring inserts a new row that references this one, so the history stays intact.</span></div></div>'
     + '<div class="notebox">Nothing is removed from the database. <kbd>u</kbd> restores it.</div></div>'
@@ -1776,6 +1910,28 @@ function restrictToNumeric(el, allowComma){
   });
 }
 
+/* Money mask for the Amount field: the user only ever types digits — the
+   decimal separator and thousands grouping are inserted for them, from the
+   household's configured currency (CFG.currency), never hardcoded to
+   comma-decimal. The underlying value lives in minor units (cents) on the
+   element itself (el.dataset.cents), so saving reads that directly instead
+   of re-parsing the formatted display string back apart — the two only
+   ever have to agree by construction. */
+function maskAmount(el, amount){
+  const f = curFmt();
+  const toUnits = a => Math.round((a || 0) * Math.pow(10, f.decimals));
+  const paint = units => {
+    el.dataset.cents = String(units);
+    el.value = units ? minorUnitsToDisplay(units, f) : '';
+  };
+  paint(toUnits(amount));
+  el.addEventListener('input', () => {
+    const digits = el.value.replace(/[^0-9]/g, '');
+    paint(digits ? parseInt(digits, 10) : 0);
+    el.setSelectionRange(el.value.length, el.value.length);
+  });
+}
+
 function editOccurrence(){
   const t = cur(); if(!t) return;
   const buckets = bucketsFor(S.panel);
@@ -1784,7 +1940,7 @@ function editOccurrence(){
     + (t.recurring ? ' · overrides the rule for ' + MONTHS[S.mi].key : '') + '</div>'
     + '<div class="mbody"><div class="stack">'
     + '<div class="fgrid3">'
-    + '<label class="f"><span class="k">Amount</span><input class="i" id="eA" value="' + (t.amount ? t.amount.toFixed(2).replace('.',',') : '') + '"></label>'
+    + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span><input class="i" id="eA" value=""></div></label>'
     + '<label class="f"><span class="k">Day</span><input class="i" id="eD" value="' + (t.day||'') + '"></label>'
     + '<label class="f"><span class="k">Member</span><select class="i" id="eM">'
     + MEMBERS.map((m,i) => '<option value="' + i + '"' + (i===S.panel?' selected':'') + '>' + m.name + '</option>').join('')
@@ -1802,7 +1958,7 @@ function editOccurrence(){
       : '') + '</div>'
     + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
     + '<button class="btn pri" data-act="saveOcc" type="button">Save</button></div>');
-  restrictToNumeric($('#eA'), true);
+  maskAmount($('#eA'), t.amount);
   restrictToNumeric($('#eD'), false);
   setTimeout(()=>{ const el = $('#eA'); if(el){ el.focus(); el.select(); } }, 30);
 }
@@ -2036,6 +2192,7 @@ document.addEventListener('keydown', e => {
 
 /* ================= mouse ================= */
 $('#panels').addEventListener('click', e => {
+  if(e.target.closest('[data-role-toggle]')){ togglePreview(); return; }
   const fb = e.target.closest('.fbadge');
   if(fb){
     const p = +fb.dataset.p, i = +fb.dataset.i, n = +fb.dataset.n;
@@ -2139,8 +2296,8 @@ $('#scrim').addEventListener('click', e => {
     const t = cur(); if(!t){ closeModal(); return; }
     const prev = {title:t.title, amount:t.amount, day:t.day, private:t.private, bucket:t.bucket};
     t.title = $('#eT').value || t.title;
-    const amt = parseFloat($('#eA').value.replace(/\./g,'').replace(',','.'));
-    if(isFinite(amt)) t.amount = amt;
+    const cents = parseInt($('#eA').dataset.cents || '0', 10);
+    if(isFinite(cents)) t.amount = cents / Math.pow(10, curFmt().decimals);
     const d = parseInt($('#eD').value,10); if(d>=1 && d<=31) t.day = d;
     t.private = $('#eP').checked;
     t.bucket = $('#eB').value.trim() || null;
@@ -2291,7 +2448,7 @@ const KEYGROUPS = [
   ['Find', [['/','search the ledger — incremental, regex'],['n / N','next / previous match, wrapping'],['Esc','clear the search highlight'],['/uber','matches title, date or amount']]],
   ['Fold', [['za','toggle the fold under the cursor'],['zo / zc','open / close it explicitly'],['zR / zM','open / close every fold in the panel'],['note','only active once :group bucket is on']]],
   ['Files', [['g1','open the bill file, new tab (proposal)'],['g2','open the scheduled-payment proof (proposal)'],['g3','open the receipt, new tab (proposal)'],['note','numbered by kind, always — no file of that kind is a no-op']]],
-  ['Type', [[':','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':move ana','re-attribute to another member'],[':sort date','row order: manual · date · amount'],[':group bucket','group by category · :group none to flatten'],[':set rnu','gutter: relative · absolute · off'],[':theme gruvbox','colorscheme (writes ffm.toml)'],[':config','open ffm.toml beside the ledger'],['?','this keymap']]]
+  ['Type', [[':','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':move ana','re-attribute to another member'],[':sort date','row order: manual · date · amount'],[':group bucket','group by category · :group none to flatten'],[':set rnu','gutter: relative · absolute · off'],[':theme gruvbox','colorscheme (writes ffm.toml)'],[':currency usd','household currency, admin-only (writes ffm.toml)'],[':config','open ffm.toml beside the ledger'],[':preview','toggle previewing as a non-admin member'],['?','this keymap']]]
 ];
 const KEYHTML = KEYGROUPS.map(([g, rows]) =>
   '<div class="kgroup"><h4>' + g + '</h4>' + rows.map(([k,d]) =>

@@ -218,7 +218,9 @@ for this row"*.
 | `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |
 | `:theme gruvbox` | colourscheme (writes `ffm.toml`) |
+| `:currency usd` | household currency, admin-only (writes `ffm.toml`) |
 | `:config` | open `ffm.toml` beside the ledger |
+| `:preview` | admin only — toggle previewing the app as a non-admin member |
 | `?` | keymap |
 
 ### Modal fields
@@ -244,15 +246,23 @@ for this row"*.
   find, on purpose. Its only "yes" stays the explicit `y` keypress (see
   Undo above), so `Enter` can never become an accidental way to confirm a
   delete.
-- **Amount and day only ever hold digits** (amount also allows one decimal
-  comma) — any edit that would leave the field holding anything else is
-  rejected outright, snapping back to the field's last valid value rather
-  than to some filtered version of what was just typed. That distinction
-  matters the moment the rejected edit also erases existing text — select
-  all and type one letter over "50,00", say — where filtering the new value
-  down to digits has nothing left to recover; only remembering the value
-  from before the edit gets it back. There's nothing to validate on save
-  because there's nothing invalid to hold in the first place.
+- **Day only ever holds digits.** Any edit that would leave it holding
+  anything else is rejected outright, snapping back to the field's last
+  valid value rather than to some filtered version of what was just typed.
+  That distinction matters the moment the rejected edit also erases
+  existing text — select all and type one letter over "15", say — where
+  filtering the new value down to digits has nothing left to recover; only
+  remembering the value from before the edit gets it back.
+- **Amount is a live mask, not a filtered text field.** The user only ever
+  types digits — there's no decimal separator to type at all, because the
+  field inserts it for them, along with thousands grouping, as they type.
+  Typing `1234567` becomes `12.345,67` (or `12,345.67`, `USD`-configured
+  households; see Currency, below) one keystroke at a time, the same way a
+  calculator or POS terminal reads digits right-to-left into cents. The
+  field's real value is tracked as an integer count of minor units, not
+  parsed back out of the formatted string on save — the display and the
+  saved value can't disagree with each other because the display is
+  computed from the same integer that gets saved.
 - **A datalist's native suggestion popup is browser chrome, not page DOM** —
   closing the modal while it's open (`Enter` on the Bucket field) blurs the
   focused field first, on purpose, before the field is torn down. Skipping
@@ -326,6 +336,36 @@ does most of the real work, so the auth layer stays simple on purpose.
   `member_settings` and private rows you can see or edit. Never conflate the
   two: focusing your spouse's pane must never let you touch their settings or
   their hidden rows.
+
+### Preview as non-admin (admin only)
+
+An admin can toggle their own session's admin rights off, to see the app the
+way any other member actually experiences it — badge click (`ADMIN` ↔
+`PREVIEW`) or `:preview`, reversible any time, no confirmation needed since
+nothing about it is destructive or hard to undo.
+
+- **Deliberately not called "impersonate", and not built as one.** The admin
+  considered and rejected impersonating a specific other member (viewing as
+  *that* person, in their words: "it will not impersonate another user") —
+  this is the same session, same identity, same pane, same edits, own private
+  rows still fully visible throughout. The only thing toggled is whether
+  admin-only visibility and actions are currently in effect for that one
+  session, not a session swap to someone else's account.
+- **What actually changes**: other members' `private` rows go back to being
+  genuinely hidden — not greyed out, not present-but-redacted, absent from
+  the row list, the pane's totals, and any group subtotal exactly the way
+  they'd be absent for a real non-admin, so nothing about the numbers can
+  leak a hidden row's existence by not adding up. Admin-only config
+  (`ffm.toml` — `:config`, `:currency`) becomes inaccessible; the `ffm.toml`
+  button itself disappears rather than sitting there disabled, since a real
+  non-admin never sees a control for a file they can't open.
+- **What doesn't change**: the admin's own pane, own rows, own private
+  transactions — ownership already grants visibility independent of role,
+  same as it does for every other member.
+- **`j`/`k` (and any other row-stepping motion) skip a hidden row rather than
+  landing on it** — the same mechanism a closed `:group bucket` fold already
+  uses to keep the gutter and focus index correct while stepping over rows
+  that aren't rendered. A hidden row is skipped, never a dead stop.
 
 ---
 
@@ -615,7 +655,42 @@ show_recurring = true
 
 [privacy]
 default_visibility = "household"   # "household" | "private"
+
+[locale]
+currency = "BRL"        # "BRL" | "USD" | "EUR" | "GBP" — see below
 ```
+
+### Currency (`[locale] currency`)
+
+Household-wide, admin-only — deliberately not in `member_settings` next to
+theme. Every member's transactions feed the same shared totals (INs/OUTs/NET,
+balances), so a per-member currency would mean either fake, unbacked
+exchange-rate conversion between members' views, or two members seeing
+different-looking numbers for the exact same total. One value, same tier as
+`storage`/`layout`, is what keeps that coherent — see `CLAUDE.md`'s
+Conventions section for the fuller reasoning.
+
+- **A closed set, not a free-typed code.** `BRL` | `USD` | `EUR` | `GBP`
+  today, the same "closed set, real published values" posture as the
+  bundled themes — extendable later, not user-invented.
+- **Choosing a currency chooses its whole conventional number format as one
+  preset** — symbol, decimal separator, thousands separator, all bundled.
+  Picking `USD` switches the household to dot-decimal/comma-thousands
+  (`$1,234.56`), not just the glyph; there's no "keep comma-decimal but
+  show `$`" combination on offer, because that isn't how any of these
+  currencies are actually written.
+- **Dates are unaffected.** `dd/mm/yyyy` stays fixed regardless of currency
+  — this setting is scoped to money formatting only, not a full locale
+  switch.
+- **The edit-occurrence modal's amount field is a live mask keyed off this
+  same value** — the user only ever types digits (see Modal fields,
+  above); the decimal/thousands separators it inserts, and the static
+  currency-symbol prefix shown beside the field, both come from whichever
+  currency is currently configured. Every other money display in the app
+  (row amounts, pane totals, the household header) reads the same single
+  value, so there's exactly one place that ever needs to change if this
+  setting changes — nothing about currency formatting is hardcoded
+  per call site.
 
 ### Schema — `member_settings` (per member, DB-backed)
 
