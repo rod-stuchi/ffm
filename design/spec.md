@@ -137,7 +137,39 @@ Nothing destructive fires from a single keystroke.
 | `x` | toggle selection for a batch operation |
 | `e` | edit this occurrence |
 | `R` | edit the recurring rule behind it |
+| `gd` | show due/cadence/receipt details for the focused row *(proposal, not in the original spec)* |
 | `p` | toggle private *(proposal, not in the original spec)* |
+
+### Mouse
+| Action | Result |
+|---|---|
+| Click a row | focus it — the same cursor `j`/`k` move, just placed by pointing instead |
+| Double-click a row | `e` — edit this occurrence |
+| Hover a recurring row | show its due/cadence/receipt details — the same info `gd` shows for the focused row, keyboard-only |
+| Click a file control | open that file, new tab — the same action as `g1`/`g2`/`g3` |
+
+- **`gd` is that same details popup with no mouse involved.** Hovering was
+  the only way to see a row's due date, cadence and receipt path before this
+  — no keyboard path existed at all. `gd` anchors the popup to the focused
+  row instead of a pointer position (there isn't one), reuses the exact same
+  panel and content, and is dismissed the same way any hover artifact is —
+  the very next keypress, of any kind, closes it, per the rule below. It's a
+  no-op with a statusline message on a non-recurring row — the same
+  treatment `R` already gets there — but works the same as hover on any
+  recurring row, tracked or not.
+
+- **Keyboard motion always wins over a stale hover.** The moment any key
+  moves the cursor, the row the mouse happens to be resting over stops
+  painting its hover highlight, and the recurring-row tooltip is dismissed
+  outright — only the real (`.row.focus`) cursor stays lit. Without this,
+  hovering one row and then walking away with `j`/`k` leaves two different
+  rows highlighted in two different ways at once (possibly with the old
+  row's tooltip still floating on screen, detached from anything current),
+  and neither reading ("where my mouse is" vs. "where my cursor is") is more
+  correct than the other, which is exactly the ambiguity a modal ledger
+  cannot afford. Any real mouse movement clears the suppression immediately
+  — hover and the tooltip both come right back the instant the mouse is the
+  thing actually moving again.
 
 ### Find
 | Key | Action |
@@ -188,6 +220,21 @@ for this row"*.
 | `:theme gruvbox` | colourscheme (writes `ffm.toml`) |
 | `:config` | open `ffm.toml` beside the ledger |
 | `?` | keymap |
+
+### Modal fields
+| Key | Action |
+|---|---|
+| `Ctrl-H` / `Ctrl-J` / `Ctrl-K` / `Ctrl-L` | move focus between a modal's fields, left / down / up / right |
+
+- **Directional, not tab order.** These move by where a field actually sits
+  on screen, not by DOM sequence — so a field grid (amount / day / member,
+  say) navigates the way it visually reads, without the form's markup order
+  having to match its layout order. Plain `Tab`/`Shift-Tab` still walk the
+  DOM order for anyone who reaches for that instead.
+- **The amount comes before the description in the edit-occurrence form.**
+  It's the field most edits actually touch, so it's both the first thing on
+  the form and the one that starts focused and pre-selected — type over it
+  immediately, no click or tab required.
 
 ### Deliberate deviations from Vim
 

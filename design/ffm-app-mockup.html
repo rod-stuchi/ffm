@@ -211,7 +211,11 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .entry{display:grid;grid-template-columns:26px 1fr auto auto;gap:11px;align-items:center;
   background:var(--surface-2);border-radius:var(--r);padding:8px 12px;min-width:0;cursor:pointer;
   border:1px solid transparent;transition:background .1s}
-.row:hover .entry{background:var(--surface-3)}
+/* Suppressed while navigating by keyboard (body.kbd-nav) — otherwise the
+   physical mouse position keeps painting a second, unrelated highlight
+   while j/k moves the real (.row.focus) cursor somewhere else. Any real
+   mouse movement clears kbd-nav and hover comes right back. */
+body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 .row.focus .entry{background:var(--surface-2);border-color:var(--accent-line)}
 .row.sel .entry{box-shadow:inset 3px 0 0 var(--info)}
 .row.deleted .entry{opacity:.5}
@@ -1671,6 +1675,64 @@ function month(d){ goMonth(S.mi + d); }
 function openModal(html){ $('#modal').innerHTML = html; $('#scrim').classList.add('on'); }
 function closeModal(){ $('#scrim').classList.remove('on'); $('#app').focus(); }
 
+/* Ctrl+hjkl moves focus between a modal's fields by screen position rather
+   than DOM order, so it keeps working unchanged no matter how a given
+   modal's fields are laid out — no per-field row/col bookkeeping to keep in
+   sync as fields are added, removed or reordered. Two-phase pick, the same
+   shape real spatial-nav (TV remotes, gamepad UIs) uses: first keep only
+   fields whose box actually starts on the correct side (a field's left edge
+   must clear the current field's left edge to count as "right" of it — a
+   full-width field one row down can sit centred close enough to fail this
+   and get excluded, where a naive centre-distance metric would wrongly grab
+   it); then, among those, prefer ones that overlap the current field on the
+   cross axis (same row for h/l, same column for j/k) before falling back to
+   nearest-by-distance so j/k tracks straight down a column instead of
+   drifting into a wider neighbour. */
+const MODAL_DIRS = {h:'left', j:'down', k:'up', l:'right'};
+function modalFields(){
+  return Array.from($('#modal').querySelectorAll('input,select,textarea'))
+    .filter(el => !el.disabled && el.offsetParent !== null);
+}
+function overlaps1D(aMin, aMax, bMin, bMax){ return aMin < bMax && bMin < aMax; }
+function modalFocusMove(dir){
+  const els = modalFields();
+  if(!els.length) return;
+  const from = els.includes(document.activeElement) ? document.activeElement : els[0];
+  const a = from.getBoundingClientRect();
+  const horiz = dir === 'left' || dir === 'right';
+  const inDirection = els.filter(el => el !== from).map(el => ({el, r: el.getBoundingClientRect()}))
+    .filter(({r}) => {
+      if(dir === 'right') return r.left > a.left + 4;
+      if(dir === 'left')  return r.right < a.right - 4;
+      if(dir === 'down')  return r.top > a.top + 4;
+      return r.bottom < a.bottom - 4; /* up */
+    });
+  if(!inDirection.length) return;
+  const aligned = inDirection.filter(({r}) => horiz
+    ? overlaps1D(a.top, a.bottom, r.top, r.bottom)
+    : overlaps1D(a.left, a.right, r.left, r.right));
+  /* Within the aligned pool the overlap test has already done the real work
+     of "same row/column" — the cross-axis term only needs to break near-ties
+     (e.g. picking the closer of two equally-adjacent fields in the row
+     above). Weighted heavily there, it would let a wide full-row field's
+     far-off centre outscore a narrow field's much smaller primary-axis
+     distance, which is exactly the bug this function used to have: pressing
+     down from a 1-of-3 column field jumped clean over the very next
+     full-width row into the one after it. The unaligned fallback pool has
+     no such guarantee, so it leans on the cross-axis term much harder to
+     approximate "closest in roughly the right direction". */
+  const pool = aligned.length ? aligned : inDirection;
+  const crossWeight = aligned.length ? 0.2 : 2.2;
+  let best = null, bestDist = Infinity;
+  for(const {el, r} of pool){
+    const dx = (r.left + r.width/2) - (a.left + a.width/2);
+    const dy = (r.top + r.height/2) - (a.top + a.height/2);
+    const dist = horiz ? Math.abs(dx) + Math.abs(dy) * crossWeight : Math.abs(dy) + Math.abs(dx) * crossWeight;
+    if(dist < bestDist){ bestDist = dist; best = el; }
+  }
+  if(best){ best.focus(); if(best.select) best.select(); }
+}
+
 function confirmDelete(){
   const t = cur(); if(!t) return;
   if(t.deleted){ say('already deleted', true); return; }
@@ -1691,7 +1753,6 @@ function editOccurrence(){
     '<h3>Edit occurrence</h3><div class="msub">e · this month only'
     + (t.recurring ? ' · overrides the rule for ' + MONTHS[S.mi].key : '') + '</div>'
     + '<div class="mbody"><div class="stack">'
-    + '<label class="f"><span class="k">Description</span><input class="i" id="eT" value="' + esc(t.title) + '"></label>'
     + '<div class="fgrid3">'
     + '<label class="f"><span class="k">Amount</span><input class="i" id="eA" value="' + (t.amount ? t.amount.toFixed(2).replace('.',',') : '') + '"></label>'
     + '<label class="f"><span class="k">Day</span><input class="i" id="eD" value="' + (t.day||'') + '"></label>'
@@ -1699,6 +1760,7 @@ function editOccurrence(){
     + MEMBERS.map((m,i) => '<option value="' + i + '"' + (i===S.panel?' selected':'') + '>' + m.name + '</option>').join('')
     + '</select></label>'
     + '</div>'
+    + '<label class="f"><span class="k">Description</span><input class="i" id="eT" value="' + esc(t.title) + '"></label>'
     + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">optional</span></span>'
     + '<input class="i" id="eB" value="' + esc(t.bucket || '') + '" placeholder="e.g. Groceries"></label>'
     + '<label class="switch"><input type="checkbox" id="eP"' + (t.private?' checked':'') + '>'
@@ -1708,7 +1770,7 @@ function editOccurrence(){
       : '') + '</div>'
     + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
     + '<button class="btn pri" data-act="saveOcc" type="button">Save</button></div>');
-  setTimeout(()=>$('#eT') && $('#eT').focus(), 30);
+  setTimeout(()=>{ const el = $('#eA'); if(el){ el.focus(); el.select(); } }, 30);
 }
 
 function editRule(){
@@ -1762,7 +1824,18 @@ function helpModal(){
 
 /* ================= keyboard ================= */
 const DIGIT = /^[0-9]$/;
+/* Real mouse movement clears this immediately, so hover returns the moment
+   the mouse is the thing actually moving again. */
+document.addEventListener('mousemove', () => document.body.classList.remove('kbd-nav'), {passive:true});
 document.addEventListener('keydown', e => {
+  document.body.classList.add('kbd-nav');
+  /* The recurring-row tooltip is shown/hidden purely by real mouse position
+     (see the mousemove listener below) — it has no idea the keyboard just
+     moved the actual cursor elsewhere, so without this it can be left
+     dangling over a row that isn't focused anymore, or covering a row that
+     now is. Any keypress kills it outright, the same instant kbd-nav kicks
+     in; a real mousemove is what's allowed to bring it back. */
+  $('#tip').style.display = 'none';
   const inField = e.target.closest('input,select,textarea');
 
   if(mpop.classList.contains('on')){
@@ -1803,6 +1876,7 @@ document.addEventListener('keydown', e => {
     if(!inField && (e.key === 'y' || e.key === 'Y') && $('#modal').querySelector('[data-act="del"]')){
       e.preventDefault(); softDelete();
     }
+    if(e.ctrlKey && MODAL_DIRS[e.key]){ e.preventDefault(); modalFocusMove(MODAL_DIRS[e.key]); }
     return;
   }
   if(inField) return;
@@ -1837,6 +1911,7 @@ document.addEventListener('keydown', e => {
     if(k === 'g'){ S.focus[S.panel]=0; S.count=''; render(); }
     else if(k === 't'){ gotoTab(1); }
     else if(k === 'T'){ gotoTab(-1); }
+    else if(k === 'd'){ S.count=''; showDetailsForFocused(); }
     else { S.count=''; render(); }
     return;
   }
@@ -1916,19 +1991,28 @@ $('#panels').addEventListener('click', e => {
     return;
   }
   const row = e.target.closest('.row');
-  if(row){ S.panel = +row.dataset.p; S.focus[S.panel] = +row.dataset.i; S.count=''; render(); $('#app').focus(); return; }
+  if(row){
+    /* e.detail (the browser's own same-spot rapid-click counter) rather than
+       the native dblclick event: every click here calls render(), which
+       replaces the row element under the pointer, and Chrome never promotes
+       that second click to a dblclick once the target stops being the same
+       node — even though it still correctly counts it as click #2 at the
+       same position. detail is the one signal that survives the re-render. */
+    const isDbl = e.detail >= 2;
+    S.panel = +row.dataset.p; S.focus[S.panel] = +row.dataset.i; S.count=''; render(); $('#app').focus();
+    if(isDbl) editOccurrence();
+    return;
+  }
   const pan = e.target.closest('.panel');
   if(pan) switchPanel(+pan.dataset.panel);
 });
 
-/* hover tooltip on recurring rows */
+/* hover tooltip on recurring rows — also reachable via gd for keyboard-only
+   use (see showDetailsForFocused below), since the mouse-driven version had
+   no keyboard equivalent at all. */
 const tip = $('#tip');
-$('#panels').addEventListener('mousemove', e => {
-  const row = e.target.closest('.row');
-  if(!row){ tip.style.display='none'; return; }
-  const t = view(+row.dataset.p)[+row.dataset.i];
-  if(!t || !t.recurring || t.state !== 'ok'){ tip.style.display='none'; return; }
-  tip.innerHTML = '<b>' + esc(t.title) + '</b><div class="hr"></div>'
+function tipHTML(t){
+  return '<b>' + esc(t.title) + '</b><div class="hr"></div>'
     + 'Due: ' + (t.due || 'day ' + pad(t.day) + ' each month') + '<br>'
     + 'Cadence: monthly · since 01/03/2024<br>'
     + (t.tracked
@@ -1936,6 +2020,13 @@ $('#panels').addEventListener('mousemove', e => {
             ? '<span style="color:var(--pos)">found on disk → paid</span>'
             : '<span style="color:var(--accent)">not found yet → unpaid</span>')
         : '<span style="color:var(--ink-3)">tracking off · no paid state</span>');
+}
+$('#panels').addEventListener('mousemove', e => {
+  const row = e.target.closest('.row');
+  if(!row){ tip.style.display='none'; return; }
+  const t = view(+row.dataset.p)[+row.dataset.i];
+  if(!t || !t.recurring || t.state !== 'ok'){ tip.style.display='none'; return; }
+  tip.innerHTML = tipHTML(t);
   tip.style.display='block';
   const r = tip.getBoundingClientRect();
   let x = e.clientX + 14, y = e.clientY + 16;
@@ -1944,6 +2035,27 @@ $('#panels').addEventListener('mousemove', e => {
   tip.style.left = (x + scrollX) + 'px'; tip.style.top = (y + scrollY) + 'px';
 });
 $('#panels').addEventListener('mouseleave', () => tip.style.display='none');
+
+/* gd — the keyboard equivalent of hovering the focused row: same content,
+   same element, just anchored to the row's own position instead of a
+   pointer that doesn't exist for a keyboard action. Dismissed the same way
+   any other hover artifact is (see the kbd-nav suppression above) — the
+   very next keypress, of any kind, hides it again. */
+function showDetailsForFocused(){
+  const t = cur();
+  render(); /* clears the g/d buffer out of the statusline either way */
+  if(!t || !t.recurring){ say('not generated from a recurring rule', true); return; }
+  if(t.state !== 'ok') return;
+  const rowEl = document.querySelector('.row.focus');
+  if(!rowEl) return;
+  tip.innerHTML = tipHTML(t);
+  tip.style.display = 'block';
+  const rr = rowEl.getBoundingClientRect(), r = tip.getBoundingClientRect();
+  let x = rr.right - r.width, y = rr.bottom + 8;
+  if(y + r.height > innerHeight - 10) y = rr.top - r.height - 8;
+  if(x < 10) x = 10;
+  tip.style.left = (x + scrollX) + 'px'; tip.style.top = (y + scrollY) + 'px';
+}
 
 $('#scrim').addEventListener('click', e => {
   if(e.target === $('#scrim')){ closeModal(); return; }
@@ -2103,7 +2215,7 @@ $('#netBtn').onclick = () => {
 /* ================= keymap ================= */
 const KEYGROUPS = [
   ['Move', [['j / k','row down / up'],['5j · 7k','counted motion'],['gg / G','first / last row'],['H / L','focus member panel, left / right'],['gt / gT','next / previous member tab'],['2gt','jump straight to tab 2'],['Ctrl-P / Ctrl-N','previous / next month']]],
-  ['Act',  [['J / K','move the row — or every selected row — down / up'],['3J','move it three places'],['Ctrl-H / Ctrl-L','send the row to the member pane left / right'],['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence'],['R','edit the recurring rule behind it'],['p','toggle private (proposal)']]],
+  ['Act',  [['J / K','move the row — or every selected row — down / up'],['3J','move it three places'],['Ctrl-H / Ctrl-L','send the row to the member pane left / right'],['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence'],['R','edit the recurring rule behind it'],['gd','show due/cadence/receipt details, keyboard-only (proposal)'],['p','toggle private (proposal)']]],
   ['Undo', [['dd','delete — opens a confirmation'],['y','confirm in the delete modal'],['u','undo the last change'],['Esc','clear count, buffer and selection']]],
   ['Find', [['/','search the ledger — incremental, regex'],['n / N','next / previous match, wrapping'],['Esc','clear the search highlight'],['/uber','matches title, date or amount']]],
   ['Fold', [['za','toggle the fold under the cursor'],['zo / zc','open / close it explicitly'],['zR / zM','open / close every fold in the panel'],['note','only active once :group bucket is on']]],
