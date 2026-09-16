@@ -43,8 +43,58 @@ understood:
   even possible.
 - **The bill/invoice file (`barcode`) never changes this state column at all.**
   It's informational — line items, amount, due date, as issued by the company
-  — shown as its own small "bill attached" glyph regardless of whether
-  anything has been scheduled or paid.
+  — and is surfaced through the file badges below, not through the status
+  mark, regardless of whether anything has been scheduled or paid.
+- **Installment progress is a bare `{paid}/{total}` badge** (e.g. `7/12`), not
+  baked into the title — the same meta slot the due-date and recurring glyphs
+  already occupy.
+
+### File badges
+
+Up to three small badges sit in their own slot between the name/meta block
+and the amount — not in the meta line (too small for what these need to
+carry), and not merged into the status mark (the mark stays a pure fact about
+state; opening a file is an action, kept visually separate on purpose).
+
+```
+ 0   ✓   Energia · Enel SP              [📄1][🧾3]      R$ 343,62
+         🏁 11/07/2026 · ↻                                 ▲ +20%
+
+ 1   ⏱   Água · Sabesp                  [📄1][◷2]        R$ 108,40
+         ⚠ agendado, sem comprovante · venceu 18/07
+
+ 2        Mercado · Pão de Açúcar                          R$ 658,90
+         13/07/2026                                          ▼ -6%
+```
+
+- **Fixed numbering by kind, always**: `1` is the bill (📄), `2` is scheduled
+  (◷), `3` is the receipt (🧾) — never renumbered based on what happens to
+  exist on a given row. `g1` means "show me the bill" on every row, tracked or
+  not, which is what makes it learnable.
+- **Only rendered when that file exists.** A row with a bill and a receipt but
+  no scheduled file shows `[📄1][🧾3]` — nothing sits where `2` would be. No
+  ghost/hollow placeholder; the keybinding still works purely off kind, not
+  position.
+- **The number is a real `<kbd>`**, reusing the existing key-cap styling
+  verbatim (surface-2 fill, bottom-weighted border, mono font) — it doesn't
+  just label the badge, it reads as "press this," the same trick the gutter's
+  relative line numbers already pull off.
+- **Sized in a deliberate hierarchy**: the status mark stays the biggest,
+  most important thing on the row (26px, unchanged) → file badges are a clear
+  step down (~23px, legible at a glance — they're a key on-row fact, not a
+  minor annotation) → `↻`/`🔒` stay exactly as small and inline as they've
+  always been in the meta line. Three tiers, each size saying how important
+  the fact is.
+- **Kept visually separate from the amount.** The badge cluster carries its
+  own margin beyond the row's normal grid gap, so it never reads as fused to
+  the value it sits next to — opening a file and reading the amount are two
+  different facts, not one glued group.
+- **Absent for any row with nothing to show** — not a reserved empty box. The
+  row's middle column is already flexible (`1fr`), so the amount column stays
+  flush against the row's right edge whether the badge cluster is present or
+  not; nothing about existing alignment changes.
+- **Clicking a badge opens that file in a new browser tab.** No in-app
+  preview/modal — see the Recurring rules section of `CLAUDE.md` for why.
 
 ---
 
@@ -83,6 +133,27 @@ Nothing destructive fires from a single keystroke.
 | `n` / `N` | next / previous match, wrapping |
 | `Esc` | clear the search highlight |
 
+### Fold
+| Key | Action |
+|---|---|
+| `za` | toggle the fold under the cursor |
+| `zo` / `zc` | open / close it explicitly |
+| `zR` / `zM` | open / close every fold in the panel |
+
+### Files
+| Key | Action |
+|---|---|
+| `g1` | open the bill (📄) for the focused row, new tab *(proposal, not in the original spec)* |
+| `g2` | open the scheduled-payment file (◷) *(proposal, not in the original spec)* |
+| `g3` | open the receipt (🧾) *(proposal, not in the original spec)* |
+
+Not stock Vim — a genuine FFM extension of the `g`-prefix "goto" vocabulary
+already in use (`gg`, `gt`), not a new pattern. Pressing a number for a file
+that doesn't exist on that row is a no-op with a statusline message, same
+treatment `R` already gets on a non-recurring row: *"no bill on file for this
+row"*, *"no scheduled payment on file for this row"*, *"no receipt on file
+for this row"*.
+
 ### Undo
 | Key | Action |
 |---|---|
@@ -99,6 +170,7 @@ Nothing destructive fires from a single keystroke.
 | `:in 2400 freelance` | an incoming |
 | `:move ana` | re-attribute to another member |
 | `:sort date` | row order: manual · date · amount |
+| `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |
 | `:theme gruvbox` | colourscheme (writes `ffm.toml`) |
 | `:config` | open `ffm.toml` beside the ledger |
@@ -283,6 +355,88 @@ stored file's extension mirrors whatever was actually uploaded.
 
 ---
 
+## Categorization & grouping
+
+`bucket` and `bill_name` are free-text fields on any transaction, autocompleted
+per member (see Receipt tracking & files above for how tracked rules also use
+them, plus `instance`, to compute storage paths). Grouping turns them into a
+view.
+
+### Folds, not a new widget
+
+`:group bucket` switches a panel's ledger from flat to grouped, rendered as
+real Vim folds — see the Fold keymap above (`za`/`zo`/`zc`/`zR`/`zM`). Fold
+state is pure Alpine visual state — the server renders the full grouped,
+subtotaled fragment regardless of what's folded; folding only shows or hides
+what's already in the DOM. `j`/`k` skip a closed fold's contents and land on
+its header, same as real Vim.
+
+### What a fold header looks like
+
+A framed container (same visual language as the existing `.card` component),
+one per `bucket`, holding the bucket name, a row count, and a **subtotal that
+stays visible whether the fold is open or closed**. Deliberately not
+colour-coded — `bucket` is open-vocabulary and unbounded, while a theme's
+palette is a fixed 11 tokens with `pos`/`neg`/`accent`/`info` already spoken
+for; a frame plus a label scales to any number of categories without risking a
+collision or inventing a hash-based colour scheme for marginal gain.
+
+Rows with no `bucket` set land in an **`Uncategorized`** group — grouping never
+silently drops a row. Nesting stops at `bucket` — no nested `bill_name`
+sub-folds.
+
+### This is the report, not a separate screen
+
+Because the subtotal never disappears, `zM` (close every fold) turns the
+ledger straight into a per-category summary — Consumption R$ 1.556,92,
+Subscriptions R$ 59,90, and so on — with zero additional screen to build.
+Browsing and summarizing are the same mechanism at two zoom levels.
+
+### Interaction with sort and reorder
+
+Grouping is a derived view exactly like `ledger.sort = "date"`/`"amount"` — the
+moment rows are re-clustered by category, `J`/`K` refuse with the same message
+pattern: `ledger.group = "bucket" — reorder needs group = "none"`.
+
+### Default fold state is personal
+
+Whether a newly-opened grouped panel starts fully expanded or fully collapsed
+is a `member_settings` radio choice (`group_fold_default`), not a shared
+`ffm.toml` setting — same reasoning as theme and line numbers: it's taste, not
+process config.
+
+---
+
+## Unresolved issues across months
+
+An unresolved issue is a tracked occurrence overdue with no receipt —
+`pending` past its due date, or `scheduled overdue` — checked household-wide
+across the current calendar year, filtered per-viewer by the existing privacy
+rule (a private row only counts for its owner and the admin).
+
+### Surfaced as a badge, not a message
+
+- A small dot (`--neg` token, the same warning colour already used for
+  `scheduled overdue`) overlays the month-picker trigger button whenever any
+  month this year, other than the one currently open, has an unresolved
+  occurrence.
+- The same dot appears on each flagged month's `.mcell` inside the picker
+  popup, so opening the picker shows exactly which months, not just that
+  something, somewhere, is wrong.
+- No toast, no banner, no first-load message. The dot is just there the
+  moment the page renders, for as long as the issue stays unresolved —
+  ambient like every other status in this app, not a one-shot notification
+  that gets dismissed and then forgotten.
+- Clicking a flagged cell jumps to that month — the picker's existing
+  behaviour, unchanged. No new command.
+
+### Defaults
+
+The app opens to the current month on first load, always — never the
+last-viewed month, never January.
+
+---
+
 ## Configuration — `ffm.toml` + per-member settings
 
 Two tiers, split by who legitimately needs to change what:
@@ -367,6 +521,8 @@ theme_overrides   json     -- open-ended: any of the 11 tokens, same
                             -- #[serde(flatten)] HashMap<ThemeToken, Color> as
                             -- before, decoded from JSON instead of TOML
 line_numbers      text     -- "relative" | "absolute" | "none"
+ledger_group      text     -- "none" | "bucket"
+group_fold_default text    -- "expanded" | "collapsed"
 ```
 
 `theme_overrides` stays the one **open-ended** field: a strongly-typed key enum

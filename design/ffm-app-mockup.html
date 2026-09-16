@@ -127,12 +127,15 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
   border-radius:7px;color:var(--ink-2);cursor:pointer;font-family:var(--mono);font-size:15px}
 .mbtn:hover{background:var(--surface);border-color:var(--line-2);color:var(--ink)}
 .mpick{display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line-2);
-  border-radius:9px;padding:8px 12px;cursor:pointer;color:var(--ink);height:38px}
+  border-radius:9px;padding:8px 12px;cursor:pointer;color:var(--ink);height:38px;position:relative}
 .mpick .month{font-family:var(--mono);font-size:16px;font-weight:500;letter-spacing:.01em;min-width:104px;text-align:center}
 .mpick .car{font-size:9px;color:var(--ink-3);line-height:1}
 .mpick:hover{border-color:var(--accent-line)}
 .mpick:hover .car{color:var(--accent)}
 .mpick[aria-expanded="true"]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.mdot{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;
+  background:var(--neg);border:2px solid var(--paper);display:none}
+.mdot.on{display:block}
 .topbar .spacer{flex:1}
 .hh{display:flex;align-items:stretch}
 .hh div{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:2px 16px;border-left:1px solid var(--line)}
@@ -150,13 +153,14 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .mcell{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--paper);
   border:1px solid var(--line);border-radius:8px;padding:8px 4px 7px;cursor:pointer;color:var(--ink);
-  font-family:var(--mono);font-size:13px;font-weight:500}
+  font-family:var(--mono);font-size:13px;font-weight:500;position:relative}
 .mcell:hover{border-color:var(--accent-line);background:var(--surface-2)}
 .mcell .n{font-size:9.5px;font-weight:400;color:var(--ink-3);font-variant-numeric:tabular-nums}
 .mcell.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
 .mcell.on .n{color:var(--accent)}
 .mcell.now{box-shadow:inset 0 -2px 0 var(--info)}
 .mcell.fut .n{color:var(--accent-2)}
+.mcell .idot{position:absolute;top:4px;right:5px;width:6px;height:6px;border-radius:50%;background:var(--neg)}
 .mpop .ft{font-family:var(--mono);font-size:10px;color:var(--ink-3);line-height:1.7;margin-top:10px;
   padding-top:9px;border-top:1px solid var(--line)}
 .mpop .ft i{font-style:normal;color:var(--info)}
@@ -204,7 +208,7 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .row.nogut{grid-template-columns:10px 1fr}
 .row.nogut .gut{padding-right:0;overflow:hidden}
 
-.entry{display:grid;grid-template-columns:26px 1fr auto;gap:11px;align-items:center;
+.entry{display:grid;grid-template-columns:26px 1fr auto auto;gap:11px;align-items:center;
   background:var(--surface-2);border-radius:var(--r);padding:8px 12px;min-width:0;cursor:pointer;
   border:1px solid transparent;transition:background .1s}
 .row:hover .entry{background:var(--surface-3)}
@@ -225,6 +229,23 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .mark .dot{width:7px;height:7px;border-radius:50%;background:var(--line-2)}
 .mark .dot.in{background:var(--pos)}
 
+/* file badges — bigger than the meta-line glyphs, smaller than the status
+   mark: a deliberate three-tier size hierarchy. Fixed numbering by kind
+   (1 bill, 2 scheduled, 3 receipt), only rendered when that file exists —
+   no reserved empty slot, so an untracked row's amount still sits flush
+   right against the row edge exactly as before (the grid's own auto-track
+   sizing collapses an unoccupied column to zero on its own). Sized and
+   coloured to read at a glance — these are a key on-row fact, not a minor
+   annotation — and pulled away from the amount with their own margin so
+   the cluster doesn't visually fuse with the value next to it. */
+.fbadges{display:flex;gap:5px;align-items:center;margin-right:8px}
+.fbadge{width:23px;height:23px;border-radius:7px;background:var(--surface-3);
+  border:1px solid var(--line-2);display:grid;place-items:center;font-size:14px;
+  line-height:1;cursor:pointer;position:relative;color:var(--ink)}
+.fbadge:hover{border-color:var(--accent-line);background:var(--surface-2)}
+.fbadge kbd{position:absolute;bottom:-7px;right:-7px;font-size:9px;padding:0 3px;
+  line-height:1.3;border-bottom-width:1px;background:var(--surface);pointer-events:none}
+
 .name{min-width:0}
 .name b{font-weight:600;font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .name .meta{font-family:var(--mono);font-size:11px;color:var(--ink-3);display:flex;gap:7px;align-items:center;
@@ -239,6 +260,20 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .amt .d.up{color:var(--neg)}
 .amt .d.down{color:var(--pos)}
 .amt .d.flat{color:var(--ink-3)}
+
+/* ============ fold groups (:group bucket) ============ */
+.fgroup{margin:0 0 3px}
+.fhead{display:grid;grid-template-columns:14px 1fr auto auto;gap:9px;align-items:center;
+  padding:8px 12px;margin:0 10px;border-radius:var(--r);background:var(--surface-3);
+  border:1px solid var(--line-2);cursor:pointer;user-select:none}
+.fhead:hover{border-color:var(--accent-line)}
+.fchev{font-size:11px;color:var(--accent);transition:transform .14s;transform:rotate(90deg);line-height:1}
+.fgroup.closed .fchev{transform:rotate(0deg)}
+.fgroup.closed .frows{display:none}
+.fname{font-weight:600;font-size:12.5px}
+.fname.unc{color:var(--ink-3);font-weight:500;font-style:italic}
+.fcount{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.fsum{font-family:var(--mono);font-size:13px;font-weight:500;font-variant-numeric:tabular-nums}
 
 /* skeleton + error rows */
 .sk-bar{height:9px;border-radius:4px;background:var(--skeleton);background-size:220% 100%;
@@ -451,7 +486,8 @@ body{height:100dvh;overflow:hidden;display:flex;flex-direction:column;background
       <button class="mbtn" id="prevM" title="Previous month (Ctrl-P)" type="button">‹</button>
       <button class="mpick" id="monthBtn" type="button" aria-haspopup="dialog" aria-expanded="false"
               title="Pick a month">
-        <span class="month" id="monthLbl">jul / 2026</span><span class="car">▼</span>
+        <span class="month" id="monthLbl">set / 2026</span><span class="car">▼</span>
+        <span class="mdot" id="monthDot" title="A tracked bill earlier this year is overdue with no receipt"></span>
       </button>
       <button class="mbtn" id="nextM" title="Next month (Ctrl-N)" type="button">›</button>
     </div>
@@ -487,12 +523,12 @@ body{height:100dvh;overflow:hidden;display:flex;flex-direction:column;background
   <div class="cmdbar" id="cmdbar">
     <span class="pfx" id="cmdPfx">:</span>
     <input id="cmdInput" autocomplete="off" spellcheck="false" aria-label="Command">
-    <span class="cmdhint" id="cmdHint">add · in · move · sort · set · theme · config · undo · help</span>
+    <span class="cmdhint" id="cmdHint">add · in · move · sort · group · set · theme · config · undo · help</span>
   </div>
 
   <div class="status">
     <div class="st mode" id="stMode">NORMAL</div>
-    <div class="st" id="stFile">~/ffm · jul/2026</div>
+    <div class="st" id="stFile">~/ffm · 09/2026</div>
     <div class="st" id="stMember">Rodrigo</div>
     <div class="st grow msg" id="stMsg"></div>
     <div class="st buf" id="stBuf"></div>
@@ -520,7 +556,10 @@ let uid = 1000;
 function T(o){ return Object.assign({
   id:++uid, kind:'out', title:'', sub:'', amount:0, day:1, status:'plain',
   progress:null, due:null, delta:null, recurring:false, tracked:false,
-  pattern:null, private:false, deleted:false, restored:false, state:'ok'
+  pattern:null, private:false, deleted:false, restored:false, state:'ok',
+  bucket:null, billName:null, instance:null,
+  totalInstallments:null, installmentsPaid:null,
+  barcodePath:null, scheduledPath:null, receiptPath:null
 }, o); }
 
 /* Hand-authored months carry the narrative from the sketches (the +20% energia,
@@ -528,55 +567,56 @@ function T(o){ return Object.assign({
 const AUTHORED = {
   4:[[
       T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
-      T({title:'Energia · Enel SP', amount:281.40, day:12, status:'paid', recurring:true, tracked:true, delta:-6, due:'15/05/2026', pattern:'energia/2026/05.pdf'}),
-      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/05/2026', pattern:'vivo_fibra/2026/05.pdf'}),
-      T({title:'Condomínio', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/05/2026', pattern:'condominio/2026/05.pdf'}),
-      T({title:'Mercado · Pão de Açúcar', amount:642.18, day:14}),
-      T({title:'Combustível · Shell', amount:310.00, day:19}),
+      T({title:'Energia · Enel SP', bucket:'Consumption', amount:281.40, day:12, status:'paid', recurring:true, tracked:true, delta:-6, due:'15/05/2026', pattern:'energia/2026/05.pdf'}),
+      T({title:'Internet · Vivo Fibra', bucket:'Consumption', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/05/2026', pattern:'vivo_fibra/2026/05.pdf'}),
+      T({title:'Condomínio', bucket:'Consumption', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/05/2026', pattern:'condominio/2026/05.pdf'}),
+      T({title:'Mercado · Pão de Açúcar', bucket:'Everyday', amount:642.18, day:14}),
+      T({title:'Combustível · Shell', bucket:'Everyday', amount:310.00, day:19}),
     ],[
       T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
-      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/05/2026', pattern:'unimed/2026/05.pdf'}),
-      T({title:'Escola · Materiais', amount:388.00, day:11}),
-      T({title:'Farmácia · Drogasil', amount:126.55, day:16}),
-      T({title:'Academia · Smart Fit', amount:119.90, day:20, recurring:true}),
+      T({title:'Plano de saúde · Unimed', bucket:'Health', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/05/2026', pattern:'unimed/2026/05.pdf'}),
+      T({title:'Escola · Materiais', bucket:'Education', amount:388.00, day:11}),
+      T({title:'Farmácia · Drogasil', bucket:'Health', amount:126.55, day:16}),
+      T({title:'Academia · Smart Fit', bucket:'Health', amount:119.90, day:20, recurring:true}),
     ]],
   5:[[
       T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
       T({kind:'in', title:'Freelance', sub:'Auditoria Marotta', amount:2400, day:22, status:'in'}),
-      T({title:'Energia · Enel SP', amount:286.30, day:13, status:'paid', recurring:true, tracked:true, delta:2, due:'15/06/2026', pattern:'energia/2026/06.pdf'}),
-      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/06/2026', pattern:'vivo_fibra/2026/06.pdf'}),
-      T({title:'Condomínio', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/06/2026', pattern:'condominio/2026/06.pdf'}),
-      T({title:'IPTU · parcela 6/10', amount:412.70, day:15, recurring:true}),
-      T({title:'Mercado · Pão de Açúcar', amount:701.44, day:14}),
-      T({title:'Combustível · Shell', amount:310.00, day:18}),
-      T({title:'Uber', amount:88.30, day:24}),
+      T({title:'Energia · Enel SP', bucket:'Consumption', amount:286.30, day:13, status:'paid', recurring:true, tracked:true, delta:2, due:'15/06/2026', pattern:'energia/2026/06.pdf'}),
+      T({title:'Internet · Vivo Fibra', bucket:'Consumption', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/06/2026', pattern:'vivo_fibra/2026/06.pdf'}),
+      T({title:'Condomínio', bucket:'Consumption', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/06/2026', pattern:'condominio/2026/06.pdf'}),
+      T({title:'IPTU', amount:412.70, day:15, recurring:true}),
+      T({title:'Mercado · Pão de Açúcar', bucket:'Everyday', amount:701.44, day:14}),
+      T({title:'Combustível · Shell', bucket:'Everyday', amount:310.00, day:18}),
+      T({title:'Uber', bucket:'Everyday', amount:88.30, day:24}),
     ],[
       T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
-      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/06/2026', pattern:'unimed/2026/06.pdf'}),
-      T({title:'Escola · Mensalidade', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/06/2026', pattern:'escola/2026/06.pdf'}),
-      T({title:'Farmácia · Drogasil', amount:214.90, day:18}),
-      T({title:'Academia · Smart Fit', amount:119.90, day:20, recurring:true}),
+      T({title:'Plano de saúde · Unimed', bucket:'Health', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/06/2026', pattern:'unimed/2026/06.pdf'}),
+      T({title:'Escola · Mensalidade', bucket:'Education', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/06/2026', pattern:'escola/2026/06.pdf'}),
+      T({title:'Farmácia · Drogasil', bucket:'Health', amount:214.90, day:18}),
+      T({title:'Academia · Smart Fit', bucket:'Health', amount:119.90, day:20, recurring:true}),
       T({title:'Presente · aniversário', amount:260.00, day:27, private:true}),
     ]],
   6:[[
       T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
-      T({title:'Energia · Enel SP', amount:343.62, day:11, status:'paid', recurring:true, tracked:true, delta:20, due:'15/07/2026', pattern:'energia/2026/07.pdf'}),
-      T({title:'Água · Sabesp', amount:108.40, day:0, status:'scheduled-overdue', recurring:true, tracked:true, due:'18/07/2026', pattern:'sabesp/2026/07_scheduled.pdf'}),
-      T({title:'Internet · Vivo Fibra', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/07/2026', pattern:'vivo_fibra/2026/07.pdf'}),
-      T({title:'Condomínio', amount:965.00, day:8, status:'paid', recurring:true, tracked:true, delta:5, due:'08/07/2026', pattern:'condominio/2026/07.pdf'}),
-      T({title:'IPTU · parcela 7/10', amount:412.70, day:15, recurring:true}),
-      T({title:'Mercado · Pão de Açúcar', amount:658.90, day:13, delta:-6}),
-      T({title:'Combustível · Shell', amount:298.40, day:17, delta:-4}),
-      T({title:'Netflix', amount:59.90, day:21, recurring:true, status:'manual-paid'}),
-      T({title:'Uber', amount:112.60, day:25, delta:27}),
+      T({title:'Energia · Enel SP', bucket:'Consumption', amount:343.62, day:11, status:'paid', recurring:true, tracked:true, delta:20, due:'15/07/2026', pattern:'energia/2026/07.pdf'}),
+      T({title:'Água · Sabesp', bucket:'Consumption', amount:108.40, day:0, status:'scheduled-overdue', recurring:true, tracked:true, due:'18/07/2026', pattern:'sabesp/2026/07_scheduled.pdf'}),
+      T({title:'Internet · Vivo Fibra', bucket:'Consumption', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/07/2026', pattern:'vivo_fibra/2026/07.pdf'}),
+      T({title:'Condomínio', bucket:'Consumption', amount:965.00, day:8, status:'paid', recurring:true, tracked:true, delta:5, due:'08/07/2026', pattern:'condominio/2026/07.pdf'}),
+      T({title:'IPTU', amount:412.70, day:15, recurring:true}),
+      T({title:'Financiamento · Honda Biz', bucket:'Transporte', amount:687.00, day:20, recurring:true, totalInstallments:12, installmentsPaid:7}),
+      T({title:'Mercado · Pão de Açúcar', bucket:'Everyday', amount:658.90, day:13, delta:-6}),
+      T({title:'Combustível · Shell', bucket:'Everyday', amount:298.40, day:17, delta:-4}),
+      T({title:'Netflix', bucket:'Subscriptions', amount:59.90, day:21, recurring:true, status:'manual-paid'}),
+      T({title:'Uber', bucket:'Everyday', amount:112.60, day:25, delta:27}),
     ],[
       T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
       T({kind:'in', title:'Dividendos', sub:'corretora', amount:318.44, day:16, status:'in'}),
-      T({title:'Plano de saúde · Unimed', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/07/2026', pattern:'unimed/2026/07.pdf'}),
-      T({title:'Escola · Mensalidade', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/07/2026', pattern:'escola/2026/07.pdf'}),
-      T({title:'Farmácia · Drogasil', amount:98.70, day:19, delta:-54}),
-      T({title:'Academia · Smart Fit', amount:119.90, day:20, recurring:true}),
-      T({title:'Spotify Família', amount:34.90, day:22, recurring:true}),
+      T({title:'Plano de saúde · Unimed', bucket:'Health', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/07/2026', pattern:'unimed/2026/07.pdf'}),
+      T({title:'Escola · Mensalidade', bucket:'Education', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/07/2026', pattern:'escola/2026/07.pdf'}),
+      T({title:'Farmácia · Drogasil', bucket:'Health', amount:98.70, day:19, delta:-54}),
+      T({title:'Academia · Smart Fit', bucket:'Health', amount:119.90, day:20, recurring:true}),
+      T({title:'Spotify Família', bucket:'Subscriptions', amount:34.90, day:22, recurring:true}),
       T({title:'Consulta · dermatologista', amount:450.00, day:23, private:true}),
     ]]
 };
@@ -588,22 +628,25 @@ const slug = s => s.split(' · ')[0].toLowerCase()
 
 const RULES = [[
   {kind:'in', title:'Salário', amount:11800, day:5, status:'in'},
-  {title:'Condomínio', base:920, day:8, due:8, rec:1, track:1, v:.04},
-  {title:'Internet · Vivo Fibra', base:139.90, day:10, due:10, rec:1, track:1, v:0},
-  {title:'Energia · Enel SP', base:300, day:11, due:15, rec:1, track:1, v:.17},
-  {title:'Água · Sabesp', base:108, day:14, due:18, rec:1, track:1, v:.14},
-  {title:'IPTU · parcela {n}/10', key:'IPTU', base:412.70, day:15, rec:1, v:0, months:[0,1,2,3,4,5,6,7,8,9]},
-  {title:'Netflix', base:59.90, day:21, rec:1, v:0},
-  {title:'Mercado · Pão de Açúcar', base:665, day:13, v:.13},
-  {title:'Combustível · Shell', base:302, day:17, v:.15},
-  {title:'Uber', base:98, day:25, v:.32},
+  {title:'Condomínio', bucket:'Consumption', base:920, day:8, due:8, rec:1, track:1, v:.04},
+  {title:'Internet · Vivo Fibra', bucket:'Consumption', base:139.90, day:10, due:10, rec:1, track:1, v:0},
+  {title:'Energia · Enel SP', bucket:'Consumption', base:300, day:11, due:15, rec:1, track:1, v:.17},
+  {title:'Água · Sabesp', bucket:'Consumption', base:108, day:14, due:18, rec:1, track:1, v:.14},
+  /* IPTU is left without a bucket on purpose — it's the "Uncategorized" demo row.
+     It's also the cyclic/seasonal case (months allow-list, still an open design
+     question), not a total_installments rule — do not add an installment badge here. */
+  {title:'IPTU', key:'IPTU', base:412.70, day:15, rec:1, v:0, months:[0,1,2,3,4,5,6,7,8,9]},
+  {title:'Netflix', bucket:'Subscriptions', base:59.90, day:21, rec:1, v:0},
+  {title:'Mercado · Pão de Açúcar', bucket:'Everyday', base:665, day:13, v:.13},
+  {title:'Combustível · Shell', bucket:'Everyday', base:302, day:17, v:.15},
+  {title:'Uber', bucket:'Everyday', base:98, day:25, v:.32},
 ],[
   {kind:'in', title:'Salário', amount:9400, day:5, status:'in'},
-  {title:'Plano de saúde · Unimed', base:1148, day:7, due:7, rec:1, track:1, v:.02},
-  {title:'Escola · Mensalidade', base:1690, day:9, due:9, rec:1, track:1, v:0, months:[1,2,3,4,5,6,7,8,9,10,11]},
-  {title:'Academia · Smart Fit', base:119.90, day:20, rec:1, v:0},
-  {title:'Spotify Família', base:34.90, day:22, rec:1, v:0},
-  {title:'Farmácia · Drogasil', base:152, day:19, v:.48},
+  {title:'Plano de saúde · Unimed', bucket:'Health', base:1148, day:7, due:7, rec:1, track:1, v:.02},
+  {title:'Escola · Mensalidade', bucket:'Education', base:1690, day:9, due:9, rec:1, track:1, v:0, months:[1,2,3,4,5,6,7,8,9,10,11]},
+  {title:'Academia · Smart Fit', bucket:'Health', base:119.90, day:20, rec:1, v:0},
+  {title:'Spotify Família', bucket:'Subscriptions', base:34.90, day:22, rec:1, v:0},
+  {title:'Farmácia · Drogasil', bucket:'Health', base:152, day:19, v:.48},
 ]];
 
 function makeMonth(mi){
@@ -618,15 +661,15 @@ function makeMonth(mi){
     const settled = !future && (!now || r.day <= TODAY_D);
     if(r.track){
       const due = String(r.due).padStart(2,'0') + '/' + mm + '/2026';
-      if(settled) return T({title, key:r.key, amount, day:r.day, status:'paid', recurring:true,
+      if(settled) return T({title, key:r.key, bucket:r.bucket, amount, day:r.day, status:'paid', recurring:true,
         tracked:true, due, pattern:slug(r.title) + '/2026/' + mm + '.pdf'});
       const span = future ? .04 : Math.max(.08, Math.min(.97, TODAY_D / r.due));
-      return T({title, key:r.key, amount:0, day:0, status:'pending', progress:span, recurring:true,
+      return T({title, key:r.key, bucket:r.bucket, amount:0, day:0, status:'pending', progress:span, recurring:true,
         tracked:true, due, pattern:slug(r.title) + '/2026/' + mm + '_scheduled.pdf'});
     }
     if(future && !r.rec) return null;                 // variable spends aren't projected
     if(now && r.day > TODAY_D && !r.rec) return null;
-    return T({title, key:r.key, amount:future ? amount : amount, day:r.day, recurring:!!r.rec});
+    return T({title, key:r.key, bucket:r.bucket, amount:future ? amount : amount, day:r.day, recurring:!!r.rec});
   }).filter(Boolean));
 }
 
@@ -638,8 +681,21 @@ const MONTHS = Array.from({length:12}, (_, mi) => ({
   m: AUTHORED[mi] || makeMonth(mi)
 }));
 
+/* file badges are derived from the tracked row's existing pattern + status —
+   barcode/scheduled/receipt are three independent files per period, and a
+   row never carries both scheduled and receipt: uploading the receipt
+   supersedes and removes the scheduled file, per the spec. */
+MONTHS.forEach(M => M.m.forEach(rows => rows.forEach(t => {
+  if(!t.tracked || !t.pattern) return;
+  const base = t.pattern.replace(/(_scheduled)?\.pdf$/, '');
+  t.barcodePath = base + '_barcode.pdf';
+  if(t.status === 'paid') t.receiptPath = base + '.pdf';
+  else if(t.status === 'scheduled' || t.status === 'scheduled-overdue') t.scheduledPath = base + '_scheduled.pdf';
+  // status === 'pending' → bill on file, nothing scheduled or paid yet
+})));
+
 /* month-over-month deltas are derived, not authored — the same window the app would run */
-const mkey = t => t.key || t.title.replace(/ · parcela \d+\/10$/, '');
+const mkey = t => t.key || t.title;
 MONTHS.forEach((M, i) => {
   if(i === 0) return;
   M.m.forEach((rows, p) => rows.forEach(t => {
@@ -656,10 +712,11 @@ const MEMBERS = [
 
 /* ================= state ================= */
 const S = {
-  mi: 6, panel: 0, focus: [1,1], nu: 'rnu', online: true, cfg: false,
+  mi: TODAY_M, panel: 0, focus: [1,1], nu: 'rnu', online: true, cfg: false,
   sel: [new Set(), new Set()], undo: [], msg:'', msgBad:false,
   buf:'', count:'', mode:'NORMAL',
-  q:'', qre:null, origin:{panel:0, focus:0}
+  q:'', qre:null, origin:{panel:0, focus:0},
+  foldClosed: [new Set(), new Set()]   // per-panel set of closed bucket names, :group bucket
 };
 
 /* ================= search =================
@@ -743,6 +800,54 @@ function view(p){
   return c;
 }
 const cur = () => view(S.panel)[S.focus[S.panel]];
+
+/* ================= grouping · :group bucket =================
+   Grouping never reorders the underlying array or the index space focus/gutter
+   rely on — it only changes how view(p) gets drawn. rowHTML still receives the
+   row's real index into view(p), so click-to-focus, the gutter and selection
+   all keep working unchanged; only the rendered position moves. */
+const bucketOf = t => t && t.kind !== 'in' ? (t.bucket || 'Uncategorized') : null;
+function allBucketsOf(p){
+  const s = new Set();
+  view(p).forEach(t => { const b = bucketOf(t); if(b) s.add(b); });
+  return [...s];
+}
+function isFoldedOut(p, i){
+  if(CFG.group !== 'bucket') return false;
+  const b = bucketOf(view(p)[i]);
+  return !!b && S.foldClosed[p].has(b);
+}
+function clampFocusToVisible(p){
+  const len = rowsOf(p).length;
+  if(!len) return;
+  let f = Math.min(Math.max(S.focus[p], 0), len - 1), guard = 0;
+  while(isFoldedOut(p, f) && guard < len){ f = (f + 1) % len; guard++; }
+  S.focus[p] = f;
+}
+function groupedHTML(p, fi){
+  const rows = view(p);
+  const ins = [], groups = new Map();
+  rows.forEach((t, i) => {
+    const b = bucketOf(t);
+    if(!b){ ins.push(rowHTML(t, i, fi, p)); return; }
+    if(!groups.has(b)) groups.set(b, []);
+    groups.get(b).push({t, i});
+  });
+  const order = [...groups.keys()].filter(b => b !== 'Uncategorized');
+  if(groups.has('Uncategorized')) order.push('Uncategorized');
+  return ins.join('') + order.map(b => {
+    const items = groups.get(b);
+    const sum = items.reduce((a, {t}) => a + (t.deleted ? 0 : t.amount), 0);
+    const closed = S.foldClosed[p].has(b);
+    return '<div class="fgroup' + (closed?' closed':'') + '">'
+      + '<div class="fhead" data-p="' + p + '" data-b="' + esc(b) + '">'
+      + '<span class="fchev">▸</span>'
+      + '<span class="fname' + (b==='Uncategorized'?' unc':'') + '">' + esc(b) + '</span>'
+      + '<span class="fcount">' + items.length + ' item' + (items.length>1?'s':'') + '</span>'
+      + '<span class="fsum">' + brl(sum) + '</span></div>'
+      + '<div class="frows">' + items.map(({t,i}) => rowHTML(t, i, fi, p)).join('') + '</div></div>';
+  }).join('');
+}
 
 /* ================= config · ffm.toml =================
    The file is the source of truth. There is no settings dialog: `:set` and the
@@ -871,7 +976,7 @@ default_visibility = "household"
 const CFG = { panes:'auto', min_split_width:900, max_width:900, gap:16,
   line_numbers:'relative', show_delta:true, show_recurring:true,
   default_visibility:'household', sort:'manual', search_scope:'pane',
-  theme:'ffm', theme_over:{} };
+  theme:'ffm', theme_over:{}, group:'none' };
 
 const SCHEMA = {
   'layout.panes':            ['auto','split','tabs'],
@@ -1065,6 +1170,7 @@ function metaHTML(t){
   else if(t.status === 'scheduled-overdue') bits.push('<span style="color:var(--neg)">⚠ agendado, sem comprovante · venceu ' + t.due + '</span>');
   else if(t.status === 'pending') bits.push('<span class="rec">◷ vence ' + t.due + '</span>');
   else if(t.day) bits.push('<span>' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
+  if(t.totalInstallments) bits.push('<span style="color:var(--ink-2)">' + (t.installmentsPaid||0) + '/' + t.totalInstallments + '</span>');
   if(t.recurring && !['pending','scheduled','scheduled-overdue'].includes(t.status) && CFG.show_recurring) bits.push('<span class="rec">↻</span>');
   if(t.private) bits.push('<span class="lock" title="hidden from other members">🔒 private</span>');
   if(t.deleted) bits.push('<span style="color:var(--neg)">deleted</span>');
@@ -1072,6 +1178,29 @@ function metaHTML(t){
   return bits.join('');
 }
 const pad = n => String(n).padStart(2,'0');
+
+/* ================= file badges =================
+   Fixed numbering by kind, always: 1 bill, 2 scheduled, 3 receipt — never
+   renumbered by what happens to exist on a given row, which is what makes
+   g1/g2/g3 learnable across the whole ledger. */
+const FILE_KINDS = [
+  {n:1, field:'barcodePath',   glyph:'📄', label:'bill'},
+  {n:2, field:'scheduledPath', glyph:'◷', label:'scheduled payment'},
+  {n:3, field:'receiptPath',   glyph:'🧾', label:'receipt'}
+];
+function fileBadgesHTML(t, p, i){
+  const chips = FILE_KINDS.filter(k => t[k.field]).map(k =>
+    '<span class="fbadge" data-p="' + p + '" data-i="' + i + '" data-n="' + k.n + '" '
+    + 'title="' + esc(k.label) + ' · ' + esc(t[k.field]) + '">' + k.glyph + '<kbd>' + k.n + '</kbd></span>'
+  ).join('');
+  return chips ? '<div class="fbadges">' + chips + '</div>' : '';
+}
+function openFile(t, n){
+  const kind = FILE_KINDS.find(k => k.n === n);
+  const path = kind && t[kind.field];
+  if(!path){ say('no ' + (kind ? kind.label : 'file') + ' on file for this row', true); return; }
+  window.open(path, '_blank');
+}
 
 function deltaHTML(t){
   if(!CFG.show_delta) return '';
@@ -1083,7 +1212,7 @@ function deltaHTML(t){
   return '<div class="d ' + (up?'up':'down') + '">' + (up?'▲':'▼') + ' ' + (up?'+':'') + t.delta + '%</div>';
 }
 
-function entryHTML(t){
+function entryHTML(t, p, i){
   if(t.state === 'skeleton'){
     return '<div class="entry">' + markHTML(t)
       + '<div class="name"><div class="sk-bar" style="width:56%"></div>'
@@ -1098,6 +1227,7 @@ function entryHTML(t){
   }
   return '<div class="entry">' + markHTML(t)
     + '<div class="name"><b>' + hl(t.title) + '</b><div class="meta">' + metaHTML(t) + '</div></div>'
+    + fileBadgesHTML(t, p, i)
     + '<div class="amt"><div class="v' + (t.kind==='in'?' in':'') + '">'
     + (t.kind==='in'?'+ ':'')
     + (t.status==='pending' && !t.amount ? 'R$ __,__' : hl(brl(t.amount)))
@@ -1119,7 +1249,7 @@ function rowHTML(t, i, fi, p){
   if(isMatch(t)) cls.push('match');
   if(S.nu === 'nonu') cls.push('nogut');
   return '<div class="' + cls.join(' ') + '" data-p="' + p + '" data-i="' + i + '" data-id="' + t.id + '">'
-    + '<div class="gut">' + gutter(i, fi) + '</div>' + entryHTML(t) + '</div>';
+    + '<div class="gut">' + gutter(i, fi) + '</div>' + entryHTML(t, p, i) + '</div>';
 }
 
 /* ================= render ================= */
@@ -1158,7 +1288,8 @@ function render(){
       + '<div class="sum bal"><div class="k">Balance</div><div class="v' + (t.b<0?' neg':'') + '">'
       + (t.b<0?'− ':'') + brl(t.b) + '</div></div>'
       + '</div></div>'
-      + '<div class="ledger">' + view(p).map((r,i)=>rowHTML(r,i,fi,p)).join('') + '</div></div>';
+      + '<div class="ledger">' + (CFG.group === 'bucket' ? groupedHTML(p, fi)
+          : view(p).map((r,i)=>rowHTML(r,i,fi,p)).join('')) + '</div></div>';
   }).join('');
 
   const a = totals(0), b = totals(1);
@@ -1237,6 +1368,11 @@ function flip(mutate){
 }
 
 function moveRows(dir){
+  if(CFG.group !== 'none'){
+    S.count = '';
+    say('ledger.group = "' + CFG.group + '" — reorder needs group = "none"', true);
+    return;
+  }
   if(CFG.sort !== 'manual'){
     S.count = '';
     say('ledger.sort = "' + CFG.sort + '" — reorder needs sort = "manual"', true);
@@ -1317,7 +1453,14 @@ function sendRow(dir){
 function move(d){
   const n = Math.max(1, parseInt(S.count||'1',10));
   const len = rowsOf(S.panel).length;
-  S.focus[S.panel] = Math.min(len-1, Math.max(0, S.focus[S.panel] + d*n));
+  let f = S.focus[S.panel], steps = 0, guard = 0;
+  while(steps < n && guard < len * 2){
+    const nf = Math.min(len - 1, Math.max(0, f + d));
+    if(nf === f) break;
+    f = nf; guard++;
+    if(!isFoldedOut(S.panel, f)) steps++;         // folded-closed rows are skipped, like real Vim folds
+  }
+  S.focus[S.panel] = f;
   S.count=''; render();
 }
 function switchPanel(p){
@@ -1404,7 +1547,7 @@ function insertRow(after, data){
 }
 
 /* ================= command bar ================= */
-const CMD_HINT = 'add · in · move · sort · set · theme · config · undo · help';
+const CMD_HINT = 'add · in · move · sort · group · set · theme · config · undo · help';
 function openCmd(pfx){
   const search = pfx === '/';
   S.mode = search ? 'SEARCH' : 'COMMAND';
@@ -1434,6 +1577,10 @@ function runCmd(raw){
       kind: cmd==='in' ? 'in' : 'out',
       status: cmd==='in' ? 'in' : 'plain',
       title: (desc ? cat + ' · ' + desc : cat).replace(/^\w/, m=>m.toUpperCase()),
+      /* the first word doubles as a starting `bucket` guess — free, since it was
+         typed anyway. Blank stays blank rather than a literal "Sem categoria"
+         bucket, so an unbucketed add still lands in the real Uncategorized group. */
+      bucket: rest[1] ? cat.replace(/^\w/, m=>m.toUpperCase()) : null,
       amount: amt, day: Math.min(28, now.getDate()),
       private: CFG.default_visibility === 'private'
     });
@@ -1467,6 +1614,16 @@ function runCmd(raw){
     });
     closeCmd();
     say(v === 'manual' ? 'manual order · J/K reorder rows' : 'sorted by ' + v + ' · J/K disabled');
+    return;
+  }
+  if(cmd === 'group'){
+    const v = (rest[0] || '').toLowerCase();
+    if(!['bucket','none'].includes(v)){ say('group bucket | none', true); return; }
+    CFG.group = v;
+    clampFocusToVisible(0); clampFocusToVisible(1);
+    closeCmd();
+    say(v === 'none' ? 'grouping off · flat order restored'
+                      : 'grouped by bucket · za toggle · zR/zM open/close all');
     return;
   }
   if(cmd === 'theme'){
@@ -1527,6 +1684,8 @@ function editOccurrence(){
     + MEMBERS.map((m,i) => '<option value="' + i + '"' + (i===S.panel?' selected':'') + '>' + m.name + '</option>').join('')
     + '</select></label>'
     + '</div>'
+    + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">optional</span></span>'
+    + '<input class="i" id="eB" value="' + esc(t.bucket || '') + '" placeholder="e.g. Groceries"></label>'
     + '<label class="switch"><input type="checkbox" id="eP"' + (t.private?' checked':'') + '>'
     + '<span>Hidden from other members<span class="d">The admin always sees it.</span></span></label>'
     + '</div>' + (t.recurring
@@ -1549,19 +1708,28 @@ function editRule(){
     + '<label class="f"><span class="k">Cadence</span><select class="i"><option>Monthly</option><option>Bimonthly</option><option>Yearly</option></select></label>'
     + '</div><div class="fgrid">'
     + '<label class="f"><span class="k">Start date</span><input class="i" value="01/03/2024"></label>'
-    + '<label class="f"><span class="k">End date</span><input class="i" value="—  (ongoing)"></label>'
+    + '<label class="f"><span class="k">End date</span><input class="i" value="'
+    + (t.totalInstallments ? (t.installmentsPaid||0) + '/' + t.totalInstallments + ' installments' : '—  (ongoing)') + '"></label>'
     + '</div>'
+    + '<div class="fgrid">'
+    + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">any transaction can have one</span></span>'
+    + '<input class="i" value="' + esc(t.bucket || '') + '" placeholder="e.g. Consumption"></label>'
+    + '<label class="f"><span class="k">Bill name</span><input class="i" value="' + esc(t.billName || t.title.split(' · ')[0]) + '"></label>'
+    + '</div>'
+    + '<label class="f"><span class="k">Total installments <span style="text-transform:none;font-weight:400">optional — for a fixed-length rule, e.g. a loan</span></span>'
+    + '<input class="i" value="' + (t.totalInstallments || '') + '" placeholder="leave blank if ongoing"></label>'
+    + (t.totalInstallments
+      ? '<div class="notebox">' + (t.installmentsPaid||0) + ' of ' + t.totalInstallments + ' paid. Editing this '
+        + 'count or the end date recomputes the other. Paying several off early? Shorten this number and record '
+        + 'the lump sum as its own one-off entry — there is no separate "pay off early" action.</div>'
+      : '')
     + '<label class="switch"><input type="checkbox"' + (t.tracked?' checked':'') + '>'
     + '<span>Track receipt on disk<span class="d">'
     + (t.tracked ? 'no manual tick — paid only when a file exists at the computed path'
         : 'off = no filesystem proof; a manual "paid" checkbox appears instead') + '</span></span></label>'
     + (t.tracked
-      ? '<div class="fgrid3">'
-        + '<label class="f"><span class="k">Bucket</span><input class="i" value="' + esc(t.bucket || 'Consumption') + '"></label>'
-        + '<label class="f"><span class="k">Bill name</span><input class="i" value="' + esc(t.billName || t.title.split(' · ')[0]) + '"></label>'
-        + '<label class="f"><span class="k">Instance <span style="text-transform:none;font-weight:400">optional</span></span>'
-        + '<input class="i" value="' + esc(t.instance || '') + '" placeholder="only if more than one"></label>'
-        + '</div>'
+      ? '<label class="f"><span class="k">Instance <span style="text-transform:none;font-weight:400">optional — only if more than one</span></span>'
+        + '<input class="i" value="' + esc(t.instance || '') + '" placeholder="e.g. House 8898"></label>'
         + '<div class="notebox mono" style="font-family:var(--mono);font-size:11.5px">path: ' + esc(t.pattern || '—')
         + ' · <span style="color:var(--ink-3)">no regex — bucket / bill name / instance compute it</span></div>'
       : '<label class="switch"><input type="checkbox"' + (t.status==='manual-paid'?' checked':'') + '>'
@@ -1630,6 +1798,18 @@ document.addEventListener('keydown', e => {
 
   const k = e.key;
 
+  /* g1/g2/g3 open a file by fixed kind (bill/scheduled/receipt) on the
+     focused row — checked before the digit-count buffer below, or the '1'
+     in g1 would just get swallowed as a count prefix instead of reaching
+     this block. Not stock Vim: a genuine extension of the existing g-prefix
+     "goto" vocabulary (gg, gt), same treatment as p (proposal). */
+  if(S.buf === 'g' && (k === '1' || k === '2' || k === '3')){
+    S.buf=''; e.preventDefault();
+    openFile(cur(), +k);
+    render();
+    return;
+  }
+
   if(DIGIT.test(k) && !(k === '0' && !S.count)){ S.count += k; render(); e.preventDefault(); return; }
 
   if(S.buf === 'd'){
@@ -1645,12 +1825,26 @@ document.addEventListener('keydown', e => {
     else { S.count=''; render(); }
     return;
   }
+  if(S.buf === 'z'){
+    S.buf=''; e.preventDefault();
+    if(CFG.group !== 'bucket'){ render(); say('not grouped · :group bucket', true); return; }
+    const b = bucketOf(cur());
+    if(k === 'a' && b){ S.foldClosed[S.panel].has(b) ? S.foldClosed[S.panel].delete(b) : S.foldClosed[S.panel].add(b); }
+    else if(k === 'o' && b){ S.foldClosed[S.panel].delete(b); }
+    else if(k === 'c' && b){ S.foldClosed[S.panel].add(b); }
+    else if(k === 'R'){ S.foldClosed[S.panel].clear(); }
+    else if(k === 'M'){ allBucketsOf(S.panel).forEach(x => S.foldClosed[S.panel].add(x)); }
+    clampFocusToVisible(S.panel);
+    render();
+    return;
+  }
 
   switch(k){
     case 'j': case 'ArrowDown': e.preventDefault(); move(1); break;
     case 'k': case 'ArrowUp':   e.preventDefault(); move(-1); break;
     case 'd': e.preventDefault(); S.buf='d'; render(); break;
     case 'g': e.preventDefault(); S.buf='g'; render(); break;
+    case 'z': e.preventDefault(); S.buf='z'; render(); break;
     case 'G': e.preventDefault(); S.focus[S.panel]=rowsOf(S.panel).length-1; S.count=''; render(); break;
     case 'J': e.preventDefault(); moveRows(1); break;
     case 'K': e.preventDefault(); moveRows(-1); break;
@@ -1681,6 +1875,22 @@ document.addEventListener('keydown', e => {
 
 /* ================= mouse ================= */
 $('#panels').addEventListener('click', e => {
+  const fb = e.target.closest('.fbadge');
+  if(fb){
+    const p = +fb.dataset.p, i = +fb.dataset.i, n = +fb.dataset.n;
+    S.panel = p; S.focus[p] = i; S.count='';
+    openFile(view(p)[i], n);
+    render();
+    return;
+  }
+  const fh = e.target.closest('.fhead');
+  if(fh){
+    const p = +fh.dataset.p, b = fh.dataset.b;
+    S.foldClosed[p].has(b) ? S.foldClosed[p].delete(b) : S.foldClosed[p].add(b);
+    clampFocusToVisible(p);
+    render();
+    return;
+  }
   const rt = e.target.closest('[data-retry]');
   if(rt){
     const id = +rt.dataset.retry;
@@ -1729,12 +1939,13 @@ $('#scrim').addEventListener('click', e => {
   if(a === 'send'){ const t = pendingSend; pendingSend = null; closeModal(); if(t != null) doSend(t); }
   if(a === 'saveOcc'){
     const t = cur(); if(!t){ closeModal(); return; }
-    const prev = {title:t.title, amount:t.amount, day:t.day, private:t.private};
+    const prev = {title:t.title, amount:t.amount, day:t.day, private:t.private, bucket:t.bucket};
     t.title = $('#eT').value || t.title;
     const amt = parseFloat($('#eA').value.replace(/\./g,'').replace(',','.'));
     if(isFinite(amt)) t.amount = amt;
     const d = parseInt($('#eD').value,10); if(d>=1 && d<=31) t.day = d;
     t.private = $('#eP').checked;
+    t.bucket = $('#eB').value.trim() || null;
     S.undo.push({k:'edit', p:S.panel, id:t.id, prev});
     const want = +$('#eM').value;
     closeModal();
@@ -1753,6 +1964,17 @@ function monthNet(i){
   return MONTHS[i].m.reduce((a, rows) => a + rows.reduce((b,t) =>
     b + (t.deleted || t.state !== 'ok' ? 0 : (t.kind === 'in' ? t.amount : -t.amount)), 0), 0);
 }
+/* Unresolved = a tracked occurrence overdue with no receipt (pending fully
+   elapsed, or scheduled-overdue). Checked for months strictly before "now",
+   within the current year only — MONTHS never spans more than one year here.
+   Real implementation also filters by viewer privacy; this mock has one
+   implicit (admin) viewpoint, so nothing to filter. */
+function monthHasIssue(i){
+  if(i >= TODAY_M) return false;
+  return MONTHS[i].m.some(rows => rows.some(t =>
+    !t.deleted && (t.status === 'scheduled-overdue' || (t.status === 'pending' && t.progress >= 1))));
+}
+function yearHasIssue(){ return MONTHS.some((_, i) => monthHasIssue(i)); }
 function drawPicker(){
   mpop.innerHTML = '<div class="yr"><b>2026</b><span>select month</span></div><div class="mgrid">'
     + MONTHS.map((M,i) => {
@@ -1760,7 +1982,8 @@ function drawPicker(){
         const cls = ['mcell']; if(i===S.mi) cls.push('on'); if(M.now) cls.push('now'); if(M.future) cls.push('fut');
         return '<button class="' + cls.join(' ') + '" data-m="' + i + '" type="button">' + MN[i]
           + '<span class="n">' + (M.future ? 'projected' : (net<0?'−':'+') + Math.round(Math.abs(net)/1000) + 'k')
-          + '</span></button>';
+          + '</span>' + (monthHasIssue(i) ? '<span class="idot" title="overdue, no receipt"></span>' : '')
+          + '</button>';
       }).join('')
     + '</div><div class="ft"><i style="display:inline-block;width:14px;height:3px;background:var(--info);'
     + 'border-radius:2px;vertical-align:middle"></i> current month · 09/2026<br>'
@@ -1868,13 +2091,16 @@ const KEYGROUPS = [
   ['Act',  [['J / K','move the row — or every selected row — down / up'],['3J','move it three places'],['Ctrl-H / Ctrl-L','send the row to the member pane left / right'],['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence'],['R','edit the recurring rule behind it'],['p','toggle private (proposal)']]],
   ['Undo', [['dd','delete — opens a confirmation'],['y','confirm in the delete modal'],['u','undo the last change'],['Esc','clear count, buffer and selection']]],
   ['Find', [['/','search the ledger — incremental, regex'],['n / N','next / previous match, wrapping'],['Esc','clear the search highlight'],['/uber','matches title, date or amount']]],
-  ['Type', [[':','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':move ana','re-attribute to another member'],[':sort date','row order: manual · date · amount'],[':set rnu','gutter: relative · absolute · off'],[':theme gruvbox','colorscheme (writes ffm.toml)'],[':config','open ffm.toml beside the ledger'],['?','this keymap']]]
+  ['Fold', [['za','toggle the fold under the cursor'],['zo / zc','open / close it explicitly'],['zR / zM','open / close every fold in the panel'],['note','only active once :group bucket is on']]],
+  ['Files', [['g1','open the bill (📄), new tab (proposal)'],['g2','open the scheduled payment (◷) (proposal)'],['g3','open the receipt (🧾) (proposal)'],['note','numbered by kind, always — no file of that kind is a no-op']]],
+  ['Type', [[':','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':move ana','re-attribute to another member'],[':sort date','row order: manual · date · amount'],[':group bucket','group by category · :group none to flatten'],[':set rnu','gutter: relative · absolute · off'],[':theme gruvbox','colorscheme (writes ffm.toml)'],[':config','open ffm.toml beside the ledger'],['?','this keymap']]]
 ];
 const KEYHTML = KEYGROUPS.map(([g, rows]) =>
   '<div class="kgroup"><h4>' + g + '</h4>' + rows.map(([k,d]) =>
     '<div class="krow"><kbd>' + esc(k) + '</kbd><span class="d">' + esc(d) + '</span></div>').join('') + '</div>').join('');
 
 /* ================= go ================= */
+$('#monthDot').classList.toggle('on', yearHasIssue());
 render();
 $('#app').addEventListener('focus', ()=> $('#app').classList.add('armed'));
 $('#app').addEventListener('blur',  ()=> $('#app').classList.remove('armed'));

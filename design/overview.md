@@ -10,7 +10,8 @@ This project replaces a shared household spreadsheet used to track finances — 
 
 ## Goals
 
-- **No more manual month copies.** "Months" are not physical copies of anything — they're just a time-sliced view over a single, continuous transactions table. Recurring payments are defined once and automatically materialized into the ledger (e.g. on app start or a scheduled task) instead of being re-entered or copy-pasted.
+- **No more manual month copies.** "Months" are not physical copies of anything — they're just a time-sliced view over a single, continuous transactions table. Recurring payments are defined once and automatically materialized into the ledger — by an in-process task that runs at startup and hourly thereafter, reconciling which periods are missing rather than tracking a "last run" marker — instead of being re-entered or copy-pasted.
+- **A recurring bill's amount can carry forward, or not — the household's choice, per bill.** Most bills (rent, internet, IPTU) barely change month to month, so materializing a new period can seed its amount from last period's actual value, still fully editable. A bill that's genuinely different every time, like a credit card statement, can opt out and start blank instead — auto-filling a wildly different number would be actively wrong, not just unhelpful.
 - **Shared, per-user household use.** Transactions are attributed to a user, so the app can show the household total or filter down to either person's spending individually.
 - **Open sharing by default, with opt-in privacy.** Transactions are visible to all household members by default. A user can mark a transaction as hidden from other members, but never from the admin user (the household member with role 0), who can always see everything.
 - **Built-in month-over-month comparison.** Comparing this month to previous ones is a first-class query (e.g. via SQL window functions), not a manual diffing exercise.
@@ -18,13 +19,16 @@ This project replaces a shared household spreadsheet used to track finances — 
   - Each period can carry up to three files, each a separate fact: the **bill itself** (informational — line items, amount, due date, as issued by the company), an **optional scheduled-payment proof** (only relevant if the payment was set up ahead of time rather than paid same-day), and the **definitive receipt**, whose presence alone means **paid** — read straight off the filesystem, not a database flag, since the vault is meant to be browsable and manipulable by hand.
   - A scheduled payment left unconfirmed past its due date — a promise with no receipt yet — is its own warning state, not lumped in with "nothing filed yet." Uploading the receipt resolves it automatically, moving the now-superseded scheduled file aside.
   - Recurring bills without tracking opted in have no filesystem proof either way, but do get an optional **manual** paid checkbox, visually distinct from a file-verified paid mark. A *tracked* rule never gets a manual override — the whole point of opting into tracking is that a checkbox stops being sufficient evidence.
+- **Categorization is universal, grouping is free.** `bucket` and `bill_name` are plain tags on any transaction — recurring or one-off, tracked or not — not just receipt-tracking plumbing. Grouping a panel by `bucket` renders as real Vim folds, and because a fold header always shows its subtotal whether open or closed, collapsing everything (`zM`) already reads as the monthly category report. No separate summary screen to build.
+- **Unresolved bills don't get lost in an old month.** The app always opens to the current month, and if a tracked bill anywhere earlier in the current calendar year is overdue with no receipt, a small badge on the month picker flags it — ambient, not a notification that has to be dismissed, and one click away from being resolved via the same month navigation that already exists.
+- **Recurring rules can be open-ended or a fixed run.** A subscription or utility recurs indefinitely; something like a car loan financed in installments has a real end. `total_installments` gives it a countdown that stays in sync with an editable end date — distinct from a seasonal bill that goes quiet part of the year and returns annually (still an open design question, see `CLAUDE.md`'s open items).
 
 ## Stack
 
 - **Rust (Axum, SQLx, Askama)**
   - **Axum** — the web framework; mature, stable, maintained by the Tokio team.
   - **SQLx** — database access with compile-time checked queries against the real schema; a renamed/removed column fails the build instead of failing at runtime.
-  - **SQLite (WAL mode)** — a single-file database, fast enough and simple enough for a 2-user household system, with no separate database process to run or maintain.
+  - **SQLite (WAL mode)** — a single-file database, fast enough and simple enough for a household-scale, multi-user system, with no separate database process to run or maintain.
   - **Askama** — HTML templates that are compile-time checked against the Rust structs passed into them; a template referencing a field that no longer exists fails `cargo build`.
 - **HTMX, Tailwind, Alpine.js**
   - **HTMX** — drives all client/server interactivity by swapping HTML fragments returned by the server; no JSON API layer to build or keep in sync.

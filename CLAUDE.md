@@ -202,20 +202,12 @@ JS only because it has no template layer.
 
 - Defined once, **materialized** into the ledger as real rows each period.
 - Receipt tracking is **opt-in per rule** — no regex, no pattern, no traversal.
-  A tracked rule carries three free-text taxonomy fields — `bucket` (required),
-  `bill_name` (required), `instance` (optional) — used only to compute where
-  its files live. `instance` exists to disambiguate the same bill name across
-  two properties/accounts (two houses, each with their own power bill); if
-  there's only one, it's skipped entirely rather than named — "Power" alone is
-  enough.
-- **`bucket` / `bill_name` / `instance` are a per-member tag cloud, not a
-  category table.** Autocompleted from `SELECT DISTINCT ... WHERE member_id = ?`
-  over the logged-in member's own rules, no separate taxonomy entity to manage.
-  Scoped per member on purpose — a kid's "Mesada" / school-cafeteria categories
-  have nothing to do with a parent's "Consumption / Power," and a shared
-  dropdown would just be noise for both. Nothing stops two members typing the
-  same string (e.g. both calling something "Consumption"), it just isn't
-  suggested across accounts.
+  A tracked rule uses its `bucket` / `bill_name` — general-purpose fields, see
+  Categorization & grouping below — plus an `instance` field exclusive to
+  tracked rules, to compute where its files live. `instance` disambiguates the
+  same bill name across two properties/accounts (two houses, each with their
+  own power bill); if there's only one, it's skipped entirely rather than
+  named — "Power" alone is enough.
 - **Path is fully computed, never authored**:
   `{member_uuid}-{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}.{ext}`
   — the `instance` segment is only present when the rule has one. Slugified
@@ -262,6 +254,20 @@ JS only because it has no template layer.
   fixed name and its own effect on state. The file is renamed to the
   deterministic convention on disk; the user's original filename is kept as
   metadata only.
+- **Viewing an attached file opens it in a new browser tab** — no in-app
+  preview or modal. All four allowed extensions already render natively in a
+  browser; a custom viewer would just reimplement that for no gain. See
+  `design/spec.md`'s row-component section for the on-row badges and their
+  keybindings.
+- **Carrying the amount forward is opt-in per rule, checked by default.**
+  Materializing a new period seeds its amount from the *previous* period's
+  actual value when this is on; off, the new occurrence starts with no amount
+  at all — the same `R$ __,__` placeholder already used for a tracked row with
+  no amount yet — forcing an explicit edit. For a bill that's genuinely
+  different every period (a credit-card statement), auto-filling last month's
+  number would be actively wrong, not just unhelpful. The very first
+  occurrence of a rule has nothing to carry forward from, so it always seeds
+  from the rule's own `amount` field.
 - **Deleting any of the three files is a soft delete.** The file moves into a
   `.delete/` subfolder alongside where it lived — never removed from disk —
   and a DB row records the move (old path, `deleted_at`, `deleted_by`, reason)
@@ -275,6 +281,127 @@ JS only because it has no template layer.
   paid, manually-asserted paid (untracked only), and scheduled-overdue-warning
   are three different colours/shades, never sharing a mark. Designs need
   updating for this.
+- **A finite, non-cyclic rule (e.g. a car loan) gets `total_installments`**
+  (nullable int; null = ongoing, matching existing behaviour). `end_date` is
+  derived from `start_date + cadence × total_installments` and is editable two
+  ways that stay in sync — type a new installment count, or pick a new end
+  date, either recomputes the other. This is a different shape from a cyclic
+  seasonal bill (an annual tax tracked only Jan–Oct, forever): cyclic bills
+  repeat every year and remain open item 3 below; installment rules run once
+  and end permanently. Don't conflate the two.
+- **Installment progress displays as a bare `{paid}/{total}` badge** (e.g.
+  `7/12`), not baked into the transaction title — the same meta slot the
+  due-date and recurring glyphs already occupy.
+- **Paying off several installments early is a decoupled, manual action** — no
+  guided "pay off N now" feature. Shorten `total_installments`/`end_date` on
+  the rule, and record the lump payment as an ordinary one-off transaction.
+  Simplest thing that works; revisit only if the manual version proves
+  annoying in practice.
+
+### Materialization
+
+- **An in-process scheduled task, ticking hourly, and also run once at
+  startup.** No external cron, no systemd unit — one process per household is
+  the whole deployment. Startup matters as much as the tick: a process that
+  was down across a month boundary must catch up the moment it's back, not up
+  to an hour later.
+- **Not lazily on view.** Materializing only when someone opens a month makes
+  "does this row exist" depend on "did anyone happen to look," which silently
+  breaks every query that reads across months — the unresolved-issues badge
+  would report all-clear for a month nobody opened, and MoM deltas and `:grep`
+  would have nothing to find.
+- **Reconcile per rule; keep no watermark.** For each active rule, find the
+  periods between `start_date` and `min(current_month, end_date)` that have no
+  occurrence, and insert those. The absence of rows *is* the state, so there is
+  nothing to keep in sync. A `last_checked` control value would look simpler
+  and quietly get it wrong: create a rule today whose `start_date` is six
+  months back, and a watermark says "already caught up" and never materializes
+  its history. Reconciliation handles that, plus downtime of any length, edited
+  start dates and reactivated rules, for free. At household scale this is a few
+  hundred `(rule, period)` pairs to check — nothing.
+- **`UNIQUE(rule_id, period)` makes the whole job idempotent**, so the startup
+  run and an hourly tick can race harmlessly. This also removes the
+  double-insert case from the concurrency question below.
+- **The gap query must count soft-deleted occurrences as present.** This is
+  where two decided rules collide: deletes are soft, so a `dd`'d occurrence is
+  still a row. If the reconciler only looks for *live* rows, it will resurrect
+  every deleted occurrence on the next tick and fight the user once an hour.
+- **Never materialize past the current month.** Future months stay projections
+  rendered on the fly and are never persisted — which is what the mock's
+  "projected" label already implies.
+
+### Categorization & grouping
+
+- **`bucket` and `bill_name` are general-purpose on any transaction** —
+  recurring or one-off, tracked or not. They started as receipt-path plumbing
+  for tracked rules; that's no longer their only job. The old, never-formalized
+  `Category` field on the Rule card is retired in favor of `bucket`.
+- **`instance` stays exclusive to tracked rules** (see Recurring rules above) —
+  it only ever existed to disambiguate a receipt file path, and that meaning
+  doesn't generalize to a one-off grocery run.
+- **`bucket` / `bill_name` are a per-member tag cloud, not a category table.**
+  Autocompleted from `SELECT DISTINCT ... WHERE member_id = ?` over the
+  logged-in member's own rows, no separate taxonomy entity to manage. Scoped
+  per member on purpose — a kid's "Mesada" / school-cafeteria categories have
+  nothing to do with a parent's "Consumption / Power," and a shared dropdown
+  would just be noise for both. Nothing stops two members typing the same
+  string (e.g. both calling something "Consumption"), it just isn't suggested
+  across accounts.
+- **Grouping renders as real Vim folds**, not an invented gesture: `:group
+  bucket` switches a panel's ledger from flat to grouped; `za`/`zo`/`zc` toggle
+  a single fold, `zR`/`zM` open/close every fold at once. Fold open/closed
+  state is pure visual state — Alpine already owns exactly this per the
+  existing division-of-responsibility rule — the server still renders the full
+  grouped, subtotaled fragment; folding only hides/shows what's already there.
+- **Nesting stops at `bucket`.** No nested `bill_name` sub-folds — one level is
+  enough for a household-sized ledger.
+- **Groups are framed, not colour-coded.** A bordered container (reusing the
+  existing `.card` visual language) plus a text label — deliberately not a
+  per-category colour system, since `bucket` is open-vocabulary and unbounded
+  while a theme is deliberately only 11 tokens with `pos`/`neg`/`accent`/`info`
+  already carrying fixed meanings. An unbounded set of user-typed strings
+  either collides with those meanings or needs hash-based colour assignment
+  for no real gain over a plain frame.
+- **Scoped to each member's own panel** — no household-wide, cross-member
+  category view. Grouping only reorganizes the rows already in front of you.
+- **An `Uncategorized` group catches rows with no `bucket` set** — grouping
+  never silently drops a row.
+- **A group header always shows its subtotal, open or closed.** This is why
+  there is no separate `:budget`/report screen: `zM` (fold everything) on the
+  real ledger already reads as a per-category summary. Browsing and
+  summarizing are one mechanism at two zoom levels, not two features.
+- **Grouping is a derived view, exactly like `sort = date`/`amount`.** The
+  moment rows are re-clustered by category instead of read in stored manual
+  order, `J`/`K` refuses with the same message pattern already established for
+  sort — you cannot reorder a derived view, the app says so instead of
+  pretending.
+- **Default fold state on load (expanded vs. collapsed) is a per-member
+  setting** in `member_settings`, a radio choice, not a checkbox list, since
+  the two states are mutually exclusive.
+
+### Unresolved issues across months
+
+- **The app opens to the current month by default** on first load — not the
+  last-viewed month, not January.
+- **A tracked occurrence that's overdue with no receipt is "unresolved"**:
+  `pending` past its due date (ring fully red) or `scheduled overdue`. An
+  untracked bill sitting without a manual tick is *not* an issue — there's no
+  filesystem evidence to act on, so flagging it would be nagging based on
+  nothing.
+- **The lookback window is the current calendar year, not indefinite.** On a
+  given date in September 2026 that means January–August 2026 get checked,
+  not December 2025. Bounded on purpose.
+- **Surfaced as a badge, not a message.** A small warning dot on the
+  month-picker trigger button, and on every flagged month's cell inside the
+  picker popup — ambient and persistent, like every other status in this app
+  (marks, rings, deltas), not a toast that gets dismissed and forgotten. No
+  separate "you have unpaid bills" message on load.
+- **Getting there is just existing navigation.** Clicking a flagged month cell
+  jumps to it — no new command needed on top of the month picker that already
+  exists.
+- **The check is per-viewer, respecting existing privacy rules.** A private
+  row's unresolved status only counts toward the badge for its owner and the
+  admin (role 0) — never for another member who can't see the row itself.
 
 ### Sort and search semantics
 
@@ -294,17 +421,18 @@ JS only because it has no template layer.
 
 ### Open — not yet decided
 
-1. **Materialization trigger.** App start, a scheduled task, or lazily on first
-   view of a month? This shapes the recurring table. The mock generates months on
-   the fly, which is exactly what the real app must *not* do.
-2. **Concurrency.** Everything about the optimistic-UI flow is single-user in the
+1. **Concurrency.** Everything about the optimistic-UI flow is single-user in the
    mock. The interesting cases only exist with a server: Ana deletes a row while
-   Rodrigo has its edit modal open; both add in the same second.
-3. **Seasonal / interval-limited recurring rules.** Some bills only apply part
-   of the year (e.g. a tax tracked January–October). ffm's rule already has
-   start/end dates; a months-of-year allow-list on top of that is not yet
-   designed. Nice-to-have, not blocking.
-4. **Split mode assumes exactly two panes.** "The unfocused pane," `H`/`L`
+   Rodrigo has its edit modal open; both add in the same second. (The
+   materialization half of this is already handled — see Materialization
+   above: `UNIQUE(rule_id, period)` makes a double-insert impossible.)
+2. **Seasonal / cyclic recurring rules.** Some bills only apply part of the
+   year, every year (e.g. a tax tracked January–October, then again the next
+   January) — a `months`-of-year allow-list on top of the rule's existing
+   start/end dates is not yet designed. Distinct from `total_installments`
+   (decided, above): that's a one-time, finite run that ends permanently; this
+   is a recurring annual pattern. Nice-to-have, not blocking.
+3. **Split mode assumes exactly two panes.** "The unfocused pane," `H`/`L`
    moving focus left/right — the whole layout is binary by construction, which
    was fine when this was framed as a two-person app. It doesn't obviously
    generalize to a household of four or six: a scrollable row of panes? pick

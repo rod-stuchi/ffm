@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Rust build output
+/target
+
+# SQLite database and its write-ahead log — never commit real household data
+*.db
+*.db-wal
+*.db-shm
+
+# Rolling backups of the database
+/backups
