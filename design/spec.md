@@ -49,51 +49,64 @@ understood:
   baked into the title — the same meta slot the due-date and recurring glyphs
   already occupy.
 
-### File badges
+### File controls (the file rail)
 
-Up to three small badges sit in their own slot between the name/meta block
+Up to three small controls sit in their own slot between the name/meta block
 and the amount — not in the meta line (too small for what these need to
 carry), and not merged into the status mark (the mark stays a pure fact about
 state; opening a file is an action, kept visually separate on purpose).
 
 ```
- 0   ✓   Energia · Enel SP              [📄1][🧾3]      R$ 343,62
+ 0   ✓   Energia · Enel SP              [1] [3]            R$ 343,62
          🏁 11/07/2026 · ↻                                 ▲ +20%
 
- 1   ⏱   Água · Sabesp                  [📄1][◷2]        R$ 108,40
+ 1   ⏱   Água · Sabesp                  [1] [2]            R$ 108,40
          ⚠ agendado, sem comprovante · venceu 18/07
 
  2        Mercado · Pão de Açúcar                          R$ 658,90
          13/07/2026                                          ▼ -6%
 ```
 
-- **Fixed numbering by kind, always**: `1` is the bill (📄), `2` is scheduled
-  (◷), `3` is the receipt (🧾) — never renumbered based on what happens to
-  exist on a given row. `g1` means "show me the bill" on every row, tracked or
-  not, which is what makes it learnable.
+- **Fixed numbering by kind, always**: `1` is the bill, `2` is scheduled, `3`
+  is the receipt — never renumbered based on what happens to exist on a given
+  row. `g1` means "show me the bill" on every row, tracked or not, which is
+  what makes it learnable.
 - **Only rendered when that file exists.** A row with a bill and a receipt but
-  no scheduled file shows `[📄1][🧾3]` — nothing sits where `2` would be. No
+  no scheduled file shows `[1] [3]` — nothing sits where `2` would be. No
   ghost/hollow placeholder; the keybinding still works purely off kind, not
   position.
-- **The number is a real `<kbd>`**, reusing the existing key-cap styling
-  verbatim (surface-2 fill, bottom-weighted border, mono font) — it doesn't
-  just label the badge, it reads as "press this," the same trick the gutter's
-  relative line numbers already pull off.
-- **Sized in a deliberate hierarchy**: the status mark stays the biggest,
-  most important thing on the row (26px, unchanged) → file badges are a clear
-  step down (~23px, legible at a glance — they're a key on-row fact, not a
-  minor annotation) → `↻`/`🔒` stay exactly as small and inline as they've
-  always been in the meta line. Three tiers, each size saying how important
-  the fact is.
-- **Kept visually separate from the amount.** The badge cluster carries its
-  own margin beyond the row's normal grid gap, so it never reads as fused to
-  the value it sits next to — opening a file and reading the amount are two
-  different facts, not one glued group.
+- **Neutral stroke icon per kind, not a colour-coded emoji.** Bill, scheduled
+  and receipt each get their own small matching-weight line-icon (a
+  document, a clock-in-a-box, a checked receipt) rendered in `currentColor` —
+  legible in every theme, and never competing with `pos`/`neg`/`accent` for
+  attention the way a full-colour emoji glyph did.
+- **The number is a real `<kbd>` built into the control itself**, not a
+  floating notification-style bubble pinned to its corner — same key-cap
+  styling used everywhere else in the app (surface-2 fill, bottom-weighted
+  border, mono font). It doesn't just label the control, it reads as "press
+  this," the same trick the gutter's relative line numbers already pull off.
+- **Compact by default, labelled on the focused row.** Every control is
+  icon-and-keycap only until its row is focused; the focused row's controls
+  expand in place to add the file's name (`Bill`, `Scheduled`, `Receipt`), so
+  the one row you're actually looking at spells itself out without every row
+  in the ledger paying that width cost. Narrow screens stay icon-only
+  regardless of focus — there's no room to spare there.
+- **Sized as a deliberate step down from the status mark**, not by box
+  height alone: the mark is a solid 26px disc, the read of the row's single
+  most important fact. The file rail's controls share that 26px height but
+  as slim, low-contrast outline pills with a 14px icon — visually lighter and
+  narrower, so they stay legible without competing with the mark for the eye.
+  `↻`/`🔒` stay exactly as small and inline as they've always been in the
+  meta line. Three tiers, each weight saying how important the fact is.
+- **Kept visually separate from the amount.** The file rail carries its own
+  margin beyond the row's normal grid gap — wider than before — so it never
+  reads as fused to the value it sits next to: opening a file and reading the
+  amount are two different facts, not one glued group.
 - **Absent for any row with nothing to show** — not a reserved empty box. The
   row's middle column is already flexible (`1fr`), so the amount column stays
-  flush against the row's right edge whether the badge cluster is present or
-  not; nothing about existing alignment changes.
-- **Clicking a badge opens that file in a new browser tab.** No in-app
+  flush against the row's right edge whether the file rail is present or not;
+  nothing about existing alignment changes.
+- **Clicking a control opens that file in a new browser tab.** No in-app
   preview/modal — see the Recurring rules section of `CLAUDE.md` for why.
 
 ---
@@ -143,9 +156,9 @@ Nothing destructive fires from a single keystroke.
 ### Files
 | Key | Action |
 |---|---|
-| `g1` | open the bill (📄) for the focused row, new tab *(proposal, not in the original spec)* |
-| `g2` | open the scheduled-payment file (◷) *(proposal, not in the original spec)* |
-| `g3` | open the receipt (🧾) *(proposal, not in the original spec)* |
+| `g1` | open the bill for the focused row, new tab *(proposal, not in the original spec)* |
+| `g2` | open the scheduled-payment file *(proposal, not in the original spec)* |
+| `g3` | open the receipt *(proposal, not in the original spec)* |
 
 Not stock Vim — a genuine FFM extension of the `g`-prefix "goto" vocabulary
 already in use (`gg`, `gt`), not a new pattern. Pressing a number for a file

@@ -229,22 +229,27 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .mark .dot{width:7px;height:7px;border-radius:50%;background:var(--line-2)}
 .mark .dot.in{background:var(--pos)}
 
-/* file badges — bigger than the meta-line glyphs, smaller than the status
-   mark: a deliberate three-tier size hierarchy. Fixed numbering by kind
-   (1 bill, 2 scheduled, 3 receipt), only rendered when that file exists —
-   no reserved empty slot, so an untracked row's amount still sits flush
-   right against the row edge exactly as before (the grid's own auto-track
-   sizing collapses an unoccupied column to zero on its own). Sized and
-   coloured to read at a glance — these are a key on-row fact, not a minor
-   annotation — and pulled away from the amount with their own margin so
-   the cluster doesn't visually fuse with the value next to it. */
-.fbadges{display:flex;gap:5px;align-items:center;margin-right:8px}
-.fbadge{width:23px;height:23px;border-radius:7px;background:var(--surface-3);
-  border:1px solid var(--line-2);display:grid;place-items:center;font-size:14px;
-  line-height:1;cursor:pointer;position:relative;color:var(--ink)}
-.fbadge:hover{border-color:var(--accent-line);background:var(--surface-2)}
-.fbadge kbd{position:absolute;bottom:-7px;right:-7px;font-size:9px;padding:0 3px;
-  line-height:1.3;border-bottom-width:1px;background:var(--surface);pointer-events:none}
+/* File rail ---------------------------------------------------------------
+   Files are actions, not payment state. Keep them neutral and subordinate to
+   the 26px status mark and the amount column. The keycap is part of the control
+   (not a floating notification badge), which makes the fixed g1/g2/g3 mapping
+   obvious without turning each file into a tiny card-inside-a-card. */
+.fbadges{display:flex;gap:6px;align-items:center;margin-right:18px;min-width:0}
+.fbadge{height:26px;min-width:34px;max-width:112px;display:inline-flex;align-items:center;gap:6px;
+  padding:0 7px 0 5px;border-radius:7px;background:transparent;border:1px solid var(--line-2);
+  color:var(--ink-2);cursor:pointer;line-height:1;white-space:nowrap;overflow:hidden;
+  transition:border-color .12s ease,background .12s ease,color .12s ease,max-width .16s ease}
+.fbadge:hover,.fbadge:focus-visible{border-color:var(--accent-line);background:var(--surface);color:var(--ink)}
+.fbadge kbd{flex:none;font-size:9px;line-height:1.25;padding:1px 4px;border-radius:4px;
+  border-bottom-width:2px;background:var(--surface-2);pointer-events:none}
+.fbadge .ficon{width:14px;height:14px;display:block;flex:none;pointer-events:none}
+.fbadge .ficon svg{width:14px;height:14px;display:block;fill:none;stroke:currentColor;
+  stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.fbadge .flabel{max-width:0;opacity:0;overflow:hidden;font-family:var(--mono);font-size:9.5px;
+  color:var(--ink-3);transition:max-width .16s ease,opacity .12s ease}
+.row.focus .fbadge{max-width:112px}
+.row.focus .fbadge .flabel{max-width:72px;opacity:1}
+.row.focus .fbadge:hover .flabel{color:var(--ink-2)}
 
 .name{min-width:0}
 .name b{font-weight:600;font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -456,6 +461,9 @@ body{height:100dvh;overflow:hidden;display:flex;flex-direction:column;background
 .cfg-st .d{color:var(--ink-3)}
 
 @media (max-width:700px){
+  .fbadges{margin-right:10px;gap:4px}
+  .fbadge{min-width:30px;padding:0 5px}
+  .row.focus .fbadge .flabel{max-width:0;opacity:0}
   /* keep the top bar on one row: the month picker replaces the arrows,
      and the server pill keeps its dot but loses its label */
   #prevM,#nextM{display:none}
@@ -1184,16 +1192,23 @@ const pad = n => String(n).padStart(2,'0');
    renumbered by what happens to exist on a given row, which is what makes
    g1/g2/g3 learnable across the whole ledger. */
 const FILE_KINDS = [
-  {n:1, field:'barcodePath',   glyph:'📄', label:'bill'},
-  {n:2, field:'scheduledPath', glyph:'◷', label:'scheduled payment'},
-  {n:3, field:'receiptPath',   glyph:'🧾', label:'receipt'}
+  {n:1, field:'barcodePath',   kind:'bill',      label:'Bill'},
+  {n:2, field:'scheduledPath', kind:'scheduled', label:'Scheduled'},
+  {n:3, field:'receiptPath',   kind:'receipt',   label:'Receipt'}
 ];
+function fileIconSVG(kind){
+  if(kind === 'bill') return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4z"/><path d="M9 2.5v3h3M6 8h4M6 10.5h4"/></svg>';
+  if(kind === 'scheduled') return '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="9.5" rx="1.7"/><path d="M5 2v3M11 2v3M2.5 6.5h11"/><path d="M8 8v2.2l1.6 1"/></svg>';
+  return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h8v11l-2-1-2 1-2-1-2 1z"/><path d="M6 6.2h4M6 8.5h4M6.3 10.8l1 1 2.4-2.5"/></svg>';
+}
 function fileBadgesHTML(t, p, i){
   const chips = FILE_KINDS.filter(k => t[k.field]).map(k =>
-    '<span class="fbadge" data-p="' + p + '" data-i="' + i + '" data-n="' + k.n + '" '
-    + 'title="' + esc(k.label) + ' · ' + esc(t[k.field]) + '">' + k.glyph + '<kbd>' + k.n + '</kbd></span>'
+    '<button class="fbadge" type="button" data-p="' + p + '" data-i="' + i + '" data-n="' + k.n + '" '
+    + 'aria-label="Open ' + esc(k.label.toLowerCase()) + ' file" title="' + esc(k.label) + ' · ' + esc(t[k.field]) + '">'
+    + '<kbd>' + k.n + '</kbd><span class="ficon">' + fileIconSVG(k.kind) + '</span>'
+    + '<span class="flabel">' + esc(k.label) + '</span></button>'
   ).join('');
-  return chips ? '<div class="fbadges">' + chips + '</div>' : '';
+  return chips ? '<div class="fbadges" aria-label="Files">' + chips + '</div>' : '';
 }
 function openFile(t, n){
   const kind = FILE_KINDS.find(k => k.n === n);
@@ -2092,7 +2107,7 @@ const KEYGROUPS = [
   ['Undo', [['dd','delete — opens a confirmation'],['y','confirm in the delete modal'],['u','undo the last change'],['Esc','clear count, buffer and selection']]],
   ['Find', [['/','search the ledger — incremental, regex'],['n / N','next / previous match, wrapping'],['Esc','clear the search highlight'],['/uber','matches title, date or amount']]],
   ['Fold', [['za','toggle the fold under the cursor'],['zo / zc','open / close it explicitly'],['zR / zM','open / close every fold in the panel'],['note','only active once :group bucket is on']]],
-  ['Files', [['g1','open the bill (📄), new tab (proposal)'],['g2','open the scheduled payment (◷) (proposal)'],['g3','open the receipt (🧾) (proposal)'],['note','numbered by kind, always — no file of that kind is a no-op']]],
+  ['Files', [['g1','open the bill file, new tab (proposal)'],['g2','open the scheduled-payment proof (proposal)'],['g3','open the receipt, new tab (proposal)'],['note','numbered by kind, always — no file of that kind is a no-op']]],
   ['Type', [[':','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':move ana','re-attribute to another member'],[':sort date','row order: manual · date · amount'],[':group bucket','group by category · :group none to flatten'],[':set rnu','gutter: relative · absolute · off'],[':theme gruvbox','colorscheme (writes ffm.toml)'],[':config','open ffm.toml beside the ledger'],['?','this keymap']]]
 ];
 const KEYHTML = KEYGROUPS.map(([g, rows]) =>
