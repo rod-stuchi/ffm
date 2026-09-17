@@ -203,6 +203,10 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
   box-shadow:inset 0 0 0 0 var(--accent);transition:box-shadow .12s}
 .panel.active::before{box-shadow:inset 0 0 0 2px var(--accent-line)}
 .panel.active .p-name{color:var(--accent)}
+/* Bill-import drop target (design/spec-bill-import.md) — dropping a boleto/
+   barcode PDF onto a panel attributes it to that member, same as a/i/:add. */
+.panel.dragover{background:var(--accent-soft)}
+.panel.dragover::before{box-shadow:inset 0 0 0 2px var(--accent)}
 
 .p-head{padding:12px 14px 10px;border-bottom:1px solid var(--line)}
 .p-title{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -457,6 +461,21 @@ input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:
 .warnbox .g{font-size:16px;line-height:1.2}
 .notebox{background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:8px;
   padding:9px 11px;font-size:12.5px;color:var(--ink-2);margin-top:12px}
+
+/* Pre-existing gap: .switch/.d had no rule at all, so a label immediately
+   followed by another (e.g. Track receipt + Mark paid manually, both now
+   always in the DOM for r/R's live show/hide) rendered inline, run together
+   on one line instead of stacking as separate rows. */
+.switch{display:flex;align-items:flex-start;gap:9px;margin-top:12px;cursor:pointer}
+.switch input[type="checkbox"]{margin-top:3px;flex:none;cursor:pointer}
+.switch > span{display:block}
+.switch .d{display:block;font-size:11.5px;font-weight:400;color:var(--ink-3);margin-top:2px}
+
+/* The rule modal's barcode upload target (r / R) — see design/spec-bill-import.md. */
+.dropzone{margin-top:8px;padding:11px 12px;border:1px dashed var(--line-2);border-radius:8px;
+  background:var(--surface-2);font-size:12px;color:var(--ink-2);text-align:center;
+  transition:border-color .15s ease,background .15s ease,color .15s ease}
+.dropzone.dragover{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
 
 /* ============ gallery ============ */
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;align-items:start}
@@ -762,7 +781,7 @@ let uid = 1000;
 /* ================= data ================= */
 function T(o){ return Object.assign({
   id:++uid, kind:'out', title:'', sub:'', amount:0, day:1, status:'plain',
-  progress:null, due:null, delta:null, recurring:false, tracked:false,
+  progress:null, due:null, delta:null, recurring:false, tracked:false, noBarcode:false,
   pattern:null, private:false, deleted:false, restored:false, state:'ok',
   bucket:null, billName:null, instance:null,
   totalInstallments:null, installmentsPaid:null,
@@ -1344,7 +1363,7 @@ function doUndo(){
   render();
 }
 
-function insertRow(after, data){
+function insertRow(after, data, okMsg){
   const list = rowsOf(S.panel);
   const at = Math.min(list.length, Math.max(0, S.focus[S.panel] + (after?1:0)));
   const row = T(Object.assign({state:'skeleton'}, data));
@@ -1352,7 +1371,7 @@ function insertRow(after, data){
   S.focus[S.panel] = at;
   render();
   setTimeout(() => {
-    if(S.online){ row.state = 'ok'; S.undo.push({k:'add', p:S.panel, id:row.id}); say('added #' + row.id); }
+    if(S.online){ row.state = 'ok'; S.undo.push({k:'add', p:S.panel, id:row.id}); say(okMsg || ('added #' + row.id)); }
     else { row.state = 'error'; say('server unreachable · nothing written', true); }
     render();
   }, 780);
@@ -1630,6 +1649,20 @@ function wireInstallmentSync(startEl, endEl, instEl){
   });
 }
 
+/* Tracked-only fields (and, inside those, barcode-only fields) are rendered
+   once at open time but need to react live — r's whole point is "check
+   Tracked, then decide noBarcode / maybe drop a file, all in one sitting." */
+function wireRuleFormReactivity(){
+  const trackedEl = $('#rTracked'), fields = $('#rTrackedFields');
+  if(trackedEl && fields){
+    trackedEl.addEventListener('change', () => { fields.style.display = trackedEl.checked ? '' : 'none'; });
+  }
+  const noBarcodeEl = $('#rNoBarcode'), barcodeFields = $('#rBarcodeFields');
+  if(noBarcodeEl && barcodeFields){
+    noBarcodeEl.addEventListener('change', () => { barcodeFields.style.display = noBarcodeEl.checked ? 'none' : ''; });
+  }
+}
+
 /* A row's due day-of-month, for the rule form's Due date field. t.day is
    the *paid-on* day — 0/blank until a payment actually lands (see "An
    unpaid row sorts by its due day" in spec.md), so it's frequently empty
@@ -1642,17 +1675,20 @@ function dueDay(t){
   return d ? d.d : (t.day || null);
 }
 
+/* Editing only — creation moved to r / createRule() below. Converting an
+   existing occurrence into a rule's first one is no longer possible: see
+   CLAUDE.md's Recurring rules section for why (a barcode binding has to
+   happen at creation time or not at all, and there's no such moment for a
+   row that already exists as a plain transaction). */
 function editRule(){
   const t = cur();
   if(!t) return;
-  const creating = !t.recurring;
+  if(!t.recurring){ say('not recurring — press r to create a new recurring bill', true); return; }
   const buckets = bucketsFor(S.panel);
-  const [curM, curY] = MONTHS[S.mi].key.split('/').map(Number);
-  const start = creating ? { d: t.day || 1, m: curM, y: curY } : (t.ruleStart || { d: 1, m: 3, y: 2024 });
+  const start = t.ruleStart || { d: 1, m: 3, y: 2024 };
   openModal(
-    '<h3>' + (creating ? 'Create recurring rule' : 'Edit recurring rule') + '</h3>'
-    + '<div class="msub">R · ' + esc(t.title) + ' · '
-    + (creating ? 'turns this into a recurring rule, starting here' : 'applies to every future occurrence') + '</div>'
+    '<h3>Edit recurring rule</h3>'
+    + '<div class="msub">R · ' + esc(t.title) + ' · applies to every future occurrence</div>'
     + '<div class="mbody"><div class="stack">'
     + '<div class="fgrid">'
     + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span><input class="i" id="rAmount" value=""></div></label>'
@@ -1668,7 +1704,7 @@ function editRule(){
     + '<input class="i" id="rInstallments" value="' + (t.totalInstallments || '') + '" placeholder="leave blank if ongoing"></label>'
     + '</div><div class="fgrid">'
     + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">any transaction can have one</span></span>'
-    + '<input class="i" id="ruleBucket" list="ruleBucketList" value="' + (creating ? '' : esc(t.bucket || '')) + '" placeholder="e.g. Consumption" autocomplete="off">'
+    + '<input class="i" id="ruleBucket" list="ruleBucketList" value="' + esc(t.bucket || '') + '" placeholder="e.g. Consumption" autocomplete="off">'
     + '<datalist id="ruleBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist>'
     + '</label>'
     + '<label class="f"><span class="k">Bill name</span><input class="i" id="rBillName" value="' + esc(t.billName || t.title.split(' · ')[0]) + '"></label>'
@@ -1676,29 +1712,101 @@ function editRule(){
     + '<label class="switch"><input type="checkbox" id="rTracked"' + (t.tracked?' checked':'') + '>'
     + '<span>Track receipt on disk<span class="d">'
     + (t.pattern ? 'computed path · ' + esc(t.pattern) : 'no taxonomy set yet') + '</span></span></label>'
-    + (t.tracked
-      ? '<label class="switch"><input type="checkbox" id="rMultiPage"' + (t.barcodeSpansPeriod?' checked':'') + '>'
-        + '<span>Barcode covers multiple months<span class="d">one file with several pages — e.g. a city tax’s '
-        + '10-page annual booklet, or a loan’s full run of installments. Not a fresh upload every month.</span></span></label>'
-        + (t.barcodeSpansPeriod
-          ? '<div class="fgrid">'
-            + '<label class="f"><span class="k">Pages in this file</span><input class="i" id="rPages" value="' + (t.barcodeWindowSize || '') + '" placeholder="e.g. 10"></label>'
-            + '<label class="f"><span class="k">First page covers</span><input class="i" id="rWinStart" value="' + (t.barcodeWindowStart ? fmtDMY(Object.assign({d:1}, t.barcodeWindowStart)) : fmtDMY(start)) + '"></label>'
-            + '</div>'
-            + '<div class="notebox">Re-enter these two whenever a new file actually arrives (a new tax year, a refinanced '
-            + 'loan) — that’s what starts the page count over from 1 for a new upload, without touching any other field.</div>'
-          : '')
+    + '<div id="rTrackedFields" style="display:' + (t.tracked ? '' : 'none') + '">'
+    + '<label class="switch"><input type="checkbox" id="rNoBarcode"' + (t.noBarcode?' checked':'') + '>'
+    + '<span>This bill has no barcode file<span class="d">paid by wire transfer / PIX / TED — nothing to attach, ever</span></span></label>'
+    + '<div id="rBarcodeFields" style="display:' + (t.noBarcode ? 'none' : '') + '">'
+    + (t.clientCode
+      ? '<div class="notebox mono" id="rClientCodeLine" style="font-family:var(--mono);font-size:11.5px">Client code: ' + esc(t.clientCode)
+        + ' <span style="color:var(--ink-3)">· read-only, from the last attached file</span>'
+        + ' <button class="btn" data-act="unlinkBarcode" type="button" style="padding:3px 9px;font-size:11px;margin-left:8px">Unlink</button></div>'
       : '')
-    + '</div>' + (creating
-      ? '<div class="notebox">This occurrence becomes the rule’s first — future months materialize on their own from here. Past months are never generated retroactively.</div>'
-      : '<div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div>') + '</div>'
+    + '<div class="f"><span class="k">Barcode file <span style="text-transform:none;font-weight:400">optional — attach or replace it here</span></span>'
+    + '<div class="dropzone" id="rFileDrop" data-attached="0" data-removed="0"><span class="dz-msg">'
+    + (t.clientCode ? 'Drop a new barcode PDF to replace the one on file' : 'Drop the barcode PDF here, or leave blank for now')
+    + '</span></div></div>'
+    + '<label class="switch"><input type="checkbox" id="rMultiPage"' + (t.barcodeSpansPeriod?' checked':'') + '>'
+    + '<span>Barcode covers multiple months<span class="d">one file with several pages — e.g. a city tax’s '
+    + '10-page annual booklet, or a loan’s full run of installments. Not a fresh upload every month.</span></span></label>'
+    + (t.barcodeSpansPeriod
+      ? '<div class="fgrid">'
+        + '<label class="f"><span class="k">Pages in this file</span><input class="i" id="rPages" value="' + (t.barcodeWindowSize || '') + '" placeholder="e.g. 10"></label>'
+        + '<label class="f"><span class="k">First page covers</span><input class="i" id="rWinStart" value="' + (t.barcodeWindowStart ? fmtDMY(Object.assign({d:1}, t.barcodeWindowStart)) : fmtDMY(start)) + '"></label>'
+        + '</div>'
+        + '<div class="notebox">Re-enter these two whenever a new file actually arrives (a new tax year, a refinanced '
+        + 'loan) — that’s what starts the page count over from 1 for a new upload, without touching any other field.</div>'
+      : '')
+    + '</div>'
+    + '</div>'
+    + '</div>'
+    + '<div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div>'
+    + '</div>'
     + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
-    + '<button class="btn pri" data-act="saveRule" type="button">' + (creating ? 'Create rule' : 'Save rule') + '</button></div>');
+    + '<button class="btn pri" data-act="saveRule" type="button">Save rule</button></div>');
   maskAmount($('#rAmount'), t.amount);
   restrictToNumeric($('#rInstallments'), false);
   restrictToNumeric($('#rDue'), false);
   if($('#rPages')) restrictToNumeric($('#rPages'), false);
   wireInstallmentSync($('#rStart'), $('#rEnd'), $('#rInstallments'));
+  wireRuleFormReactivity();
+  setTimeout(()=>{ const el = $('#rAmount'); if(el){ el.focus(); el.select(); } }, 30);
+}
+
+/* r — the only way a recurring rule is ever created now. Blank modal, no
+   anchor row: creating a rule is no longer something a one-off transaction
+   becomes, it's typed from scratch and handed to insertRow like any other
+   brand-new row (CLAUDE.md's Recurring rules section explains why this
+   supersedes the old "R on a plain row" conversion). */
+function createRule(){
+  const buckets = bucketsFor(S.panel);
+  const [curM, curY] = MONTHS[S.mi].key.split('/').map(Number);
+  const start = { d: 1, m: curM, y: curY };
+  openModal(
+    '<h3>Create recurring bill</h3>'
+    + '<div class="msub">r · a fresh rule — not tied to any existing row</div>'
+    + '<div class="mbody"><div class="stack">'
+    + '<div class="fgrid">'
+    + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span><input class="i" id="rAmount" value=""></div></label>'
+    + '<label class="f"><span class="k">Cadence</span><select class="i" id="rCadence"><option>Monthly</option><option>Bimonthly</option><option>Yearly</option></select></label>'
+    + '</div><div class="fgrid">'
+    + '<label class="f"><span class="k">Start date</span><input class="i" id="rStart" value="' + fmtDMY(start) + '"></label>'
+    + '<label class="f"><span class="k">Due date <span style="text-transform:none;font-weight:400">day of month, every period</span></span>'
+    + '<input class="i" id="rDue" value=""></label>'
+    + '</div><div class="fgrid">'
+    + '<label class="f"><span class="k">End date <span style="text-transform:none;font-weight:400">optional — blank means ongoing</span></span>'
+    + '<input class="i" id="rEnd" value="" placeholder="blank = ongoing"></label>'
+    + '<label class="f"><span class="k">Total installments <span style="text-transform:none;font-weight:400">optional — fixed-length, e.g. a loan</span></span>'
+    + '<input class="i" id="rInstallments" value="" placeholder="leave blank if ongoing"></label>'
+    + '</div><div class="fgrid">'
+    + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">any transaction can have one</span></span>'
+    + '<input class="i" id="ruleBucket" list="ruleBucketList" value="" placeholder="e.g. Consumption" autocomplete="off">'
+    + '<datalist id="ruleBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist>'
+    + '</label>'
+    + '<label class="f"><span class="k">Bill name</span><input class="i" id="rBillName" value="" placeholder="e.g. Energia"></label>'
+    + '</div>'
+    + '<label class="switch"><input type="checkbox" id="rTracked">'
+    + '<span>Track receipt on disk<span class="d">no manual tick — paid only when a file exists at the computed path</span></span></label>'
+    + '<div id="rTrackedFields" style="display:none">'
+    + '<label class="switch"><input type="checkbox" id="rNoBarcode">'
+    + '<span>This bill has no barcode file<span class="d">paid by wire transfer / PIX / TED — nothing to attach, ever</span></span></label>'
+    + '<div id="rBarcodeFields">'
+    + '<div class="f"><span class="k">Barcode file <span style="text-transform:none;font-weight:400">optional — can also be added later via R</span></span>'
+    + '<div class="dropzone" id="rFileDrop" data-attached="0" data-removed="0"><span class="dz-msg">Drop the barcode PDF here, or leave blank for now</span></div></div>'
+    + '<label class="switch"><input type="checkbox" id="rMultiPage">'
+    + '<span>Barcode covers multiple months<span class="d">one file with several pages — e.g. a city tax’s '
+    + '10-page annual booklet, or a loan’s full run of installments. Not a fresh upload every month.</span></span></label>'
+    + '</div>'
+    + '</div>'
+    + '</div>'
+    + '<div class="notebox">A brand-new rule — nothing in the ledger yet. Future months materialize on their own from here; there is no anchor occurrence to convert.</div>'
+    + '</div>'
+    + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
+    + '<button class="btn pri" data-act="createRule" type="button">Create rule</button></div>');
+  maskAmount($('#rAmount'), 0);
+  restrictToNumeric($('#rInstallments'), false);
+  restrictToNumeric($('#rDue'), false);
+  wireInstallmentSync($('#rStart'), $('#rEnd'), $('#rInstallments'));
+  wireRuleFormReactivity();
   setTimeout(()=>{ const el = $('#rAmount'); if(el){ el.focus(); el.select(); } }, 30);
 }
 
@@ -1837,6 +1945,7 @@ document.addEventListener('keydown', e => {
     case 'u': e.preventDefault(); doUndo(); break;
     case 'e': e.preventDefault(); editOccurrence(); break;
     case 'R': e.preventDefault(); editRule(); break;
+    case 'r': e.preventDefault(); createRule(); break;
     case 'a': e.preventDefault(); openCmd(':'); $('#cmdInput').value='add '; break;
     case 'i': e.preventDefault(); openCmd(':'); $('#cmdInput').value='add '; break;
     case '/': case ':': e.preventDefault(); openCmd(k); break;
@@ -1847,6 +1956,64 @@ document.addEventListener('keydown', e => {
 });
 
 /* ================= mouse ================= */
+/* Bill import via drag & drop — design/spec-bill-import.md. Dropping a file
+   onto a panel no longer binds or parses anything itself — matching a
+   dropped file's name against a row's title turned out to be brittle
+   (renaming a downloaded PDF shouldn't be a requirement), and there is no
+   other row-independent signal this mock can fake convincingly. The only
+   place a file is ever attached now is the rule's own modal (r to create,
+   R to edit) — no ambiguity there, since the user is looking straight at
+   the one rule they mean. A panel drop is now just a nudge: warn if this
+   panel has recurring bills still waiting on a first barcode, otherwise
+   discard the file silently. */
+function clientCodeFor(t){
+  let h = 0;
+  for(const c of (t.key || t.title)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const digits = String(h % 10000000000).padStart(10, '0');
+  return digits.slice(0, 9) + '-' + digits.slice(9);
+}
+function warnUnlinkedBarcodes(p){
+  const pending = rowsOf(p).filter(t =>
+    t.tracked && t.recurring && !t.noBarcode && !t.clientCode && !t.deleted && t.state === 'ok');
+  if(!pending.length) return;
+  const names = pending.map(t => t.billName || t.title.split(' · ')[0]).join(', ');
+  say((pending.length === 1 ? '1 recurring bill' : pending.length + ' recurring bills')
+    + ' still need a barcode file (' + names + ') — focus it and press R to set it up', true);
+}
+$('#panels').addEventListener('dragover', e => {
+  if(!e.dataTransfer || !e.dataTransfer.types.includes('Files')) return;
+  const pan = e.target.closest('.panel');
+  if(!pan) return;
+  e.preventDefault();
+  pan.classList.add('dragover');
+});
+$('#panels').addEventListener('dragleave', e => {
+  const pan = e.target.closest('.panel');
+  if(pan && !pan.contains(e.relatedTarget)) pan.classList.remove('dragover');
+});
+$('#panels').addEventListener('drop', e => {
+  if(!e.dataTransfer || !e.dataTransfer.types.includes('Files')) return;
+  const pan = e.target.closest('.panel');
+  if(!pan) return;
+  e.preventDefault();
+  pan.classList.remove('dragover');
+  warnUnlinkedBarcodes(+pan.dataset.panel);
+});
+/* The rule modal's own barcode dropzone (r / R) — delegated on #scrim so it
+   survives openModal's innerHTML replacement without re-binding per open. */
+$('#scrim').addEventListener('dragover', e => {
+  const dz = e.target.closest('#rFileDrop'); if(!dz || !e.dataTransfer) return;
+  e.preventDefault(); dz.classList.add('dragover');
+});
+$('#scrim').addEventListener('dragleave', e => {
+  const dz = e.target.closest('#rFileDrop'); if(dz) dz.classList.remove('dragover');
+});
+$('#scrim').addEventListener('drop', e => {
+  const dz = e.target.closest('#rFileDrop'); if(!dz || !e.dataTransfer || !e.dataTransfer.types.includes('Files')) return;
+  e.preventDefault(); dz.classList.remove('dragover');
+  dz.dataset.attached = '1'; dz.dataset.removed = '0';
+  const msg = dz.querySelector('.dz-msg'); if(msg) msg.textContent = 'Barcode file attached — client code will be derived on save';
+});
 $('#panels').addEventListener('click', e => {
   if(e.target.closest('[data-role-toggle]')){ togglePreview(); return; }
   const fb = e.target.closest('.fbadge');
@@ -1970,12 +2137,12 @@ $('#scrim').addEventListener('click', e => {
   }
   if(a === 'saveRule'){
     const t = cur(); if(!t){ closeModal(); return; }
-    const creating = !t.recurring;
-    const prev = {recurring:t.recurring, amount:t.amount, day:t.day, bucket:t.bucket, billName:t.billName,
+    const prev = {amount:t.amount, day:t.day, bucket:t.bucket, billName:t.billName,
       totalInstallments:t.totalInstallments, installmentsPaid:t.installmentsPaid, tracked:t.tracked,
       pattern:t.pattern, status:t.status, progress:t.progress, due:t.due,
       ruleStart:t.ruleStart, ruleEnd:t.ruleEnd, barcodeSpansPeriod:t.barcodeSpansPeriod,
-      barcodeWindowSize:t.barcodeWindowSize, barcodeWindowStart:t.barcodeWindowStart, barcodePath:t.barcodePath};
+      barcodeWindowSize:t.barcodeWindowSize, barcodeWindowStart:t.barcodeWindowStart, barcodePath:t.barcodePath,
+      noBarcode:t.noBarcode, clientCode:t.clientCode};
     const cents = parseInt($('#rAmount').dataset.cents || '0', 10);
     if(isFinite(cents)) t.amount = cents / Math.pow(10, curFmt().decimals);
     const dueD = parseInt($('#rDue').value, 10);
@@ -1994,7 +2161,6 @@ $('#scrim').addEventListener('click', e => {
     t.billName = $('#rBillName').value.trim() || t.title.split(' · ')[0];
     const inst = parseInt($('#rInstallments').value, 10);
     t.totalInstallments = (isFinite(inst) && inst > 0) ? inst : null;
-    if(creating) t.installmentsPaid = t.totalInstallments ? 1 : 0;
     const startD = parseDMY($('#rStart').value); if(startD) t.ruleStart = startD;
     t.ruleEnd = parseDMY($('#rEnd').value);
     t.tracked = $('#rTracked').checked;
@@ -2005,22 +2171,34 @@ $('#scrim').addEventListener('click', e => {
          elsewhere in this mock (no member folder, no bucket segment). */
       const [mm, yyyy] = MONTHS[S.mi].key.split('/');
       t.pattern = slugify(t.billName) + '/' + yyyy + '/' + mm + '.pdf';
-      t.barcodeSpansPeriod = $('#rMultiPage') ? $('#rMultiPage').checked : false;
-      if(t.barcodeSpansPeriod){
-        const pages = parseInt($('#rPages').value, 10);
-        t.barcodeWindowSize = (isFinite(pages) && pages > 0) ? pages : null;
-        const winStart = parseDMY($('#rWinStart').value);
-        /* Re-typing this date is the whole "I just got a new file" action —
-           there's no separate upload flow in this mock, so setting a fresh
-           windowStart is what resets the page count back to 1 for the new
-           file, the same way an admin re-entering these two fields for a
-           new tax year or a refinanced loan would in the real app. */
-        t.barcodeWindowStart = winStart ? {m:winStart.m, y:winStart.y} : t.barcodeWindowStart;
-        t.barcodePath = t.barcodeWindowStart
-          ? slugify(t.billName) + '/barcode_' + pad(t.barcodeWindowStart.m) + '-' + t.barcodeWindowStart.y + '.pdf'
-          : t.barcodePath;
+      t.noBarcode = $('#rNoBarcode') ? $('#rNoBarcode').checked : false;
+      if(t.noBarcode){
+        /* A barcode-less bill (PIX/TED/wire transfer) can't have a
+           multi-page barcode window either. */
+        t.barcodeSpansPeriod = false; t.barcodeWindowSize = null; t.barcodeWindowStart = null;
       } else {
-        t.barcodeWindowSize = null; t.barcodeWindowStart = null;
+        const drop = $('#rFileDrop');
+        if(drop){
+          if(drop.dataset.removed === '1') t.clientCode = null;
+          else if(drop.dataset.attached === '1') t.clientCode = clientCodeFor(t);
+        }
+        t.barcodeSpansPeriod = $('#rMultiPage') ? $('#rMultiPage').checked : false;
+        if(t.barcodeSpansPeriod){
+          const pages = parseInt($('#rPages').value, 10);
+          t.barcodeWindowSize = (isFinite(pages) && pages > 0) ? pages : null;
+          const winStart = parseDMY($('#rWinStart').value);
+          /* Re-typing this date is the whole "I just got a new file" action —
+             there's no separate upload flow in this mock, so setting a fresh
+             windowStart is what resets the page count back to 1 for the new
+             file, the same way an admin re-entering these two fields for a
+             new tax year or a refinanced loan would in the real app. */
+          t.barcodeWindowStart = winStart ? {m:winStart.m, y:winStart.y} : t.barcodeWindowStart;
+          t.barcodePath = t.barcodeWindowStart
+            ? slugify(t.billName) + '/barcode_' + pad(t.barcodeWindowStart.m) + '-' + t.barcodeWindowStart.y + '.pdf'
+            : t.barcodePath;
+        } else {
+          t.barcodeWindowSize = null; t.barcodeWindowStart = null;
+        }
       }
       if(t.status !== 'paid'){
         t.status = 'pending';
@@ -2028,14 +2206,57 @@ $('#scrim').addEventListener('click', e => {
         if(!t.due) t.due = pad(t.day || 1) + '/' + MONTHS[S.mi].key;
       }
     } else {
-      t.pattern = null;
+      t.pattern = null; t.noBarcode = false; t.clientCode = null;
     }
-    t.recurring = true;
     S.undo.push({k:'edit', p:S.panel, id:t.id, prev});
     closeModal();
-    say(creating
-      ? 'recurring rule created from “' + t.title + '” · future months materialize on their own'
-      : 'rule updated');
+    say('rule updated');
+  }
+  if(a === 'unlinkBarcode'){
+    /* Deliberately does not close the modal — unlinking exists so the
+       household can immediately re-drop a corrected file into this same
+       dropzone, not so they have to reopen R to try again. */
+    const drop = $('#rFileDrop');
+    if(drop){
+      drop.dataset.attached = '0'; drop.dataset.removed = '1';
+      const msg = drop.querySelector('.dz-msg'); if(msg) msg.textContent = 'No barcode file linked — drop one below, or leave blank';
+    }
+    const line = $('#rClientCodeLine'); if(line) line.remove();
+  }
+  if(a === 'createRule'){
+    const billName = $('#rBillName').value.trim();
+    if(!billName){ say('a recurring bill needs a name', true); return; }
+    const cents = parseInt($('#rAmount').dataset.cents || '0', 10);
+    const amount = isFinite(cents) ? cents / Math.pow(10, curFmt().decimals) : 0;
+    const [curM, curY] = MONTHS[S.mi].key.split('/').map(Number);
+    const startD = parseDMY($('#rStart').value) || {d:1, m:curM, y:curY};
+    const dueD = parseInt($('#rDue').value, 10);
+    const day = (dueD>=1 && dueD<=31) ? dueD : (startD.d || 1);
+    const inst = parseInt($('#rInstallments').value, 10);
+    const totalInstallments = (isFinite(inst) && inst > 0) ? inst : null;
+    const tracked = $('#rTracked').checked;
+    const data = {
+      kind:'out', title: billName, billName, day, amount,
+      bucket: $('#ruleBucket').value.trim() || null,
+      recurring: true, ruleStart: startD, ruleEnd: parseDMY($('#rEnd').value),
+      totalInstallments, installmentsPaid: totalInstallments ? 1 : 0,
+      tracked, progress: null,
+      status: tracked ? 'pending' : 'plain'
+    };
+    if(tracked){
+      const [mm, yyyy] = MONTHS[S.mi].key.split('/');
+      data.pattern = slugify(billName) + '/' + yyyy + '/' + mm + '.pdf';
+      data.noBarcode = $('#rNoBarcode') ? $('#rNoBarcode').checked : false;
+      data.progress = .25;
+      data.due = pad(day) + '/' + MONTHS[S.mi].key;
+      if(!data.noBarcode){
+        const drop = $('#rFileDrop');
+        if(drop && drop.dataset.attached === '1') data.clientCode = clientCodeFor({title: billName});
+        data.barcodeSpansPeriod = $('#rMultiPage') ? $('#rMultiPage').checked : false;
+      }
+    }
+    closeModal();
+    insertRow(true, data, 'recurring bill created · future months materialize on their own');
   }
 });
 
@@ -2291,7 +2512,7 @@ renderTaxonomy();
 /* ================= keymap ================= */
 const KEYGROUPS = [
   ['Move', [['j / k','row down / up'],['5j · 7k','counted motion'],['gg / G','first / last row'],['H / L','focus member panel, left / right'],['Ctrl-P / Ctrl-N','previous / next month']]],
-  ['Act',  [['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence'],['R','edit the recurring rule behind it'],['gd','show due/cadence/receipt details, keyboard-only (proposal)'],['p','toggle private (proposal)']]],
+  ['Act',  [['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence'],['r','create a new recurring bill — blank modal, no anchor row'],['R','edit the recurring rule behind it — no-op on a plain row'],['gd','show due/cadence/receipt details, keyboard-only (proposal)'],['p','toggle private (proposal)']]],
   ['Undo', [['dd','delete — opens a confirmation'],['y','confirm in the delete modal'],['u','undo the last change'],['Esc','clear count, buffer and selection']]],
   ['Files', [['g1','open the bill file, new tab (proposal)'],['g2','open the scheduled-payment proof (proposal)'],['g3','open the receipt, new tab (proposal)'],['P','preview the row’s files in a carousel, without leaving the ledger (proposal)'],['1 / 2 / 3','inside the carousel — jump straight to that file'],['h / l','inside the carousel — previous / next file'],['+ / -','inside the carousel — zoom in / out'],['0','inside the carousel — reset zoom'],['note','numbered by kind, always — no file of that kind is a no-op']]],
   ['Type', [['/ or :','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':set rnu | nu | nonu','gutter: relative · absolute · off'],[':preview','toggle previewing as a non-admin member'],['?','this keymap']]]

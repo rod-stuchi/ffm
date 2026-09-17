@@ -211,18 +211,21 @@ JS only because it has no template layer.
 
 ### Recurring rules
 
-- **Created by turning an existing occurrence into the rule's first one —
-  there is no separate "new rule" form.** `R` on a row that isn't recurring
-  yet opens the same rule editor a recurring row's `R` does, just in
-  creation mode: same fields, pre-filled from the transaction you're
-  looking at (amount, day → start date, a bill-name guess from the title),
-  a "Create rule" button instead of "Save rule". Saving flips that
-  transaction's `recurring` flag and gives it the new rule's fields — it
-  *becomes* the anchor occurrence, never a separate parallel row — which is
-  what keeps materialization's `UNIQUE(rule_id, period)` idempotency intact
-  for the period it's already in; inserting a second row for that same
-  month would violate the very constraint that makes materialization safe
-  to run hourly.
+- **Created from scratch via a dedicated command — `r` — never by turning
+  an existing occurrence into one.** This reverses this repo's earlier "no
+  separate new-rule form" stance: `R` on a row that wasn't recurring yet
+  used to open the rule editor in a creation mode, pre-filled from that
+  transaction. That's gone — `r` opens a blank rule editor with no anchor
+  row at all, and `R` is now edit-only (a no-op with a statusline message
+  on a plain row, the same treatment `gd` already gets there). The reason
+  is the barcode-binding feature below: a recurring rule can optionally be
+  bound to a barcode file, and that binding has to happen at creation time
+  or not at all — there's no still-plain transaction lying around
+  afterward to retroactively attach it to. Saving `r`'s form inserts a
+  genuinely new row (the same `add`-family undo entry as `a`/`i`/`:add`),
+  it never mutates one that was already there — materialization's
+  `UNIQUE(rule_id, period)` idempotency was never actually at risk from
+  this change, since there's still exactly one row per period either way.
 - **The due date lives on the rule, not the occurrence, once a row is
   recurring.** `R`'s Due date field (day-of-month) is the one place it's
   editable; `e`'s Day field disappears entirely for a recurring row, rather
@@ -233,10 +236,8 @@ JS only because it has no template layer.
   the rule form's Bucket field and the occurrence form's Bucket field both
   read the identical `SELECT DISTINCT bucket WHERE member_id = ?` tag
   cloud (see Categorization & grouping below), not two separately-behaving
-  widgets that happen to share a label. Creating a new rule starts Bucket
-  empty regardless of whatever the anchor transaction happened to be
-  tagged with — a fresh rule gets an explicit choice, not an inherited
-  guess.
+  widgets that happen to share a label. `r`'s form starts Bucket empty —
+  a fresh rule gets an explicit choice, not an inherited guess.
 - Defined once, **materialized** into the ledger as real rows each period.
 - Receipt tracking is **opt-in per rule** — no regex, no pattern, no traversal.
   A tracked rule uses its `bucket` / `bill_name` — general-purpose fields, see
@@ -298,6 +299,44 @@ JS only because it has no template layer.
     carousel: "page 11 — outside this file's 10 pages, a new upload is
     needed for this month." That's the signal a fresh file needs
     uploading (a new tax year, a refinanced loan), not a bug to chase.
+- **Dropping a barcode/boleto PDF onto a member's panel binds nothing — it's
+  a notifier, not an upload path.** An earlier design had the drop parse the
+  file and infer which rule it belonged to (by issuer + period + value
+  proximity, or by matching the dropped filename against a row's title);
+  both were rejected as too fragile — a real bill's filename, or its
+  content, shouldn't have to line up with what's already in the ledger. The
+  only place a barcode file is ever attached now is the rule's own editor:
+  `r`'s optional upload field at creation, or `R`'s upload field afterward —
+  both scoped to one specific, already-identified rule, so there's no
+  matching left to get wrong. A panel drop just checks that panel for
+  recurring, tracked rules still missing a barcode
+  (`tracked && recurring && !no_barcode && !client_code`) and says so in the
+  statusline if any exist; otherwise the dropped file is discarded with no
+  message at all. Full parsing design (FEBRABAN barcode decoding,
+  value/due-date extraction, issuer profiles) still lives in
+  `design/spec-bill-import.md` — it runs on whatever file lands in `r`/`R`'s
+  own upload control, the same as it would have on a panel-dropped file
+  before.
+  - **`no_barcode` is a rule-level flag, decided once at creation, independent
+    of `tracked`.** It exists for bills paid by wire transfer / PIX / TED,
+    which never have a barcode at all — but the household may still want
+    the *receipt* tracked on disk (`tracked` stays about the
+    `{month}.{ext}` proof-of-payment file, an entirely separate fact per
+    the three-file-kinds model above). A rule with `no_barcode = true`
+    never shows the barcode upload control again, in any modal.
+  - **A rule gets an optional `client_code`** — the subscriber's own
+    account number (Sabesp's "matrícula", Enel's "número do cliente"),
+    read from the bill's text layer, never the barcode itself. It lives on
+    the rule, not the occurrence — the same account every period, unlike
+    `barcode_raw`/value/due date which are genuinely per-period — and it's
+    populated by attaching a file in the rule's own editor, not typed by
+    hand: no form field, shown read-only once set, absent until a file has
+    been attached. A parse that resolves to an existing rule but reads a
+    *different* client code than the one on file is flagged, not silently
+    overwritten — same "flag it, don't guess" posture as the multi-page
+    barcode window above. It can also be unlinked independently of the
+    rule itself — a narrow correction for "the wrong file got attached the
+    first time," distinct from `u`'s full revert of the last change.
 - **A scheduled payment still unconfirmed past its due date is a distinct,
   warning-coloured state** — not a generic `pending`. A
   `{month}_scheduled.{ext}` file with no `{month}.{ext}` and a due date already

@@ -218,7 +218,8 @@ Nothing destructive fires from a single keystroke.
 | `a` / `i` | add after / before the current row |
 | `x` | toggle selection for a batch operation |
 | `e` | edit this occurrence |
-| `R` | edit the recurring rule behind it — or, on a row that isn't recurring yet, create one starting here |
+| `r` | create a new recurring bill — blank modal, no anchor row |
+| `R` | edit the recurring rule behind the focused row; no-op with a statusline message on a plain row |
 | `gd` | show due/cadence/receipt details for the focused row *(proposal, not in the original spec)* |
 | `p` | toggle private *(proposal, not in the original spec)* |
 | `P` | preview the row's files in a carousel — see Files below *(proposal, not in the original spec)* |
@@ -343,6 +344,11 @@ for this row"*.
   to find, on purpose. Its only "yes" stays the explicit `y` keypress (see
   Undo above), so `Enter` can never become an accidental way to confirm a
   delete.
+- **`r`'s form is the same field grid as `R`'s, minus the two per-occurrence
+  noteboxes** ("this occurrence becomes the rule's first" / "past
+  occurrences are left as recorded") — there's no anchor row, so neither
+  applies. `Esc`/Cancel here leaves nothing behind: unlike `e`/`R` on an
+  existing row, nothing has been created yet to cancel out of.
 - **The rule form's End date and Total installments stay in sync**, per
   CLAUDE.md's Recurring rules section — typing one recomputes the other
   (assuming monthly cadence; that's the only cadence actually wired today).
@@ -357,6 +363,27 @@ for this row"*.
   re-entered whenever a cyclic bill's next cycle actually sends a new one
   — there's no separate "renew" control, typing a fresh pair of values
   *is* the renewal.
+- **A tracked rule's "This bill has no barcode file" checkbox hides the
+  upload control and the multi-page checkbox entirely** — set once, for
+  bills paid by wire transfer / PIX / TED that will never have a barcode to
+  attach. Decided in `r`'s form at creation, correctable later in `R`'s,
+  never inferred from anything else about the rule.
+- **The barcode upload field is a dropzone, not a file `<input>` styled to
+  look like one** — attaching a file there is what derives `client_code`
+  on save (see Bill import, below), and it's optional in both `r` and `R`:
+  a rule can be created and saved with tracking on and no file yet, the
+  same way an amount or due date can be filled in later.
+- **A rule with a `client_code` on file shows it read-only**, above the
+  upload field — a plain "Client code: 0123456789-0" line with its own
+  **Unlink** button, no input box. The code itself is populated only by
+  attaching a file (see Bill import, below), never typed by hand, so
+  there's nothing here to edit directly; a rule with no file attached yet
+  shows no line at all, the same "absent, not a blank field" treatment
+  `instance` already gets when a rule doesn't need one. **Unlink** clears
+  just the code — it doesn't close the modal, doesn't touch `tracked`/
+  `bucket`/`billName`/`pattern`, and exists specifically for "the wrong
+  file got attached the first time": drop a corrected one right after,
+  in the same still-open dropzone.
 - **Due date moved from the occurrence form to the rule form.** The
   edit-occurrence form's Day field only renders at all for a non-recurring
   row; a recurring row's due day is edited on the rule (`R`) instead, so
@@ -639,6 +666,37 @@ stored file's extension mirrors whatever was actually uploaded.
   `.delete/` subfolder beside where it lived; never removed from disk. The DB
   row records the move (`old_path`, `deleted_at`, `deleted_by`, `reason`) so
   `u` restores it exactly.
+
+### Bill import — attached inside the rule's own modal
+
+Binding a barcode file to a rule is an explicit, in-modal action — never
+inferred by matching a dropped file against existing rows. An earlier design
+had a panel drop parse the file and guess which rule it belonged to (by
+issuer/period/value proximity, or by matching the dropped filename against a
+row's title); both were rejected as too fragile — a real bill's filename or
+content shouldn't have to line up with what's already in the ledger for the
+household to trust the result. Full parsing design (FEBRABAN barcode
+decoding, issuer profiles) lives in `design/spec-bill-import.md`; what's
+UI-facing:
+
+- **The only place a barcode file is ever attached is the rule's own
+  dropzone** — `r`'s upload field at creation, or `R`'s afterward. Both are
+  scoped to one specific, already-identified rule, so there's no matching
+  left to get wrong; see Modal fields, below, for the dropzone and its
+  read-only Client code / Unlink controls.
+- **Dropping a file onto a member's panel binds nothing.** It's downgraded
+  to a passive nudge: if that panel has recurring, tracked rules still
+  missing a barcode (and not marked "no barcode file"), the statusline
+  names them and points at `R`; otherwise the dropped file is discarded
+  with no message at all. The panel still decides member attribution for
+  a *new* rule (`r`'s form is created against whichever panel is
+  focused, same as `a`/`i`/`:add`) — it just never decides which rule a
+  dropped file belongs to, because a drop no longer resolves to a rule at
+  all.
+- **A successfully-attached file may carry a `client_code`** — the
+  subscriber's own account number, read from the bill's text (never the
+  barcode). It shows up read-only in the rule editor once a rule has one;
+  see Modal fields, below.
 
 ### Manual paid, for untracked rules only
 
