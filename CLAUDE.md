@@ -261,6 +261,43 @@ JS only because it has no template layer.
     out of balance — scheduling is a promise, not a required step.
   - `{month}.{ext}` — the definitive proof of payment. Its presence is `paid`,
     full stop.
+- **A barcode can cover several periods from one upload instead of a fresh
+  file every month** — a city tax office issuing one PDF with 10 barcodes
+  for the whole Jan–Oct cycle, or a bank issuing one document with a loan's
+  full run of installments. Opt-in per rule (`spans_period`, alongside
+  `window_size` and `window_start`); off by default, since most bills
+  genuinely do get a new file each period. When on, `{month}_barcode.{ext}`
+  stops being computed per period — every occurrence inside the window
+  points at the **same** uploaded file, and the app computes which page is
+  theirs from `window_start` and their own period (`window_start`'s month
+  is page 1, the next month page 2, and so on). This is a property of the
+  barcode specifically: `{month}_scheduled.{ext}` and `{month}.{ext}` stay
+  genuinely per-period regardless — each installment is still scheduled and
+  paid on its own, only the *bill document* is shared.
+  - **This applies whether the rule itself is finite or cyclic — the window
+    doesn't have to span the rule's entire life.** A fixed-length loan gets
+    exactly one window for its whole run (`window_size` = its
+    `total_installments`, uploaded once, never replaced — when it's done,
+    it's done). A cyclic bill like an annual property tax gets a **new**
+    window every cycle: the same rule, re-opened each January with a fresh
+    `window_start` and `window_size` when that year's document arrives,
+    which is what resets the page count back to 1 for the new file without
+    touching anything else about the rule. Re-entering those two fields
+    *is* the "I got a new file" action — there's no separate upload flow
+    modelled for this yet, same as barcode/scheduled/receipt uploads
+    generally (see Upload, below).
+  - **This is independent of, and doesn't resolve, the still-open cyclic/
+    seasonal rule design** (`months`-of-year allow-list — see Open items,
+    below). A cyclic rule already skips materializing outside its active
+    months by whatever mechanism eventually lands there; the barcode window
+    just needs *a* start period and size to compute pages from, and doesn't
+    care how the rule decided which periods are active.
+  - **An occurrence whose period falls outside the current window's page
+    count is flagged, not silently wrong** — same warning channel as
+    scheduled-overdue, both on the file badge and in the `P` preview
+    carousel: "page 11 — outside this file's 10 pages, a new upload is
+    needed for this month." That's the signal a fresh file needs
+    uploading (a new tax year, a refinanced loan), not a bug to chase.
 - **A scheduled payment still unconfirmed past its due date is a distinct,
   warning-coloured state** — not a generic `pending`. A
   `{month}_scheduled.{ext}` file with no `{month}.{ext}` and a due date already
@@ -291,11 +328,34 @@ JS only because it has no template layer.
   fixed name and its own effect on state. The file is renamed to the
   deterministic convention on disk; the user's original filename is kept as
   metadata only.
-- **Viewing an attached file opens it in a new browser tab** — no in-app
-  preview or modal. All four allowed extensions already render natively in a
-  browser; a custom viewer would just reimplement that for no gain. See
-  `design/spec.md`'s row-component section for the on-row badges and their
-  keybindings.
+- **A file badge or `g1`/`g2`/`g3` still opens the file in a new browser
+  tab** — that stays the default, and no custom rendering is built for it:
+  all four allowed extensions already render natively in a browser. `P`
+  (see below) is a **second, additive** way to look at a row's files —
+  reversing this repo's earlier "no in-app preview at all" stance, on the
+  strength of flipping between a row's own bill/scheduled/receipt without
+  losing the ledger underneath. It still doesn't reimplement a file
+  renderer: the carousel shows the file's kind, computed path and an icon,
+  not the file's actual bytes, and "Open in new tab" is right there for
+  when the real content is needed. See `design/spec.md`'s row-component
+  section for the on-row badges and their keybindings.
+- **`P` opens that carousel for the focused row's files.** `1`/`2`/`3`
+  jump straight to that fixed file kind (unchanged from `g1`/`g2`/`g3`'s
+  numbering — never renumbered by what exists); `h`/`l` step to the
+  previous/next file that actually exists on the row, clamping rather than
+  wrapping at either end. Pressing a number for a kind that isn't there is
+  the same no-op-with-a-statusline-message treatment `g1`/`g2`/`g3` already
+  get, not a different error path to learn.
+- **The carousel is full-viewport, not a dialog-sized modal.** The actual
+  job isn't just "glance at which file this is" — it's reading a boleto's
+  barcode digits, or holding a phone up to its QR code, both of which need
+  the file genuinely large on screen. A 560px dialog can't do that; this is
+  the one modal in the app sized to the full window on purpose.
+- **Zoom (`+`/`-`, or `0` to reset) scales the preview**, floating controls
+  in the stage's corner rather than in the button row, the same placement
+  any image viewer's zoom control uses. Each file starts back at 100% when
+  you flip to a different one with `h`/`l`/`1`/`2`/`3` — carrying a zoom
+  level over to an unrelated file would be a surprise, not a convenience.
 - **Carrying the amount forward is opt-in per rule, checked by default.**
   Materializing a new period seeds its amount from the *previous* period's
   actual value when this is on; off, the new occurrence starts with no amount
@@ -475,7 +535,10 @@ JS only because it has no template layer.
    January) — a `months`-of-year allow-list on top of the rule's existing
    start/end dates is not yet designed. Distinct from `total_installments`
    (decided, above): that's a one-time, finite run that ends permanently; this
-   is a recurring annual pattern. Nice-to-have, not blocking.
+   is a recurring annual pattern. Nice-to-have, not blocking. The multi-period
+   barcode window (Recurring rules, above) is decided and doesn't wait on
+   this — it just needs a start period and a page count from whatever
+   mechanism eventually decides which months are active.
 3. **Split mode assumes exactly two panes.** "The unfocused pane," `H`/`L`
    moving focus left/right — the whole layout is binary by construction, which
    was fine when this was framed as a two-person app. It doesn't obviously

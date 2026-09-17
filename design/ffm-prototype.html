@@ -276,6 +276,11 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
   color:var(--ink-2);cursor:pointer;line-height:1;white-space:nowrap;overflow:hidden;
   transition:border-color .12s ease,background .12s ease,color .12s ease,max-width .16s ease}
 .fbadge:hover,.fbadge:focus-visible{border-color:var(--accent-line);background:var(--surface);color:var(--ink)}
+/* A spansPeriod bill whose computed page falls outside the uploaded file's
+   page count — the window has run out and needs a fresh upload. Same
+   warning channel as scheduled-overdue, not a new colour meaning. */
+.fbadge-warn{border-color:var(--neg);color:var(--neg)}
+.fbadge-warn:hover,.fbadge-warn:focus-visible{border-color:var(--neg);color:var(--neg);background:var(--neg-soft)}
 .fbadge kbd{flex:none;font-size:9px;line-height:1.25;padding:1px 4px;border-radius:4px;
   border-bottom-width:2px;background:var(--surface-2);pointer-events:none}
 .fbadge .ficon{width:14px;height:14px;display:block;flex:none;pointer-events:none}
@@ -286,6 +291,57 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 .row.focus .fbadge{max-width:112px}
 .row.focus .fbadge .flabel{max-width:72px;opacity:1}
 .row.focus .fbadge:hover .flabel{color:var(--ink-2)}
+
+/* P — file preview carousel. Reuses the exact same stroke icons the file
+   rail already uses, just bigger, so the carousel reads as "the same file
+   controls, zoomed in" rather than a second icon language to learn.
+   Full-viewport (see #modal.pv below) because the real job — reading a
+   boleto's barcode, or scanning its QR code with a phone camera — needs
+   the file genuinely large and zoomable, not a 560px dialog. */
+#scrim.pv-open{padding:0}
+#modal.pv{width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0;
+  display:flex;flex-direction:column;overflow:hidden}
+#modal.pv h3,#modal.pv .msub{flex:none}
+#modal.pv .mbody{flex:1;display:flex;flex-direction:column;min-height:0;overflow:auto}
+#modal.pv .mfoot{flex:none;border-radius:0}
+.pv-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none}
+.pv-kind{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.pv-pos{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.pv-stage{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:14px;padding:40px 16px;margin-top:10px;min-height:0;
+  background:var(--surface-2);border:1px solid var(--line-2);border-radius:10px;overflow:auto}
+.pv-content{display:flex;flex-direction:column;align-items:center;gap:14px;transition:transform .12s ease}
+.pv-content .ficon.lg{width:52px;height:52px;color:var(--ink-2)}
+.pv-content .ficon.lg svg{width:52px;height:52px;fill:none;stroke:currentColor;stroke-width:1.3;
+  stroke-linecap:round;stroke-linejoin:round}
+.pv-path{font-family:var(--mono);font-size:12px;color:var(--ink-2);text-align:center;word-break:break-all}
+/* One barcode file, several months — see barcodePageFor(). Same warning
+   channel as scheduled-overdue when the occurrence falls outside the
+   currently-uploaded file's page count, not a new colour meaning. */
+.pv-page{font-size:13px;color:var(--ink);text-align:center;max-width:44ch}
+.pv-page b{font-family:var(--mono)}
+.pv-page.warn{color:var(--neg)}
+/* Floats over the stage's bottom-right corner, like any image viewer's
+   zoom control — doesn't eat into the vertical space the file itself
+   needs at full-viewport size. */
+.pv-zoom{position:absolute;bottom:14px;right:14px;display:flex;align-items:center;gap:6px;
+  background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:4px 6px;
+  box-shadow:var(--shadow-sm)}
+.pv-zoom button{width:26px;height:26px;border-radius:6px;border:1px solid var(--line-2);
+  background:var(--surface-2);color:var(--ink);cursor:pointer;font-size:15px;line-height:1;
+  font-family:var(--sans);display:grid;place-items:center}
+.pv-zoom button:hover{border-color:var(--accent-line)}
+.pv-zoom button[disabled]{opacity:.4;cursor:default}
+.pv-zoom button[disabled]:hover{border-color:var(--line-2)}
+.pv-zoomlvl{font-family:var(--mono);font-size:11px;color:var(--ink-2);min-width:38px;text-align:center}
+.pv-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;flex:none}
+.pv-nav .btn[disabled]{opacity:.4;cursor:default}
+.pv-nav .btn[disabled]:hover{border-color:var(--line-2)}
+.pv-dots{display:flex;gap:6px}
+.pv-dot{width:26px;height:26px;border-radius:7px;border:1px solid var(--line-2);background:var(--surface);
+  display:grid;place-items:center;cursor:pointer;color:var(--ink-2);font-family:var(--sans)}
+.pv-dot:hover{border-color:var(--accent-line)}
+.pv-dot.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 @media (max-width:700px){
   .fbadges{margin-right:10px;gap:4px}
   .fbadge{min-width:30px;padding:0 5px}
@@ -717,7 +773,8 @@ const AUTHORED = {
       T({title:'Energia · Enel SP', bucket:'Consumption', amount:286.30, day:13, status:'paid', recurring:true, tracked:true, delta:2, due:'15/06/2026', pattern:'energia/2026/06.pdf'}),
       T({title:'Internet · Vivo Fibra', bucket:'Consumption', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/06/2026', pattern:'vivo_fibra/2026/06.pdf'}),
       T({title:'Condomínio', bucket:'Consumption', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/06/2026', pattern:'condominio/2026/06.pdf'}),
-      T({title:'IPTU', amount:412.70, day:15, recurring:true}),
+      T({title:'IPTU', amount:412.70, day:15, status:'paid', recurring:true, tracked:true, due:'15/06/2026', pattern:'iptu/2026/06.pdf',
+        barcodeSpansPeriod:true, barcodeWindowSize:10, barcodeWindowStart:{m:1,y:2026}}),
       T({title:'Mercado · Pão de Açúcar', bucket:'Everyday', amount:701.44, day:14}),
       T({title:'Combustível · Shell', bucket:'Everyday', amount:310.00, day:18}),
       T({title:'Uber', bucket:'Everyday', amount:88.30, day:24}),
@@ -735,7 +792,8 @@ const AUTHORED = {
       T({title:'Água · Sabesp', bucket:'Consumption', amount:108.40, day:0, status:'scheduled-overdue', recurring:true, tracked:true, due:'18/07/2026', pattern:'sabesp/2026/07_scheduled.pdf'}),
       T({title:'Internet · Vivo Fibra', bucket:'Consumption', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/07/2026', pattern:'vivo_fibra/2026/07.pdf'}),
       T({title:'Condomínio', bucket:'Consumption', amount:965.00, day:8, status:'paid', recurring:true, tracked:true, delta:5, due:'08/07/2026', pattern:'condominio/2026/07.pdf'}),
-      T({title:'IPTU', amount:412.70, day:15, recurring:true}),
+      T({title:'IPTU', amount:412.70, day:15, status:'paid', recurring:true, tracked:true, due:'15/07/2026', pattern:'iptu/2026/07.pdf',
+        barcodeSpansPeriod:true, barcodeWindowSize:10, barcodeWindowStart:{m:1,y:2026}}),
       T({title:'Financiamento · Honda Biz', bucket:'Transporte', amount:687.00, day:20, recurring:true, totalInstallments:12, installmentsPaid:7}),
       T({title:'Mercado · Pão de Açúcar', bucket:'Everyday', amount:658.90, day:13, delta:-6}),
       T({title:'Combustível · Shell', bucket:'Everyday', amount:298.40, day:17, delta:-4}),
@@ -766,8 +824,13 @@ const RULES = [[
   {title:'Água · Sabesp', bucket:'Consumption', base:108, day:14, due:18, rec:1, track:1, v:.14},
   /* IPTU has no bucket on purpose — the "Uncategorized" demo row. It's also the
      cyclic/seasonal case (months allow-list, still an open design question),
-     not a total_installments rule — no installment badge here. */
-  {title:'IPTU', key:'IPTU', base:412.70, day:15, rec:1, v:0, months:[0,1,2,3,4,5,6,7,8,9]},
+     not a total_installments rule — no installment badge here. It's also the
+     multi-page-barcode demo: the city sends one PDF with 10 barcodes
+     (Jan–Oct) at the start of the cycle, not a fresh file every month —
+     spansPeriod/windowSize/windowStart below are what tell the app "same
+     file, different page," see barcodePageFor(). */
+  {title:'IPTU', key:'IPTU', base:412.70, day:15, due:15, rec:1, track:1, v:0, months:[0,1,2,3,4,5,6,7,8,9],
+    spansPeriod:true, windowSize:10, windowStart:{m:1,y:2026}},
   {title:'Netflix', bucket:'Subscriptions', base:59.90, day:21, rec:1, v:0},
   {title:'Mercado · Pão de Açúcar', bucket:'Everyday', base:665, day:13, v:.13},
   {title:'Combustível · Shell', bucket:'Everyday', base:302, day:17, v:.15},
@@ -793,11 +856,16 @@ function makeMonth(mi){
     const settled = !future && (!now || r.day <= TODAY_D);
     if(r.track){
       const due = String(r.due).padStart(2,'0') + '/' + mm + '/2026';
-      if(settled) return T({title, key:r.key, bucket:r.bucket, amount, day:r.day, status:'paid', recurring:true,
-        tracked:true, due, pattern:slug(r.title) + '/2026/' + mm + '.pdf'});
+      /* spansPeriod rules (see barcodePageFor()) carry their window onto
+         every occurrence they generate — each month needs to know which
+         page of the *shared* file is its own. */
+      const spanFields = r.spansPeriod
+        ? {barcodeSpansPeriod:true, barcodeWindowSize:r.windowSize, barcodeWindowStart:r.windowStart} : {};
+      if(settled) return T(Object.assign({title, key:r.key, bucket:r.bucket, amount, day:r.day, status:'paid', recurring:true,
+        tracked:true, due, pattern:slug(r.title) + '/2026/' + mm + '.pdf'}, spanFields));
       const span = future ? .04 : Math.max(.08, Math.min(.97, TODAY_D / r.due));
-      return T({title, key:r.key, bucket:r.bucket, amount:0, day:0, status:'pending', progress:span, recurring:true,
-        tracked:true, due, pattern:slug(r.title) + '/2026/' + mm + '_scheduled.pdf'});
+      return T(Object.assign({title, key:r.key, bucket:r.bucket, amount:0, day:0, status:'pending', progress:span, recurring:true,
+        tracked:true, due, pattern:slug(r.title) + '/2026/' + mm + '_scheduled.pdf'}, spanFields));
     }
     if(future && !r.rec) return null;                 // variable spends aren't projected
     if(now && r.day > TODAY_D && !r.rec) return null;
@@ -816,11 +884,23 @@ const MONTHS = Array.from({length:12}, (_, mi) => ({
 /* file badges are derived from the tracked row's existing pattern + status —
    barcode/scheduled/receipt are three independent files per period, and a
    row never carries both scheduled and receipt: uploading the receipt
-   supersedes and removes the scheduled file, per the spec. */
+   supersedes and removes the scheduled file, per the spec. A spansPeriod
+   rule's barcode is the one exception to "per period": the same uploaded
+   file covers every occurrence in its window, so its path is computed from
+   the window's own start, not this occurrence's month — that's what makes
+   it the *same path* every month instead of a new one, and what
+   barcodePageFor() then maps back to a page number for. Scheduled/receipt
+   stay genuinely per-month regardless — each installment is still paid,
+   and proven, separately. */
 MONTHS.forEach(M => M.m.forEach(rows => rows.forEach(t => {
   if(!t.tracked || !t.pattern) return;
   const base = t.pattern.replace(/(_scheduled)?\.pdf$/, '');
-  t.barcodePath = base + '_barcode.pdf';
+  t.barcodePath = t.barcodeSpansPeriod
+    /* inlined padStart, not pad() — this block runs at top-level script
+       evaluation, before pad's own `const` declaration further down has
+       been reached */
+    ? slug(t.title) + '/barcode_' + String(t.barcodeWindowStart.m).padStart(2,'0') + '-' + t.barcodeWindowStart.y + '.pdf'
+    : base + '_barcode.pdf';
   if(t.status === 'paid') t.receiptPath = base + '.pdf';
   else if(t.status === 'scheduled' || t.status === 'scheduled-overdue') t.scheduledPath = base + '_scheduled.pdf';
   // status === 'pending' → bill on file, nothing scheduled or paid yet
@@ -852,7 +932,8 @@ const S = {
      logged in, only whether their admin rights are currently in effect —
      "preview my own experience with them switched off", not "become someone
      else". See isAdminNow() and isPrivacyHidden() below. */
-  previewNonAdmin: false
+  previewNonAdmin: false,
+  filePreview: null   // {p, i, n} while the P file-preview carousel is open
 };
 const rowsOf = p => MONTHS[S.mi].m[p];
 const cur = () => rowsOf(S.panel)[S.focus[S.panel]];
@@ -947,12 +1028,16 @@ function fileIconSVG(kind){
   return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h8v11l-2-1-2 1-2-1-2 1z"/><path d="M6 6.2h4M6 8.5h4M6.3 10.8l1 1 2.4-2.5"/></svg>';
 }
 function fileBadgesHTML(t, p, i){
-  const chips = FILE_KINDS.filter(k => t[k.field]).map(k =>
-    '<button class="fbadge" type="button" data-p="' + p + '" data-i="' + i + '" data-n="' + k.n + '" '
-    + 'aria-label="Open ' + esc(k.label.toLowerCase()) + ' file" title="' + esc(k.label) + ' · ' + esc(t[k.field]) + '">'
+  const page = t.barcodeSpansPeriod ? barcodePageFor(t, MONTHS[S.mi].key) : null;
+  const pageTag = page ? (page.valid ? ' · page ' + page.page + ' of ' + page.total
+    : ' · page ' + page.page + ' — outside the uploaded file’s ' + page.total + ' pages') : '';
+  const chips = FILE_KINDS.filter(k => t[k.field]).map(k => {
+    const tag = k.n === 1 ? pageTag : '';
+    return '<button class="fbadge' + (k.n===1 && page && !page.valid ? ' fbadge-warn' : '') + '" type="button" data-p="' + p + '" data-i="' + i + '" data-n="' + k.n + '" '
+    + 'aria-label="Open ' + esc(k.label.toLowerCase()) + ' file" title="' + esc(k.label) + tag + ' · ' + esc(t[k.field]) + '">'
     + '<kbd>' + k.n + '</kbd><span class="ficon">' + fileIconSVG(k.kind) + '</span>'
-    + '<span class="flabel">' + esc(k.label) + '</span></button>'
-  ).join('');
+    + '<span class="flabel">' + esc(k.label) + (k.n === 1 && page ? ' · p.' + page.page : '') + '</span></button>';
+  }).join('');
   return chips ? '<div class="fbadges" aria-label="Files">' + chips + '</div>' : '';
 }
 function openFile(t, n){
@@ -960,6 +1045,91 @@ function openFile(t, n){
   const path = kind && t && t[kind.field];
   if(!path){ say('no ' + (kind ? kind.label : 'file') + ' on file for this row', true); return; }
   window.open(path, '_blank');
+}
+
+/* P — an in-app carousel over the focused row's files, alongside (not
+   instead of) g1/g2/g3 and clicking a badge, which still open a new tab.
+   Flipping through bill → scheduled → receipt without losing the ledger
+   underneath earns its keep even though every one of these file types
+   already renders natively in a browser tab on its own. */
+const PV_ZOOM_MIN = 50, PV_ZOOM_MAX = 300, PV_ZOOM_STEP = 25;
+function openFilePreview(startN){
+  const t = cur(); if(!t) return;
+  const existing = FILE_KINDS.filter(k => t[k.field]);
+  if(!existing.length){ say('no files on this row', true); return; }
+  const wantKind = startN && FILE_KINDS.find(k => k.n === startN);
+  const n = (wantKind && t[wantKind.field]) ? startN : existing[0].n;
+  S.filePreview = { p: S.panel, i: S.focus[S.panel], n, zoom: 100 };
+  renderFilePreview();
+}
+/* Full-viewport, not the standard centred dialog — a boleto's barcode or a
+   QR code needs to be readable, or literally scannable off the screen with
+   a phone camera, which the small modal this started as never had room
+   for. #modal/#scrim carry the .pv class only while this is the open
+   modal, so every other dialog keeps its normal size. */
+function renderFilePreview(){
+  const fp = S.filePreview; if(!fp) return;
+  const t = rowsOf(fp.p)[fp.i];
+  const existing = FILE_KINDS.filter(k => t[k.field]);
+  const kind = FILE_KINDS.find(k => k.n === fp.n);
+  const idx = existing.findIndex(k => k.n === fp.n);
+  const page = (fp.n === 1 && t.barcodeSpansPeriod) ? barcodePageFor(t, MONTHS[S.mi].key) : null;
+  $('#modal').classList.add('pv');
+  $('#scrim').classList.add('pv-open');
+  openModal(
+    '<h3>File preview</h3>'
+    + '<div class="msub">P · ' + esc(t.title) + '</div>'
+    + '<div class="mbody"><div class="pv-head"><span class="pv-kind">' + esc(kind.label) + '</span>'
+    + '<span class="pv-pos">' + (idx+1) + ' of ' + existing.length + '</span></div>'
+    + '<div class="pv-stage">'
+    + '<div class="pv-content" style="transform:scale(' + (fp.zoom/100) + ')">'
+    + '<span class="ficon lg">' + fileIconSVG(kind.kind) + '</span>'
+    + (page ? '<div class="pv-page' + (page.valid ? '' : ' warn') + '">'
+        + (page.valid
+            ? 'One file, ' + page.total + ' pages — this month is page <b>' + page.page + '</b>'
+            : '⚠ Page ' + page.page + ' — outside this file’s ' + page.total + ' pages, a new upload is needed for this month')
+        + '</div>' : '')
+    + '<div class="pv-path">' + esc(t[kind.field]) + '</div>'
+    + '</div>'
+    + '<div class="pv-zoom">'
+    + '<button data-pv="zoomout" type="button" title="Zoom out (-)" ' + (fp.zoom<=PV_ZOOM_MIN?'disabled':'') + '>−</button>'
+    + '<span class="pv-zoomlvl">' + fp.zoom + '%</span>'
+    + '<button data-pv="zoomin" type="button" title="Zoom in (+)" ' + (fp.zoom>=PV_ZOOM_MAX?'disabled':'') + '>+</button>'
+    + '</div>'
+    + '</div>'
+    + '<div class="pv-nav">'
+    + '<button class="btn" data-pv="prev" type="button" ' + (idx===0?'disabled':'') + '>‹ <kbd>h</kbd></button>'
+    + '<div class="pv-dots">' + FILE_KINDS.filter(k => t[k.field]).map(k =>
+        '<button class="pv-dot' + (k.n===fp.n?' on':'') + '" data-pv-n="' + k.n + '" type="button" title="' + esc(k.label) + '"><kbd>' + k.n + '</kbd></button>').join('')
+    + '</div>'
+    + '<button class="btn" data-pv="next" type="button" ' + (idx===existing.length-1?'disabled':'') + '><kbd>l</kbd> ›</button>'
+    + '</div></div>'
+    + '<div class="mfoot"><button class="btn" data-act="close" type="button">Close <kbd>Esc</kbd></button>'
+    + '<button class="btn pri" data-pv="open" type="button">Open in new tab ↗</button></div>');
+}
+function previewStep(d){
+  const fp = S.filePreview; if(!fp) return;
+  const t = rowsOf(fp.p)[fp.i];
+  const existing = FILE_KINDS.filter(k => t[k.field]);
+  const idx = existing.findIndex(k => k.n === fp.n);
+  const next = Math.min(existing.length - 1, Math.max(0, idx + d));
+  fp.n = existing[next].n;
+  fp.zoom = 100;
+  renderFilePreview();
+}
+function previewGoTo(n){
+  const fp = S.filePreview; if(!fp) return;
+  const t = rowsOf(fp.p)[fp.i];
+  const kind = FILE_KINDS.find(k => k.n === n);
+  if(!t[kind.field]){ say('no ' + kind.label + ' on file for this row', true); return; }
+  fp.n = n;
+  fp.zoom = 100;
+  renderFilePreview();
+}
+function previewZoom(delta){
+  const fp = S.filePreview; if(!fp) return;
+  fp.zoom = Math.min(PV_ZOOM_MAX, Math.max(PV_ZOOM_MIN, fp.zoom + delta));
+  renderFilePreview();
 }
 
 function deltaHTML(t){
@@ -1205,7 +1375,12 @@ function month(d){ goMonth(S.mi + d); }
 
 /* ================= modals ================= */
 function openModal(html){ $('#modal').innerHTML = html; $('#scrim').classList.add('on'); }
-function closeModal(){ $('#scrim').classList.remove('on'); $('#app').focus(); }
+function closeModal(){
+  $('#scrim').classList.remove('on', 'pv-open');
+  $('#modal').classList.remove('pv');
+  S.filePreview = null;
+  $('#app').focus();
+}
 
 /* Ctrl+hjkl moves focus between a modal's fields by screen position rather
    than DOM order, so it keeps working unchanged no matter how a given
@@ -1380,6 +1555,25 @@ function monthsBetween(a, b){
 }
 const fmtDMY = date => pad(date.d) + '/' + pad(date.m) + '/' + date.y;
 
+/* A spansPeriod rule's barcode file covers several consecutive periods from
+   one upload (CLAUDE.md's Recurring rules section) — IPTU's 10-page Jan–Oct
+   booklet, or a loan's fixed run of installments. barcodePath is the same
+   for every occurrence in the window (see the MONTHS.forEach post-process
+   above); this is what tells the *viewer* which page of that shared file
+   is theirs for a given month. `valid: false` means this occurrence falls
+   outside the currently-uploaded file's coverage — the window needs a
+   fresh upload (a new file, a new windowStart) before this period has a
+   real page to point to. */
+function barcodePageFor(t, periodKey){
+  if(!t.barcodeSpansPeriod || !t.barcodeWindowStart) return null;
+  const [pm, py] = periodKey.split('/').map(Number);
+  const page = monthsBetween(
+    {d:1, m:t.barcodeWindowStart.m, y:t.barcodeWindowStart.y},
+    {d:1, m:pm, y:py}
+  ) + 1;
+  return { page, total: t.barcodeWindowSize, valid: page >= 1 && page <= t.barcodeWindowSize };
+}
+
 /* Bidirectional end-date ↔ installment sync (CLAUDE.md's Recurring rules
    section: "editable two ways that stay in sync"). Setting .value from
    code doesn't fire 'input', so each side updating the other can't loop. */
@@ -1443,6 +1637,19 @@ function editRule(){
     + '<label class="switch"><input type="checkbox" id="rTracked"' + (t.tracked?' checked':'') + '>'
     + '<span>Track receipt on disk<span class="d">'
     + (t.pattern ? 'computed path · ' + esc(t.pattern) : 'no taxonomy set yet') + '</span></span></label>'
+    + (t.tracked
+      ? '<label class="switch"><input type="checkbox" id="rMultiPage"' + (t.barcodeSpansPeriod?' checked':'') + '>'
+        + '<span>Barcode covers multiple months<span class="d">one file with several pages — e.g. a city tax’s '
+        + '10-page annual booklet, or a loan’s full run of installments. Not a fresh upload every month.</span></span></label>'
+        + (t.barcodeSpansPeriod
+          ? '<div class="fgrid">'
+            + '<label class="f"><span class="k">Pages in this file</span><input class="i" id="rPages" value="' + (t.barcodeWindowSize || '') + '" placeholder="e.g. 10"></label>'
+            + '<label class="f"><span class="k">First page covers</span><input class="i" id="rWinStart" value="' + (t.barcodeWindowStart ? fmtDMY(Object.assign({d:1}, t.barcodeWindowStart)) : fmtDMY(start)) + '"></label>'
+            + '</div>'
+            + '<div class="notebox">Re-enter these two whenever a new file actually arrives (a new tax year, a refinanced '
+            + 'loan) — that’s what starts the page count over from 1 for a new upload, without touching any other field.</div>'
+          : '')
+      : '')
     + '</div>' + (creating
       ? '<div class="notebox">This occurrence becomes the rule’s first — future months materialize on their own from here. Past months are never generated retroactively.</div>'
       : '<div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div>') + '</div>'
@@ -1451,6 +1658,7 @@ function editRule(){
   maskAmount($('#rAmount'), t.amount);
   restrictToNumeric($('#rInstallments'), false);
   restrictToNumeric($('#rDue'), false);
+  if($('#rPages')) restrictToNumeric($('#rPages'), false);
   wireInstallmentSync($('#rStart'), $('#rEnd'), $('#rInstallments'));
   setTimeout(()=>{ const el = $('#rAmount'); if(el){ el.focus(); el.select(); } }, 30);
 }
@@ -1487,6 +1695,17 @@ document.addEventListener('keydown', e => {
   }
   if($('#scrim').classList.contains('on')){
     if(e.key === 'Escape'){ e.preventDefault(); closeModal(); }
+    /* The carousel has no fields to type into, so h/l/1/2/3 are safe to
+       claim outright here — same numbering as g1/g2/g3, same "no file of
+       that kind" no-op elsewhere in the app. */
+    if(S.filePreview){
+      if(e.key === 'h'){ e.preventDefault(); previewStep(-1); return; }
+      if(e.key === 'l'){ e.preventDefault(); previewStep(1); return; }
+      if(e.key === '1' || e.key === '2' || e.key === '3'){ e.preventDefault(); previewGoTo(+e.key); return; }
+      if(e.key === '+' || e.key === '='){ e.preventDefault(); previewZoom(PV_ZOOM_STEP); return; }
+      if(e.key === '-' || e.key === '_'){ e.preventDefault(); previewZoom(-PV_ZOOM_STEP); return; }
+      if(e.key === '0'){ e.preventDefault(); previewZoom(100 - S.filePreview.zoom); return; }
+    }
     if(!inField && (e.key === 'y' || e.key === 'Y') && $('#modal').querySelector('[data-act="del"]')){
       e.preventDefault(); softDelete();
     }
@@ -1575,6 +1794,7 @@ document.addEventListener('keydown', e => {
     case 'L': e.preventDefault(); switchPanel(1); break;
     case 'x': e.preventDefault(); toggleSel(); break;
     case 'p': e.preventDefault(); togglePrivate(); break;
+    case 'P': e.preventDefault(); openFilePreview(); break;
     case 'u': e.preventDefault(); doUndo(); break;
     case 'e': e.preventDefault(); editOccurrence(); break;
     case 'R': e.preventDefault(); editRule(); break;
@@ -1681,6 +1901,18 @@ function showDetailsForFocused(){
 
 $('#scrim').addEventListener('click', e => {
   if(e.target === $('#scrim')){ closeModal(); return; }
+  const pvN = e.target.closest('[data-pv-n]');
+  if(pvN){ previewGoTo(+pvN.dataset.pvN); return; }
+  const pv = e.target.closest('[data-pv]');
+  if(pv){
+    const fp = S.filePreview;
+    if(pv.dataset.pv === 'prev') previewStep(-1);
+    else if(pv.dataset.pv === 'next') previewStep(1);
+    else if(pv.dataset.pv === 'zoomin') previewZoom(PV_ZOOM_STEP);
+    else if(pv.dataset.pv === 'zoomout') previewZoom(-PV_ZOOM_STEP);
+    else if(pv.dataset.pv === 'open' && fp){ openFile(rowsOf(fp.p)[fp.i], fp.n); }
+    return;
+  }
   const b = e.target.closest('[data-act]'); if(!b) return;
   const a = b.dataset.act;
   if(a === 'close') closeModal();
@@ -1703,7 +1935,8 @@ $('#scrim').addEventListener('click', e => {
     const prev = {recurring:t.recurring, amount:t.amount, day:t.day, bucket:t.bucket, billName:t.billName,
       totalInstallments:t.totalInstallments, installmentsPaid:t.installmentsPaid, tracked:t.tracked,
       pattern:t.pattern, status:t.status, progress:t.progress, due:t.due,
-      ruleStart:t.ruleStart, ruleEnd:t.ruleEnd};
+      ruleStart:t.ruleStart, ruleEnd:t.ruleEnd, barcodeSpansPeriod:t.barcodeSpansPeriod,
+      barcodeWindowSize:t.barcodeWindowSize, barcodeWindowStart:t.barcodeWindowStart, barcodePath:t.barcodePath};
     const cents = parseInt($('#rAmount').dataset.cents || '0', 10);
     if(isFinite(cents)) t.amount = cents / Math.pow(10, curFmt().decimals);
     const dueD = parseInt($('#rDue').value, 10);
@@ -1733,6 +1966,23 @@ $('#scrim').addEventListener('click', e => {
          elsewhere in this mock (no member folder, no bucket segment). */
       const [mm, yyyy] = MONTHS[S.mi].key.split('/');
       t.pattern = slugify(t.billName) + '/' + yyyy + '/' + mm + '.pdf';
+      t.barcodeSpansPeriod = $('#rMultiPage') ? $('#rMultiPage').checked : false;
+      if(t.barcodeSpansPeriod){
+        const pages = parseInt($('#rPages').value, 10);
+        t.barcodeWindowSize = (isFinite(pages) && pages > 0) ? pages : null;
+        const winStart = parseDMY($('#rWinStart').value);
+        /* Re-typing this date is the whole "I just got a new file" action —
+           there's no separate upload flow in this mock, so setting a fresh
+           windowStart is what resets the page count back to 1 for the new
+           file, the same way an admin re-entering these two fields for a
+           new tax year or a refinanced loan would in the real app. */
+        t.barcodeWindowStart = winStart ? {m:winStart.m, y:winStart.y} : t.barcodeWindowStart;
+        t.barcodePath = t.barcodeWindowStart
+          ? slugify(t.billName) + '/barcode_' + pad(t.barcodeWindowStart.m) + '-' + t.barcodeWindowStart.y + '.pdf'
+          : t.barcodePath;
+      } else {
+        t.barcodeWindowSize = null; t.barcodeWindowStart = null;
+      }
       if(t.status !== 'paid'){
         t.status = 'pending';
         if(t.progress == null) t.progress = .25;
@@ -2004,7 +2254,7 @@ const KEYGROUPS = [
   ['Move', [['j / k','row down / up'],['5j · 7k','counted motion'],['gg / G','first / last row'],['H / L','focus member panel, left / right'],['Ctrl-P / Ctrl-N','previous / next month']]],
   ['Act',  [['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence'],['R','edit the recurring rule behind it'],['gd','show due/cadence/receipt details, keyboard-only (proposal)'],['p','toggle private (proposal)']]],
   ['Undo', [['dd','delete — opens a confirmation'],['y','confirm in the delete modal'],['u','undo the last change'],['Esc','clear count, buffer and selection']]],
-  ['Files', [['g1','open the bill file, new tab (proposal)'],['g2','open the scheduled-payment proof (proposal)'],['g3','open the receipt, new tab (proposal)'],['note','numbered by kind, always — no file of that kind is a no-op']]],
+  ['Files', [['g1','open the bill file, new tab (proposal)'],['g2','open the scheduled-payment proof (proposal)'],['g3','open the receipt, new tab (proposal)'],['P','preview the row’s files in a carousel, without leaving the ledger (proposal)'],['1 / 2 / 3','inside the carousel — jump straight to that file'],['h / l','inside the carousel — previous / next file'],['+ / -','inside the carousel — zoom in / out'],['0','inside the carousel — reset zoom'],['note','numbered by kind, always — no file of that kind is a no-op']]],
   ['Type', [['/ or :','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':set rnu | nu | nonu','gutter: relative · absolute · off'],[':preview','toggle previewing as a non-admin member'],['?','this keymap']]]
 ];
 const KEYHTML = KEYGROUPS.map(([g, rows]) =>

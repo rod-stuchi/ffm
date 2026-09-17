@@ -106,8 +106,62 @@ state; opening a file is an action, kept visually separate on purpose).
   row's middle column is already flexible (`1fr`), so the amount column stays
   flush against the row's right edge whether the file rail is present or not;
   nothing about existing alignment changes.
-- **Clicking a control opens that file in a new browser tab.** No in-app
-  preview/modal — see the Recurring rules section of `CLAUDE.md` for why.
+- **Clicking a control opens that file in a new browser tab.** That default
+  is unchanged — see the Recurring rules section of `CLAUDE.md` for why no
+  custom file renderer is built for it. `P` (below) is a second, additive
+  way to look at a row's files without leaving the ledger; it doesn't
+  replace opening a file in its own tab, which is still one keystroke away.
+- **The bill control shows a page indicator when its rule's barcode spans
+  several periods** (see Recurring rules' `spans_period` in `CLAUDE.md`) —
+  `Bill · p.4` in its label, rather than a bare "Bill" that would read as
+  this month's own file when it's actually page 4 of a shared one. An
+  occurrence outside the current window's page count gets the same
+  warning treatment as `scheduled overdue` (`fbadge-warn`) instead of the
+  neutral stroke styling every other file control uses — the badge itself
+  is the first place this gets flagged, before anyone opens `P` or the
+  file.
+
+### File preview carousel (`P`)
+
+`P` opens a carousel over the focused row's own files — bill, scheduled,
+receipt — without leaving the ledger behind it.
+
+- **Same fixed numbering as `g1`/`g2`/`g3`, reused rather than
+  reinvented.** `1`/`2`/`3` inside the carousel jump straight to that file
+  kind; pressing a number for a kind that doesn't exist on this row is the
+  same no-op-with-a-statusline-message `g1`/`g2`/`g3` already give,
+  not a new error path.
+- **`h`/`l` step to the previous/next file that actually exists.** Clamped
+  at either end, not wrapping — the first file's "previous" button and the
+  last file's "next" button are both visibly disabled rather than looping
+  back around.
+- **Full-viewport, not a dialog-sized modal** — every other modal in this
+  app is a centred `min(560px, 100%)` box, and this is the one deliberate
+  exception. The actual job is reading a boleto's barcode digits, or
+  holding a phone up to its QR code to scan it — both need the file
+  genuinely large on screen, which a 560px dialog can't give.
+- **Zoom (`+`/`-`, `0` to reset) scales the preview**, with floating
+  controls in the stage's corner — the same placement any image viewer's
+  zoom control uses, chosen so it doesn't compete with the row of file-nav
+  buttons for space. Each file starts back at 100% when you flip to a
+  different one; a carried-over zoom level would be a surprise applied to
+  an unrelated file, not a convenience.
+- **The stage shows the file's icon (the same stroke icon the file rail
+  already uses, just bigger) and its computed path — not the file's actual
+  bytes.** This is still not a custom file renderer; "Open in new tab" sits
+  in the footer for when the real content is actually needed.
+- **A row with zero files refuses outright** — `P` says "no files on this
+  row" rather than opening an empty carousel with nothing to look at.
+- **A bill whose rule spans several periods (`spans_period`) shows its page
+  prominently in the stage**, not just in the file rail's small label —
+  "One file, 10 pages — this month is page **4**" sits right under the
+  icon, since the whole point of opening the carousel for this file kind
+  is confirming which page is actually owed this period. A page outside
+  the current window's count shows the same warning colour and copy as
+  the file rail's `fbadge-warn` state: "page 11 — outside this file's 10
+  pages, a new upload is needed for this month" — the carousel and the
+  badge always agree, never one flagging a problem the other stays quiet
+  about.
 
 ---
 
@@ -139,6 +193,7 @@ Nothing destructive fires from a single keystroke.
 | `R` | edit the recurring rule behind it — or, on a row that isn't recurring yet, create one starting here |
 | `gd` | show due/cadence/receipt details for the focused row *(proposal, not in the original spec)* |
 | `p` | toggle private *(proposal, not in the original spec)* |
+| `P` | preview the row's files in a carousel — see Files below *(proposal, not in the original spec)* |
 
 ### Mouse
 | Action | Result |
@@ -191,6 +246,11 @@ Nothing destructive fires from a single keystroke.
 | `g1` | open the bill for the focused row, new tab *(proposal, not in the original spec)* |
 | `g2` | open the scheduled-payment file *(proposal, not in the original spec)* |
 | `g3` | open the receipt *(proposal, not in the original spec)* |
+| `P` | preview the row's files in a carousel, without leaving the ledger *(proposal, not in the original spec)* |
+| `1` / `2` / `3` | inside the carousel — jump straight to that file |
+| `h` / `l` | inside the carousel — previous / next file |
+| `+` / `-` | inside the carousel — zoom in / out |
+| `0` | inside the carousel — reset zoom to 100% |
 
 Not stock Vim — a genuine FFM extension of the `g`-prefix "goto" vocabulary
 already in use (`gg`, `gt`), not a new pattern. Pressing a number for a file
@@ -252,6 +312,14 @@ for this row"*.
   End date alone, with installments left blank, is the correct way to give
   an ordinary open-ended bill a stopping point without implying it was ever
   a fixed-length loan.
+- **A tracked rule's "Barcode covers multiple months" checkbox reveals two
+  more fields**, "Pages in this file" and "First page covers" —
+  `spans_period`'s `window_size`/`window_start`, per CLAUDE.md's Recurring
+  rules section. The same two fields serve both shapes the feature
+  supports: filled in once for a fixed-length loan's one-time file, or
+  re-entered whenever a cyclic bill's next cycle actually sends a new one
+  — there's no separate "renew" control, typing a fresh pair of values
+  *is* the renewal.
 - **Due date moved from the occurrence form to the rule form.** The
   edit-occurrence form's Day field only renders at all for a non-recurring
   row; a recurring row's due day is edited on the rule (`R`) instead, so
@@ -451,6 +519,54 @@ left standing. This is a system-triggered soft delete, logged exactly like a
 manual one (`old_path`, `deleted_at`, `deleted_by`) plus a `reason` of
 `superseded` rather than `manual`, so `u` on the receipt upload restores the
 scheduled file too and the audit trail is honest about why it moved.
+
+### Multi-page barcode — one file, several months (`spans_period`)
+
+Opt-in per rule, off by default. Some bills arrive as a single document
+covering several periods at once instead of a fresh file every month:
+
+- A city property tax office sending one PDF with 10 barcodes for a
+  Jan–Oct cycle, reissued (new file, values readjusted) at the start of
+  the next cycle.
+- A bank issuing one document with a loan's entire run of installments up
+  front — that one file lasts for the rule's whole life; there's no
+  "next cycle" to reissue for.
+
+Both shapes share the same mechanism: `spans_period`, `window_size`
+(pages in the current file) and `window_start` (which period is page 1).
+`{month}_barcode.{ext}` stops being computed per period when this is on —
+every occurrence inside the window points at the identical uploaded file,
+and the app derives the page from `window_start` and the occurrence's own
+period, not from a separately-stored per-occurrence number. `scheduled`
+and the definitive receipt stay genuinely per-period regardless — sharing
+one bill document doesn't mean sharing one payment.
+
+- **The window doesn't have to span the rule's entire life.** A
+  fixed-length rule (`total_installments` set) gets exactly one window,
+  sized to match, that outlives nothing — once it's done, it's done, so
+  there's never a second file to upload. A cyclic bill gets a **new**
+  window every cycle: re-entering `window_size`/`window_start` when that
+  cycle's document actually arrives is the whole "I got a new file"
+  action — there's no separate upload flow modelled for any of the three
+  file kinds yet (see Upload, below), and this doesn't need one either.
+- **Independent of the still-open cyclic/seasonal rule design** (a
+  `months`-of-year allow-list — see CLAUDE.md's Open items). This doesn't
+  wait on that: it only needs a start period and a page count to compute
+  from, regardless of what eventually decides which months are active.
+  IPTU already demonstrates the *filtering* half (a `months` allow-list in
+  the mock's seed data) independently of the *shared-file* half decided
+  here — the two compose without either depending on the other.
+- **An occurrence outside the current window's page count is flagged, not
+  silently wrong** — the same warning channel as scheduled-overdue, shown
+  both on the file badge (`fbadge-warn`) and in the `P` preview carousel:
+  *"page 11 — outside this file's 10 pages, a new upload is needed for
+  this month."* That message is the cue a fresh file needs uploading, not
+  a bug to chase down.
+- **The rule form's "Barcode covers multiple months" checkbox** sits right
+  under "Track receipt on disk" (only shown once that's on), revealing
+  "Pages in this file" and "First page covers" — the same two fields
+  whether you're setting up a loan's one-time window or a tax's next
+  yearly one.
 
 ### Paid is still "a matching file exists on disk" — checked directly, not by traversal
 
