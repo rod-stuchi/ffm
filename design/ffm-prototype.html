@@ -353,7 +353,26 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 .name .meta{font-family:var(--mono);font-size:11px;color:var(--ink-3);display:flex;gap:7px;align-items:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .name .meta .rec{color:var(--accent)}
-.lock{color:var(--info)}
+/* Inline status icons (paid flag, scheduled clock, overdue warning) — same
+   stroke-icon language as the file rail, sized down to sit inline with the
+   meta text instead of relying on an emoji font that looks different on
+   every OS. */
+.micon{width:12px;height:12px;display:inline-flex;flex:none;vertical-align:-1.5px}
+.micon svg{width:12px;height:12px;display:block;fill:none;stroke:currentColor;
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* Recurring/private are independent per-row facts, not mutually exclusive
+   with each other or with the status above — so unlike the file rail (which
+   omits a control outright when that file doesn't exist), both icons are
+   always present here. Presence alone would make every row look recurring
+   *and* private at a glance; only opacity+colour tell them apart, the same
+   "brighter = active" language `.row.focus` already uses elsewhere. */
+.mflags{display:inline-flex;gap:5px;align-items:center;flex:none}
+.mflag{width:12px;height:12px;display:inline-flex;color:var(--ink-3);opacity:.25}
+.mflag svg{width:12px;height:12px;display:block;fill:none;stroke:currentColor;
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mflag.on{opacity:1}
+.mflag.on.rec{color:var(--accent)}
+.mflag.on.priv{color:var(--info)}
 
 .amt{text-align:right;white-space:nowrap}
 .amt .v{font-family:var(--mono);font-size:14px;font-weight:500;font-variant-numeric:tabular-nums}
@@ -996,17 +1015,37 @@ function markHTML(t){
   return '<div class="mark"><span class="dot"></span></div>';
 }
 
+/* Same stroke-icon language as fileIconSVG (16x16, unfilled, currentColor)
+   so a row's meta line and its file rail read as one visual system instead
+   of an emoji font sitting next to hand-drawn SVGs. */
+function metaIconSVG(kind){
+  if(kind === 'paid') return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 13.5V2.5"/><path d="M4 3h7l-1.7 2.2L11 7.4H4"/></svg>';
+  if(kind === 'warn') return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.6l6.2 10.9H1.8z"/><path d="M8 6.6v3.1M8 11.3v.1"/></svg>';
+  if(kind === 'recurring') return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.3 8a4.7 4.7 0 0 1 8-3.3l1.2 1.2"/><path d="M12.5 3.6v2.6h-2.6"/><path d="M12.7 8a4.7 4.7 0 0 1-8 3.3l-1.2-1.2"/><path d="M3.5 12.4V9.8h2.6"/></svg>';
+  if(kind === 'private') return '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="7.2" width="9" height="6.3" rx="1.3"/><path d="M5.3 7.2V5.3a2.7 2.7 0 0 1 5.4 0v1.9"/></svg>';
+  return '';
+}
+/* Recurring and private are independent booleans, not tied to the row's
+   payment status — so unlike the file rail they're always both rendered,
+   dim when off, rather than appearing/disappearing. No CFG.show_recurring
+   gate here — the prototype has no ffm.toml to hold it. */
+function metaFlagsHTML(t){
+  const chips = [
+    '<span class="mflag' + (t.recurring?' on rec':'') + '" title="' + (t.recurring?'recurring':'not recurring') + '">' + metaIconSVG('recurring') + '</span>',
+    '<span class="mflag' + (t.private?' on priv':'') + '" title="' + (t.private?'private · hidden from other members':'not private') + '">' + metaIconSVG('private') + '</span>'
+  ];
+  return '<span class="mflags">' + chips.join('') + '</span>';
+}
 function metaHTML(t){
   const bits = [];
-  if(t.status === 'paid') bits.push('<span>🏁 ' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
-  else if(t.status === 'manual-paid') bits.push('<span style="color:var(--pos)">✓ marcado como pago (sem comprovante)</span>');
-  else if(t.status === 'scheduled') bits.push('<span style="color:var(--info)">◷ agendado · vence ' + t.due + '</span>');
-  else if(t.status === 'scheduled-overdue') bits.push('<span style="color:var(--neg)">⚠ agendado, sem comprovante · venceu ' + t.due + '</span>');
-  else if(t.status === 'pending') bits.push('<span class="rec">◷ vence ' + t.due + '</span>');
+  if(t.status === 'paid') bits.push('<span><span class="micon">' + metaIconSVG('paid') + '</span> ' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
+  else if(t.status === 'manual-paid') bits.push('<span style="color:var(--pos)">✓ marked paid manually</span>');
+  else if(t.status === 'scheduled') bits.push('<span style="color:var(--info)"><span class="micon">' + fileIconSVG('scheduled') + '</span> scheduled · due ' + t.due + '</span>');
+  else if(t.status === 'scheduled-overdue') bits.push('<span style="color:var(--neg)"><span class="micon">' + metaIconSVG('warn') + '</span> overdue since ' + t.due + '</span>');
+  else if(t.status === 'pending') bits.push('<span class="rec"><span class="micon">' + fileIconSVG('scheduled') + '</span> due ' + t.due + '</span>');
   else if(t.day) bits.push('<span>' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
   if(t.totalInstallments) bits.push('<span style="color:var(--ink-2)">' + (t.installmentsPaid||0) + '/' + t.totalInstallments + '</span>');
-  if(t.recurring && !['pending','scheduled','scheduled-overdue'].includes(t.status)) bits.push('<span class="rec">↻</span>');
-  if(t.private) bits.push('<span class="lock" title="hidden from other members">🔒 private</span>');
+  bits.push(metaFlagsHTML(t));
   if(t.deleted) bits.push('<span style="color:var(--neg)">deleted</span>');
   if(t.restored) bits.push('<span style="color:var(--info)" title="supersedes the deleted row">↩ #' + t.restored + '</span>');
   return bits.join('');

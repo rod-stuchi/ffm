@@ -608,6 +608,15 @@ JS only because it has no template layer.
   `layout`/`privacy` are — by the admin, in `ffm.toml`, whenever the
   household is first configured. Format server-side; do not push locale
   logic into Alpine.
+- **UI copy is a separate axis from the pt-BR locale above, and defaults to
+  English.** `dd/mm/yyyy` dates and the currency-driven number format are
+  fixed regardless of language; the *words* — row status text, statusline
+  messages, modal labels, button copy — are English by default, with i18n
+  support planned but not built yet. Sample/seed data (bill names like
+  "Água · Sabesp", bucket labels) stays realistic Brazilian-household
+  Portuguese on purpose — that's content the household typed in, not app
+  copy — but anything the app itself says needs to be in English until a
+  real i18n layer lands, not written in Portuguese and translated later.
 - **Copy is written from the user's side of the screen.** Name things by what
   people recognise, active voice, a control says exactly what happens. Errors
   explain what went wrong and how to fix it.

@@ -9,16 +9,16 @@ understood:
 
 | State | Mark | Meaning |
 |---|---|---|
-| `paid` | filled green disc + checkered-flag date | tracked, receipt file found on disk |
-| `scheduled` | calendar glyph over the ring | tracked, scheduled-payment file exists, due date not yet passed |
-| `scheduled overdue` | calendar glyph, warning colour | tracked, scheduled-payment file exists **past** due date, no receipt yet — an unconfirmed promise |
+| `paid` | filled green disc + flag-icon date | tracked, receipt file found on disk |
+| `scheduled` | calendar-icon glyph over the ring | tracked, scheduled-payment file exists, due date not yet passed |
+| `scheduled overdue` | warning-icon glyph, warning colour | tracked, scheduled-payment file exists **past** due date, no receipt yet — an unconfirmed promise |
 | `pending` | ring, filling green → amber → red | tracked, neither a receipt nor a scheduled-payment file exists yet |
 | `plain` | hollow dot | untracked, not marked paid — no filesystem proof either way |
 | `manual paid` | filled disc, distinct shade from `paid` | untracked — user asserted paid, no file to prove it |
 | income | filled dot, `+ R$`, positive colour | sums into the pane header |
 | focused | accent left rail, gutter `0`, tinted ground | cursor position |
 | selected | `--info` inset bar | `x` — a marker for a batch op, never a delete |
-| private | 🔒 glyph | hidden from other members, never from admin |
+| private | lock-icon glyph, full colour when set, faint when not | hidden from other members, never from admin |
 | deleted | dimmed, strikethrough, deletion date | soft delete, row retained |
 | restored | `↩ #id` | new row superseding the deleted one |
 | skeleton | shimmer bars, **identical geometry** | in flight |
@@ -48,6 +48,27 @@ understood:
 - **Installment progress is a bare `{paid}/{total}` badge** (e.g. `7/12`), not
   baked into the title — the same meta slot the due-date and recurring glyphs
   already occupy.
+- **The meta line's icons are stroke SVGs, not an emoji font** — the flag
+  (paid), calendar-clock (scheduled/pending) and warning triangle
+  (scheduled overdue) reuse the exact same line-icon language as the file
+  rail's bill/scheduled/receipt icons (unfilled paths, `currentColor`,
+  matching stroke weight), just sized down to sit inline with the meta
+  text. An emoji font renders differently — sometimes in full colour, at a
+  different weight — on every OS, which fights the "one visual system"
+  point of the rest of this table.
+- **Recurring and private are always both rendered, dimmed when off,
+  instead of appearing only when true.** Unlike the status icons above
+  (mutually exclusive with each other) or the file rail (a control is
+  absent when that file doesn't exist), recurring and private are
+  independent per-row booleans that can be on, off, or both at once — a
+  fixed two-icon pair with opacity carrying the fact reads at a glance
+  without the row's width jumping around as flags toggle. Active is full
+  opacity in the fact's own colour (`--accent` for recurring, `--info`
+  for private, unchanged from before); inactive is the same icon at low
+  opacity in `--ink-3` — present, but deliberately not competing for
+  attention. `ledger.show_recurring = false` still removes the recurring
+  icon outright, household-wide — that config already means "we don't
+  use this concept here," not "mute it."
 
 ### File controls (the file rail)
 
@@ -58,14 +79,19 @@ state; opening a file is an action, kept visually separate on purpose).
 
 ```
  0   ✓   Energia · Enel SP              [1] [3]            R$ 343,62
-         🏁 11/07/2026 · ↻                                 ▲ +20%
+         🏁 11/07/2026 · ↻ 🔒                                ▲ +20%
 
  1   ⏱   Água · Sabesp                  [1] [2]            R$ 108,40
-         ⚠ agendado, sem comprovante · venceu 18/07
+         ⚠ agendado, sem comprovante · ↻ 🔒 venceu 18/07
 
  2        Mercado · Pão de Açúcar                          R$ 658,90
-         13/07/2026                                          ▼ -6%
+         13/07/2026 · ↻ 🔒                                    ▼ -6%
 ```
+
+(The icons above are ASCII stand-ins for the actual line-icon SVGs — see
+Specifics that carry meaning, above. Row 2's `↻ 🔒` render faint/dim, since
+that row is neither recurring nor private; they're still there, just not
+standing out.)
 
 - **Fixed numbering by kind, always**: `1` is the bill, `2` is scheduled, `3`
   is the receipt — never renumbered based on what happens to exist on a given
@@ -96,8 +122,10 @@ state; opening a file is an action, kept visually separate on purpose).
   most important fact. The file rail's controls share that 26px height but
   as slim, low-contrast outline pills with a 14px icon — visually lighter and
   narrower, so they stay legible without competing with the mark for the eye.
-  `↻`/`🔒` stay exactly as small and inline as they've always been in the
-  meta line. Three tiers, each weight saying how important the fact is.
+  The recurring/private icons stay exactly as small and inline as they've
+  always been in the meta line — see Specifics that carry meaning, above, for
+  why they're now a fixed pair rather than emoji that appear only when true.
+  Three tiers, each weight saying how important the fact is.
 - **Kept visually separate from the amount.** The file rail carries its own
   margin beyond the row's normal grid gap — wider than before — so it never
   reads as fused to the value it sits next to: opening a file and reading the
@@ -212,6 +240,15 @@ Nothing destructive fires from a single keystroke.
   no-op with a statusline message on a non-recurring row — the same
   treatment `R` already gets there — but works the same as hover on any
   recurring row, tracked or not.
+
+- **The row's own status text stays short; the full explanation lives in
+  this popup.** `scheduled overdue`'s meta line is just `overdue since
+  {date}` — enough to scan at a glance, backed by the mark's own warning
+  colour and icon (see the row-state table above). A full sentence
+  (`scheduled, due date passed, no receipt yet`) sits in the popup instead,
+  next to the `Due`/`Cadence`/`Receipt` fields it belongs with — the same
+  glance-vs-read-on-demand split every other on-row status already makes,
+  rather than growing the meta line into a paragraph every row pays for.
 
 - **Keyboard motion always wins over a stale hover.** The moment any key
   moves the cursor, the row the mouse happens to be resting over stops
