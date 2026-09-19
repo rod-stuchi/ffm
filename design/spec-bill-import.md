@@ -347,7 +347,7 @@ make it more confident:
   profiles, the value/due-date/client-code holes all still run on whatever
   file lands in the upload control. Only the *targeting* step (which rule
   does this belong to) moved from "the system infers it" to "the user
-  already told you by which modal they opened."
+  already told you by which rule's form they opened."
 
 ### Client code lives on the rule, not the occurrence
 

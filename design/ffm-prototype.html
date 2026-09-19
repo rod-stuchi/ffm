@@ -444,8 +444,8 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 .btn.dgr{background:var(--neg);border-color:var(--neg);color:#fff;font-weight:600}
 .btn kbd{background:rgba(255,255,255,.18);border-color:transparent;color:inherit;margin-left:6px}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
-label.f{display:block}
-label.f .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:4px}
+.f{display:block}
+.f .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:4px}
 input.i,select.i{width:100%;font-family:var(--mono);font-size:13px;background:var(--paper);color:var(--ink);
   border:1px solid var(--line-2);border-radius:7px;padding:7px 9px}
 input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -476,6 +476,48 @@ input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:
   background:var(--surface-2);font-size:12px;color:var(--ink-2);text-align:center;
   transition:border-color .15s ease,background .15s ease,color .15s ease}
 .dropzone.dragover{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+.dropzone.on{border-style:solid;border-color:var(--accent-line);color:var(--ink)}
+
+/* ============ inline editing (e) + rule side pane (R / r) ============
+   Neither is a modal: the row being edited opens up in place, and the rule
+   form is a pane in the ledger's own grid, so the ledger stays in view. */
+.stack{display:flex;flex-direction:column;gap:10px}
+.stack .sub{display:flex;flex-direction:column;gap:10px}
+.stack .switch,.stack .notebox,.stack .dropzone{margin-top:0}
+.stack .f .dropzone{margin-top:4px}
+.row.editing{background:var(--accent-soft)}
+.rowedit{background:var(--surface);border:1px solid var(--accent);border-radius:var(--r);
+  padding:10px 12px 0;min-width:0;cursor:auto;margin:2px 0}
+.re-head{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-bottom:10px}
+.re-foot{display:flex;gap:8px;justify-content:flex-end;margin:12px -12px 0;padding:9px 12px;
+  border-top:1px solid var(--line);background:var(--surface-2);border-radius:0 0 var(--r) var(--r)}
+/* A parked draft: left with unsaved changes. Accent, not --neg — this is
+   "your work in progress", not a money or overdue warning. */
+.row.draft .entry{border:1px dashed var(--accent)}
+.dtag{font-family:var(--mono);font-size:10px;letter-spacing:.03em;color:var(--accent);white-space:nowrap;
+  border:1px solid var(--accent-line);border-radius:4px;padding:0 5px;background:var(--accent-soft)}
+.entry.placeholder{background:transparent;border:1px dashed var(--line-2)}
+.entry.placeholder .name b{color:var(--ink-2);font-weight:500}
+.row.ruletarget .entry{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.rulepane{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;
+  background:var(--surface);border:1px solid var(--accent-line);border-radius:13px;box-shadow:var(--shadow-md)}
+.rp-arrow{position:absolute;left:-8px;top:50%;width:14px;height:14px;margin-top:-7px;z-index:1;
+  background:var(--surface-2);border-left:1px solid var(--accent-line);border-bottom:1px solid var(--accent-line);
+  transform:rotate(45deg);pointer-events:none}
+.rp-head{flex:none;padding:12px 14px 10px;border-bottom:1px solid var(--line);
+  background:var(--surface-2);border-radius:13px 13px 0 0}
+.rp-head h3{font-size:14px;font-weight:600;margin:0}
+.rp-head .msub{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:3px}
+.rp-body{flex:1;min-height:0;overflow-y:auto;padding:12px 14px;scrollbar-width:thin}
+.rp-foot{flex:none;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:10px 14px;
+  border-top:1px solid var(--line);background:var(--surface-2);border-radius:0 0 13px 13px}
+/* The prototype's panes butt up against each other with a divider; with the
+   rule pane open they need a gap for its arrow, and scroll sideways rather
+   than squeezing when there isn't room. */
+.panels.has-pane{gap:14px;overflow-x:auto;padding:0 2px 2px;align-items:start}
+/* The prototype's panels aren't height-bound like the full-viewport app's,
+   so cap the pane near a panel's height and let its body scroll. */
+.panels.has-pane .rulepane{max-height:540px}
 
 /* ============ gallery ============ */
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;align-items:start}
@@ -971,7 +1013,13 @@ const S = {
      "preview my own experience with them switched off", not "become someone
      else". See isAdminNow() and isPrivacyHidden() below. */
   previewNonAdmin: false,
-  filePreview: null   // {p, i, n} while the P file-preview carousel is open
+  filePreview: null,  // {p, i, n} while the P file-preview carousel is open
+  /* Inline editing (e) and the rule side pane (R / r) keep their field values
+     here, not in the DOM — render() rebuilds #panels on every call, so a
+     value that only lived in an <input> would be wiped mid-edit. drafts is
+     keyed 'occ:<rowId>' / 'rule:<rowId>'; editing is the one open right now. */
+  drafts: {},
+  editing: null       // {kind, id, p, mi}
 };
 const rowsOf = p => MONTHS[S.mi].m[p];
 const cur = () => rowsOf(S.panel)[S.focus[S.panel]];
@@ -1212,8 +1260,16 @@ function entryHTML(t, p, i){
       + '<span class="errsub">server unreachable · nothing was written</span></div>'
       + '<div class="amt"><button class="retry" data-retry="' + t.id + '" type="button">Try Again</button></div></div>';
   }
+  if(t.state === 'draft'){   // r's placeholder — the real row lands here on Create
+    return '<div class="entry placeholder"><div class="mark"><span class="dot"></span></div>'
+      + '<div class="name"><b>' + esc(t.title) + '</b><div class="meta"><span>r · fill it in on the right</span>'
+      + (rowDraftKind(t) ? '<span class="dtag">unsaved · R to resume</span>' : '') + '</div></div>'
+      + '<div class="amt"></div></div>';
+  }
+  const dk = rowDraftKind(t);
   return '<div class="entry">' + markHTML(t)
-    + '<div class="name"><b>' + esc(t.title) + '</b><div class="meta">' + metaHTML(t) + '</div></div>'
+    + '<div class="name"><b>' + esc(t.title) + '</b><div class="meta">' + metaHTML(t)
+    + (dk ? '<span class="dtag">unsaved · ' + (dk === 'rule' ? 'R' : 'e') + ' to resume</span>' : '') + '</div></div>'
     + fileBadgesHTML(t, p, i)
     + '<div class="amt"><div class="v' + (t.kind==='in'?' in':'') + '">'
     + (t.kind==='in'?'+ ':'') + (t.status==='pending' && !t.amount ? emptyAmountPlaceholder() : fmtMoney(t.amount))
@@ -1233,8 +1289,14 @@ function rowHTML(t, i, fi, p){
   if(t.deleted) cls.push('deleted');
   if(t.state === 'error') cls.push('err');
   if(S.nu === 'nonu') cls.push('nogut');
+  const E = S.editing, mine = E && E.id === t.id && E.p === p;
+  const inline = mine && E.kind === 'occ';
+  if(inline) cls.push('editing');
+  if(mine && E.kind === 'rule') cls.push('ruletarget');
+  if(rowDraftKind(t)) cls.push('draft');
   return '<div class="' + cls.join(' ') + '" data-p="' + p + '" data-i="' + i + '" data-id="' + t.id + '">'
-    + '<div class="gut">' + gutter(i, fi) + '</div>' + entryHTML(t, p, i) + '</div>';
+    + '<div class="gut">' + gutter(i, fi) + '</div>'
+    + (inline ? occFormHTML(t, activeDraft()) : entryHTML(t, p, i)) + '</div>';
 }
 
 /* ================= render ================= */
@@ -1251,8 +1313,17 @@ function totals(p){
 }
 
 function render(){
+  syncEditing();
+  /* #panels is rebuilt from scratch below — remember which edit field had
+     focus (and where the caret was) so typing survives a statusline message
+     or any other re-render mid-edit. */
+  const ae = document.activeElement;
+  const keep = ae && ae.id && $('#panels').contains(ae)
+    ? {id:ae.id, s:(() => { try { return ae.selectionStart; } catch(_){ return null; } })(),
+       e:(() => { try { return ae.selectionEnd; } catch(_){ return null; } })()} : null;
   const M = MONTHS[S.mi];
   $('#monthLbl').textContent = M.label;
+  const pane = rulePaneHTML(), paneP = pane ? S.editing.p : -1;
   $('#panels').innerHTML = MEMBERS.map((mem,p) => {
     const t = totals(p), fi = S.focus[p];
     return '<div class="panel' + (p===S.panel?' active':'') + '" data-panel="' + p + '">'
@@ -1268,8 +1339,28 @@ function render(){
       + '<div class="sum bal"><div class="k">Balance</div><div class="v' + (t.b<0?' neg':'') + '">'
       + (t.b<0?'− ':'') + fmtMoney(t.b) + '</div></div>'
       + '</div></div>'
-      + '<div class="ledger">' + rowsOf(p).map((r,i)=>isPrivacyHidden(p,r)?'':rowHTML(r,i,fi,p)).join('') + '</div></div>';
+      + '<div class="ledger">' + rowsOf(p).map((r,i)=>isPrivacyHidden(p,r)?'':rowHTML(r,i,fi,p)).join('') + '</div></div>'
+      + (p === paneP ? pane : '');
   }).join('');
+  /* The rule pane is a column of its own, right after the pane it's editing,
+     pushing any later panes further right — .panels scrolls sideways rather
+     than hiding anyone. Without a pane, the stylesheet's own columns (and its
+     narrow-screen stacking) apply. */
+  if(pane){
+    const cols = MEMBERS.map(() => 'minmax(480px,1fr)');
+    cols.splice(paneP + 1, 0, 'minmax(320px,420px)');
+    $('#panels').style.gridTemplateColumns = cols.join(' ');
+  } else $('#panels').style.gridTemplateColumns = '';
+  $('#panels').classList.toggle('has-pane', !!pane);
+  wireEditors();
+  if(keep){
+    const el = document.getElementById(keep.id);
+    if(el){
+      el.focus({preventScroll:true});
+      if(keep.s != null) try { el.setSelectionRange(keep.s, keep.e); } catch(_){}
+    }
+  }
+  positionPaneArrow();
 
   const a = totals(0), b = totals(1);
   $('#hIn').textContent = fmtMoney(a.i+b.i);
@@ -1289,12 +1380,16 @@ function render(){
   $('#stMode').textContent = S.mode;
   $('#stMode').className = 'st mode' + (S.mode==='COMMAND'?' cmd':'') + (S.mode==='VISUAL'?' vis':'');
   const nsel = S.sel[0].size + S.sel[1].size;
-  const msg = S.msg || (nsel ? nsel + ' row' + (nsel>1?'s':'') + ' selected' : '');
+  const nd = dirtyDraftCount();
+  const msg = S.msg || (nsel ? nsel + ' row' + (nsel>1?'s':'') + ' selected' : '')
+    || (nd ? nd + ' unsaved edit' + (nd>1?'s':'') + ' · marked rows · e / R to resume' : '');
   $('#stMsg').textContent = msg;
   $('#stMsg').className = 'st grow msg' + (S.msgBad?' bad':'');
 
+  /* Not while typing in the rule pane — scrolling the ledger row into view
+     can slide the pane itself out of sight on a narrow screen. */
   const fr = document.querySelector('.panel[data-panel="' + S.panel + '"] .row.focus');
-  if(fr) fr.scrollIntoView({block:'nearest'});
+  if(fr && !(document.activeElement && document.activeElement.closest('.rulepane'))) fr.scrollIntoView({block:'nearest'});
 }
 
 function say(m, bad){ S.msg = m; S.msgBad = !!bad; render();
@@ -1326,6 +1421,7 @@ function toggleSel(){
 }
 function togglePrivate(){
   const t = cur(); if(!t) return;
+  if(t.state === 'draft'){ say('a draft row — finish or cancel it in its pane first', true); return; }
   t.private = !t.private;
   S.undo.push({k:'private', p:S.panel, id:t.id});
   say(t.private ? 'hidden from other members (admin still sees it)' : 'visible to the household');
@@ -1440,9 +1536,9 @@ function closeModal(){
   $('#app').focus();
 }
 
-/* Ctrl+hjkl moves focus between a modal's fields by screen position rather
-   than DOM order, so it keeps working unchanged no matter how a given
-   modal's fields are laid out — no per-field row/col bookkeeping to keep in
+/* Ctrl+hjkl moves focus between a form's fields (the inline e row, the R/r
+   pane, or a modal) by screen position rather than DOM order, so it keeps
+   working unchanged no matter how the form's fields are laid out — no per-field row/col bookkeeping to keep in
    sync as fields are added, removed or reordered. Two-phase pick, the same
    shape real spatial-nav (TV remotes, gamepad UIs) uses: first keep only
    fields whose box actually starts on the correct side (a field's left edge
@@ -1454,15 +1550,18 @@ function closeModal(){
    nearest-by-distance so j/k tracks straight down a column instead of
    drifting into a wider neighbour. */
 const MODAL_DIRS = {h:'left', j:'down', k:'up', l:'right'};
-function modalFields(){
-  return Array.from($('#modal').querySelectorAll('input,select,textarea'))
+function formFields(box){
+  return Array.from(box.querySelectorAll('input,select,textarea'))
     .filter(el => !el.disabled && el.offsetParent !== null);
 }
 function overlaps1D(aMin, aMax, bMin, bMax){ return aMin < bMax && bMin < aMax; }
-function modalFocusMove(dir){
-  const els = modalFields();
-  if(!els.length) return;
-  const from = els.includes(document.activeElement) ? document.activeElement : els[0];
+/* Returns false when there's no field that way — the inline row and the
+   rule pane use that edge to hand focus back to the ledger. */
+function fieldFocusMove(box, dir){
+  const els = formFields(box);
+  if(!els.length) return false;
+  if(!els.includes(document.activeElement)){ els[0].focus(); return true; }
+  const from = document.activeElement;
   const a = from.getBoundingClientRect();
   const horiz = dir === 'left' || dir === 'right';
   const inDirection = els.filter(el => el !== from).map(el => ({el, r: el.getBoundingClientRect()}))
@@ -1472,7 +1571,7 @@ function modalFocusMove(dir){
       if(dir === 'down')  return r.top > a.top + 4;
       return r.bottom < a.bottom - 4; /* up */
     });
-  if(!inDirection.length) return;
+  if(!inDirection.length) return false;
   const aligned = inDirection.filter(({r}) => horiz
     ? overlaps1D(a.top, a.bottom, r.top, r.bottom)
     : overlaps1D(a.left, a.right, r.left, r.right));
@@ -1486,6 +1585,10 @@ function modalFocusMove(dir){
      full-width row into the one after it. The unaligned fallback pool has
      no such guarantee, so it leans on the cross-axis term much harder to
      approximate "closest in roughly the right direction". */
+  /* Sideways only ever means "same row" — with nothing left or right on this
+     row, that's the form's edge (which the rule pane uses to hand focus
+     back to the ledger), not a licence to jump to some field further down. */
+  if(horiz && !aligned.length) return false;
   const pool = aligned.length ? aligned : inDirection;
   const crossWeight = aligned.length ? 0.2 : 2.2;
   let best = null, bestDist = Infinity;
@@ -1496,10 +1599,12 @@ function modalFocusMove(dir){
     if(dist < bestDist){ bestDist = dist; best = el; }
   }
   if(best){ best.focus(); if(best.select) best.select(); }
+  return !!best;
 }
 
 function confirmDelete(){
   const t = cur(); if(!t) return;
+  if(t.state === 'draft'){ say('a draft row — Esc in its pane discards it', true); return; }
   if(t.deleted){ say('already deleted', true); return; }
   openModal(
     '<h3>Delete this transaction?</h3><div class="msub">dd · soft delete</div><div class="mbody">'
@@ -1564,31 +1669,371 @@ function bucketsFor(p){
   return Array.from(set).sort();
 }
 
+/* ================= inline editing: e (in the row) · R / r (side pane) =================
+   Neither form is a modal any more. Each open form is drawn from a draft in
+   S.drafts on every render, and render() puts focus and the caret back
+   afterwards. Leaving the row (any route) "parks" the draft: the row goes
+   back to read-only, and if anything was changed it stays marked until the
+   draft is saved or discarded — several can be parked at once. */
+const unitsOf = a => Math.round((a || 0) * Math.pow(10, curFmt().decimals));
+const amountOf = u => (u || 0) / Math.pow(10, curFmt().decimals);
+const draftKey = (kind, id) => kind + ':' + id;
+function activeDraft(){ return S.editing ? S.drafts[draftKey(S.editing.kind, S.editing.id)] || null : null; }
+function draftRow(d){ return MONTHS[d.mi].m[d.p].find(t => t.id === d.id); }
+const draftDirty = d => JSON.stringify(d.f) !== d.orig;
+/* Parked, changed drafts — the one open right now isn't "left behind". */
+function dirtyDraftCount(){
+  return Object.values(S.drafts).filter(d => draftDirty(d) && !(S.editing && S.editing.id === d.id && S.editing.kind === d.kind)).length;
+}
+
+function occFields(t, p){
+  return {cents:unitsOf(t.amount), day:t.day ? String(t.day) : '', title:t.title, private:!!t.private};
+}
+function ruleFields(t){
+  const start = t.ruleStart || {d:1, m:3, y:2024}, due = dueDay(t);
+  return {cents:unitsOf(t.amount), cadence:'Monthly', start:fmtDMY(start), due:due ? String(due) : '',
+    end:t.ruleEnd ? fmtDMY(t.ruleEnd) : '', inst:t.totalInstallments ? String(t.totalInstallments) : '',
+    bucket:t.bucket || '', billName:t.billName || t.title.split(' · ')[0], tracked:!!t.tracked,
+    noBarcode:!!t.noBarcode, multi:!!t.barcodeSpansPeriod,
+    pages:t.barcodeWindowSize ? String(t.barcodeWindowSize) : '',
+    winStart:fmtDMY(t.barcodeWindowStart ? Object.assign({d:1}, t.barcodeWindowStart) : start),
+    attached:false, removed:false};
+}
+function blankRuleFields(){
+  const [m, y] = MONTHS[S.mi].key.split('/').map(Number), start = fmtDMY({d:1, m, y});
+  return {cents:0, cadence:'Monthly', start, due:'', end:'', inst:'', bucket:'', billName:'', tracked:false,
+    noBarcode:false, multi:false, pages:'', winStart:start, attached:false, removed:false};
+}
+
+/* Removing a row out from under the cursor has to keep the cursor on the
+   same row it was on, not the same index — otherwise dropping a draft row
+   above it silently moves focus onto its neighbour. */
+function removeRowKeepFocus(mi, p, id){
+  const list = MONTHS[mi].m[p], at = list.findIndex(t => t.id === id);
+  if(at < 0) return;
+  const live = mi === S.mi, keep = live ? (rowsOf(p)[S.focus[p]] || {}).id : null;
+  list.splice(at, 1);
+  if(!live) return;
+  const i = rowsOf(p).findIndex(t => t.id === keep);
+  S.focus[p] = Math.max(0, i >= 0 ? i : Math.min(S.focus[p], rowsOf(p).length - 1));
+}
+function dropDraft(d){
+  delete S.drafts[draftKey(d.kind, d.id)];
+  const t = draftRow(d);
+  if(t && t.state === 'draft') removeRowKeepFocus(d.mi, d.p, d.id);  // r's placeholder row
+}
+function parkEditing(){
+  const d = activeDraft();
+  S.editing = null;
+  if(d && !draftDirty(d)) dropDraft(d);
+}
+/* The one check that catches every way of leaving the row being edited —
+   j/k, a click, gg/G, a month change, H/L, a search jump, undo — instead of
+   hooking each of them. Called first thing in render(). */
+function syncEditing(){
+  if(!S.editing) return;
+  const t = cur(), E = S.editing;
+  if(!t || E.p !== S.panel || E.mi !== S.mi || t.id !== E.id) parkEditing();
+}
+/* A parked draft on this row (not the one open right now), for the marker. */
+function rowDraftKind(t){
+  if(S.editing && S.editing.id === t.id) return null;
+  return S.drafts[draftKey('rule', t.id)] ? 'rule' : S.drafts[draftKey('occ', t.id)] ? 'occ' : null;
+}
+
+function openEditor(kind, t, fieldsFn, creating){
+  const key = draftKey(kind, t.id);
+  if(S.editing && draftKey(S.editing.kind, S.editing.id) !== key) parkEditing();
+  if(!S.drafts[key]){
+    const f = fieldsFn();
+    S.drafts[key] = {kind, id:t.id, p:S.panel, mi:S.mi, creating:!!creating, f, orig:JSON.stringify(f)};
+  }
+  S.editing = {kind, id:t.id, p:S.panel, mi:S.mi};
+  render();
+  /* The ledger can be wider than the screen now that panes keep a readable
+     minimum width — bring the whole pane into view, not just its first field. */
+  const pane = document.querySelector('.rulepane');
+  if(pane) pane.scrollIntoView({inline:'nearest', block:'nearest'});
+}
+function focusField(sel){ const el = $(sel); if(el){ el.focus(); if(el.select) el.select(); } }
+
 function editOccurrence(){
   const t = cur(); if(!t) return;
-  /* The due date is the rule's property once a row is recurring — R edits
-     it there now (see editRule's Due date field), so it has no business
-     staying editable per-occurrence too: two controls for the same fact,
-     one of them silent about which one wins. A non-recurring row has no
-     rule to hold it, so Day stays right here, same as always. */
-  openModal(
-    '<h3>Edit occurrence</h3><div class="msub">e · this month only'
-    + (t.recurring ? ' · overrides the rule for ' + MONTHS[S.mi].key : '') + '</div>'
-    + '<div class="mbody"><div class="stack">'
-    + (t.recurring ? '' : '<div class="fgrid">')
-    + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span><input class="i" id="eA" value=""></div></label>'
-    + (t.recurring ? '' : '<label class="f"><span class="k">Day</span><input class="i" id="eD" value="' + (t.day||'') + '"></label></div>')
-    + '<label class="f"><span class="k">Description</span><input class="i" id="eT" value="' + esc(t.title) + '"></label>'
-    + '<label class="switch"><input type="checkbox" id="eP"' + (t.private?' checked':'') + '>'
+  if(t.state === 'draft'){ editRule(); return; }   // r's placeholder: its only form is the pane
+  openEditor('occ', t, () => occFields(t, S.panel));
+  focusField('#eA');
+}
+
+const kNote = s => ' <span style="text-transform:none;font-weight:400">' + s + '</span>';
+/* The due date is the rule's property once a row is recurring — R edits it
+   there (see the rule form's Due date field), so it has no business staying
+   editable per-occurrence too. A non-recurring row has no rule to hold it,
+   so Day stays right here. */
+function occFormHTML(t, d){
+  const f = d.f, rec = t.recurring;
+  return '<div class="rowedit">'
+    + '<div class="re-head">e · this month only' + (rec ? ' · overrides the rule for ' + MONTHS[d.mi].key : '') + '</div>'
+    + '<div class="stack">'
+    + (rec ? '' : '<div class="fgrid">')
+    + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span>'
+    + '<input class="i" id="eA" data-f="cents" value=""></div></label>'
+    + (rec ? '' : '<label class="f"><span class="k">Day</span><input class="i" id="eD" data-f="day" value="' + esc(f.day) + '"></label></div>')
+    + '<label class="f"><span class="k">Description</span><input class="i" id="eT" data-f="title" value="' + esc(f.title) + '"></label>'
+    + '<label class="switch"><input type="checkbox" id="eP" data-f="private"' + (f.private ? ' checked' : '') + '>'
     + '<span>Hidden from other members<span class="d">The admin always sees it.</span></span></label>'
-    + '</div>' + (t.recurring
-      ? '<div class="notebox">Generated by a recurring rule. <kbd>R</kbd> edits the rule itself — including its due date — for every future occurrence.</div>'
-      : '') + '</div>'
-    + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
-    + '<button class="btn pri" data-act="saveOcc" type="button">Save</button></div>');
-  maskAmount($('#eA'), t.amount);
-  if(!t.recurring) restrictToNumeric($('#eD'), false);
-  setTimeout(()=>{ const el = $('#eA'); if(el){ el.focus(); el.select(); } }, 30);
+    + (rec ? '<div class="notebox">Generated by a recurring rule. <kbd>R</kbd> edits the rule itself — including its due date — for every future occurrence.</div>' : '')
+    + '</div>'
+    + '<div class="re-foot"><button class="btn" data-act="discardOcc" type="button">Cancel <kbd>Esc</kbd></button>'
+    + '<button class="btn pri" data-act="saveOcc" type="button">Save <kbd>Enter</kbd></button></div></div>';
+}
+
+/* Everything is drawn from the draft, so a checkbox's show/hide is just
+   "is this in the draft" — a change re-renders the pane. That's also what
+   makes Pages / First page covers appear the moment Multi-page is ticked,
+   which the old modal never did. */
+function ruleFormHTML(t, d){
+  const f = d.f, c = d.creating, buckets = bucketsFor(d.p);
+  const showCode = !c && t.clientCode && !f.removed;
+  const dzMsg = f.attached ? 'Barcode file attached — client code will be derived on save'
+    : f.removed ? 'No barcode file linked — drop one here, or leave blank'
+    : showCode ? 'Drop a new barcode PDF to replace the one on file'
+    : 'Drop the barcode PDF here, or leave blank for now';
+  const cad = ['Monthly','Bimonthly','Yearly'].map(o => '<option' + (o === f.cadence ? ' selected' : '') + '>' + o + '</option>').join('');
+  return '<div class="rp-head"><h3>' + (c ? 'Create recurring bill' : 'Edit recurring rule') + '</h3>'
+    + '<div class="msub">' + (c ? 'r · a fresh rule — not tied to any existing row'
+        : 'R · ' + esc(t.title) + ' · applies to every future occurrence') + '</div></div>'
+    + '<div class="rp-body"><div class="stack">'
+    + '<div class="fgrid">'
+    + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span>'
+    + '<input class="i" id="rAmount" data-f="cents" value=""></div></label>'
+    + '<label class="f"><span class="k">Cadence</span><select class="i" id="rCadence" data-f="cadence">' + cad + '</select></label>'
+    + '</div><div class="fgrid">'
+    + '<label class="f"><span class="k">Start date</span><input class="i" id="rStart" data-f="start" value="' + esc(f.start) + '"></label>'
+    + '<label class="f"><span class="k">Due date' + kNote('day of month') + '</span><input class="i" id="rDue" data-f="due" value="' + esc(f.due) + '"></label>'
+    + '</div><div class="fgrid">'
+    + '<label class="f"><span class="k">End date' + kNote('optional') + '</span>'
+    + '<input class="i" id="rEnd" data-f="end" value="' + esc(f.end) + '" placeholder="blank = ongoing"></label>'
+    + '<label class="f"><span class="k">Installments' + kNote('optional') + '</span>'
+    + '<input class="i" id="rInstallments" data-f="inst" value="' + esc(f.inst) + '" placeholder="blank if ongoing"></label>'
+    + '</div>'
+    + (!c && t.totalInstallments
+      ? '<div class="notebox">' + (t.installmentsPaid||0) + ' of ' + t.totalInstallments + ' paid. Editing this '
+        + 'count or the end date recomputes the other. Paying several off early? Shorten this number and record '
+        + 'the lump sum as its own one-off entry — there is no separate "pay off early" action.</div>'
+      : '')
+    + '<div class="fgrid">'
+    + '<label class="f"><span class="k">Bucket</span>'
+    + '<input class="i" id="ruleBucket" data-f="bucket" list="ruleBucketList" value="' + esc(f.bucket) + '" placeholder="e.g. Consumption" autocomplete="off">'
+    + '<datalist id="ruleBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist></label>'
+    + '<label class="f"><span class="k">Bill name</span><input class="i" id="rBillName" data-f="billName" value="' + esc(f.billName) + '" placeholder="e.g. Energia"></label>'
+    + '</div>'
+    + '<label class="switch"><input type="checkbox" id="rTracked" data-f="tracked"' + (f.tracked ? ' checked' : '') + '>'
+    + '<span>Track receipt on disk<span class="d">'
+    + (!c && t.pattern ? 'computed path · ' + esc(t.pattern) : 'no manual tick — paid only when a file exists at the computed path') + '</span></span></label>'
+    + (f.tracked
+      ? '<div class="sub">'
+        + '<label class="switch"><input type="checkbox" id="rNoBarcode" data-f="noBarcode"' + (f.noBarcode ? ' checked' : '') + '>'
+        + '<span>This bill has no barcode file<span class="d">paid by wire transfer / PIX / TED — nothing to attach, ever</span></span></label>'
+        + (f.noBarcode ? '' : '<div class="sub">'
+          + (showCode
+            ? '<div class="notebox mono" id="rClientCodeLine" style="font-family:var(--mono);font-size:11.5px">Client code: ' + esc(t.clientCode)
+              + ' <span style="color:var(--ink-3)">· read-only, from the last attached file</span>'
+              + ' <button class="btn" data-act="unlinkBarcode" type="button" style="padding:3px 9px;font-size:11px;margin-left:8px">Unlink</button></div>'
+            : '')
+          + '<div class="f"><span class="k">Barcode file' + kNote('optional' + (c ? ' — can also be added later via R' : ' — attach or replace it here')) + '</span>'
+          + '<div class="dropzone' + (f.attached ? ' on' : '') + '" id="rFileDrop"><span class="dz-msg">' + dzMsg + '</span></div></div>'
+          + '<label class="switch"><input type="checkbox" id="rMultiPage" data-f="multi"' + (f.multi ? ' checked' : '') + '>'
+          + '<span>Barcode covers multiple months<span class="d">one file with several pages — e.g. a city tax’s '
+          + '10-page annual booklet, or a loan’s full run of installments. Not a fresh upload every month.</span></span></label>'
+          + (f.multi
+            ? '<div class="fgrid">'
+              + '<label class="f"><span class="k">Pages in this file</span><input class="i" id="rPages" data-f="pages" value="' + esc(f.pages) + '" placeholder="e.g. 10"></label>'
+              + '<label class="f"><span class="k">First page covers</span><input class="i" id="rWinStart" data-f="winStart" value="' + esc(f.winStart) + '"></label>'
+              + '</div>'
+              + '<div class="notebox">Re-enter these two whenever a new file actually arrives (a new tax year, a refinanced '
+              + 'loan) — that’s what starts the page count over from 1 for a new upload, without touching any other field.</div>'
+            : '')
+          + '</div>')
+        + '</div>'
+      : '')
+    + (c ? '<div class="notebox">A brand-new rule — nothing in the ledger yet. Future months materialize on their own from here.</div>'
+         : '<div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div>')
+    + '</div></div>'
+    + '<div class="rp-foot"><button class="btn" data-act="discardRule" type="button">Cancel <kbd>Esc</kbd></button>'
+    + '<button class="btn pri" data-act="' + (c ? 'createRule' : 'saveRule') + '" type="button">'
+    + (c ? 'Create rule' : 'Save rule') + ' <kbd>Enter</kbd></button></div>';
+}
+function rulePaneHTML(){
+  const d = activeDraft();
+  if(!d || d.kind !== 'rule') return '';
+  const t = draftRow(d);
+  return t ? '<aside class="rulepane"><div class="rp-arrow"></div>' + ruleFormHTML(t, d) + '</aside>' : '';
+}
+
+/* Field widgets that need JS (the money mask, digits-only, end-date ↔
+   installments) are re-attached on every render, since the fields are new
+   elements each time. */
+function wireEditors(){
+  const d = activeDraft(); if(!d) return;
+  const amt = $(d.kind === 'occ' ? '#eA' : '#rAmount');
+  if(amt) maskAmount(amt, amountOf(d.f.cents));
+  ['#eD', '#rDue', '#rInstallments', '#rPages'].forEach(s => { const el = $(s); if(el) restrictToNumeric(el, false); });
+  if($('#rStart')) wireInstallmentSync($('#rStart'), $('#rEnd'), $('#rInstallments'));
+}
+/* Reads every field of the open form back into its draft — every field, not
+   just the one that fired, since wireInstallmentSync writes the *other*
+   field from code (which fires no event of its own). */
+function readForm(){
+  const d = activeDraft(); if(!d) return;
+  document.querySelectorAll('#panels [data-f]').forEach(el => {
+    const k = el.dataset.f;
+    d.f[k] = el.type === 'checkbox' ? el.checked : k === 'cents' ? parseInt(el.dataset.cents || '0', 10) : el.value;
+  });
+}
+/* The arrow sits on the pane's left edge, level with the row it's editing,
+   clamped to the pane when that row has scrolled out of view. */
+function positionPaneArrow(){
+  const pane = document.querySelector('.rulepane'), d = activeDraft();
+  if(!pane || !d) return;
+  const arrow = pane.querySelector('.rp-arrow');
+  const entry = document.querySelector('.row[data-id="' + d.id + '"] .entry');
+  if(!entry){ arrow.style.display = 'none'; return; }
+  const pr = pane.getBoundingClientRect(), er = entry.getBoundingClientRect();
+  arrow.style.display = '';
+  arrow.style.top = Math.max(24, Math.min(pr.height - 24, er.top + er.height / 2 - pr.top)) + 'px';
+}
+
+function finishEdit(d){
+  const ae = document.activeElement;
+  if(ae && ae.blur) ae.blur();   // closes a datalist popup before its field is torn down
+  S.editing = null;
+  dropDraft(d);
+  $('#app').focus();
+}
+/* Save / Create / Cancel / Unlink for whichever form is open. Always writes
+   to the draft's own row (by id), never cur() — a draft outlives focus. */
+function runEditAct(a){
+  const d = activeDraft(); if(!d) return;
+  const t = draftRow(d);
+  if(a === 'discardOcc' || a === 'discardRule'){
+    const was = draftDirty(d);
+    finishEdit(d);
+    render();
+    if(was) say('changes discarded');
+    return;
+  }
+  if(a === 'unlinkBarcode'){ d.f.attached = false; d.f.removed = true; render(); return; }
+  if(!t){ finishEdit(d); render(); return; }
+  const f = d.f;
+  if(a === 'saveOcc'){
+    const prev = {title:t.title, amount:t.amount, day:t.day, private:t.private};
+    t.title = f.title.trim() || t.title;
+    t.amount = amountOf(f.cents);
+    if(!t.recurring){ const n = parseInt(f.day, 10); if(n >= 1 && n <= 31) t.day = n; }
+    t.private = !!f.private;
+    S.undo.push({k:'edit', p:d.p, id:t.id, prev});
+    finishEdit(d);
+    say('occurrence updated');
+    return;
+  }
+  if(a === 'saveRule'){
+    const prev = {amount:t.amount, day:t.day, bucket:t.bucket, billName:t.billName,
+      totalInstallments:t.totalInstallments, installmentsPaid:t.installmentsPaid, tracked:t.tracked,
+      pattern:t.pattern, status:t.status, progress:t.progress, due:t.due,
+      ruleStart:t.ruleStart, ruleEnd:t.ruleEnd, barcodeSpansPeriod:t.barcodeSpansPeriod,
+      barcodeWindowSize:t.barcodeWindowSize, barcodeWindowStart:t.barcodeWindowStart, barcodePath:t.barcodePath,
+      noBarcode:t.noBarcode, clientCode:t.clientCode};
+    t.amount = amountOf(f.cents);
+    const dueD = parseInt(f.due, 10);
+    if(dueD >= 1 && dueD <= 31){
+      /* t.day is the paid-on day and stays whatever it already was (0 until
+         actually paid) — changing the rule's due day shouldn't retroactively
+         invent a payment. t.due is the display string for this occurrence's
+         due date, so that's what a new due day actually moves. */
+      if(!t.day) t.day = dueD;
+      const dm = parseDMY(t.due);
+      if(dm) t.due = pad(dueD) + '/' + pad(dm.m) + '/' + dm.y;
+    }
+    t.bucket = f.bucket.trim() || null;
+    t.billName = f.billName.trim() || t.title.split(' · ')[0];
+    const inst = parseInt(f.inst, 10);
+    t.totalInstallments = (isFinite(inst) && inst > 0) ? inst : null;
+    const startD = parseDMY(f.start); if(startD) t.ruleStart = startD;
+    t.ruleEnd = parseDMY(f.end);
+    t.tracked = !!f.tracked;
+    if(t.tracked){
+      /* A simplified stand-in for CLAUDE.md's full computed path — matches
+         the shorter illustrative form the seed data already uses. */
+      const [mm, yyyy] = MONTHS[d.mi].key.split('/');
+      t.pattern = slugify(t.billName) + '/' + yyyy + '/' + mm + '.pdf';
+      t.noBarcode = !!f.noBarcode;
+      if(t.noBarcode){
+        t.barcodeSpansPeriod = false; t.barcodeWindowSize = null; t.barcodeWindowStart = null;
+      } else {
+        if(f.removed) t.clientCode = null;
+        else if(f.attached) t.clientCode = clientCodeFor(t);
+        t.barcodeSpansPeriod = !!f.multi;
+        if(t.barcodeSpansPeriod){
+          const pages = parseInt(f.pages, 10);
+          t.barcodeWindowSize = (isFinite(pages) && pages > 0) ? pages : null;
+          /* Re-typing this date is the whole "I just got a new file" action —
+             a fresh windowStart resets the page count back to 1. */
+          const ws = parseDMY(f.winStart);
+          t.barcodeWindowStart = ws ? {m:ws.m, y:ws.y} : t.barcodeWindowStart;
+          t.barcodePath = t.barcodeWindowStart
+            ? slugify(t.billName) + '/barcode_' + pad(t.barcodeWindowStart.m) + '-' + t.barcodeWindowStart.y + '.pdf'
+            : t.barcodePath;
+        } else {
+          t.barcodeWindowSize = null; t.barcodeWindowStart = null;
+        }
+      }
+      if(t.status !== 'paid'){
+        t.status = 'pending';
+        if(t.progress == null) t.progress = .25;
+        if(!t.due) t.due = pad(t.day || 1) + '/' + MONTHS[d.mi].key;
+      }
+    } else {
+      t.pattern = null; t.noBarcode = false; t.clientCode = null;
+    }
+    S.undo.push({k:'edit', p:d.p, id:t.id, prev});
+    finishEdit(d);
+    say('rule updated');
+    return;
+  }
+  if(a === 'createRule'){
+    const billName = f.billName.trim();
+    if(!billName){ say('a recurring bill needs a name', true); focusField('#rBillName'); return; }
+    const [curM, curY] = MONTHS[d.mi].key.split('/').map(Number);
+    const startD = parseDMY(f.start) || {d:1, m:curM, y:curY};
+    const dueD = parseInt(f.due, 10);
+    const day = (dueD >= 1 && dueD <= 31) ? dueD : (startD.d || 1);
+    const inst = parseInt(f.inst, 10);
+    const totalInstallments = (isFinite(inst) && inst > 0) ? inst : null;
+    const data = {
+      kind:'out', title:billName, billName, day, amount:amountOf(f.cents),
+      bucket:f.bucket.trim() || null,
+      recurring:true, ruleStart:startD, ruleEnd:parseDMY(f.end),
+      totalInstallments, installmentsPaid:totalInstallments ? 1 : 0,
+      tracked:!!f.tracked, progress:null,
+      status:f.tracked ? 'pending' : 'plain'
+    };
+    if(f.tracked){
+      const [mm, yyyy] = MONTHS[d.mi].key.split('/');
+      data.pattern = slugify(billName) + '/' + yyyy + '/' + mm + '.pdf';
+      data.noBarcode = !!f.noBarcode;
+      data.progress = .25;
+      data.due = pad(day) + '/' + MONTHS[d.mi].key;
+      if(!data.noBarcode){
+        if(f.attached) data.clientCode = clientCodeFor({title:billName});
+        data.barcodeSpansPeriod = !!f.multi;
+      }
+    }
+    /* The real row lands exactly where the placeholder was. */
+    const at = rowsOf(d.p).findIndex(x => x.id === t.id);
+    finishEdit(d);
+    if(at >= 0) S.focus[d.p] = at;
+    insertRow(false, data, 'recurring bill created · future months materialize on their own');
+  }
 }
 
 /* ---- small dd/mm/yyyy date helpers, used only by the rule form's
@@ -1649,20 +2094,6 @@ function wireInstallmentSync(startEl, endEl, instEl){
   });
 }
 
-/* Tracked-only fields (and, inside those, barcode-only fields) are rendered
-   once at open time but need to react live — r's whole point is "check
-   Tracked, then decide noBarcode / maybe drop a file, all in one sitting." */
-function wireRuleFormReactivity(){
-  const trackedEl = $('#rTracked'), fields = $('#rTrackedFields');
-  if(trackedEl && fields){
-    trackedEl.addEventListener('change', () => { fields.style.display = trackedEl.checked ? '' : 'none'; });
-  }
-  const noBarcodeEl = $('#rNoBarcode'), barcodeFields = $('#rBarcodeFields');
-  if(noBarcodeEl && barcodeFields){
-    noBarcodeEl.addEventListener('change', () => { barcodeFields.style.display = noBarcodeEl.checked ? 'none' : ''; });
-  }
-}
-
 /* A row's due day-of-month, for the rule form's Due date field. t.day is
    the *paid-on* day — 0/blank until a payment actually lands (see "An
    unpaid row sorts by its due day" in spec.md), so it's frequently empty
@@ -1675,139 +2106,30 @@ function dueDay(t){
   return d ? d.d : (t.day || null);
 }
 
-/* Editing only — creation moved to r / createRule() below. Converting an
-   existing occurrence into a rule's first one is no longer possible: see
-   CLAUDE.md's Recurring rules section for why (a barcode binding has to
-   happen at creation time or not at all, and there's no such moment for a
-   row that already exists as a plain transaction). */
+/* R — edits the rule behind the focused row, in the side pane. On r's
+   placeholder row it resumes that row's create form. A plain row has no rule
+   to edit, and can't become one: rules are only ever created from scratch
+   with r (CLAUDE.md's Recurring rules section explains why). */
 function editRule(){
   const t = cur();
   if(!t) return;
+  if(t.state === 'draft'){ openEditor('rule', t, blankRuleFields, true); focusField('#rAmount'); return; }
   if(!t.recurring){ say('not recurring — press r to create a new recurring bill', true); return; }
-  const buckets = bucketsFor(S.panel);
-  const start = t.ruleStart || { d: 1, m: 3, y: 2024 };
-  openModal(
-    '<h3>Edit recurring rule</h3>'
-    + '<div class="msub">R · ' + esc(t.title) + ' · applies to every future occurrence</div>'
-    + '<div class="mbody"><div class="stack">'
-    + '<div class="fgrid">'
-    + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span><input class="i" id="rAmount" value=""></div></label>'
-    + '<label class="f"><span class="k">Cadence</span><select class="i" id="rCadence"><option>Monthly</option><option>Bimonthly</option><option>Yearly</option></select></label>'
-    + '</div><div class="fgrid">'
-    + '<label class="f"><span class="k">Start date</span><input class="i" id="rStart" value="' + fmtDMY(start) + '"></label>'
-    + '<label class="f"><span class="k">Due date <span style="text-transform:none;font-weight:400">day of month, every period</span></span>'
-    + '<input class="i" id="rDue" value="' + (dueDay(t) || '') + '"></label>'
-    + '</div><div class="fgrid">'
-    + '<label class="f"><span class="k">End date <span style="text-transform:none;font-weight:400">optional — blank means ongoing</span></span>'
-    + '<input class="i" id="rEnd" value="' + (t.ruleEnd ? fmtDMY(t.ruleEnd) : '') + '" placeholder="blank = ongoing"></label>'
-    + '<label class="f"><span class="k">Total installments <span style="text-transform:none;font-weight:400">optional — fixed-length, e.g. a loan</span></span>'
-    + '<input class="i" id="rInstallments" value="' + (t.totalInstallments || '') + '" placeholder="leave blank if ongoing"></label>'
-    + '</div><div class="fgrid">'
-    + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">any transaction can have one</span></span>'
-    + '<input class="i" id="ruleBucket" list="ruleBucketList" value="' + esc(t.bucket || '') + '" placeholder="e.g. Consumption" autocomplete="off">'
-    + '<datalist id="ruleBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist>'
-    + '</label>'
-    + '<label class="f"><span class="k">Bill name</span><input class="i" id="rBillName" value="' + esc(t.billName || t.title.split(' · ')[0]) + '"></label>'
-    + '</div>'
-    + '<label class="switch"><input type="checkbox" id="rTracked"' + (t.tracked?' checked':'') + '>'
-    + '<span>Track receipt on disk<span class="d">'
-    + (t.pattern ? 'computed path · ' + esc(t.pattern) : 'no taxonomy set yet') + '</span></span></label>'
-    + '<div id="rTrackedFields" style="display:' + (t.tracked ? '' : 'none') + '">'
-    + '<label class="switch"><input type="checkbox" id="rNoBarcode"' + (t.noBarcode?' checked':'') + '>'
-    + '<span>This bill has no barcode file<span class="d">paid by wire transfer / PIX / TED — nothing to attach, ever</span></span></label>'
-    + '<div id="rBarcodeFields" style="display:' + (t.noBarcode ? 'none' : '') + '">'
-    + (t.clientCode
-      ? '<div class="notebox mono" id="rClientCodeLine" style="font-family:var(--mono);font-size:11.5px">Client code: ' + esc(t.clientCode)
-        + ' <span style="color:var(--ink-3)">· read-only, from the last attached file</span>'
-        + ' <button class="btn" data-act="unlinkBarcode" type="button" style="padding:3px 9px;font-size:11px;margin-left:8px">Unlink</button></div>'
-      : '')
-    + '<div class="f"><span class="k">Barcode file <span style="text-transform:none;font-weight:400">optional — attach or replace it here</span></span>'
-    + '<div class="dropzone" id="rFileDrop" data-attached="0" data-removed="0"><span class="dz-msg">'
-    + (t.clientCode ? 'Drop a new barcode PDF to replace the one on file' : 'Drop the barcode PDF here, or leave blank for now')
-    + '</span></div></div>'
-    + '<label class="switch"><input type="checkbox" id="rMultiPage"' + (t.barcodeSpansPeriod?' checked':'') + '>'
-    + '<span>Barcode covers multiple months<span class="d">one file with several pages — e.g. a city tax’s '
-    + '10-page annual booklet, or a loan’s full run of installments. Not a fresh upload every month.</span></span></label>'
-    + (t.barcodeSpansPeriod
-      ? '<div class="fgrid">'
-        + '<label class="f"><span class="k">Pages in this file</span><input class="i" id="rPages" value="' + (t.barcodeWindowSize || '') + '" placeholder="e.g. 10"></label>'
-        + '<label class="f"><span class="k">First page covers</span><input class="i" id="rWinStart" value="' + (t.barcodeWindowStart ? fmtDMY(Object.assign({d:1}, t.barcodeWindowStart)) : fmtDMY(start)) + '"></label>'
-        + '</div>'
-        + '<div class="notebox">Re-enter these two whenever a new file actually arrives (a new tax year, a refinanced '
-        + 'loan) — that’s what starts the page count over from 1 for a new upload, without touching any other field.</div>'
-      : '')
-    + '</div>'
-    + '</div>'
-    + '</div>'
-    + '<div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div>'
-    + '</div>'
-    + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
-    + '<button class="btn pri" data-act="saveRule" type="button">Save rule</button></div>');
-  maskAmount($('#rAmount'), t.amount);
-  restrictToNumeric($('#rInstallments'), false);
-  restrictToNumeric($('#rDue'), false);
-  if($('#rPages')) restrictToNumeric($('#rPages'), false);
-  wireInstallmentSync($('#rStart'), $('#rEnd'), $('#rInstallments'));
-  wireRuleFormReactivity();
-  setTimeout(()=>{ const el = $('#rAmount'); if(el){ el.focus(); el.select(); } }, 30);
+  openEditor('rule', t, () => ruleFields(t));
+  focusField('#rAmount');
 }
 
-/* r — the only way a recurring rule is ever created now. Blank modal, no
-   anchor row: creating a rule is no longer something a one-off transaction
-   becomes, it's typed from scratch and handed to insertRow like any other
-   brand-new row (CLAUDE.md's Recurring rules section explains why this
-   supersedes the old "R on a plain row" conversion). */
+/* r — the only way a recurring rule is ever created. There's no row yet for
+   the pane's arrow to point at, so a dashed placeholder row goes in at the
+   cursor; Create turns it into the real row, Cancel removes it. */
 function createRule(){
-  const buckets = bucketsFor(S.panel);
-  const [curM, curY] = MONTHS[S.mi].key.split('/').map(Number);
-  const start = { d: 1, m: curM, y: curY };
-  openModal(
-    '<h3>Create recurring bill</h3>'
-    + '<div class="msub">r · a fresh rule — not tied to any existing row</div>'
-    + '<div class="mbody"><div class="stack">'
-    + '<div class="fgrid">'
-    + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span><input class="i" id="rAmount" value=""></div></label>'
-    + '<label class="f"><span class="k">Cadence</span><select class="i" id="rCadence"><option>Monthly</option><option>Bimonthly</option><option>Yearly</option></select></label>'
-    + '</div><div class="fgrid">'
-    + '<label class="f"><span class="k">Start date</span><input class="i" id="rStart" value="' + fmtDMY(start) + '"></label>'
-    + '<label class="f"><span class="k">Due date <span style="text-transform:none;font-weight:400">day of month, every period</span></span>'
-    + '<input class="i" id="rDue" value=""></label>'
-    + '</div><div class="fgrid">'
-    + '<label class="f"><span class="k">End date <span style="text-transform:none;font-weight:400">optional — blank means ongoing</span></span>'
-    + '<input class="i" id="rEnd" value="" placeholder="blank = ongoing"></label>'
-    + '<label class="f"><span class="k">Total installments <span style="text-transform:none;font-weight:400">optional — fixed-length, e.g. a loan</span></span>'
-    + '<input class="i" id="rInstallments" value="" placeholder="leave blank if ongoing"></label>'
-    + '</div><div class="fgrid">'
-    + '<label class="f"><span class="k">Bucket <span style="text-transform:none;font-weight:400">any transaction can have one</span></span>'
-    + '<input class="i" id="ruleBucket" list="ruleBucketList" value="" placeholder="e.g. Consumption" autocomplete="off">'
-    + '<datalist id="ruleBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist>'
-    + '</label>'
-    + '<label class="f"><span class="k">Bill name</span><input class="i" id="rBillName" value="" placeholder="e.g. Energia"></label>'
-    + '</div>'
-    + '<label class="switch"><input type="checkbox" id="rTracked">'
-    + '<span>Track receipt on disk<span class="d">no manual tick — paid only when a file exists at the computed path</span></span></label>'
-    + '<div id="rTrackedFields" style="display:none">'
-    + '<label class="switch"><input type="checkbox" id="rNoBarcode">'
-    + '<span>This bill has no barcode file<span class="d">paid by wire transfer / PIX / TED — nothing to attach, ever</span></span></label>'
-    + '<div id="rBarcodeFields">'
-    + '<div class="f"><span class="k">Barcode file <span style="text-transform:none;font-weight:400">optional — can also be added later via R</span></span>'
-    + '<div class="dropzone" id="rFileDrop" data-attached="0" data-removed="0"><span class="dz-msg">Drop the barcode PDF here, or leave blank for now</span></div></div>'
-    + '<label class="switch"><input type="checkbox" id="rMultiPage">'
-    + '<span>Barcode covers multiple months<span class="d">one file with several pages — e.g. a city tax’s '
-    + '10-page annual booklet, or a loan’s full run of installments. Not a fresh upload every month.</span></span></label>'
-    + '</div>'
-    + '</div>'
-    + '</div>'
-    + '<div class="notebox">A brand-new rule — nothing in the ledger yet. Future months materialize on their own from here; there is no anchor occurrence to convert.</div>'
-    + '</div>'
-    + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
-    + '<button class="btn pri" data-act="createRule" type="button">Create rule</button></div>');
-  maskAmount($('#rAmount'), 0);
-  restrictToNumeric($('#rInstallments'), false);
-  restrictToNumeric($('#rDue'), false);
-  wireInstallmentSync($('#rStart'), $('#rEnd'), $('#rInstallments'));
-  wireRuleFormReactivity();
-  setTimeout(()=>{ const el = $('#rAmount'); if(el){ el.focus(); el.select(); } }, 30);
+  if(S.editing) parkEditing();
+  const list = rowsOf(S.panel);
+  const ph = T({state:'draft', title:'New recurring bill', kind:'out'});
+  list.splice(Math.min(list.length, S.focus[S.panel] + 1), 0, ph);
+  S.focus[S.panel] = list.indexOf(ph);
+  openEditor('rule', ph, blankRuleFields, true);
+  focusField('#rAmount');
 }
 
 function helpModal(){
@@ -1856,46 +2178,55 @@ document.addEventListener('keydown', e => {
     if(!inField && (e.key === 'y' || e.key === 'Y') && $('#modal').querySelector('[data-act="del"]')){
       e.preventDefault(); softDelete();
     }
-    if(e.ctrlKey && MODAL_DIRS[e.key]){ e.preventDefault(); modalFocusMove(MODAL_DIRS[e.key]); }
-    /* Enter on the bucket combobox is never "save the form" — it's
-       ambiguous with "confirm the highlighted <datalist> suggestion", and
-       browsers don't agree on which one wins. Chrome swallows that Enter
-       inside its own suggestion-list handling before it ever reaches this
-       listener; Safari doesn't, so the very keystroke meant to pick a
-       bucket value falls through and closes the whole modal instead. Rather
-       than guess at Safari's exact event sequence, this field is simply
-       carved out of the generic Enter-saves rule below: Enter here only
-       blurs it (which is also what dismisses an open suggestion list),
-       leaving the value it just picked in place. A second Enter — now from
-       anywhere else — saves for real. */
-    if(e.key === 'Enter' && document.activeElement
-        && (document.activeElement.id === 'eB' || document.activeElement.id === 'ruleBucket')){
-      e.preventDefault();
-      document.activeElement.blur();
-      return;
-    }
-    /* Enter = whatever the modal's own primary button does — saveOcc for
-       the edit-occurrence form, Close for a modal with no real save action
-       (help, edit rule). Deliberately no fallback to .dgr: the delete
-       confirm's only "yes" is the explicit y keypress above, so Enter never
-       becomes an accidental way to confirm a destructive action. */
+    if(e.ctrlKey && MODAL_DIRS[e.key]){ e.preventDefault(); fieldFocusMove($('#modal'), MODAL_DIRS[e.key]); }
+    /* Enter = whatever the modal's own primary button does — Close on the
+       keymap, Re-attribute on the private-row confirm. Deliberately no
+       fallback to .dgr: the delete confirm's only "yes" is the explicit y
+       keypress above, so Enter never becomes an accidental way to confirm a
+       destructive action. (The e and R/r forms aren't modals any more — see
+       the editing branch below.) */
     if(e.key === 'Enter'){
-      const primary = $('#modal').querySelector('[data-act="saveOcc"], .mfoot .btn.pri');
-      if(primary){
-        e.preventDefault();
-        /* Blur whatever field is focused before tearing the modal down —
-           a datalist-backed input can have its native suggestion popup
-           open, and that popup is browser chrome outside the page's own
-           DOM/CSS. Removing the field from under it without blurring first
-           can leave it visually stuck on screen with nothing left to
-           anchor to. Blurring is what a browser already treats as "dismiss
-           the suggestions", so doing it explicitly, before the field is
-           gone, is what actually closes it. */
-        if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
-        primary.click();
-      }
+      const primary = $('#modal').querySelector('.mfoot .btn.pri');
+      if(primary){ e.preventDefault(); primary.click(); }
     }
     return;
+  }
+  /* The inline e row and the R/r side pane. Enter saves, Esc discards,
+     Ctrl-hjkl moves between fields — and past the form's edge hands focus
+     back to the ledger, parking the draft instead of losing it: j/k-like
+     off the top/bottom of an inline row moves the cursor to the row above
+     or below; Ctrl-h off the pane's left edge returns to the ledger with
+     the pane still open until the cursor actually moves. */
+  const edBox = e.target.closest && e.target.closest('.rowedit, .rulepane');
+  if(edBox){
+    const isPane = edBox.classList.contains('rulepane');
+    if(e.key === 'Escape'){ e.preventDefault(); runEditAct(isPane ? 'discardRule' : 'discardOcc'); return; }
+    if(e.ctrlKey && MODAL_DIRS[e.key]){
+      e.preventDefault();
+      const dir = MODAL_DIRS[e.key];
+      if(fieldFocusMove(edBox, dir)) return;
+      if(!isPane && (dir === 'down' || dir === 'up')){ $('#app').focus(); move(dir === 'down' ? 1 : -1); }
+      else if(isPane && dir === 'left'){ $('#app').focus(); render(); say('back to the ledger · the pane stays open until the cursor moves'); }
+      return;
+    }
+    if(e.key === 'Enter'){
+      /* Enter on a bucket combobox is never "save" — it's ambiguous with
+         "confirm the highlighted <datalist> suggestion", and browsers don't
+         agree on which wins: Chrome swallows it inside its suggestion list,
+         Safari lets it fall through and would save the whole form. So here
+         it only blurs the field (which also dismisses the suggestion list)
+         and parks focus on Save; a second Enter saves for real. */
+      if(document.activeElement && document.activeElement.id === 'ruleBucket'){
+        e.preventDefault();
+        document.activeElement.blur();
+        const pri = edBox.querySelector('.btn.pri'); if(pri) pri.focus();
+        return;
+      }
+      const pri = edBox.querySelector('.btn.pri');
+      if(pri){ e.preventDefault(); runEditAct(pri.dataset.act); }
+      return;
+    }
+    if(inField) return;
   }
   if(inField) return;
 
@@ -1999,22 +2330,44 @@ $('#panels').addEventListener('drop', e => {
   pan.classList.remove('dragover');
   warnUnlinkedBarcodes(+pan.dataset.panel);
 });
-/* The rule modal's own barcode dropzone (r / R) — delegated on #scrim so it
-   survives openModal's innerHTML replacement without re-binding per open. */
-$('#scrim').addEventListener('dragover', e => {
+/* The rule pane's barcode dropzone (r / R). The pane isn't a .panel, so the
+   member-panel drop handlers above never see these; delegated on #panels so
+   they survive render() rebuilding the pane. The attached flag lives on the
+   draft, not the element, for the same reason. */
+$('#panels').addEventListener('dragover', e => {
   const dz = e.target.closest('#rFileDrop'); if(!dz || !e.dataTransfer) return;
   e.preventDefault(); dz.classList.add('dragover');
 });
-$('#scrim').addEventListener('dragleave', e => {
+$('#panels').addEventListener('dragleave', e => {
   const dz = e.target.closest('#rFileDrop'); if(dz) dz.classList.remove('dragover');
 });
-$('#scrim').addEventListener('drop', e => {
+$('#panels').addEventListener('drop', e => {
   const dz = e.target.closest('#rFileDrop'); if(!dz || !e.dataTransfer || !e.dataTransfer.types.includes('Files')) return;
-  e.preventDefault(); dz.classList.remove('dragover');
-  dz.dataset.attached = '1'; dz.dataset.removed = '0';
-  const msg = dz.querySelector('.dz-msg'); if(msg) msg.textContent = 'Barcode file attached — client code will be derived on save';
+  e.preventDefault();
+  const d = activeDraft(); if(!d) return;
+  readForm();
+  d.f.attached = true; d.f.removed = false;
+  render();
 });
+/* Typing into the open form writes straight into its draft; ticking a box
+   also re-renders, since what the form shows depends on those boxes. */
+$('#panels').addEventListener('input', e => { if(e.target.closest('.rowedit, .rulepane')) readForm(); });
+$('#panels').addEventListener('change', e => {
+  if(!e.target.closest('.rowedit, .rulepane')) return;
+  readForm();
+  if(e.target.type === 'checkbox') render();
+});
+/* The ledgers are rebuilt on every render, so listen in the capture phase
+   on #panels to catch any of them scrolling. */
+$('#panels').addEventListener('scroll', positionPaneArrow, true);
 $('#panels').addEventListener('click', e => {
+  /* Inside the inline row or the pane: run the button, if any, and stop —
+     the row-click handling below would refocus and re-render mid-edit. */
+  if(e.target.closest('.rowedit, .rulepane')){
+    const act = e.target.closest('[data-act]');
+    if(act) runEditAct(act.dataset.act);
+    return;
+  }
   if(e.target.closest('[data-role-toggle]')){ togglePreview(); return; }
   const fb = e.target.closest('.fbadge');
   if(fb){
@@ -2071,7 +2424,7 @@ function tipHTML(t){
 }
 $('#panels').addEventListener('mousemove', e => {
   const row = e.target.closest('.row');
-  if(!row){ tip.style.display='none'; return; }
+  if(!row || e.target.closest('.rowedit')){ tip.style.display='none'; return; }
   const t = rowsOf(+row.dataset.p)[+row.dataset.i];
   if(!t || !t.recurring || t.state !== 'ok'){ tip.style.display='none'; return; }
   tip.innerHTML = tipHTML(t);
@@ -2123,141 +2476,6 @@ $('#scrim').addEventListener('click', e => {
   const a = b.dataset.act;
   if(a === 'close') closeModal();
   if(a === 'del') softDelete();
-  if(a === 'saveOcc'){
-    const t = cur(); if(!t){ closeModal(); return; }
-    const prev = {title:t.title, amount:t.amount, day:t.day, private:t.private};
-    t.title = $('#eT').value || t.title;
-    const cents = parseInt($('#eA').dataset.cents || '0', 10);
-    if(isFinite(cents)) t.amount = cents / Math.pow(10, curFmt().decimals);
-    const eD = $('#eD'); // absent for a recurring row — its day lives on the rule now
-    if(eD){ const d = parseInt(eD.value,10); if(d>=1 && d<=31) t.day = d; }
-    t.private = $('#eP').checked;
-    S.undo.push({k:'edit', p:S.panel, id:t.id, prev});
-    closeModal(); say('occurrence updated');
-  }
-  if(a === 'saveRule'){
-    const t = cur(); if(!t){ closeModal(); return; }
-    const prev = {amount:t.amount, day:t.day, bucket:t.bucket, billName:t.billName,
-      totalInstallments:t.totalInstallments, installmentsPaid:t.installmentsPaid, tracked:t.tracked,
-      pattern:t.pattern, status:t.status, progress:t.progress, due:t.due,
-      ruleStart:t.ruleStart, ruleEnd:t.ruleEnd, barcodeSpansPeriod:t.barcodeSpansPeriod,
-      barcodeWindowSize:t.barcodeWindowSize, barcodeWindowStart:t.barcodeWindowStart, barcodePath:t.barcodePath,
-      noBarcode:t.noBarcode, clientCode:t.clientCode};
-    const cents = parseInt($('#rAmount').dataset.cents || '0', 10);
-    if(isFinite(cents)) t.amount = cents / Math.pow(10, curFmt().decimals);
-    const dueD = parseInt($('#rDue').value, 10);
-    if(dueD>=1 && dueD<=31){
-      /* t.day is the paid-on day and stays whatever it already was (0
-         until actually paid) — changing the rule's due day shouldn't
-         retroactively invent a payment. t.due is the display string for
-         the current occurrence's due date, so that's what a new due day
-         actually needs to move; a not-yet-paid row (t.day falsy) picks up
-         the new day directly too, since it has no paid-on date to protect. */
-      if(!t.day) t.day = dueD;
-      const dm = parseDMY(t.due);
-      if(dm) t.due = pad(dueD) + '/' + pad(dm.m) + '/' + dm.y;
-    }
-    t.bucket = $('#ruleBucket').value.trim() || null;
-    t.billName = $('#rBillName').value.trim() || t.title.split(' · ')[0];
-    const inst = parseInt($('#rInstallments').value, 10);
-    t.totalInstallments = (isFinite(inst) && inst > 0) ? inst : null;
-    const startD = parseDMY($('#rStart').value); if(startD) t.ruleStart = startD;
-    t.ruleEnd = parseDMY($('#rEnd').value);
-    t.tracked = $('#rTracked').checked;
-    if(t.tracked){
-      /* A simplified stand-in for CLAUDE.md's full computed path
-         ({member_uuid}-{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}.{ext})
-         — matches the shorter illustrative form the seed data already uses
-         elsewhere in this mock (no member folder, no bucket segment). */
-      const [mm, yyyy] = MONTHS[S.mi].key.split('/');
-      t.pattern = slugify(t.billName) + '/' + yyyy + '/' + mm + '.pdf';
-      t.noBarcode = $('#rNoBarcode') ? $('#rNoBarcode').checked : false;
-      if(t.noBarcode){
-        /* A barcode-less bill (PIX/TED/wire transfer) can't have a
-           multi-page barcode window either. */
-        t.barcodeSpansPeriod = false; t.barcodeWindowSize = null; t.barcodeWindowStart = null;
-      } else {
-        const drop = $('#rFileDrop');
-        if(drop){
-          if(drop.dataset.removed === '1') t.clientCode = null;
-          else if(drop.dataset.attached === '1') t.clientCode = clientCodeFor(t);
-        }
-        t.barcodeSpansPeriod = $('#rMultiPage') ? $('#rMultiPage').checked : false;
-        if(t.barcodeSpansPeriod){
-          const pages = parseInt($('#rPages').value, 10);
-          t.barcodeWindowSize = (isFinite(pages) && pages > 0) ? pages : null;
-          const winStart = parseDMY($('#rWinStart').value);
-          /* Re-typing this date is the whole "I just got a new file" action —
-             there's no separate upload flow in this mock, so setting a fresh
-             windowStart is what resets the page count back to 1 for the new
-             file, the same way an admin re-entering these two fields for a
-             new tax year or a refinanced loan would in the real app. */
-          t.barcodeWindowStart = winStart ? {m:winStart.m, y:winStart.y} : t.barcodeWindowStart;
-          t.barcodePath = t.barcodeWindowStart
-            ? slugify(t.billName) + '/barcode_' + pad(t.barcodeWindowStart.m) + '-' + t.barcodeWindowStart.y + '.pdf'
-            : t.barcodePath;
-        } else {
-          t.barcodeWindowSize = null; t.barcodeWindowStart = null;
-        }
-      }
-      if(t.status !== 'paid'){
-        t.status = 'pending';
-        if(t.progress == null) t.progress = .25;
-        if(!t.due) t.due = pad(t.day || 1) + '/' + MONTHS[S.mi].key;
-      }
-    } else {
-      t.pattern = null; t.noBarcode = false; t.clientCode = null;
-    }
-    S.undo.push({k:'edit', p:S.panel, id:t.id, prev});
-    closeModal();
-    say('rule updated');
-  }
-  if(a === 'unlinkBarcode'){
-    /* Deliberately does not close the modal — unlinking exists so the
-       household can immediately re-drop a corrected file into this same
-       dropzone, not so they have to reopen R to try again. */
-    const drop = $('#rFileDrop');
-    if(drop){
-      drop.dataset.attached = '0'; drop.dataset.removed = '1';
-      const msg = drop.querySelector('.dz-msg'); if(msg) msg.textContent = 'No barcode file linked — drop one below, or leave blank';
-    }
-    const line = $('#rClientCodeLine'); if(line) line.remove();
-  }
-  if(a === 'createRule'){
-    const billName = $('#rBillName').value.trim();
-    if(!billName){ say('a recurring bill needs a name', true); return; }
-    const cents = parseInt($('#rAmount').dataset.cents || '0', 10);
-    const amount = isFinite(cents) ? cents / Math.pow(10, curFmt().decimals) : 0;
-    const [curM, curY] = MONTHS[S.mi].key.split('/').map(Number);
-    const startD = parseDMY($('#rStart').value) || {d:1, m:curM, y:curY};
-    const dueD = parseInt($('#rDue').value, 10);
-    const day = (dueD>=1 && dueD<=31) ? dueD : (startD.d || 1);
-    const inst = parseInt($('#rInstallments').value, 10);
-    const totalInstallments = (isFinite(inst) && inst > 0) ? inst : null;
-    const tracked = $('#rTracked').checked;
-    const data = {
-      kind:'out', title: billName, billName, day, amount,
-      bucket: $('#ruleBucket').value.trim() || null,
-      recurring: true, ruleStart: startD, ruleEnd: parseDMY($('#rEnd').value),
-      totalInstallments, installmentsPaid: totalInstallments ? 1 : 0,
-      tracked, progress: null,
-      status: tracked ? 'pending' : 'plain'
-    };
-    if(tracked){
-      const [mm, yyyy] = MONTHS[S.mi].key.split('/');
-      data.pattern = slugify(billName) + '/' + yyyy + '/' + mm + '.pdf';
-      data.noBarcode = $('#rNoBarcode') ? $('#rNoBarcode').checked : false;
-      data.progress = .25;
-      data.due = pad(day) + '/' + MONTHS[S.mi].key;
-      if(!data.noBarcode){
-        const drop = $('#rFileDrop');
-        if(drop && drop.dataset.attached === '1') data.clientCode = clientCodeFor({title: billName});
-        data.barcodeSpansPeriod = $('#rMultiPage') ? $('#rMultiPage').checked : false;
-      }
-    }
-    closeModal();
-    insertRow(true, data, 'recurring bill created · future months materialize on their own');
-  }
 });
 
 $('#prevM').onclick = () => month(-1);
@@ -2512,7 +2730,7 @@ renderTaxonomy();
 /* ================= keymap ================= */
 const KEYGROUPS = [
   ['Move', [['j / k','row down / up'],['5j · 7k','counted motion'],['gg / G','first / last row'],['H / L','focus member panel, left / right'],['Ctrl-P / Ctrl-N','previous / next month']]],
-  ['Act',  [['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence'],['r','create a new recurring bill — blank modal, no anchor row'],['R','edit the recurring rule behind it — no-op on a plain row'],['gd','show due/cadence/receipt details, keyboard-only (proposal)'],['p','toggle private (proposal)']]],
+  ['Act',  [['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence, in place — Enter saves, Esc cancels'],['r','create a new recurring bill — opens the rule pane beside the ledger'],['R','edit the recurring rule behind it, in the rule pane — no-op on a plain row'],['Ctrl-hjkl','in a form: move between fields · past the edge, back to the ledger (keeps the draft)'],['gd','show due/cadence/receipt details, keyboard-only (proposal)'],['p','toggle private (proposal)']]],
   ['Undo', [['dd','delete — opens a confirmation'],['y','confirm in the delete modal'],['u','undo the last change'],['Esc','clear count, buffer and selection']]],
   ['Files', [['g1','open the bill file, new tab (proposal)'],['g2','open the scheduled-payment proof (proposal)'],['g3','open the receipt, new tab (proposal)'],['P','preview the row’s files in a carousel, without leaving the ledger (proposal)'],['1 / 2 / 3','inside the carousel — jump straight to that file'],['h / l','inside the carousel — previous / next file'],['+ / -','inside the carousel — zoom in / out'],['0','inside the carousel — reset zoom'],['note','numbered by kind, always — no file of that kind is a no-op']]],
   ['Type', [['/ or :','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':set rnu | nu | nonu','gutter: relative · absolute · off'],[':preview','toggle previewing as a non-admin member'],['?','this keymap']]]

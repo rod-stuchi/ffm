@@ -153,6 +153,28 @@ JS only because it has no template layer.
 - Panes are cards with their own border, radius and surface, separated by
   `layout.gap`. The gap must read as separation, not as a crack.
 
+### Editing — forms live in the ledger, not in modals
+
+- **`e` edits the row in place**: the focused row opens into its own form
+  (Cancel / Save at its foot). **`R` / `r` open the rule pane** — a column
+  in the ledger grid right after the member pane being edited, pushing
+  later panes right (the ledger scrolls sideways rather than hiding a pane
+  — households can have more than two members), with an arrow on its edge
+  pointing at the row. `r` adds a dashed placeholder row at the cursor for
+  the arrow to point at; Create turns it into the real row.
+- **Why:** the rule form outgrew a dialog, and a dialog hides the ledger
+  you're editing — the same argument that made `:config` a vsplit instead
+  of a modal (see `design/spec.md`'s Configuration section).
+- **Drafts outlive focus.** Leaving a row mid-edit collapses it back to
+  read-only; unchanged drafts vanish, changed ones stay marked on the row
+  (dashed border, `unsaved` tag, a statusline count) until saved or
+  discarded, and several can be parked at once. In the real app a draft is
+  visual state — unsubmitted form values — so it lives in Alpine, never on
+  the server; Save is the only thing that sends it.
+- **Still modal:** the `dd` delete confirmation, the private-row
+  re-attribution confirm, the `?` keymap and the `P` file carousel —
+  confirmations and viewers, not forms.
+
 ---
 
 ## Data model
@@ -323,7 +345,7 @@ JS only because it has no template layer.
     the *receipt* tracked on disk (`tracked` stays about the
     `{month}.{ext}` proof-of-payment file, an entirely separate fact per
     the three-file-kinds model above). A rule with `no_barcode = true`
-    never shows the barcode upload control again, in any modal.
+    never shows the barcode upload control again, in either form.
   - **A rule gets an optional `client_code`** — the subscriber's own
     account number (Sabesp's "matrícula", Enel's "número do cliente"),
     read from the bill's text layer, never the barcode itself. It lives on
@@ -566,7 +588,7 @@ JS only because it has no template layer.
 
 1. **Concurrency.** Everything about the optimistic-UI flow is single-user in the
    mock. The interesting cases only exist with a server: Ana deletes a row while
-   Rodrigo has its edit modal open; both add in the same second. (The
+   Rodrigo has it open in an edit form (or parked as a draft); both add in the same second. (The
    materialization half of this is already handled — see Materialization
    above: `UNIQUE(rule_id, period)` makes a double-insert impossible.)
 2. **Seasonal / cyclic recurring rules.** Some bills only apply part of the

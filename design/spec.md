@@ -23,6 +23,10 @@ understood:
 | restored | `↩ #id` | new row superseding the deleted one |
 | skeleton | shimmer bars, **identical geometry** | in flight |
 | error | red ground, message + **Try Again** | server said no, nothing was written |
+| editing | the row opens into its own form, Cancel / Save at its foot | `e` — see Edit fields |
+| rule open | accent outline, the rule pane's arrow pointing at it | `R` — see Edit fields |
+| unsaved | dashed accent border + `unsaved · e to resume` tag | a draft left behind when the cursor moved on |
+| placeholder | dashed, empty "New recurring bill" row | `r` — where the new rule's row will land |
 
 ### Specifics that carry meaning
 
@@ -163,9 +167,9 @@ receipt — without leaving the ledger behind it.
   at either end, not wrapping — the first file's "previous" button and the
   last file's "next" button are both visibly disabled rather than looping
   back around.
-- **Full-viewport, not a dialog-sized modal** — every other modal in this
-  app is a centred `min(560px, 100%)` box, and this is the one deliberate
-  exception. The actual job is reading a boleto's barcode digits, or
+- **Full-viewport, not a dialog-sized modal** — the few other modals left
+  in this app (confirmations, the keymap) are centred `min(560px, 100%)`
+  boxes, and this is the one deliberate exception. The actual job is reading a boleto's barcode digits, or
   holding a phone up to its QR code to scan it — both need the file
   genuinely large on screen, which a 560px dialog can't give.
 - **Zoom (`+`/`-`, `0` to reset) scales the preview**, with floating
@@ -218,7 +222,7 @@ Nothing destructive fires from a single keystroke.
 | `a` / `i` | add after / before the current row |
 | `x` | toggle selection for a batch operation |
 | `e` | edit this occurrence |
-| `r` | create a new recurring bill — blank modal, no anchor row |
+| `r` | create a new recurring bill — opens the rule pane, with a placeholder row at the cursor |
 | `R` | edit the recurring rule behind the focused row; no-op with a statusline message on a plain row |
 | `gd` | show due/cadence/receipt details for the focused row *(proposal, not in the original spec)* |
 | `p` | toggle private *(proposal, not in the original spec)* |
@@ -321,12 +325,48 @@ for this row"*.
 | `:preview` | admin only — toggle previewing the app as a non-admin member |
 | `?` | keymap |
 
-### Modal fields
+### Edit fields
 | Key | Action |
 |---|---|
-| `Ctrl-H` / `Ctrl-J` / `Ctrl-K` / `Ctrl-L` | move focus between a modal's fields, left / down / up / right |
-| `Enter` | trigger the modal's primary action — Save on the edit-occurrence form |
-| `Esc` | cancel, no changes written |
+| `Ctrl-H` / `Ctrl-J` / `Ctrl-K` / `Ctrl-L` | move focus between a form's fields, left / down / up / right — past the form's edge, back to the ledger, keeping the draft |
+| `Enter` | save — the form's primary action |
+| `Esc` | cancel: discard the draft, nothing written |
+
+**Neither edit form is a modal.** The forms outgrew a centred 560px dialog
+(the rule form especially), and a dialog hides the very ledger you're
+editing. So:
+
+- **`e` edits in place.** The focused row opens up into its own form — the
+  same fields, with Cancel (`Esc`) and Save (`Enter`) at the bottom of the
+  row — and the rest of the ledger stays where it was.
+- **`R` / `r` open the rule pane** — a column of its own in the ledger's
+  grid, right after the member pane being edited, pushing any later panes
+  further right. The ledger scrolls sideways when they don't all fit rather
+  than hiding a pane: a household can have more than two members. A small
+  arrow on the pane's left edge sits level with the row being edited (and
+  follows it as the ledger scrolls); the row itself keeps an accent outline
+  while its rule is open.
+- **`r` gets a placeholder row.** A brand-new bill has no row yet for the
+  arrow to point at, so a dashed "New recurring bill" row appears at the
+  cursor; Create turns it into the real row in that same spot, Cancel
+  removes it.
+- **Leaving an edit keeps it as a draft.** Moving the cursor off a row
+  being edited — `j`/`k`, a click, a month change, `H`/`L`, anything —
+  collapses it back to read-only. If nothing was changed the draft just
+  goes away; if something was, the row stays marked (dashed accent border,
+  an `unsaved · e to resume` tag) until the draft is saved or discarded, and
+  the statusline counts them. Several can be parked at once; `e`/`R` on a
+  marked row picks its draft back up exactly as it was left.
+- **`Ctrl-H/J/K/L` past the form's edge is the keyboard way out.** Off the
+  top or bottom of an inline row, the cursor moves to the row above or
+  below (parking the draft); off the left edge of the rule pane, focus
+  returns to the ledger with the pane still open until the cursor actually
+  moves. Sideways never jumps rows — with no field left or right on this
+  row, that's the edge.
+- **Still modal, on purpose:** the `dd` delete confirmation, the
+  private-row re-attribution confirm, the `?` keymap and the `P` file
+  carousel. Those are confirmations and full-screen viewers, not forms —
+  there's nothing to type, and a confirmation *should* stop you.
 
 - **Directional, not tab order.** These move by where a field actually sits
   on screen, not by DOM sequence — so a field grid (amount / day / member,
@@ -337,18 +377,16 @@ for this row"*.
   It's the field most edits actually touch, so it's both the first thing on
   the form and the one that starts focused and pre-selected — type over it
   immediately, no click or tab required.
-- **`Enter` never reaches a destructive confirmation.** It fires whatever
-  the modal's own primary button does — Save on the edit-occurrence form,
-  Save/Create on the rule form, Close on a modal with nothing to save
-  (help) — but the delete-confirmation modal has no primary button for it
-  to find, on purpose. Its only "yes" stays the explicit `y` keypress (see
+- **`Enter` never reaches a destructive confirmation.** In a form it saves;
+  in a modal it fires the modal's own primary button — Close on the keymap,
+  Re-attribute on the private-row confirm — but the delete-confirmation
+  modal has no primary button for it to find, on purpose. Its only "yes" stays the explicit `y` keypress (see
   Undo above), so `Enter` can never become an accidental way to confirm a
   delete.
 - **`r`'s form is the same field grid as `R`'s, minus the two per-occurrence
-  noteboxes** ("this occurrence becomes the rule's first" / "past
-  occurrences are left as recorded") — there's no anchor row, so neither
-  applies. `Esc`/Cancel here leaves nothing behind: unlike `e`/`R` on an
-  existing row, nothing has been created yet to cancel out of.
+  noteboxes** (the path box and "past occurrences are left as recorded") —
+  there's no real row behind it yet. `Esc`/Cancel removes the placeholder
+  row too: nothing has been created to cancel out of.
 - **The rule form's End date and Total installments stay in sync**, per
   CLAUDE.md's Recurring rules section — typing one recomputes the other
   (assuming monthly cadence; that's the only cadence actually wired today).
@@ -356,7 +394,7 @@ for this row"*.
   an ordinary open-ended bill a stopping point without implying it was ever
   a fixed-length loan.
 - **A tracked rule's "Barcode covers multiple months" checkbox reveals two
-  more fields**, "Pages in this file" and "First page covers" —
+  more fields** the moment it's ticked, "Pages in this file" and "First page covers" —
   `spans_period`'s `window_size`/`window_start`, per CLAUDE.md's Recurring
   rules section. The same two fields serve both shapes the feature
   supports: filled in once for a fixed-length loan's one-time file, or
@@ -380,7 +418,7 @@ for this row"*.
   there's nothing here to edit directly; a rule with no file attached yet
   shows no line at all, the same "absent, not a blank field" treatment
   `instance` already gets when a rule doesn't need one. **Unlink** clears
-  just the code — it doesn't close the modal, doesn't touch `tracked`/
+  just the code — it doesn't close the pane, doesn't touch `tracked`/
   `bucket`/`billName`/`pattern`, and exists specifically for "the wrong
   file got attached the first time": drop a corrected one right after,
   in the same still-open dropzone.
@@ -413,8 +451,8 @@ for this row"*.
   saved value can't disagree with each other because the display is
   computed from the same integer that gets saved.
 - **A datalist's native suggestion popup is browser chrome, not page DOM** —
-  closing the modal while it's open (`Enter` on the Bucket field) blurs the
-  focused field first, on purpose, before the field is torn down. Skipping
+  closing a form while it's open (saving, cancelling, or collapsing the
+  row) blurs the focused field first, on purpose, before the field is torn down. Skipping
   that step can leave the popup visually stuck on screen with nothing left
   to anchor to, since removing its input from under it isn't the same thing
   as the browser's own "dismiss the suggestions" trigger, which is losing
@@ -428,8 +466,8 @@ for this row"*.
   fell through and saved the whole form — closing it before the rest of the
   edit was even reviewed. Carving this one field out of the generic
   "Enter saves" rule sidesteps the disagreement outright rather than trying
-  to detect it: Enter here always just confirms the field and blurs; a
-  second Enter, now from anywhere else, saves for real.
+  to detect it: Enter here always just confirms the field, blurs it and
+  moves focus to Save; a second Enter saves for real.
 
 ### Deliberate deviations from Vim
 
@@ -667,9 +705,9 @@ stored file's extension mirrors whatever was actually uploaded.
   row records the move (`old_path`, `deleted_at`, `deleted_by`, `reason`) so
   `u` restores it exactly.
 
-### Bill import — attached inside the rule's own modal
+### Bill import — attached inside the rule's own form
 
-Binding a barcode file to a rule is an explicit, in-modal action — never
+Binding a barcode file to a rule is an explicit action in the rule's own form — never
 inferred by matching a dropped file against existing rows. An earlier design
 had a panel drop parse the file and guess which rule it belonged to (by
 issuer/period/value proximity, or by matching the dropped filename against a
@@ -682,7 +720,7 @@ UI-facing:
 - **The only place a barcode file is ever attached is the rule's own
   dropzone** — `r`'s upload field at creation, or `R`'s afterward. Both are
   scoped to one specific, already-identified rule, so there's no matching
-  left to get wrong; see Modal fields, below, for the dropzone and its
+  left to get wrong; see Edit fields, above, for the dropzone and its
   read-only Client code / Unlink controls.
 - **Dropping a file onto a member's panel binds nothing.** It's downgraded
   to a passive nudge: if that panel has recurring, tracked rules still
@@ -696,7 +734,7 @@ UI-facing:
 - **A successfully-attached file may carry a `client_code`** — the
   subscriber's own account number, read from the bill's text (never the
   barcode). It shows up read-only in the rule editor once a rule has one;
-  see Modal fields, below.
+  see Edit fields, above.
 
 ### Manual paid, for untracked rules only
 
@@ -910,8 +948,8 @@ Conventions section for the fuller reasoning.
 - **Dates are unaffected.** `dd/mm/yyyy` stays fixed regardless of currency
   — this setting is scoped to money formatting only, not a full locale
   switch.
-- **The edit-occurrence modal's amount field is a live mask keyed off this
-  same value** — the user only ever types digits (see Modal fields,
+- **The edit-occurrence form's amount field is a live mask keyed off this
+  same value** — the user only ever types digits (see Edit fields,
   above); the decimal/thousands separators it inserts, and the static
   currency-symbol prefix shown beside the field, both come from whichever
   currency is currently configured. Every other money display in the app
