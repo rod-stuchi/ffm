@@ -383,10 +383,19 @@ editing. So:
   modal has no primary button for it to find, on purpose. Its only "yes" stays the explicit `y` keypress (see
   Undo above), so `Enter` can never become an accidental way to confirm a
   delete.
+- **Field order puts what names the bill first:** Amount and Bill name, then
+  Bucket and Cadence, then the dates (Start / Due, End / Installments).
+- **On/off settings are toggle switches, not tick boxes** — "track receipt on
+  disk", "no barcode file", "covers multiple months", "hidden from other
+  members" all read as states rather than actions, and a pill toggle says
+  that in less space than a checkbox plus its label.
 - **`r`'s form is the same field grid as `R`'s, minus the two per-occurrence
   noteboxes** (the path box and "past occurrences are left as recorded") —
   there's no real row behind it yet. `Esc`/Cancel removes the placeholder
   row too: nothing has been created to cancel out of.
+- **Cadence offers monthly, bimonthly, every 3 / 4 / 6 months and yearly.**
+  Only the list is real so far: End date ↔ Installments still computes in
+  whole months, so anything other than monthly is a label today.
 - **The rule form's End date and Total installments stay in sync**, per
   CLAUDE.md's Recurring rules section — typing one recomputes the other
   (assuming monthly cadence; that's the only cadence actually wired today).
@@ -433,13 +442,15 @@ editing. So:
   blank when creating a new rule specifically (not when editing an
   existing one), regardless of what the anchor transaction was tagged
   with before it became a rule.
-- **Day only ever holds digits.** Any edit that would leave it holding
-  anything else is rejected outright, snapping back to the field's last
-  valid value rather than to some filtered version of what was just typed.
-  That distinction matters the moment the rejected edit also erases
-  existing text — select all and type one letter over "15", say — where
-  filtering the new value down to digits has nothing left to recover; only
-  remembering the value from before the edit gets it back.
+- **Numeric fields refuse a bad keystroke outright — value and selection
+  untouched.** Day, Due date, Installments and Pages only ever hold digits,
+  and Amount only ever takes typed digits. A letter is rejected *before* it
+  lands (`beforeinput`), so typing "a" over a selected "59,90" leaves
+  "59,90" selected, rather than blanking the field (the money mask would
+  otherwise see "no digits" and repaint it empty) or snapping the caret to
+  the end. A paste into Amount goes through as long as it carries digits
+  ("R$ 12,34" is fine). Anything that slips past that (autofill) reverts to
+  the field's last valid value with the selection put back where it was.
 - **Amount is a live mask, not a filtered text field.** The user only ever
   types digits — there's no decimal separator to type at all, because the
   field inserts it for them, along with thousands grouping, as they type.

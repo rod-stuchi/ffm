@@ -453,7 +453,16 @@ input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:
    always in the DOM for r/R's live show/hide) rendered inline, run together
    on one line instead of stacking as separate rows. */
 .switch{display:flex;align-items:flex-start;gap:9px;margin-top:12px;cursor:pointer}
-.switch input[type="checkbox"]{margin-top:3px;flex:none;cursor:pointer}
+/* Toggle switch, not a tick box — these read as settings ("tracking is on"),
+   and a pill toggle says that better in a dense form. */
+.switch input[type="checkbox"]{appearance:none;-webkit-appearance:none;margin:2px 0 0;flex:none;position:relative;
+  width:34px;height:20px;border-radius:999px;background:var(--surface-3);border:1px solid var(--line-2);
+  cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.switch input[type="checkbox"]::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;
+  border-radius:50%;background:var(--ink-3);transition:transform .15s ease,background .15s ease}
+.switch input[type="checkbox"]:checked{background:var(--accent-soft);border-color:var(--accent)}
+.switch input[type="checkbox"]:checked::after{transform:translateX(14px);background:var(--accent)}
+.switch input[type="checkbox"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .switch > span{display:block}
 .switch .d{display:block;font-size:11.5px;font-weight:400;color:var(--ink-3);margin-top:2px}
 
@@ -1720,8 +1729,19 @@ function render(){
      pushing any later panes further right — .panels scrolls sideways rather
      than hiding anyone, since a household can have more than two members. */
   const shown = MEMBERS.map((_, p) => p).filter(p => lay !== 'tabs' || p === S.panel);
-  const cols = shown.map(() => pane ? 'minmax(520px,var(--pane-max,1fr))' : 'minmax(0,var(--pane-max,1fr))');
-  if(pane) cols.splice(shown.indexOf(paneP) + 1, 0, 'minmax(360px,440px)');
+  /* Member panes never drop below a readable width in split mode — the
+     focused row's file badges expand to show their labels, and below this
+     they crush the title and date. Two that don't fit side by side scroll
+     sideways instead of squeezing. (Tabs mode shows one pane at a time and
+     has to fit a phone, so it gets no floor.) Opening the rule pane must not
+     resize them either: each keeps exactly the width it has without the
+     pane, and the pane is added as one more fixed column. */
+  const PANE_MIN = lay === 'tabs' ? 0 : 520;
+  const W = $('#panels').clientWidth, n = shown.length;
+  const natural = Math.max(PANE_MIN, (W - CFG.gap * (n - 1)) / n);
+  const memberW = CFG.max_width > 0 ? Math.min(natural, CFG.max_width) : natural;
+  const cols = shown.map(() => pane ? memberW + 'px' : 'minmax(' + PANE_MIN + 'px,var(--pane-max,1fr))');
+  if(pane) cols.splice(shown.indexOf(paneP) + 1, 0, '420px');
   $('#panels').style.gridTemplateColumns = cols.join(' ');
   wireEditors();
   if(keep){
@@ -2237,10 +2257,23 @@ function bucketsFor(p){
    formatted for display (11800,00). */
 function restrictToNumeric(el, allowComma){
   const pattern = allowComma ? /^[0-9]*,?[0-9]*$/ : /^[0-9]*$/;
-  let last = el.value;
+  const allowed = allowComma ? /^[0-9,]*$/ : /^[0-9]*$/;
+  let last = el.value, sel = [el.value.length, el.value.length];
+  /* Refuse a bad keystroke before it lands, so the value *and* the selection
+     stay exactly as they were — typing a letter over a selected "15" must
+     leave "15" selected, not blank the field or move the caret. */
+  el.addEventListener('beforeinput', e => {
+    sel = [el.selectionStart, el.selectionEnd];
+    if(!e.inputType.startsWith('insert')) return;
+    const txt = e.data != null ? e.data : (e.dataTransfer ? e.dataTransfer.getData('text/plain') : '');
+    if(txt && !allowed.test(txt)) e.preventDefault();
+  });
+  /* Fallback for anything beforeinput didn't catch (autofill, IME): revert
+     to the last valid value and put the selection back where it was. */
   el.addEventListener('input', () => {
-    if(pattern.test(el.value)) last = el.value;
-    else el.value = last;
+    if(pattern.test(el.value)){ last = el.value; return; }
+    el.value = last;
+    try { el.setSelectionRange(sel[0], sel[1]); } catch(_){}
   });
 }
 
@@ -2259,6 +2292,18 @@ function maskAmount(el, amount){
     el.value = units ? minorUnitsToDisplay(units, f) : '';
   };
   paint(toUnits(amount));
+  /* Only digits are ever typed here — a letter is refused outright before
+     it lands, instead of reaching the input handler below, where replacing
+     a selected amount with "a" would leave no digits and repaint it empty.
+     A paste is let through as long as it carries digits ("R$ 12,34" is
+     fine; the mask keeps just the digits). */
+  el.addEventListener('beforeinput', e => {
+    if(!e.inputType.startsWith('insert')) return;
+    const txt = e.data != null ? e.data : (e.dataTransfer ? e.dataTransfer.getData('text/plain') : '');
+    if(!txt) return;
+    const bad = e.inputType === 'insertFromPaste' ? !/[0-9]/.test(txt) : /[^0-9]/.test(txt);
+    if(bad) e.preventDefault();
+  });
   el.addEventListener('input', () => {
     const digits = el.value.replace(/[^0-9]/g, '');
     paint(digits ? parseInt(digits, 10) : 0);
@@ -2402,7 +2447,8 @@ function ruleFormHTML(t, d){
     : f.removed ? 'No barcode file linked — drop one here, or leave blank'
     : showCode ? 'Drop a new barcode PDF to replace the one on file'
     : 'Drop the barcode PDF here, or leave blank for now';
-  const cad = ['Monthly','Bimonthly','Yearly'].map(o => '<option' + (o === f.cadence ? ' selected' : '') + '>' + o + '</option>').join('');
+  const cad = ['Monthly','Bimonthly','Every 3 months','Every 4 months','Every 6 months','Yearly']
+    .map(o => '<option' + (o === f.cadence ? ' selected' : '') + '>' + o + '</option>').join('');
   return '<div class="rp-head"><h3>' + (c ? 'Create recurring bill' : 'Edit recurring rule') + '</h3>'
     + '<div class="msub">' + (c ? 'r · a fresh rule — not tied to any existing row'
         : 'R · ' + esc(t.title) + ' · applies to every future occurrence') + '</div></div>'
@@ -2410,6 +2456,11 @@ function ruleFormHTML(t, d){
     + '<div class="fgrid">'
     + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span>'
     + '<input class="i" id="rAmount" data-f="cents" value=""></div></label>'
+    + '<label class="f"><span class="k">Bill name</span><input class="i" id="rBillName" data-f="billName" value="' + esc(f.billName) + '" placeholder="e.g. Energia"></label>'
+    + '</div><div class="fgrid">'
+    + '<label class="f"><span class="k">Bucket</span>'
+    + '<input class="i" id="rBucket" data-f="bucket" list="rBucketList" value="' + esc(f.bucket) + '" placeholder="e.g. Consumption" autocomplete="off">'
+    + '<datalist id="rBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist></label>'
     + '<label class="f"><span class="k">Cadence</span><select class="i" id="rCadence" data-f="cadence">' + cad + '</select></label>'
     + '</div><div class="fgrid">'
     + '<label class="f"><span class="k">Start date</span><input class="i" id="rStart" data-f="start" value="' + esc(f.start) + '"></label>'
@@ -2425,12 +2476,6 @@ function ruleFormHTML(t, d){
         + 'count or the end date recomputes the other. Paying several off early? Shorten this number and record '
         + 'the lump sum as its own one-off entry — there is no separate "pay off early" action.</div>'
       : '')
-    + '<div class="fgrid">'
-    + '<label class="f"><span class="k">Bucket</span>'
-    + '<input class="i" id="rBucket" data-f="bucket" list="rBucketList" value="' + esc(f.bucket) + '" placeholder="e.g. Consumption" autocomplete="off">'
-    + '<datalist id="rBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist></label>'
-    + '<label class="f"><span class="k">Bill name</span><input class="i" id="rBillName" data-f="billName" value="' + esc(f.billName) + '" placeholder="e.g. Energia"></label>'
-    + '</div>'
     + '<label class="switch"><input type="checkbox" id="rTracked" data-f="tracked"' + (f.tracked ? ' checked' : '') + '>'
     + '<span>Track receipt on disk<span class="d">'
     + (f.tracked ? 'no manual tick — paid only when a file exists at the computed path'
