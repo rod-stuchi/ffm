@@ -415,6 +415,42 @@ editing. So:
   bills paid by wire transfer / PIX / TED that will never have a barcode to
   attach. Decided in `r`'s form at creation, correctable later in `R`'s,
   never inferred from anything else about the rule.
+- **The computed receipt path is shown live, in two lines** — the real path
+  as it stands (`consumption/condominio/house_33a/2026/09.pdf`) above a dim
+  reminder of what makes it up (`bucket / bill name / instance / year /
+  month.ext`). It recomputes on every keystroke in Bucket, Bill name or
+  Instance, so renaming taxonomy shows where the files will move before the
+  rule is saved. It includes the **bucket** segment, matching the storage
+  layout above; the mock still omits the `{member_uuid}-{slug}` prefix.
+- **"Amount in filename" appends it to the month** —
+  `{month}_{currency}{amount}.{ext}`, so `09.pdf` becomes
+  `09_brl122.94.pdf`. Off by default, per tracked rule.
+  - **The currency code is what keeps the month readable.** A bare
+    `09_9_99` reads as three equal parts — is that September, or the ninth
+    of something? `09_brl9.99` can't be misread, and it records which
+    currency the number was in, which matters because currency is
+    household-wide config that can change (see Currency, below) while old
+    filenames stay as written.
+  - **Nothing in the name needs shell quoting.** Only letters, digits, `.`,
+    `_`, `-` and `/` — no brackets, no spaces — because the vault is meant
+    to be browsed and moved around by hand (`cp .../09_brl9.99.pdf` just
+    works).
+  - **The amount is plain: dot decimal, no thousands separator**
+    (`1234.56`, never `1.234,56` or `1,234.56`). The displayed
+    amount follows the household's currency format; the filename
+    deliberately doesn't, so a stored name never depends on a setting that
+    can be changed later.
+  - **No amount yet means no suffix** — the name stays `{month}.{ext}` and
+    picks the suffix up once the amount is known. In practice that gap only
+    happens when the barcode parse couldn't read the value (see
+    `design/spec-bill-import.md` §3's `Open`/`Reference` cases and §8's
+    extraction-failure dialog), since an imported bill normally arrives with
+    its amount already filled in. Writing a placeholder like
+    `09_brl0.00.pdf` would put a number in the filename that was never
+    owed.
+  - **The app's own suffixes are untouched** — `{month}_scheduled.{ext}`
+    and `{month}_barcode.{ext}` keep their plain `_` form, so the three file
+    kinds stay recognisable at a glance.
 - **The barcode upload field is a dropzone, not a file `<input>` styled to
   look like one** — attaching a file there is what derives `client_code`
   on save (see Bill import, below), and it's optional in both `r` and `R`:

@@ -401,7 +401,10 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 /* tooltip */
 .tip{position:absolute;z-index:40;background:var(--surface);border:1px solid var(--line-2);
   border-radius:8px;box-shadow:var(--shadow-md);padding:9px 11px;font-family:var(--mono);font-size:11.5px;
-  color:var(--ink-2);pointer-events:none;max-width:290px;line-height:1.65}
+  color:var(--ink-2);pointer-events:none;max-width:290px;line-height:1.65;
+  /* a computed path has no spaces to wrap at, so let it break anywhere
+     rather than run out past the border */
+  overflow-wrap:anywhere}
 .tip b{color:var(--ink);font-weight:500}
 .tip .hr{height:1px;background:var(--line);margin:6px 0}
 
@@ -486,6 +489,11 @@ input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:
   transition:border-color .15s ease,background .15s ease,color .15s ease}
 .dropzone.dragover{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
 .dropzone.on{border-style:solid;border-color:var(--accent-line);color:var(--ink)}
+/* Computed receipt path: what it actually is now, with what makes it up
+   underneath — it moves as bucket / bill name are typed. */
+.pathbox{font-family:var(--mono);font-size:11.5px;line-height:1.5}
+.pathbox .p-real{color:var(--ink);word-break:break-all}
+.pathbox .p-tmpl{color:var(--ink-3);margin-top:2px}
 
 /* ============ inline editing (e) + rule side pane (R / r) ============
    Neither is a modal: the row being edited opens up in place, and the rule
@@ -832,7 +840,7 @@ let uid = 1000;
 /* ================= data ================= */
 function T(o){ return Object.assign({
   id:++uid, kind:'out', title:'', sub:'', amount:0, day:1, status:'plain',
-  progress:null, due:null, delta:null, recurring:false, tracked:false, noBarcode:false,
+  progress:null, due:null, delta:null, recurring:false, tracked:false, noBarcode:false, amountInName:false,
   pattern:null, private:false, deleted:false, restored:false, state:'ok',
   bucket:null, billName:null, instance:null,
   totalInstallments:null, installmentsPaid:null,
@@ -1736,12 +1744,37 @@ function ruleFields(t){
     noBarcode:!!t.noBarcode, multi:!!t.barcodeSpansPeriod,
     pages:t.barcodeWindowSize ? String(t.barcodeWindowSize) : '',
     winStart:fmtDMY(t.barcodeWindowStart ? Object.assign({d:1}, t.barcodeWindowStart) : start),
-    attached:false, removed:false};
+    amountInName:!!t.amountInName, attached:false, removed:false};
+}
+/* The amount, appended to the file name when the rule asks for it:
+   {month}_{currency}{amount}. The currency code is what keeps the month
+   readable — "09_9_99" could be read as three equal parts, where
+   "09_brl9.99" can't — and it records which currency the number was in.
+   No brackets, no space: nothing here needs quoting in a shell, since the
+   vault is meant to be browsed and moved around by hand. The amount is
+   plain (dot decimal, no thousands separator), so it never depends on how
+   the household's currency happens to be written. Skipped while there's
+   no amount yet (see spec.md: that gap means the barcode parse couldn't
+   read a value). */
+function amountSuffix(f){
+  if(!f.amountInName || !f.cents) return '';
+  const fmt = curFmt();
+  return '_' + String(HOUSEHOLD_CURRENCY).toLowerCase() + (f.cents / Math.pow(10, fmt.decimals)).toFixed(fmt.decimals);
+}
+/* The computed receipt path, straight from the draft — so it updates as
+   bucket / bill name are typed, instead of only on save. Simplified from
+   CLAUDE.md's full convention (no {member_uuid}-{slug} prefix, and this
+   file has no instance field), but it does include the bucket segment. */
+function patternFor(f, mi){
+  const [mm, yyyy] = MONTHS[mi].key.split('/');
+  const seg = [f.bucket, f.billName].map(v => slugify((v || '').trim())).filter(Boolean);
+  if(!seg.length) seg.push('…');
+  return seg.join('/') + '/' + yyyy + '/' + mm + amountSuffix(f) + '.pdf';
 }
 function blankRuleFields(){
   const [m, y] = MONTHS[S.mi].key.split('/').map(Number), start = fmtDMY({d:1, m, y});
   return {cents:0, cadence:'Monthly', start, due:'', end:'', inst:'', bucket:'', billName:'', tracked:false,
-    noBarcode:false, multi:false, pages:'', winStart:start, attached:false, removed:false};
+    noBarcode:false, multi:false, pages:'', winStart:start, amountInName:false, attached:false, removed:false};
 }
 
 /* Removing a row out from under the cursor has to keep the cursor on the
@@ -1868,9 +1901,14 @@ function ruleFormHTML(t, d){
       : '')
     + '<label class="switch"><input type="checkbox" id="rTracked" data-f="tracked"' + (f.tracked ? ' checked' : '') + '>'
     + '<span>Track receipt on disk<span class="d">'
-    + (!c && t.pattern ? 'computed path · ' + esc(t.pattern) : 'no manual tick — paid only when a file exists at the computed path') + '</span></span></label>'
+    + 'no manual tick — paid only when a file exists at the computed path</span></span></label>'
     + (f.tracked
       ? '<div class="sub">'
+        + '<div class="notebox pathbox"><div class="p-real" id="rPathReal">' + esc(patternFor(f, d.mi)) + '</div>'
+        + '<div class="p-tmpl">bucket / bill name / year / month.ext</div></div>'
+        + '<label class="switch"><input type="checkbox" id="rAmountInName" data-f="amountInName"' + (f.amountInName ? ' checked' : '') + '>'
+        + '<span>Amount in filename<span class="d">09_brl122.94.pdf — the currency code keeps it from '
+        + 'reading as part of the month.</span></span></label>'
         + '<label class="switch"><input type="checkbox" id="rNoBarcode" data-f="noBarcode"' + (f.noBarcode ? ' checked' : '') + '>'
         + '<span>This bill has no barcode file<span class="d">paid by wire transfer / PIX / TED — nothing to attach, ever</span></span></label>'
         + (f.noBarcode ? '' : '<div class="sub">'
@@ -1981,7 +2019,7 @@ function runEditAct(a){
       pattern:t.pattern, status:t.status, progress:t.progress, due:t.due,
       ruleStart:t.ruleStart, ruleEnd:t.ruleEnd, barcodeSpansPeriod:t.barcodeSpansPeriod,
       barcodeWindowSize:t.barcodeWindowSize, barcodeWindowStart:t.barcodeWindowStart, barcodePath:t.barcodePath,
-      noBarcode:t.noBarcode, clientCode:t.clientCode};
+      noBarcode:t.noBarcode, clientCode:t.clientCode, amountInName:t.amountInName};
     t.amount = amountOf(f.cents);
     const dueD = parseInt(f.due, 10);
     if(dueD >= 1 && dueD <= 31){
@@ -2003,8 +2041,8 @@ function runEditAct(a){
     if(t.tracked){
       /* A simplified stand-in for CLAUDE.md's full computed path — matches
          the shorter illustrative form the seed data already uses. */
-      const [mm, yyyy] = MONTHS[d.mi].key.split('/');
-      t.pattern = slugify(t.billName) + '/' + yyyy + '/' + mm + '.pdf';
+      t.amountInName = !!f.amountInName;
+      t.pattern = patternFor(Object.assign({}, f, {bucket:t.bucket, billName:t.billName}), d.mi);
       t.noBarcode = !!f.noBarcode;
       if(t.noBarcode){
         t.barcodeSpansPeriod = false; t.barcodeWindowSize = null; t.barcodeWindowStart = null;
@@ -2032,7 +2070,7 @@ function runEditAct(a){
         if(!t.due) t.due = pad(t.day || 1) + '/' + MONTHS[d.mi].key;
       }
     } else {
-      t.pattern = null; t.noBarcode = false; t.clientCode = null;
+      t.pattern = null; t.noBarcode = false; t.clientCode = null; t.amountInName = false;
     }
     S.undo.push({k:'edit', p:d.p, id:t.id, prev});
     finishEdit(d);
@@ -2057,8 +2095,8 @@ function runEditAct(a){
       status:f.tracked ? 'pending' : 'plain'
     };
     if(f.tracked){
-      const [mm, yyyy] = MONTHS[d.mi].key.split('/');
-      data.pattern = slugify(billName) + '/' + yyyy + '/' + mm + '.pdf';
+      data.amountInName = !!f.amountInName;
+      data.pattern = patternFor(Object.assign({}, f, {bucket:data.bucket, billName}), d.mi);
       data.noBarcode = !!f.noBarcode;
       data.progress = .25;
       data.due = pad(day) + '/' + MONTHS[d.mi].key;
@@ -2390,7 +2428,13 @@ $('#panels').addEventListener('drop', e => {
 });
 /* Typing into the open form writes straight into its draft; ticking a box
    also re-renders, since what the form shows depends on those boxes. */
-$('#panels').addEventListener('input', e => { if(e.target.closest('.rowedit, .rulepane')) readForm(); });
+$('#panels').addEventListener('input', e => {
+  if(!e.target.closest('.rowedit, .rulepane')) return;
+  readForm();
+  /* Repaint just the computed path — a full render would fight the caret. */
+  const path = $('#rPathReal'), d = activeDraft();
+  if(path && d) path.textContent = patternFor(d.f, d.mi);
+});
 $('#panels').addEventListener('change', e => {
   if(!e.target.closest('.rowedit, .rulepane')) return;
   readForm();

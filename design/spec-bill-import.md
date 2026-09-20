@@ -281,6 +281,12 @@ No barcode found, DV failed, unknown issuer, or a hole with no profile rule.
 > **Couldn't read the due date.** The barcode doesn't carry one and there's no
 > rule for this issuer yet. *(field prefilled with whatever was found)*
 
+A bill left without an amount by either case is also what leaves a tracked
+rule's receipt filename without its amount suffix, where the rule asks for
+one (`{month}_{amount}.{ext}`, see `design/spec.md`'s Edit fields): the
+file keeps the plain `{month}.{ext}` name until a real value is known,
+rather than being named after a zero nobody owes.
+
 **Ask only for the fields that are actually missing.** A valid check digit means
 value and date are certain — if only the issuer is unknown, ask for the name
 alone, not an empty four-field form.
