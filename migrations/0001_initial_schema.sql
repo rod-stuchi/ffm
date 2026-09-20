@@ -20,6 +20,34 @@
 --     transaction").
 -- Both belong in the SQLx connect options:
 --   SqliteConnectOptions::new().foreign_keys(true).journal_mode(SqliteJournalMode::Wal)
+--
+-- PRE-RELEASE: this file is edited in place while no household database exists
+-- anywhere. The moment one does, that privilege ends — every later change is an
+-- additive migration, and SQLx's own checksums will enforce that for us.
+
+-- ---------------------------------------------------------------------------
+-- household_settings — exactly one row. Everything that is genuinely
+-- household-wide rather than personal taste, and that used to live in
+-- ffm.toml's [ledger]/[privacy]/[locale] tables.
+--
+-- ffm.toml keeps only the three paths a running process cannot change about
+-- itself: db_path, receipts_root, backup_dir. Nothing else.
+-- ---------------------------------------------------------------------------
+CREATE TABLE household_settings (
+    id                     INTEGER PRIMARY KEY CHECK (id = 1),   -- one household, enforced
+    name                   TEXT    NOT NULL,                     -- /login heading, statusline
+    locale_currency        TEXT    NOT NULL DEFAULT 'BRL',       -- symbol AND number format, one preset
+    default_language       TEXT    NOT NULL DEFAULT 'en',        -- /login, and members who haven't chosen
+    default_visibility     TEXT    NOT NULL DEFAULT 'household', -- a member may override in member_settings
+    ledger_show_recurring  INTEGER NOT NULL DEFAULT 1,           -- "we don't use this concept here"
+    created_at             TEXT    NOT NULL,
+    updated_at             TEXT    NOT NULL,
+
+    CHECK (locale_currency       IN ('BRL', 'USD', 'EUR', 'GBP')),
+    CHECK (default_language      IN ('en', 'pt-BR')),
+    CHECK (default_visibility    IN ('household', 'private')),
+    CHECK (ledger_show_recurring IN (0, 1))
+);
 
 -- ---------------------------------------------------------------------------
 -- members — real accounts, not just attribution labels
@@ -46,26 +74,101 @@ CREATE TABLE sessions (
     id            TEXT    PRIMARY KEY,                -- opaque; this is the cookie value
     member_id     INTEGER NOT NULL REFERENCES members(id),
     created_at    TEXT    NOT NULL,
-    last_seen_at  TEXT    NOT NULL                    -- sliding expiry
+    last_seen_at  TEXT    NOT NULL,                   -- sliding expiry
+    label         TEXT                                -- derived from User-Agent, so :profile can name a device
 );
 
 CREATE INDEX idx_sessions_member ON sessions(member_id);
 
 -- ---------------------------------------------------------------------------
--- member_settings — personal display preferences, 1:1 with member.
--- Deliberately NOT in ffm.toml: taste, not process config.
+-- member_invites — an admin-issued, single-use link. There is no
+-- self-registration: household membership stays closed. What changed is that
+-- the admin no longer types somebody else's password — the invitee sets their
+-- own name, password, language and theme when they accept.
+--
+-- The members row is created on ACCEPT, not when the link is issued, which is
+-- why password_hash above stays NOT NULL: a half-real, password-less member
+-- would make "NULL means cannot authenticate" a rule enforced by one WHERE
+-- clause somebody eventually forgets. `label` covers the admin's real need,
+-- which is telling two open links apart.
+-- ---------------------------------------------------------------------------
+CREATE TABLE member_invites (
+    id                  INTEGER PRIMARY KEY,
+    token_hash          TEXT    NOT NULL UNIQUE,      -- sha256 of 32 random bytes; the token itself is never stored
+    label               TEXT,                         -- admin-only note: which link is for whom
+    role                INTEGER NOT NULL DEFAULT 1,   -- the role the accepted member will get
+    created_by          INTEGER NOT NULL REFERENCES members(id),
+    created_at          TEXT    NOT NULL,
+    expires_at          TEXT    NOT NULL,             -- default: created_at + 7 days
+    accepted_at         TEXT,
+    accepted_member_id  INTEGER REFERENCES members(id),
+    revoked_at          TEXT,
+
+    CHECK (role IN (0, 1)),
+    CHECK ((accepted_at IS NULL) = (accepted_member_id IS NULL))
+);
+
+-- Argon2 is deliberately NOT used on the token: there is nothing to
+-- brute-force in 256 bits of randomness, and a slow hash on every invite-page
+-- GET would be a self-inflicted DoS.
+CREATE INDEX idx_invites_open ON member_invites(expires_at)
+    WHERE accepted_at IS NULL AND revoked_at IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- member_settings — personal preferences, 1:1 with member.
+-- Deliberately NOT in ffm.toml: taste, not process config. A shared file that
+-- two people both want to edit is the file disagreeing with itself.
+--
+-- The row is created in the same transaction as the member (at /setup, or when
+-- an invite is accepted), so no read path ever handles a missing row. The
+-- defaults below exist for columns, not for the absence of the row.
 -- ---------------------------------------------------------------------------
 CREATE TABLE member_settings (
-    member_id           INTEGER PRIMARY KEY REFERENCES members(id),
-    theme_name          TEXT    NOT NULL DEFAULT 'ffm',
-    theme_overrides     TEXT    NOT NULL DEFAULT '{}',      -- JSON: token -> colour
-    line_numbers        TEXT    NOT NULL DEFAULT 'relative',
-    ledger_group        TEXT    NOT NULL DEFAULT 'none',
-    group_fold_default  TEXT    NOT NULL DEFAULT 'expanded',
+    member_id               INTEGER PRIMARY KEY REFERENCES members(id),
 
-    CHECK (line_numbers       IN ('relative', 'absolute', 'none')),
-    CHECK (ledger_group       IN ('none', 'bucket')),
-    CHECK (group_fold_default IN ('expanded', 'collapsed')),
+    -- language: words only. Dates stay dd/mm/yyyy and money follows the
+    -- household currency, regardless of what this says.
+    language                TEXT    NOT NULL DEFAULT 'en',
+
+    -- appearance. The palette lives here; light/dark is per *device* and lives
+    -- in the ffm.theme cookie, since the same person uses a bright laptop and a
+    -- dark phone.
+    theme_name              TEXT    NOT NULL DEFAULT 'ffm',
+    theme_overrides         TEXT    NOT NULL DEFAULT '{}',      -- JSON: token -> colour
+    line_numbers            TEXT    NOT NULL DEFAULT 'relative',
+
+    -- layout. Was [layout] in ffm.toml; it describes the screen you are on,
+    -- not the household. `layout_min_split_width` is still rendered into a
+    -- single media query server-side — resolved in CSS, never in JS.
+    layout_panes            TEXT    NOT NULL DEFAULT 'auto',
+    layout_min_split_width  INTEGER NOT NULL DEFAULT 900,       -- px; below this, auto -> tabs
+    layout_max_width        INTEGER NOT NULL DEFAULT 900,       -- px cap per pane; 0 = unlimited
+    layout_gap              INTEGER NOT NULL DEFAULT 16,        -- px between panes
+
+    -- ledger view. Was [ledger] in ffm.toml. All view preferences: `sort` is
+    -- safe per-member because J/K already refuses to reorder a derived view.
+    ledger_sort             TEXT    NOT NULL DEFAULT 'manual',
+    ledger_search_scope     TEXT    NOT NULL DEFAULT 'pane',
+    ledger_show_delta       INTEGER NOT NULL DEFAULT 1,
+    ledger_group            TEXT    NOT NULL DEFAULT 'none',
+    group_fold_default      TEXT    NOT NULL DEFAULT 'expanded',
+
+    -- privacy. NULL = follow household_settings.default_visibility, which is
+    -- the household's stated policy; a member may opt their own new rows out.
+    default_visibility      TEXT,
+
+    CHECK (language               IN ('en', 'pt-BR')),
+    CHECK (line_numbers           IN ('relative', 'absolute', 'none')),
+    CHECK (layout_panes           IN ('auto', 'split', 'tabs')),
+    CHECK (layout_min_split_width BETWEEN 320 AND 4000),
+    CHECK (layout_max_width       >= 0),
+    CHECK (layout_gap             BETWEEN 0 AND 64),
+    CHECK (ledger_sort            IN ('manual', 'date', 'amount')),
+    CHECK (ledger_search_scope    IN ('pane', 'household')),
+    CHECK (ledger_show_delta      IN (0, 1)),
+    CHECK (ledger_group           IN ('none', 'bucket')),
+    CHECK (group_fold_default     IN ('expanded', 'collapsed')),
+    CHECK (default_visibility     IS NULL OR default_visibility IN ('household', 'private')),
     CHECK (json_valid(theme_overrides))
 );
 
