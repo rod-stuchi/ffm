@@ -81,22 +81,44 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_member ON sessions(member_id);
 
 -- ---------------------------------------------------------------------------
--- member_invites — an admin-issued, single-use link. There is no
--- self-registration: household membership stays closed. What changed is that
--- the admin no longer types somebody else's password — the invitee sets their
--- own name, password, language and theme when they accept.
+-- member_invites — an admin-issued, single-use, expiring link. It serves the
+-- two jobs that are actually the same mechanism:
 --
--- The members row is created on ACCEPT, not when the link is issued, which is
--- why password_hash above stays NOT NULL: a half-real, password-less member
--- would make "NULL means cannot authenticate" a rule enforced by one WHERE
--- clause somebody eventually forgets. `label` covers the admin's real need,
--- which is telling two open links apart.
+--   member_id IS NULL -> INVITE. Accepting CREATES the members row. There is
+--                        no self-registration; household membership stays
+--                        closed. The admin never types somebody else's
+--                        password — the invitee sets their own name,
+--                        password, language and theme when they accept.
+--                        This is also why password_hash above stays NOT
+--                        NULL: pre-creating a half-real, password-less
+--                        member would make "NULL means cannot authenticate"
+--                        a rule enforced by one WHERE clause somebody
+--                        eventually forgets.
+--   member_id IS SET  -> PASSWORD RESET for that existing member. Accepting
+--                        sets password_hash on the row that already exists.
+--
+-- A reset is NOT just an invite pointed at an existing person: an invite's
+-- accept path INSERTs, and members.name is UNIQUE, so the member could only
+-- get back in by choosing a different name — which also rewrites `slug`, and
+-- `slug` is their receipt-vault folder. Recovering a password must never
+-- orphan somebody's filing.
+--
+-- There is no self-service reset: no mail sender exists, so there is nowhere
+-- to send a token. An admin issuing one IS the recovery path, and because it
+-- hands over the ability to sign in as that member, it is recorded in the
+-- change log and revokes that member's sessions. See design/spec.md's
+-- Auth & sessions section for why that accountability is required, not
+-- optional.
+--
+-- `label` is an admin-only note for telling two open INVITE links apart; a
+-- reset does not need one, since member_id already says who it is for.
 -- ---------------------------------------------------------------------------
 CREATE TABLE member_invites (
     id                  INTEGER PRIMARY KEY,
     token_hash          TEXT    NOT NULL UNIQUE,      -- sha256 of 32 random bytes; the token itself is never stored
-    label               TEXT,                         -- admin-only note: which link is for whom
-    role                INTEGER NOT NULL DEFAULT 1,   -- the role the accepted member will get
+    member_id           INTEGER REFERENCES members(id),  -- NULL = invite; set = password reset for this member
+    label               TEXT,                         -- admin-only note: which link is for whom (invites only)
+    role                INTEGER NOT NULL DEFAULT 1,   -- the role the accepted member will get; ignored on a reset
     created_by          INTEGER NOT NULL REFERENCES members(id),
     created_at          TEXT    NOT NULL,
     expires_at          TEXT    NOT NULL,             -- default: created_at + 7 days
@@ -105,7 +127,11 @@ CREATE TABLE member_invites (
     revoked_at          TEXT,
 
     CHECK (role IN (0, 1)),
-    CHECK ((accepted_at IS NULL) = (accepted_member_id IS NULL))
+    CHECK ((accepted_at IS NULL) = (accepted_member_id IS NULL)),
+    -- a reset can only ever resolve to the member it was issued for
+    CHECK (member_id IS NULL
+           OR accepted_member_id IS NULL
+           OR accepted_member_id = member_id)
 );
 
 -- Argon2 is deliberately NOT used on the token: there is nothing to
@@ -113,6 +139,11 @@ CREATE TABLE member_invites (
 -- GET would be a self-inflicted DoS.
 CREATE INDEX idx_invites_open ON member_invites(expires_at)
     WHERE accepted_at IS NULL AND revoked_at IS NULL;
+
+-- At most one live reset link per member. A second "Reset password" click
+-- replaces the first rather than leaving two working links for one account.
+CREATE UNIQUE INDEX idx_invites_open_reset ON member_invites(member_id)
+    WHERE member_id IS NOT NULL AND accepted_at IS NULL AND revoked_at IS NULL;
 
 -- ---------------------------------------------------------------------------
 -- member_settings — personal preferences, 1:1 with member.

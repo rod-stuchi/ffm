@@ -284,6 +284,16 @@ legend{padding:0}
   color:var(--ink-3)}
 .mrow .seen{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
 .mrow .seen.pend{color:var(--accent)}
+.mrow .car{font-size:9px;color:var(--ink-3);line-height:1;margin-left:7px;
+  display:inline-block;transition:transform .15s ease,color .15s ease}
+/* Flip it rather than only recolouring: at 9px an accent-vs-ink-3 shift is
+   almost invisible, and open/closed has to be readable at a glance. */
+.mrow[aria-expanded="true"] .car{color:var(--accent);transform:rotate(180deg)}
+/* the expanded member's actions. Framed rather than floating, so it reads as
+   belonging to the row above it. */
+.mdetail{margin:0 0 6px 9px;padding:10px 11px;border-left:2px solid var(--accent-line);
+  background:var(--surface-2);border-radius:0 8px 8px 0}
+.mdetail .acts{display:flex;flex-wrap:wrap;gap:7px}
 .invitelink{display:flex;gap:7px;align-items:stretch;margin-top:7px}
 .invitelink input{flex:1;min-width:0;font-size:11.5px}
 
@@ -561,9 +571,62 @@ legend{padding:0}
             <h4>Members</h4>
             <div class="gb">
               <div class="mlist">
-                <div class="mrow focus"><span class="nm">Rodrigo</span><span class="role">admin</span><span class="seen">you &middot; now</span></div>
-                <div class="mrow"><span class="nm">Nat&aacute;lia</span><span class="role">member</span><span class="seen">2h ago</span></div>
-                <div class="mrow"><span class="nm">L&eacute;o</span><span class="role">member</span><span class="seen pend">invite pending</span></div>
+
+                <div class="mrow focus" aria-expanded="false" onclick="toggleMember('me')">
+                  <span class="nm">Rodrigo</span><span class="role">admin</span>
+                  <span class="seen">you &middot; now</span><span class="car">&#9662;</span>
+                </div>
+                <div class="mdetail" id="md-me" hidden>
+                  <div class="acts">
+                    <button class="btn sm" type="button" onclick="openPane('profile')">Change password</button>
+                  </div>
+                  <!-- No "Reset password" on your own row: you still know it, so
+                       this is :profile's current/new/confirm, not a recovery
+                       link. An admin resetting themselves would be issuing a
+                       link to their own inbox-less account for no reason. -->
+                  <p class="hint">Your own password is changed in <span class="mono">:profile</span>,
+                    where it asks for the current one.</p>
+                </div>
+
+                <div class="mrow" aria-expanded="false" onclick="toggleMember('na')">
+                  <span class="nm">Nat&aacute;lia</span><span class="role">member</span>
+                  <span class="seen">2h ago</span><span class="car">&#9662;</span>
+                </div>
+                <div class="mdetail" id="md-na" hidden>
+                  <div class="acts">
+                    <button class="btn sm" type="button" onclick="resetPassword('na','Nat\u00e1lia')">Reset password</button>
+                    <button class="btn sm" type="button" onclick="say('Nat\u00e1lia signed out on every device \u00b7 recorded in the change log')">Sign out everywhere</button>
+                  </div>
+                  <!-- Shown once, same control a pending invite uses. -->
+                  <div id="reset-na" hidden>
+                    <div class="invitelink">
+                      <input class="i" readonly value="https://ffm.tail/reset/9LmT4pQ8vBc2KdW" onfocus="this.select()">
+                      <button class="btn" type="button" onclick="copyLink(this)">Copy</button>
+                    </div>
+                    <p class="hint">Expires 27/09/2026. Shown once &mdash; create a new one if it's lost.
+                      It only sets a password: her name, language and colour scheme are untouched.</p>
+                    <!-- A reset hands over the ability to write to the ledger as
+                         somebody else, which is the one thing preview-as-non-admin
+                         was built not to allow. So it is never silent. -->
+                    <div class="notebox" style="margin-top:8px">
+                      Nat&aacute;lia has been signed out everywhere, and this reset is recorded
+                      in the change log under your name.
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mrow" aria-expanded="false" onclick="toggleMember('leo')">
+                  <span class="nm">L&eacute;o</span><span class="role">member</span>
+                  <span class="seen pend">invite pending</span><span class="car">&#9662;</span>
+                </div>
+                <div class="mdetail" id="md-leo" hidden>
+                  <!-- Nothing to reset: the members row does not exist until the
+                       invite is accepted. The open invite below is the whole of
+                       Léo's account so far. -->
+                  <p class="hint" style="margin-top:0">L&eacute;o hasn't joined yet, so there's no password to
+                    reset. Reissue or revoke the invite below instead.</p>
+                </div>
+
               </div>
               <p class="hint">j / k walk the list, Enter expands one.</p>
             </div>
@@ -832,6 +895,23 @@ function setVariant(g){
   el.classList.remove('bad');
   el.innerHTML = '✓ appearance → ' + (v || 'system') + ' <span class="d">· this device only</span>';
   say('appearance → ' + (v || 'system') + ' · this device only');
+}
+
+function toggleMember(id){
+  const d = document.getElementById('md-' + id);
+  const row = d.previousElementSibling;
+  const open = d.hidden;
+  d.hidden = !open;
+  row.setAttribute('aria-expanded', String(open));
+}
+
+/* Issuing a reset is never silent: it revokes every session that member has
+   and writes a password_reset entry to the append-only change log. Both are
+   required, not optional — see design/spec.md's Forgotten passwords section. */
+function resetPassword(id, name){
+  document.getElementById('reset-' + id).hidden = false;
+  saved('password reset issued for ' + name);
+  say(name + ' signed out everywhere \u00b7 reset recorded in the change log');
 }
 
 function copyLink(btn){

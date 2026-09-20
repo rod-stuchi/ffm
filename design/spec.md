@@ -629,14 +629,13 @@ does most of the real work, so the auth layer stays simple on purpose.
   construction, so a replay self-limits. **This is written down on purpose** —
   left implicit, somebody eventually "fixes" the header check into a blanket
   middleware and breaks signing in.
-- **There is no password reset, and that is a decision, not an omission.** No
-  mail sender exists, so a self-service reset would have nowhere to send a
-  token. A member who forgets their password gets a fresh invite link from an
-  admin — `member_invites` already supports exactly that, and revoking their
-  sessions at the same time is one row delete. The admin's own password is the
-  one with nobody above it, which is why `/setup` asks for it twice; if it is
-  lost, recovery is editing the database by hand, and the spec says so rather
-  than pretending otherwise.
+- **There is no *self-service* password reset**, and that is a decision, not an
+  omission: no mail sender exists, so there is nowhere to send a token. An
+  admin issuing a reset link is the recovery path — see Forgotten passwords,
+  below. The admin's own password is the one with nobody above it, which is why
+  `/setup` asks for it twice; with a second admin, either can reset the other,
+  and with only one, recovery is editing the database by hand. The spec says so
+  rather than pretending otherwise.
 - **Focused member ≠ logged-in member.** `H`/`L`/`gt` pick which pane is
   focused, which decides who a *new transaction* is attributed to — that stays
   visual/Alpine-adjacent per the existing rule. Login (the session) decides whose
@@ -801,6 +800,70 @@ it applies: *"You never type anyone else's password. They set it on the link,
 along with their name."*
 
 Like every other admin-only control, the create form **disappears** under
+preview-as-non-admin rather than sitting there disabled.
+
+### Forgotten passwords — an admin-issued reset link
+
+**Changing a password you still know is not this.** That lives in `:profile`
+(current / new / confirm) and needs no admin. This section is only about the
+case where the password is *gone*.
+
+**A reset reuses the invite mechanism rather than inventing a second one.**
+Both are a one-time, admin-issued, expiring token that lands you on a form
+which sets a password; the only real differences are whether a `members` row
+exists yet and which fields the form asks for. So `member_invites` carries a
+nullable `member_id`:
+
+| `member_id` | what the link is | accepting it |
+|---|---|---|
+| `NULL` | an invite | **creates** the `members` row |
+| set | a password reset | **sets `password_hash`** on that existing row |
+
+**A reset is not an invite pointed at somebody who already exists**, and it
+matters that this is written down: an invite's accept path *inserts*, and
+`members.name` is `UNIQUE`, so a member trying to recover through one would hit
+the name-taken error and could only get back in by choosing a *different* name.
+That would also rewrite their `slug`, and `slug` is their receipt-vault folder
+(`{uuid}-{slug}`). Recovering a password must never orphan somebody's filing.
+
+The accept form asks for **password and confirm only**. No name — renaming is a
+vault move once files exist, and this person is not new. No language or colour
+scheme — they already have both, and a reset has no business resetting taste.
+
+**At most one live reset link per member**, enforced by a partial unique index.
+A second *Reset password* click replaces the first rather than leaving two
+working links for one account.
+
+#### It is logged, and it signs that member out
+
+A reset hands the admin the ability to sign in **as** that member and write to
+the ledger under their name. That cuts against the line this document draws
+around preview-as-non-admin — *no session swap, no writes attributed to anyone
+else* — so it is made accountable rather than quietly allowed:
+
+- **It is a change-log entry**, `action = password_reset`, `entity = member`,
+  with `entity_id` the member reset and `member_id` the admin who did it. The
+  log is append-only, so the record cannot be tidied away afterwards.
+- **Issuing it revokes every session that member has** — one delete per row in
+  `sessions`, which is the reason that table exists. They are signed out, so a
+  takeover is something they *notice* rather than something they could only
+  infer.
+
+Neither is optional. An admin already sees every `private` row by virtue of
+role 0, so a reset grants no new *visibility* — what it grants is the ability
+to act as somebody else, and that is exactly the thing this app otherwise
+refuses to let anyone do silently.
+
+#### Where the admin does it
+
+In `:members`, expanding a member reveals **Reset password** beside **Sign out
+everywhere**. The new link is shown **once**, in the same read-only mono input
+with a Copy button that a pending invite already uses — no new widget, and the
+same "create a new one if it's lost" note. `:reset <name>` is not bound; the
+row action is the only entry point, so the capability is visible to whoever
+holds it rather than known only to whoever remembers a command.
+
+Like every other admin-only control, it **disappears** under
 preview-as-non-admin rather than sitting there disabled.
 
 ### Signing in — `/login`
@@ -969,8 +1032,9 @@ change              -- one row per user action ("a save")
   action            TEXT     -- create · edit · delete · restore · reattribute ·
                              -- reorder · privacy · rule_create · rule_edit ·
                              -- file_attach · file_unlink · file_upload ·
-                             -- file_delete · import · materialize
-  entity            TEXT     -- 'transaction' | 'rule' | 'file'
+                             -- file_delete · import · materialize ·
+                             -- password_reset · sessions_revoked
+  entity            TEXT     -- 'transaction' | 'rule' | 'file' | 'member'
   entity_id         INTEGER
   rule_id           INTEGER  -- nullable; set on transaction changes so a rule's
                              -- whole history is one query
@@ -998,6 +1062,13 @@ change_field        -- one row per field actually touched; none for delete/resto
   ledger itself follows. It is the app's one audit mechanism; the file
   upload/soft-delete records described under Receipt tracking are entries in
   it, not a parallel table.
+- **`entity = 'member'` covers account actions, not ledger ones** —
+  `password_reset` and `sessions_revoked`, where `entity_id` is the member
+  acted on and `member_id` is the admin who acted. These are the one place an
+  admin can affect somebody else's ability to sign in, so they belong in the
+  same append-only record as everything else rather than in a side channel.
+  They carry no `change_field` rows: a password has no old value worth
+  recording, and writing one down would be worse than useless.
 
 ### The pane
 

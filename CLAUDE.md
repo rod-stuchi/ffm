@@ -259,7 +259,8 @@ card in plain CSS.
   when they accept. The `members` row is created on accept, not when the link is
   issued — so `password_hash` stays `NOT NULL` rather than having a
   half-real, password-less member in the table. See `design/spec.md`'s Auth &
-  sessions section for the full model, including why there is no password reset.
+  sessions section for the full model, including how a forgotten password is
+  recovered.
 - **Configuration is three tiers, and `ffm.toml` is now three keys.** The file
   holds `db_path`, `receipts_root` and `backup_dir` — **nothing else**. Everything
   a household would actually want to change moved into the database:
@@ -308,7 +309,11 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   `at`, `member_id`, `source` (`user` | `import` | `materializer` |
   `system`), `action`, `entity` (`transaction` | `rule` | `file`),
   `entity_id`, a nullable `rule_id`, `period`, a nullable `undo_of` and a
-  one-line `note`. `change_field` holds one row per field actually touched:
+  one-line `note`. `entity` also covers `member`, for the two account actions
+  an admin can take against somebody else — `password_reset` and
+  `sessions_revoked` — so the one place an admin can affect another member's
+  ability to sign in is recorded in the same append-only log as everything
+  else. `change_field` holds one row per field actually touched:
   `field`, `old_value`, `new_value`, `kind`. One wide table would either
   repeat the actor and time per field or bury the diff in unqueryable JSON.
 - **`kind` travels with the value** (`money` | `date` | `day` | `bool` |
@@ -824,9 +829,18 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   closed. An admin (role 0) issues a single-use invite link; the person accepting
   it sets their **own** name and password. An admin never types somebody else's
   password, and there is no initial password to hand over. First run is `/setup`,
-  which exists only while `members` is empty. There is no password reset — a
-  forgotten password means a fresh invite from an admin, which
-  `member_invites` already supports.
+  which exists only while `members` is empty.
+- **A forgotten password is recovered by an admin-issued reset link, not by a
+  fresh invite.** `member_invites` carries a nullable `member_id`: NULL means
+  the link creates a member, set means it sets `password_hash` on one that
+  already exists. The distinction is load-bearing — an invite's accept path
+  *inserts*, and `members.name` is `UNIQUE`, so recovering through one would
+  force a different name, which rewrites `slug`, which is that member's
+  receipt-vault folder. **Issuing a reset writes a `password_reset` entry to
+  the change log and revokes that member's sessions**, because it hands the
+  admin the ability to write to the ledger as somebody else — the one thing
+  preview-as-non-admin was carefully built *not* to allow. There is no
+  self-service reset: no mail sender, nowhere to send a token.
 - **Mutations follow one optimistic flow.** Submit → insert an animated skeleton
   row immediately → the server's fragment replaces it with either the real row or
   an error row carrying a **Try Again** that resubmits the original action.
