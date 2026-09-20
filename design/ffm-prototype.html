@@ -381,6 +381,10 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 .amt{text-align:right;white-space:nowrap}
 .amt .v{font-family:var(--mono);font-size:14px;font-weight:500;font-variant-numeric:tabular-nums}
 .amt .v.in{color:var(--pos)}
+/* A projected amount is deliberately quieter than a real one — the tilde
+   says it, the colour stops it competing with facts on the same screen. */
+.amt .v.est{color:var(--ink-2);font-weight:400}
+.amt .v.in.est{color:color-mix(in srgb, var(--pos) 55%, var(--ink-3))}
 .amt .d{font-family:var(--mono);font-size:10.5px;font-variant-numeric:tabular-nums;margin-top:1px}
 .amt .d.up{color:var(--neg)}
 .amt .d.down{color:var(--pos)}
@@ -516,8 +520,37 @@ input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:
 .entry.placeholder{background:transparent;border:1px dashed var(--line-2)}
 .entry.placeholder .name b{color:var(--ink-2);font-weight:500}
 .row.ruletarget .entry{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
-.rulepane{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;
+.sidepane{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;
   background:var(--surface);border:1px solid var(--accent-line);border-radius:13px;box-shadow:var(--shadow-md)}
+/* change log (gl) */
+.chips{display:flex;gap:6px;margin-top:8px}
+.chip{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--surface);color:var(--ink-3)}
+.chip:hover{border-color:var(--accent-line);color:var(--ink-2)}
+.chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.log-day{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin:12px 0 4px}
+.log-day:first-child{margin-top:0}
+.logentry{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:baseline;width:100%;
+  text-align:left;background:transparent;border:1px solid transparent;border-radius:7px;cursor:pointer;
+  padding:5px 7px;font-family:var(--sans);font-size:12.5px;color:var(--ink-2)}
+.logentry:hover{background:var(--surface-2)}
+.logentry:focus-visible,.logentry:focus{outline:none;border-color:var(--accent);background:var(--surface-2)}
+.logentry.open{background:var(--surface-2)}
+.log-time,.log-caret{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.log-who{font-size:11.5px;color:var(--ink-3)}
+.log-what{color:var(--ink)}
+.log-tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--info);border:1px solid var(--info);border-radius:4px;padding:0 4px;margin-left:5px}
+.log-undo{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-left:6px}
+.log-fields{display:flex;flex-direction:column;gap:3px;padding:2px 7px 8px 46px}
+.log-f{display:grid;grid-template-columns:minmax(74px,auto) 1fr auto 1fr;gap:7px;align-items:baseline;
+  font-family:var(--mono);font-size:11px}
+.lf-k{color:var(--ink-3)}
+.lf-v{color:var(--ink-3);overflow-wrap:anywhere}
+.lf-v.now{color:var(--ink)}
+.lf-a{color:var(--ink-3)}
+.log-hint{font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
 .rp-arrow{position:absolute;left:-8px;top:50%;width:14px;height:14px;margin-top:-7px;z-index:1;
   background:var(--surface-2);border-left:1px solid var(--accent-line);border-bottom:1px solid var(--accent-line);
   transform:rotate(45deg);pointer-events:none}
@@ -534,7 +567,7 @@ input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:
 .panels.has-pane{gap:14px;overflow-x:auto;padding:0 2px 2px;align-items:start}
 /* The prototype's panels aren't height-bound like the full-viewport app's,
    so cap the pane near a panel's height and let its body scroll. */
-.panels.has-pane .rulepane{max-height:540px}
+.panels.has-pane .sidepane{max-height:540px}
 
 /* ============ gallery ============ */
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;align-items:start}
@@ -841,32 +874,38 @@ let uid = 1000;
 function T(o){ return Object.assign({
   id:++uid, kind:'out', title:'', sub:'', amount:0, day:1, status:'plain',
   progress:null, due:null, delta:null, recurring:false, tracked:false, noBarcode:false, amountInName:false,
-  pattern:null, private:false, deleted:false, restored:false, state:'ok',
+  pattern:null, private:false, deleted:false, state:'ok',
   bucket:null, billName:null, instance:null,
   totalInstallments:null, installmentsPaid:null,
-  barcodePath:null, scheduledPath:null, receiptPath:null
+  barcodePath:null, scheduledPath:null, receiptPath:null,
+  /* Income only. varies marks a rule whose amount can't be carried forward
+     (commission, freelance) — its unconfirmed periods show a projection
+     instead of a number, computed by estimateFor(). confirmed says this
+     period's figure is a fact rather than that projection. */
+  varies:false, confirmed:false, estimateBasis:'lowest', estimateWindow:3
 }, o); }
 
 /* Hand-authored months carry the narrative from the sketches (the +20% energia,
    the pending Água, the private rows). The rest of 2026 is generated below. */
 const AUTHORED = {
   4:[[
-      T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
+      T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', bucket:'Income', amount:11800, day:5, status:'received', recurring:true, confirmed:true}),
+      T({kind:'in', title:'Freelance · Auditoria', key:'FREELA', sub:'Auditoria Marotta', bucket:'Income', amount:3180.00, day:22, status:'received', recurring:true, tracked:true, varies:true, confirmed:true, pattern:'freelance_auditoria/2026/05.pdf'}),
       T({title:'Energia · Enel SP', bucket:'Consumption', amount:281.40, day:12, status:'paid', recurring:true, tracked:true, delta:-6, due:'15/05/2026', pattern:'energia/2026/05.pdf'}),
       T({title:'Internet · Vivo Fibra', bucket:'Consumption', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/05/2026', pattern:'vivo_fibra/2026/05.pdf'}),
       T({title:'Condomínio', bucket:'Consumption', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/05/2026', pattern:'condominio/2026/05.pdf'}),
       T({title:'Mercado · Pão de Açúcar', bucket:'Everyday', amount:642.18, day:14}),
       T({title:'Combustível · Shell', bucket:'Everyday', amount:310.00, day:19}),
     ],[
-      T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
+      T({kind:'in', title:'Salário', sub:'Instituto Vega', bucket:'Income', amount:9400, day:5, status:'received', recurring:true, confirmed:true}),
       T({title:'Plano de saúde · Unimed', bucket:'Health', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/05/2026', pattern:'unimed/2026/05.pdf'}),
       T({title:'Escola · Materiais', bucket:'Education', amount:388.00, day:11}),
       T({title:'Farmácia · Drogasil', bucket:'Health', amount:126.55, day:16}),
       T({title:'Academia · Smart Fit', bucket:'Health', amount:119.90, day:20, recurring:true}),
     ]],
   5:[[
-      T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
-      T({kind:'in', title:'Freelance', sub:'Auditoria Marotta', amount:2400, day:22, status:'in'}),
+      T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', bucket:'Income', amount:11800, day:5, status:'received', recurring:true, confirmed:true}),
+      T({kind:'in', title:'Freelance · Auditoria', key:'FREELA', sub:'Auditoria Marotta', bucket:'Income', amount:2400, day:22, status:'received', recurring:true, tracked:true, varies:true, confirmed:true, pattern:'freelance_auditoria/2026/06.pdf'}),
       T({title:'Energia · Enel SP', bucket:'Consumption', amount:286.30, day:13, status:'paid', recurring:true, tracked:true, delta:2, due:'15/06/2026', pattern:'energia/2026/06.pdf'}),
       T({title:'Internet · Vivo Fibra', bucket:'Consumption', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/06/2026', pattern:'vivo_fibra/2026/06.pdf'}),
       T({title:'Condomínio', bucket:'Consumption', amount:920.00, day:8, status:'paid', recurring:true, tracked:true, delta:0, due:'08/06/2026', pattern:'condominio/2026/06.pdf'}),
@@ -876,7 +915,7 @@ const AUTHORED = {
       T({title:'Combustível · Shell', bucket:'Everyday', amount:310.00, day:18}),
       T({title:'Uber', bucket:'Everyday', amount:88.30, day:24}),
     ],[
-      T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
+      T({kind:'in', title:'Salário', sub:'Instituto Vega', bucket:'Income', amount:9400, day:5, status:'received', recurring:true, confirmed:true}),
       T({title:'Plano de saúde · Unimed', bucket:'Health', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/06/2026', pattern:'unimed/2026/06.pdf'}),
       T({title:'Escola · Mensalidade', bucket:'Education', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/06/2026', pattern:'escola/2026/06.pdf'}),
       T({title:'Farmácia · Drogasil', bucket:'Health', amount:214.90, day:18}),
@@ -884,7 +923,8 @@ const AUTHORED = {
       T({title:'Presente · aniversário', amount:260.00, day:27, private:true}),
     ]],
   6:[[
-      T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', amount:11800, day:5, status:'in'}),
+      T({kind:'in', title:'Salário', sub:'Contabilizei Ltda', bucket:'Income', amount:11800, day:5, status:'received', recurring:true, confirmed:true}),
+      T({kind:'in', title:'Freelance · Auditoria', key:'FREELA', sub:'Auditoria Marotta', bucket:'Income', amount:1950.00, day:22, status:'received', recurring:true, tracked:true, varies:true, confirmed:true, pattern:'freelance_auditoria/2026/07.pdf'}),
       T({title:'Energia · Enel SP', bucket:'Consumption', amount:343.62, day:11, status:'paid', recurring:true, tracked:true, delta:20, due:'15/07/2026', pattern:'energia/2026/07.pdf'}),
       T({title:'Água · Sabesp', bucket:'Consumption', amount:108.40, day:0, status:'scheduled-overdue', recurring:true, tracked:true, due:'18/07/2026', pattern:'sabesp/2026/07_scheduled.pdf'}),
       T({title:'Internet · Vivo Fibra', bucket:'Consumption', amount:139.90, day:10, status:'paid', recurring:true, tracked:true, delta:0, due:'10/07/2026', pattern:'vivo_fibra/2026/07.pdf'}),
@@ -897,8 +937,8 @@ const AUTHORED = {
       T({title:'Netflix', bucket:'Subscriptions', amount:59.90, day:21, recurring:true, status:'manual-paid'}),
       T({title:'Uber', bucket:'Everyday', amount:112.60, day:25, delta:27}),
     ],[
-      T({kind:'in', title:'Salário', sub:'Instituto Vega', amount:9400, day:5, status:'in'}),
-      T({kind:'in', title:'Dividendos', sub:'corretora', amount:318.44, day:16, status:'in'}),
+      T({kind:'in', title:'Salário', sub:'Instituto Vega', bucket:'Income', amount:9400, day:5, status:'received', recurring:true, confirmed:true}),
+      T({kind:'in', title:'Dividendos', sub:'corretora', bucket:'Income', amount:318.44, day:16, status:'received', confirmed:true}),
       T({title:'Plano de saúde · Unimed', bucket:'Health', amount:1148.00, day:7, status:'paid', recurring:true, tracked:true, delta:0, due:'07/07/2026', pattern:'unimed/2026/07.pdf'}),
       T({title:'Escola · Mensalidade', bucket:'Education', amount:1690.00, day:9, status:'paid', recurring:true, tracked:true, delta:0, due:'09/07/2026', pattern:'escola/2026/07.pdf'}),
       T({title:'Farmácia · Drogasil', bucket:'Health', amount:98.70, day:19, delta:-54}),
@@ -914,7 +954,12 @@ const slug = s => s.split(' · ')[0].toLowerCase()
   .normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_');
 
 const RULES = [[
-  {kind:'in', title:'Salário', amount:11800, day:5, status:'in'},
+  {kind:'in', title:'Salário', bucket:'Income', amount:11800, day:5, rec:1},
+  /* The variable-income demo: an invoice that lands every month for a very
+     different number. varies means its future periods are projected from
+     history (estimateFor) rather than carried from this amount. */
+  {kind:'in', title:'Freelance · Auditoria', bucket:'Income', key:'FREELA', amount:2400, day:22,
+    rec:1, varies:true, v:.28, track:1},
   {title:'Condomínio', bucket:'Consumption', base:920, day:8, due:8, rec:1, track:1, v:.04},
   {title:'Internet · Vivo Fibra', bucket:'Consumption', base:139.90, day:10, due:10, rec:1, track:1, v:0},
   {title:'Energia · Enel SP', bucket:'Consumption', base:300, day:11, due:15, rec:1, track:1, v:.17},
@@ -933,7 +978,7 @@ const RULES = [[
   {title:'Combustível · Shell', bucket:'Everyday', base:302, day:17, v:.15},
   {title:'Uber', bucket:'Everyday', base:98, day:25, v:.32},
 ],[
-  {kind:'in', title:'Salário', amount:9400, day:5, status:'in'},
+  {kind:'in', title:'Salário', bucket:'Income', amount:9400, day:5, rec:1},
   {title:'Plano de saúde · Unimed', bucket:'Health', base:1148, day:7, due:7, rec:1, track:1, v:.02},
   {title:'Escola · Mensalidade', bucket:'Education', base:1690, day:9, due:9, rec:1, track:1, v:0, months:[1,2,3,4,5,6,7,8,9,10,11]},
   {title:'Academia · Smart Fit', bucket:'Health', base:119.90, day:20, rec:1, v:0},
@@ -947,7 +992,25 @@ function makeMonth(mi){
   const mm = String(mi + 1).padStart(2, '0');
   const future = mi > TODAY_M, now = mi === TODAY_M;
   return RULES.map(list => list.filter(r => !r.months || r.months.includes(mi)).map(r => {
-    if(r.kind === 'in') return T({kind:'in', status:'in', title:r.title, amount:r.amount, day:r.day});
+    if(r.kind === 'in'){
+      /* Income's own axis: expected until it lands, received after. The ring
+         is elapsed time toward the expected day, exactly as a bill's is
+         toward its due date. */
+      const landed = !future && (!now || r.day <= TODAY_D);
+      const amount = r.varies ? +(r.amount * (1 + (rnd()*2 - 1) * r.v)).toFixed(2) : r.amount;
+      return T({kind:'in', title:r.title, key:r.key, bucket:r.bucket,
+        /* The stored figure is always the rule's own baseline (or the real
+           one once it lands) — never a projection. rowAmount() computes the
+           projection for display, so it follows new history instead of
+           freezing a guess into the data. */
+        amount: landed ? amount : r.amount,
+        day: landed ? r.day : 0,
+        due: String(r.day).padStart(2,'0') + '/' + mm + '/2026',
+        status: landed ? 'received' : 'expected',
+        progress: landed ? null : (future ? .04 : Math.max(.08, Math.min(.97, TODAY_D / r.day))),
+        recurring: !!r.rec, tracked: !!r.track, varies: !!r.varies, confirmed: landed,
+        pattern: r.track ? slug(r.title) + '/2026/' + mm + '.pdf' : null});
+    }
     const amount = +(r.base * (1 + (rnd()*2 - 1) * r.v)).toFixed(2);
     const title = r.title.replace('{n}', mi + 1);
     const settled = !future && (!now || r.day <= TODAY_D);
@@ -992,13 +1055,17 @@ const MONTHS = Array.from({length:12}, (_, mi) => ({
 MONTHS.forEach(M => M.m.forEach(rows => rows.forEach(t => {
   if(!t.tracked || !t.pattern) return;
   const base = t.pattern.replace(/(_scheduled)?\.pdf$/, '');
-  t.barcodePath = t.barcodeSpansPeriod
+  /* Slot 1 is "the document that states the amount". For money going out
+     that's the company's boleto; for money coming in it's the invoice you
+     issued — same slot, same key, no barcode anywhere near it. */
+  t.barcodePath = t.kind === 'in' ? base + '_invoice.pdf'
+    : t.barcodeSpansPeriod
     /* inlined padStart, not pad() — this block runs at top-level script
        evaluation, before pad's own `const` declaration further down has
        been reached */
     ? slug(t.title) + '/barcode_' + String(t.barcodeWindowStart.m).padStart(2,'0') + '-' + t.barcodeWindowStart.y + '.pdf'
     : base + '_barcode.pdf';
-  if(t.status === 'paid') t.receiptPath = base + '.pdf';
+  if(t.status === 'paid' || t.status === 'received') t.receiptPath = base + '.pdf';
   else if(t.status === 'scheduled' || t.status === 'scheduled-overdue') t.scheduledPath = base + '_scheduled.pdf';
   // status === 'pending' → bill on file, nothing scheduled or paid yet
 })));
@@ -1008,11 +1075,54 @@ const mkey = t => t.key || t.title;
 MONTHS.forEach((M, i) => {
   if(i === 0) return;
   M.m.forEach((rows, p) => rows.forEach(t => {
-    if(t.kind === 'in' || t.status === 'pending' || !t.amount) { t.delta = null; return; }
+    /* A recurring income is worth comparing month to month; a one-off, a
+       pending bill and an unconfirmed projection are not — the last would be
+       comparing a guess against a fact. */
+    if((t.kind === 'in' && (!t.recurring || !t.confirmed)) || t.status === 'pending' || !t.amount) { t.delta = null; return; }
     const prev = MONTHS[i-1].m[p].find(x => mkey(x) === mkey(t) && x.amount);
     t.delta = prev ? Math.round((t.amount - prev.amount) / prev.amount * 100) : null;
   }));
 });
+
+/* An income whose rule says its amount varies shows a projection until the
+   real figure is confirmed — a payslip on disk, or the manual tick on an
+   untracked rule. The projection is never stored: it's recomputed on every
+   render, so it follows new history instead of freezing an old guess into
+   the data, and it never writes a spurious "amount changed" into the log. */
+const isEstimated = t => !!(t && t.kind === 'in' && t.varies && !t.confirmed);
+
+/* Only confirmed periods feed an estimate. Letting an unconfirmed month in
+   would compound a guess on a guess the moment two periods run unconfirmed
+   back to back. */
+function estimateFor(t, p, mi){
+  const n = Math.max(1, t.estimateWindow || 3), seen = [];
+  for(let i = mi - 1; i >= 0 && seen.length < n; i--){
+    /* A detached row (the spec gallery renders one with no real panel) has
+       no history to walk — fall through to the rule's own amount. */
+    const rows = MONTHS[i] && MONTHS[i].m[p];
+    if(!rows) continue;
+    const prev = rows.find(x => x.kind === 'in' && mkey(x) === mkey(t)
+      && x.confirmed && x.amount && !x.deleted);
+    if(prev) seen.push({key:MONTHS[i].key, amount:prev.amount});
+  }
+  /* Nothing behind it yet — a rule's first occurrence falls back to its own
+     stated number, the same carve-out bills already get. */
+  if(!seen.length) return {value:t.amount || 0, basis:t.estimateBasis || 'lowest', months:[]};
+  const vals = seen.map(x => x.amount);
+  const basis = t.estimateBasis || 'lowest';
+  const value = basis === 'average' ? vals.reduce((a, b) => a + b, 0) / vals.length
+              : basis === 'last'    ? vals[0]
+              :                       Math.min(...vals);
+  return {value:+value.toFixed(2), basis, months:seen};
+}
+
+/* The amount a row actually reads as — the stored figure, or the projection
+   standing in for it. Every money surface goes through here so the row, the
+   pane header and the household total can never disagree. */
+function rowAmount(t, p, mi){
+  if(!isEstimated(t)) return t.amount;
+  return estimateFor(t, p == null ? S.panel : p, mi == null ? S.mi : mi).value;
+}
 
 const MEMBERS = [
   { name:'Rodrigo', role:'admin', key:'H' },
@@ -1036,10 +1146,85 @@ const S = {
      value that only lived in an <input> would be wiped mid-edit. drafts is
      keyed 'occ:<rowId>' / 'rule:<rowId>'; editing is the one open right now. */
   drafts: {},
-  editing: null       // {kind, id, p, mi}
+  editing: null,      // {kind, id, p, mi}
+  /* The change log (gl). Append-only, never rewritten — the same "nothing is
+     destroyed" rule the ledger follows. logFor is the row whose history the
+     side pane is showing; logOpen holds the entries expanded to their field
+     diffs; logFilter narrows to this row / its rule / everything. */
+  log: [],
+  logFor: null,       // {id, p, mi}
+  logOpen: new Set(),
+  logFilter: 'row'    // 'row' | 'rule' | 'all'
 };
 const rowsOf = p => MONTHS[S.mi].m[p];
 const cur = () => rowsOf(S.panel)[S.focus[S.panel]];
+let logId = 0;
+/* A rule has no id of its own in this mock — rows generated from the same
+   seed rule share a key, and hand-made ones only have their title (the same
+   identity clientCodeFor() uses). */
+const ruleIdOf = t => t ? (t.key || t.title) : null;
+/* Which fields are worth a line in the log, how to label them, and how to
+   render their values. Anything not listed (progress, delta, state, the
+   derived installment counter) is bookkeeping, not a change someone made. */
+const LOG_FIELDS = {
+  amount:{label:'amount', kind:'money'}, title:{label:'description'},
+  bucket:{label:'bucket'}, billName:{label:'bill name'}, instance:{label:'instance'},
+  day:{label:'paid day'}, due:{label:'due date'}, private:{label:'private', kind:'bool'},
+  tracked:{label:'tracking', kind:'bool'}, noBarcode:{label:'no barcode file', kind:'bool'},
+  amountInName:{label:'amount in filename', kind:'bool'}, clientCode:{label:'client code'},
+  pattern:{label:'receipt path'}, barcodePath:{label:'barcode path'},
+  totalInstallments:{label:'installments'}, ruleStart:{label:'start date', kind:'dmy'},
+  ruleEnd:{label:'end date', kind:'dmy'}, barcodeSpansPeriod:{label:'covers multiple months', kind:'bool'},
+  barcodeWindowSize:{label:'pages in file'}, barcodeWindowStart:{label:'first page covers', kind:'ym'},
+  status:{label:'status'}, deleted:{label:'deleted', kind:'bool'}, recurring:{label:'recurring', kind:'bool'},
+  varies:{label:'amount varies', kind:'bool'}, confirmed:{label:'amount confirmed', kind:'bool'},
+  estimateBasis:{label:'estimate basis'}, estimateWindow:{label:'estimate periods'}
+};
+function logValue(v, kind){
+  if(v === null || v === undefined || v === '' || v === false && kind !== 'bool') return '—';
+  if(kind === 'bool') return v ? 'on' : 'off';
+  if(kind === 'money') return fmtMoney(v);
+  if(kind === 'dmy') return v && v.d ? fmtDMY(v) : '—';
+  if(kind === 'ym') return v && v.m ? pad(v.m) + '/' + v.y : '—';
+  return String(v);
+}
+/* The old values are already snapshotted for undo, so a diff against the row
+   after the write gives the log its fields without every call site having to
+   list them again. */
+function diffFields(prev, t){
+  const out = [];
+  Object.keys(prev || {}).forEach(k => {
+    const meta = LOG_FIELDS[k]; if(!meta) return;
+    const a = prev[k], b = t[k];
+    if(JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b)) return;
+    out.push({field:meta.label, old:logValue(a, meta.kind), new:logValue(b, meta.kind)});
+  });
+  return out;
+}
+function logChange(action, o){
+  const e = {
+    id: ++logId, at: o.at || Date.now(), p: o.p != null ? o.p : S.panel,
+    mi: o.mi != null ? o.mi : S.mi, who: o.source === 'system' ? 'system' : MEMBERS[0].name,
+    source: o.source || 'user', action, entity: o.entity || 'transaction',
+    entityId: o.id, ruleId: o.ruleId || null, fields: o.fields || [],
+    undoOf: o.undoOf || null, note: o.note || null
+  };
+  S.log.push(e);
+  return e;
+}
+/* Every entry that belongs to a row: its own, plus its rule's (which apply to
+   every period, this one included). */
+function logFor(t, p, mi, filter){
+  const rid = ruleIdOf(t);
+  return S.log.filter(e => {
+    if(filter === 'all') return true;
+    /* A file entry (barcode attached, receipt uploaded) is the row's own
+       history too — it just isn't the transaction record itself. */
+    const mine = e.entity !== 'rule' && e.entityId === t.id;
+    const rule = e.entity === 'rule' && rid && e.ruleId === rid;
+    return filter === 'rule' ? rule : (mine || rule);
+  }).slice().sort((a, b) => b.at - a.at || b.id - a.id);
+}
 /* The one thing this toggle actually changes: whether the logged-in member
    (always MEMBERS[0]) currently has admin rights in effect. Never a stand-in
    for "who is logged in" — that stays Rodrigo either way. */
@@ -1067,23 +1252,36 @@ function togglePreview(){
 }
 
 /* ================= row markup ================= */
+/* The elapsed-time ring: period start → the day something is meant to happen.
+   Shared by a bill's due date and an income's expected day — same fact
+   ("time is running out"), same green → amber → red arc, so neither has to
+   be learned twice. */
+function ringHTML(progress, glyph, label){
+  const p = progress == null ? .5 : progress, C = 2*Math.PI*10.5;
+  const col = p >= 1 ? 'var(--neg)' : p >= .66 ? 'var(--accent)' : 'var(--pos)';
+  return '<div class="mark">'
+    + '<svg viewBox="0 0 26 26" aria-hidden="true">'
+    + '<circle cx="13" cy="13" r="10.5" fill="none" stroke="var(--line-2)" stroke-width="2.5"></circle>'
+    + '<circle cx="13" cy="13" r="10.5" fill="none" stroke="' + col + '" stroke-width="2.5" stroke-linecap="round"'
+    + ' stroke-dasharray="' + C + '" stroke-dashoffset="' + (C*(1-p)) + '"></circle></svg>'
+    + '<div class="disc wait" style="width:17px;height:17px;font-size:10px"'
+    + (label ? ' aria-label="' + label + '"' : '') + '>' + glyph + '</div></div>';
+}
 function markHTML(t){
   if(t.state === 'skeleton') return '<div class="mark"><div class="sk-disc"></div></div>';
-  if(t.kind === 'in') return '<div class="mark"><span class="dot in"></span></div>';
+  /* Income runs on its own axis — arrival, not payment. It never shows a
+     paid/scheduled mark, and its ring counts toward the expected day exactly
+     the way a bill's counts toward a due date. */
+  if(t.kind === 'in'){
+    if(t.status !== 'expected')
+      return '<div class="mark"><span class="dot in" aria-label="received"></span></div>';
+    return ringHTML(t.progress, '+', 'expected, not received yet');
+  }
   if(t.status === 'paid')
     return '<div class="mark"><div class="disc paid" aria-label="paid, receipt found">✓</div></div>';
   if(t.status === 'manual-paid')
     return '<div class="mark"><div class="disc manual" aria-label="marked paid manually, no file to prove it">✓</div></div>';
-  if(t.status === 'pending'){
-    const p = t.progress == null ? .5 : t.progress, C = 2*Math.PI*10.5;
-    const col = p >= 1 ? 'var(--neg)' : p >= .66 ? 'var(--accent)' : 'var(--pos)';
-    return '<div class="mark">'
-      + '<svg viewBox="0 0 26 26" aria-hidden="true">'
-      + '<circle cx="13" cy="13" r="10.5" fill="none" stroke="var(--line-2)" stroke-width="2.5"></circle>'
-      + '<circle cx="13" cy="13" r="10.5" fill="none" stroke="' + col + '" stroke-width="2.5" stroke-linecap="round"'
-      + ' stroke-dasharray="' + C + '" stroke-dashoffset="' + (C*(1-p)) + '"></circle></svg>'
-      + '<div class="disc wait" style="width:17px;height:17px;font-size:10px">✓</div></div>';
-  }
+  if(t.status === 'pending') return ringHTML(t.progress, '✓', 'pending, nothing on file yet');
   if(t.status === 'scheduled' || t.status === 'scheduled-overdue'){
     const overdue = t.status === 'scheduled-overdue';
     const col = overdue ? 'var(--neg)' : 'var(--info)';
@@ -1122,7 +1320,9 @@ function metaFlagsHTML(t){
 }
 function metaHTML(t){
   const bits = [];
-  if(t.status === 'paid') bits.push('<span><span class="micon">' + metaIconSVG('paid') + '</span> ' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
+  if(t.status === 'received') bits.push('<span style="color:var(--pos)"><span class="micon">' + metaIconSVG('paid') + '</span> received ' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
+  else if(t.status === 'expected') bits.push('<span class="rec"><span class="micon">' + fileIconSVG('scheduled') + '</span> expected ' + (t.due || pad(t.day) + '/' + MONTHS[S.mi].key) + '</span>');
+  else if(t.status === 'paid') bits.push('<span><span class="micon">' + metaIconSVG('paid') + '</span> ' + pad(t.day) + '/' + MONTHS[S.mi].key + '</span>');
   else if(t.status === 'manual-paid') bits.push('<span style="color:var(--pos)">✓ marked paid manually</span>');
   else if(t.status === 'scheduled') bits.push('<span style="color:var(--info)"><span class="micon">' + fileIconSVG('scheduled') + '</span> scheduled · due ' + t.due + '</span>');
   else if(t.status === 'scheduled-overdue') bits.push('<span style="color:var(--neg)"><span class="micon">' + metaIconSVG('warn') + '</span> overdue since ' + t.due + '</span>');
@@ -1131,7 +1331,6 @@ function metaHTML(t){
   if(t.totalInstallments) bits.push('<span style="color:var(--ink-2)">' + (t.installmentsPaid||0) + '/' + t.totalInstallments + '</span>');
   bits.push(metaFlagsHTML(t));
   if(t.deleted) bits.push('<span style="color:var(--neg)">deleted</span>');
-  if(t.restored) bits.push('<span style="color:var(--info)" title="supersedes the deleted row">↩ #' + t.restored + '</span>');
   return bits.join('');
 }
 const pad = n => String(n).padStart(2,'0');
@@ -1141,10 +1340,13 @@ const pad = n => String(n).padStart(2,'0');
    renumbered by what happens to exist on a given row, which is what makes
    g1/g2/g3 learnable across the whole ledger. */
 const FILE_KINDS = [
-  {n:1, field:'barcodePath',   kind:'bill',      label:'Bill'},
-  {n:2, field:'scheduledPath', kind:'scheduled', label:'Scheduled'},
-  {n:3, field:'receiptPath',   kind:'receipt',   label:'Receipt'}
+  {n:1, field:'barcodePath',   kind:'bill',      label:'Bill', labelIn:'Invoice'},
+  {n:2, field:'scheduledPath', kind:'scheduled', label:'Scheduled', outOnly:true},
+  {n:3, field:'receiptPath',   kind:'receipt',   label:'Receipt', labelIn:'Payslip'}
 ];
+/* Same slot, same key, same meaning — only the word changes with which way
+   the money is moving. */
+const fileLabel = (k, t) => (t && t.kind === 'in' && k.labelIn) ? k.labelIn : k.label;
 function fileIconSVG(kind){
   if(kind === 'bill') return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4z"/><path d="M9 2.5v3h3M6 8h4M6 10.5h4"/></svg>';
   if(kind === 'scheduled') return '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="9.5" rx="1.7"/><path d="M5 2v3M11 2v3M2.5 6.5h11"/><path d="M8 8v2.2l1.6 1"/></svg>';
@@ -1154,19 +1356,25 @@ function fileBadgesHTML(t, p, i){
   const page = t.barcodeSpansPeriod ? barcodePageFor(t, MONTHS[S.mi].key) : null;
   const pageTag = page ? (page.valid ? ' · page ' + page.page + ' of ' + page.total
     : ' · page ' + page.page + ' — outside the uploaded file’s ' + page.total + ' pages') : '';
-  const chips = FILE_KINDS.filter(k => t[k.field]).map(k => {
+  const chips = FILE_KINDS.filter(k => t[k.field] && !(k.outOnly && t.kind === 'in')).map(k => {
     const tag = k.n === 1 ? pageTag : '';
+    const label = fileLabel(k, t);
     return '<button class="fbadge' + (k.n===1 && page && !page.valid ? ' fbadge-warn' : '') + '" type="button" data-p="' + p + '" data-i="' + i + '" data-n="' + k.n + '" '
-    + 'aria-label="Open ' + esc(k.label.toLowerCase()) + ' file" title="' + esc(k.label) + tag + ' · ' + esc(t[k.field]) + '">'
+    + 'aria-label="Open ' + esc(label.toLowerCase()) + ' file" title="' + esc(label) + tag + ' · ' + esc(t[k.field]) + '">'
     + '<kbd>' + k.n + '</kbd><span class="ficon">' + fileIconSVG(k.kind) + '</span>'
-    + '<span class="flabel">' + esc(k.label) + (k.n === 1 && page ? ' · p.' + page.page : '') + '</span></button>';
+    + '<span class="flabel">' + esc(label) + (k.n === 1 && page ? ' · p.' + page.page : '') + '</span></button>';
   }).join('');
   return chips ? '<div class="fbadges" aria-label="Files">' + chips + '</div>' : '';
 }
 function openFile(t, n){
   const kind = FILE_KINDS.find(k => k.n === n);
-  const path = kind && t && t[kind.field];
-  if(!path){ say('no ' + (kind ? kind.label : 'file') + ' on file for this row', true); return; }
+  if(!kind || !t){ say('no file of that kind for this row', true); return; }
+  /* Scheduling only makes sense for money leaving — nothing to promise about
+     money arriving, so slot 2 is refused outright on an income row rather
+     than reported as a file that happens to be missing. */
+  if(kind.outOnly && t.kind === 'in'){ say('no scheduled payment on an income row', true); return; }
+  const path = t[kind.field];
+  if(!path){ say('no ' + fileLabel(kind, t).toLowerCase() + ' on file for this row', true); return; }
   window.open(path, '_blank');
 }
 
@@ -1261,7 +1469,11 @@ function deltaHTML(t){
   }
   if(t.delta === 0) return '<div class="d flat">— 0%</div>';
   const up = t.delta > 0;
-  return '<div class="d ' + (up?'up':'down') + '">' + (up?'▲':'▼') + ' ' + (up?'+':'') + t.delta + '%</div>';
+  /* The arrow is direction; the colour is whether it's good news. More money
+     out is bad, more money in is good — so income inverts, or a raise would
+     paint itself red. */
+  const good = t.kind === 'in' ? up : !up;
+  return '<div class="d ' + (good?'down':'up') + '">' + (up?'▲':'▼') + ' ' + (up?'+':'') + t.delta + '%</div>';
 }
 
 function entryHTML(t, p, i){
@@ -1279,17 +1491,21 @@ function entryHTML(t, p, i){
   }
   if(t.state === 'draft'){   // r's placeholder — the real row lands here on Create
     return '<div class="entry placeholder"><div class="mark"><span class="dot"></span></div>'
-      + '<div class="name"><b>' + esc(t.title) + '</b><div class="meta"><span>r · fill it in on the right</span>'
-      + (rowDraftKind(t) ? '<span class="dtag">unsaved · R to resume</span>' : '') + '</div></div>'
+      + '<div class="name"><b>' + esc(t.title) + '</b><div class="meta"><span>'
+      + (t.kind === 'in' ? 'I' : 'A') + ' · fill it in on the right</span>'
+      + (rowDraftKind(t) ? '<span class="dtag">unsaved · E to resume</span>' : '') + '</div></div>'
       + '<div class="amt"></div></div>';
   }
   const dk = rowDraftKind(t);
   return '<div class="entry">' + markHTML(t)
     + '<div class="name"><b>' + esc(t.title) + '</b><div class="meta">' + metaHTML(t)
-    + (dk ? '<span class="dtag">unsaved · ' + (dk === 'rule' ? 'R' : 'e') + ' to resume</span>' : '') + '</div></div>'
+    + (dk ? '<span class="dtag">unsaved · ' + (dk === 'rule' ? 'E' : 'e') + ' to resume</span>' : '') + '</div></div>'
     + fileBadgesHTML(t, p, i)
-    + '<div class="amt"><div class="v' + (t.kind==='in'?' in':'') + '">'
-    + (t.kind==='in'?'+ ':'') + (t.status==='pending' && !t.amount ? emptyAmountPlaceholder() : fmtMoney(t.amount))
+    + '<div class="amt"><div class="v' + (t.kind==='in'?' in':'') + (isEstimated(t) ? ' est' : '') + '">'
+    /* The mark carries whether the money moved; this tilde carries whether
+       the number is a fact. One channel per fact. */
+    + (t.kind==='in'?'+ ':'') + (isEstimated(t) ? '~' : '')
+    + (t.status==='pending' && !t.amount ? emptyAmountPlaceholder() : fmtMoney(rowAmount(t, p, S.mi)))
     + '</div>' + deltaHTML(t) + '</div></div>';
 }
 
@@ -1310,6 +1526,7 @@ function rowHTML(t, i, fi, p){
   const inline = mine && E.kind === 'occ';
   if(inline) cls.push('editing');
   if(mine && E.kind === 'rule') cls.push('ruletarget');
+  if(S.logFor && S.logFor.id === t.id && S.logFor.p === p) cls.push('ruletarget');
   if(rowDraftKind(t)) cls.push('draft');
   return '<div class="' + cls.join(' ') + '" data-p="' + p + '" data-i="' + i + '" data-id="' + t.id + '">'
     + '<div class="gut">' + gutter(i, fi) + '</div>'
@@ -1324,9 +1541,13 @@ function totals(p){
      nowhere left for a hidden row's amount to leak through as an
      unexplained gap between what's shown and what's listed. */
   const rs = rowsOf(p).filter(t => !t.deleted && t.state === 'ok' && !isPrivacyHidden(p, t));
-  const i = rs.filter(t=>t.kind==='in').reduce((a,b)=>a+b.amount,0);
+  const ins = rs.filter(t=>t.kind==='in');
+  const i = ins.reduce((a,b)=>a+rowAmount(b, p, S.mi),0);
   const o = rs.filter(t=>t.kind==='out').reduce((a,b)=>a+b.amount,0);
-  return {i,o,b:i-o};
+  /* A total built partly from projections is still worth showing — excluding
+     them would make a future month's NET useless — but it must not read as a
+     fact. est is what puts the ~ on every header that consumes this. */
+  return {i,o,b:i-o,est:ins.some(isEstimated)};
 }
 
 function render(){
@@ -1340,7 +1561,8 @@ function render(){
        e:(() => { try { return ae.selectionEnd; } catch(_){ return null; } })()} : null;
   const M = MONTHS[S.mi];
   $('#monthLbl').textContent = M.label;
-  const pane = rulePaneHTML(), paneP = pane ? S.editing.p : -1;
+  const rp = rulePaneHTML(), lp = rp ? '' : logPaneHTML();
+  const pane = rp || lp, paneP = pane ? (rp ? S.editing.p : S.logFor.p) : -1;
   $('#panels').innerHTML = MEMBERS.map((mem,p) => {
     const t = totals(p), fi = S.focus[p];
     return '<div class="panel' + (p===S.panel?' active':'') + '" data-panel="' + p + '">'
@@ -1351,10 +1573,11 @@ function render(){
           + (isAdminNow() ? mem.role : 'preview') + '</span>' : '')
       + '<span class="p-key">' + (p===0?'H':'L') + '</span></div>'
       + '<div class="sums">'
-      + '<div class="sum in"><div class="k">INs</div><div class="v">' + fmtMoney(t.i) + '</div></div>'
+      + '<div class="sum in"><div class="k">INs</div><div class="v">'
+        + (t.est ? '~' : '') + fmtMoney(t.i) + '</div></div>'
       + '<div class="sum out"><div class="k">OUTs</div><div class="v">' + fmtMoney(t.o) + '</div></div>'
       + '<div class="sum bal"><div class="k">Balance</div><div class="v' + (t.b<0?' neg':'') + '">'
-      + (t.b<0?'− ':'') + fmtMoney(t.b) + '</div></div>'
+      + (t.b<0?'− ':'') + (t.est ? '~' : '') + fmtMoney(t.b) + '</div></div>'
       + '</div></div>'
       + '<div class="ledger">' + rowsOf(p).map((r,i)=>isPrivacyHidden(p,r)?'':rowHTML(r,i,fi,p)).join('') + '</div></div>'
       + (p === paneP ? pane : '');
@@ -1385,10 +1608,13 @@ function render(){
   positionPaneArrow();
 
   const a = totals(0), b = totals(1);
-  $('#hIn').textContent = fmtMoney(a.i+b.i);
+  /* Any projection anywhere in the household taints every total it feeds —
+     the tilde travels up, it does not get lost in the sum. */
+  const est = a.est || b.est;
+  $('#hIn').textContent = (est ? '~' : '') + fmtMoney(a.i+b.i);
   $('#hOut').textContent = fmtMoney(a.o+b.o);
   const net = a.b+b.b;
-  $('#hNet').textContent = (net<0?'− ':'') + fmtMoney(net);
+  $('#hNet').textContent = (net<0?'− ':'') + (est ? '~' : '') + fmtMoney(net);
   $('#hNet').style.color = net<0 ? 'var(--neg)' : 'var(--ink)';
 
   $('#stFile').textContent = '~/ffm · ' + M.key;
@@ -1404,7 +1630,7 @@ function render(){
   const nsel = S.sel[0].size + S.sel[1].size;
   const nd = dirtyDraftCount();
   const msg = S.msg || (nsel ? nsel + ' row' + (nsel>1?'s':'') + ' selected' : '')
-    || (nd ? nd + ' unsaved edit' + (nd>1?'s':'') + ' · marked rows · e / R to resume' : '');
+    || (nd ? nd + ' unsaved edit' + (nd>1?'s':'') + ' · marked rows · e / E to resume' : '');
   $('#stMsg').textContent = msg;
   $('#stMsg').className = 'st grow msg' + (S.msgBad?' bad':'');
 
@@ -1445,13 +1671,16 @@ function togglePrivate(){
   const t = cur(); if(!t) return;
   if(t.state === 'draft'){ say('a draft row — finish or cancel it in its pane first', true); return; }
   t.private = !t.private;
-  S.undo.push({k:'private', p:S.panel, id:t.id});
+  const c = logChange('privacy', {id:t.id, ruleId:ruleIdOf(t),
+    fields:[{field:'private', old:logValue(!t.private, 'bool'), new:logValue(t.private, 'bool')}]});
+  S.undo.push({k:'private', p:S.panel, id:t.id, c:c.id});
   say(t.private ? 'hidden from other members (admin still sees it)' : 'visible to the household');
 }
 function softDelete(){
   const t = cur(); if(!t || t.deleted) return;
   t.deleted = true;
-  S.undo.push({k:'delete', p:S.panel, id:t.id});
+  const c = logChange('delete', {id:t.id, ruleId:ruleIdOf(t)});
+  S.undo.push({k:'delete', p:S.panel, id:t.id, c:c.id});
   closeModal();
   say('“' + t.title + '” marked deleted · row kept · u to restore');
 }
@@ -1459,23 +1688,36 @@ function doUndo(){
   const a = S.undo.pop();
   if(!a){ say('already at oldest change', true); return; }
   const list = rowsOf(a.p);
+  /* Restore puts the row back as it was — no clone, no superseding id. The
+     deleted/restored pair lives in the change log (gl) instead of as two
+     rows in the ledger; see CLAUDE.md's no-hard-deletes section for why that
+     decision was reversed. */
   if(a.k === 'delete'){
-    const old = list.find(x=>x.id===a.id);
-    const i = list.indexOf(old);
-    const fresh = T(Object.assign({}, old, {id:++uid, deleted:false, restored:old.id}));
-    list.splice(i+1, 0, fresh);
-    S.panel = a.p; S.focus[a.p] = i+1;
-    say('restored as #' + fresh.id + ' → supersedes #' + old.id);
+    const t = list.find(x=>x.id===a.id);
+    if(t) t.deleted = false;
+    S.panel = a.p; S.focus[a.p] = Math.max(0, list.findIndex(x => x.id === a.id));
+    if(t) logChange('restore', {id:t.id, p:a.p, ruleId:ruleIdOf(t), undoOf:a.c});
+    say('delete undone · row restored');
   } else if(a.k === 'add'){
     const i = list.findIndex(x=>x.id===a.id);
+    const gone = list[i];
     if(i>-1) list.splice(i,1);
     S.focus[a.p] = Math.max(0, Math.min(S.focus[a.p], list.length-1));
+    if(gone) logChange('delete', {id:gone.id, p:a.p, ruleId:ruleIdOf(gone), undoOf:a.c, note:'the row it created was removed'});
     say('add undone');
   } else if(a.k === 'private'){
     const t = list.find(x=>x.id===a.id); if(t) t.private = !t.private;
+    if(t) logChange('privacy', {id:t.id, p:a.p, ruleId:ruleIdOf(t), undoOf:a.c,
+      fields:[{field:'private', old:logValue(!t.private, 'bool'), new:logValue(t.private, 'bool')}]});
     say('privacy undone');
   } else if(a.k === 'edit'){
-    const t = list.find(x=>x.id===a.id); if(t) Object.assign(t, a.prev);
+    const t = list.find(x=>x.id===a.id);
+    if(t){
+      const before = {}; Object.keys(a.prev).forEach(k => before[k] = t[k]);
+      Object.assign(t, a.prev);
+      logChange(a.entity === 'rule' ? 'rule_edit' : 'edit', {id:t.id, p:a.p, entity:a.entity || 'transaction',
+        ruleId:ruleIdOf(t), undoOf:a.c, fields:diffFields(before, t)});
+    }
     say('edit undone');
   }
   render();
@@ -1483,13 +1725,23 @@ function doUndo(){
 
 function insertRow(after, data, okMsg){
   const list = rowsOf(S.panel);
-  const at = Math.min(list.length, Math.max(0, S.focus[S.panel] + (after?1:0)));
   const row = T(Object.assign({state:'skeleton'}, data));
+  /* Income lands at the top — that's where a household reads what came in.
+     Only at creation, though: it takes an ordinary position from here and
+     J/K move it anywhere, exactly like every other row. */
+  const at = row.kind === 'in' ? 0 : Math.min(list.length, Math.max(0, S.focus[S.panel] + (after?1:0)));
   list.splice(at, 0, row);
   S.focus[S.panel] = at;
   render();
   setTimeout(() => {
-    if(S.online){ row.state = 'ok'; S.undo.push({k:'add', p:S.panel, id:row.id}); say(okMsg || ('added #' + row.id)); }
+    if(S.online){
+      row.state = 'ok';
+      const c = logChange(row.recurring ? 'rule_create' : 'create', {id:row.id, ruleId:ruleIdOf(row),
+        fields:[{field:'description', old:'—', new:row.title},
+                {field:'amount', old:'—', new:logValue(row.amount, 'money')}]});
+      S.undo.push({k:'add', p:S.panel, id:row.id, c:c.id});
+      say(okMsg || ('added #' + row.id));
+    }
     else { row.state = 'error'; say('server unreachable · nothing written', true); }
     render();
   }, 780);
@@ -1633,8 +1885,9 @@ function confirmDelete(){
     + '<div class="warnbox"><span class="g">⚠</span><div>'
     + '<b>' + esc(t.title) + '</b> · ' + fmtMoney(t.amount) + '<br>'
     + '<span style="color:var(--ink-2);font-size:12.5px">The row is kept and marked with a deletion date. '
-    + 'Restoring inserts a new row that references this one, so the history stays intact.</span></div></div>'
-    + '<div class="notebox">Nothing is removed from the database. <kbd>u</kbd> restores it.</div></div>'
+    + '<kbd>u</kbd> puts this same row back — there is no second, superseding row.</span></div></div>'
+    + '<div class="notebox">Nothing is removed from the database. The delete, and the restore that undoes it, '
+    + 'are both recorded in the change log — <kbd>gl</kbd> on the row.</div></div>'
     + '<div class="mfoot"><button class="btn" data-act="close" type="button">Cancel <kbd>Esc</kbd></button>'
     + '<button class="btn dgr" data-act="del" type="button">Delete <kbd>y</kbd></button></div>');
 }
@@ -1744,7 +1997,9 @@ function ruleFields(t){
     noBarcode:!!t.noBarcode, multi:!!t.barcodeSpansPeriod,
     pages:t.barcodeWindowSize ? String(t.barcodeWindowSize) : '',
     winStart:fmtDMY(t.barcodeWindowStart ? Object.assign({d:1}, t.barcodeWindowStart) : start),
-    amountInName:!!t.amountInName, attached:false, removed:false};
+    amountInName:!!t.amountInName, attached:false, removed:false,
+    kind:t.kind, manualPaid:t.status === 'received', varies:!!t.varies,
+    basis:t.estimateBasis || 'lowest', window:String(t.estimateWindow || 3)};
 }
 /* The amount, appended to the file name when the rule asks for it:
    {month}_{currency}{amount}. The currency code is what keeps the month
@@ -1771,10 +2026,13 @@ function patternFor(f, mi){
   if(!seg.length) seg.push('…');
   return seg.join('/') + '/' + yyyy + '/' + mm + amountSuffix(f) + '.pdf';
 }
-function blankRuleFields(){
+function blankRuleFields(kind){
   const [m, y] = MONTHS[S.mi].key.split('/').map(Number), start = fmtDMY({d:1, m, y});
-  return {cents:0, cadence:'Monthly', start, due:'', end:'', inst:'', bucket:'', billName:'', tracked:false,
-    noBarcode:false, multi:false, pages:'', winStart:start, amountInName:false, attached:false, removed:false};
+  return {kind:kind || 'out', cents:0, cadence:'Monthly', start, due:'', end:'', inst:'', bucket:'', billName:'', tracked:false,
+    noBarcode:false, multi:false, pages:'', winStart:start, amountInName:false, attached:false, removed:false,
+    /* Income only: an amount that varies is projected from history instead of
+       carried from the rule's own number. See estimateFor(). */
+    manualPaid:false, varies:false, basis:'lowest', window:'3'};
 }
 
 /* Removing a row out from under the cursor has to keep the cursor on the
@@ -1803,8 +2061,11 @@ function parkEditing(){
    j/k, a click, gg/G, a month change, H/L, a search jump, undo — instead of
    hooking each of them. Called first thing in render(). */
 function syncEditing(){
+  const t = cur();
+  const L = S.logFor;
+  if(L && (!t || L.p !== S.panel || L.mi !== S.mi || t.id !== L.id)) S.logFor = null;
   if(!S.editing) return;
-  const t = cur(), E = S.editing;
+  const E = S.editing;
   if(!t || E.p !== S.panel || E.mi !== S.mi || t.id !== E.id) parkEditing();
 }
 /* A parked draft on this row (not the one open right now), for the marker. */
@@ -1824,7 +2085,7 @@ function openEditor(kind, t, fieldsFn, creating){
   render();
   /* The ledger can be wider than the screen now that panes keep a readable
      minimum width — bring the whole pane into view, not just its first field. */
-  const pane = document.querySelector('.rulepane');
+  const pane = document.querySelector('.sidepane');
   if(pane) pane.scrollIntoView({inline:'nearest', block:'nearest'});
 }
 function focusField(sel){ const el = $(sel); if(el){ el.focus(); if(el.select) el.select(); } }
@@ -1853,7 +2114,7 @@ function occFormHTML(t, d){
     + '<label class="f"><span class="k">Description</span><input class="i" id="eT" data-f="title" value="' + esc(f.title) + '"></label>'
     + '<label class="switch"><input type="checkbox" id="eP" data-f="private"' + (f.private ? ' checked' : '') + '>'
     + '<span>Hidden from other members<span class="d">The admin always sees it.</span></span></label>'
-    + (rec ? '<div class="notebox">Generated by a recurring rule. <kbd>R</kbd> edits the rule itself — including its due date — for every future occurrence.</div>' : '')
+    + (rec ? '<div class="notebox">Generated by a recurring rule. <kbd>E</kbd> edits the rule itself — including its due date — for every future occurrence.</div>' : '')
     + '</div>'
     + '<div class="re-foot"><button class="btn" data-act="discardOcc" type="button">Cancel <kbd>Esc</kbd></button>'
     + '<button class="btn pri" data-act="saveOcc" type="button">Save <kbd>Enter</kbd></button></div></div>';
@@ -1863,6 +2124,38 @@ function occFormHTML(t, d){
    "is this in the draft" — a change re-renders the pane. That's also what
    makes Pages / First page covers appear the moment Multi-page is ticked,
    which the old modal never did. */
+const BASES = [
+  ['lowest',  'Lowest of the last'],
+  ['average', 'Average of the last'],
+  ['last',    'Most recent of the last']
+];
+/* The estimate's answer to the live path box: the number this rule would
+   project right now, over the dim line saying where it came from. Both are
+   computed from the draft, not the saved row, so changing the basis repaints
+   before anything is committed. */
+function estimateBlockHTML(t, d){
+  const f = d.f;
+  const probe = Object.assign({}, t, {estimateBasis:f.basis, estimateWindow:Math.max(1, parseInt(f.window, 10) || 3)});
+  const e = estimateFor(probe, d.p, d.mi);
+  const basisLabel = (BASES.find(b => b[0] === f.basis) || BASES[0])[1].toLowerCase();
+  const detail = e.months.length
+    ? basisLabel + ' ' + e.months.length + ' confirmed · '
+      + e.months.map(m => m.key.slice(0,2) + ': ' + fmtMoney(m.amount)).join(' · ')
+    : 'no confirmed history yet — the first period uses the amount above';
+  return '<div class="sub">'
+    + '<div class="fgrid">'
+    + '<label class="f"><span class="k">Estimate from</span><select class="i" id="rBasis" data-f="basis">'
+    + BASES.map(b => '<option value="' + b[0] + '"' + (b[0] === f.basis ? ' selected' : '') + '>' + b[1] + '</option>').join('')
+    + '</select></label>'
+    + '<label class="f"><span class="k">Periods</span><input class="i" id="rWindow" data-f="window" value="' + esc(f.window) + '"></label>'
+    + '</div>'
+    + '<div class="notebox pathbox"><div class="p-real" id="rEstReal">' + (e.months.length ? '~' : '') + esc(fmtMoney(e.value)) + '</div>'
+    + '<div class="p-tmpl" id="rEstWhy">' + esc(detail) + '</div></div>'
+    + '<div class="notebox">Only <b>confirmed</b> periods count. An unconfirmed month is skipped rather than '
+    + 'folded in — otherwise a projection would end up projected from another projection.</div>'
+    + '</div>';
+}
+
 function ruleFormHTML(t, d){
   const f = d.f, c = d.creating, buckets = bucketsFor(d.p);
   const showCode = !c && t.clientCode && !f.removed;
@@ -1872,28 +2165,43 @@ function ruleFormHTML(t, d){
     : 'Drop the barcode PDF here, or leave blank for now';
   const cad = ['Monthly','Bimonthly','Every 3 months','Every 4 months','Every 6 months','Yearly']
     .map(o => '<option' + (o === f.cadence ? ' selected' : '') + '>' + o + '</option>').join('');
-  return '<div class="rp-head"><h3>' + (c ? 'Create recurring bill' : 'Edit recurring rule') + '</h3>'
-    + '<div class="msub">' + (c ? 'r · a fresh rule — not tied to any existing row'
-        : 'R · ' + esc(t.title) + ' · applies to every future occurrence') + '</div></div>'
+  const income = t.kind === 'in';
+  return '<div class="rp-head"><h3>'
+    + (c ? (income ? 'Create recurring income' : 'Create recurring bill')
+         : (income ? 'Edit income rule' : 'Edit recurring rule')) + '</h3>'
+    + '<div class="msub">' + (c ? (income ? 'I' : 'A') + ' · a fresh rule — not tied to any existing row'
+        : 'E · ' + esc(t.title) + ' · applies to every future occurrence') + '</div></div>'
     + '<div class="rp-body"><div class="stack">'
     + '<div class="fgrid">'
     + '<label class="f"><span class="k">Amount</span><div class="amtfield"><span class="cur">' + esc(curFmt().symbol) + '</span>'
     + '<input class="i" id="rAmount" data-f="cents" value=""></div></label>'
-    + '<label class="f"><span class="k">Bill name</span><input class="i" id="rBillName" data-f="billName" value="' + esc(f.billName) + '" placeholder="e.g. Energia"></label>'
+    + '<label class="f"><span class="k">' + (income ? 'Source' : 'Bill name') + '</span>'
+    + '<input class="i" id="rBillName" data-f="billName" value="' + esc(f.billName) + '" placeholder="'
+    + (income ? 'e.g. Salário' : 'e.g. Energia') + '"></label>'
     + '</div><div class="fgrid">'
     + '<label class="f"><span class="k">Bucket</span>'
-    + '<input class="i" id="ruleBucket" data-f="bucket" list="ruleBucketList" value="' + esc(f.bucket) + '" placeholder="e.g. Consumption" autocomplete="off">'
+    + '<input class="i" id="ruleBucket" data-f="bucket" list="ruleBucketList" value="' + esc(f.bucket) + '" placeholder="'
+    + (income ? 'e.g. Income' : 'e.g. Consumption') + '" autocomplete="off">'
     + '<datalist id="ruleBucketList">' + buckets.map(b => '<option value="' + esc(b) + '">').join('') + '</datalist></label>'
     + '<label class="f"><span class="k">Cadence</span><select class="i" id="rCadence" data-f="cadence">' + cad + '</select></label>'
     + '</div><div class="fgrid">'
     + '<label class="f"><span class="k">Start date</span><input class="i" id="rStart" data-f="start" value="' + esc(f.start) + '"></label>'
-    + '<label class="f"><span class="k">Due date' + kNote('day of month') + '</span><input class="i" id="rDue" data-f="due" value="' + esc(f.due) + '"></label>'
+    + '<label class="f"><span class="k">' + (income ? 'Expected day' : 'Due date' + kNote('day of month')) + '</span>'
+    + '<input class="i" id="rDue" data-f="due" value="' + esc(f.due) + '"></label>'
     + '</div><div class="fgrid">'
     + '<label class="f"><span class="k">End date' + kNote('optional') + '</span>'
     + '<input class="i" id="rEnd" data-f="end" value="' + esc(f.end) + '" placeholder="blank = ongoing"></label>'
-    + '<label class="f"><span class="k">Installments' + kNote('optional') + '</span>'
+    + '<label class="f"><span class="k">' + (income ? 'Payments' : 'Installments') + kNote('optional') + '</span>'
     + '<input class="i" id="rInstallments" data-f="inst" value="' + esc(f.inst) + '" placeholder="blank if ongoing"></label>'
     + '</div>'
+    /* Income only: the rule's own number can't stand in for a month that
+       genuinely varies, so it says so and gets projected instead. */
+    + (income
+      ? '<label class="switch"><input type="checkbox" id="rVaries" data-f="varies"' + (f.varies ? ' checked' : '') + '>'
+        + '<span>Amount varies<span class="d">commission, freelance, anything that lands at a different '
+        + 'number each period — future months show a projection until the real figure is confirmed</span></span></label>'
+        + (f.varies ? estimateBlockHTML(t, d) : '')
+      : '')
     + (!c && t.totalInstallments
       ? '<div class="notebox">' + (t.installmentsPaid||0) + ' of ' + t.totalInstallments + ' paid. Editing this '
         + 'count or the end date recomputes the other. Paying several off early? Shorten this number and record '
@@ -1905,19 +2213,21 @@ function ruleFormHTML(t, d){
     + (f.tracked
       ? '<div class="sub">'
         + '<div class="notebox pathbox"><div class="p-real" id="rPathReal">' + esc(patternFor(f, d.mi)) + '</div>'
-        + '<div class="p-tmpl">bucket / bill name / year / month.ext</div></div>'
+        + '<div class="p-tmpl">bucket / ' + (income ? 'source' : 'bill name') + ' / year / month.ext</div></div>'
         + '<label class="switch"><input type="checkbox" id="rAmountInName" data-f="amountInName"' + (f.amountInName ? ' checked' : '') + '>'
         + '<span>Amount in filename<span class="d">09_brl122.94.pdf — the currency code keeps it from '
         + 'reading as part of the month.</span></span></label>'
-        + '<label class="switch"><input type="checkbox" id="rNoBarcode" data-f="noBarcode"' + (f.noBarcode ? ' checked' : '') + '>'
-        + '<span>This bill has no barcode file<span class="d">paid by wire transfer / PIX / TED — nothing to attach, ever</span></span></label>'
-        + (f.noBarcode ? '' : '<div class="sub">'
+        + (income ? '' : '<label class="switch"><input type="checkbox" id="rNoBarcode" data-f="noBarcode"' + (f.noBarcode ? ' checked' : '') + '>'
+        + '<span>This bill has no barcode file<span class="d">paid by wire transfer / PIX / TED — nothing to attach, ever</span></span></label>')
+        /* Money arriving has no boleto to scan — the whole barcode apparatus
+           (client code, dropzone, multi-page window) is spend-only. */
+        + (income || f.noBarcode ? '' : '<div class="sub">'
           + (showCode
             ? '<div class="notebox mono" id="rClientCodeLine" style="font-family:var(--mono);font-size:11.5px">Client code: ' + esc(t.clientCode)
               + ' <span style="color:var(--ink-3)">· read-only, from the last attached file</span>'
               + ' <button class="btn" data-act="unlinkBarcode" type="button" style="padding:3px 9px;font-size:11px;margin-left:8px">Unlink</button></div>'
             : '')
-          + '<div class="f"><span class="k">Barcode file' + kNote('optional' + (c ? ' — can also be added later via R' : ' — attach or replace it here')) + '</span>'
+          + '<div class="f"><span class="k">Barcode file' + kNote('optional' + (c ? ' — can also be added later via E' : ' — attach or replace it here')) + '</span>'
           + '<div class="dropzone' + (f.attached ? ' on' : '') + '" id="rFileDrop"><span class="dz-msg">' + dzMsg + '</span></div></div>'
           + '<label class="switch"><input type="checkbox" id="rMultiPage" data-f="multi"' + (f.multi ? ' checked' : '') + '>'
           + '<span>Barcode covers multiple months<span class="d">one file with several pages — e.g. a city tax’s '
@@ -1932,7 +2242,13 @@ function ruleFormHTML(t, d){
             : '')
           + '</div>')
         + '</div>'
-      : '')
+      /* The manual tick is the untracked rule's stand-in for a payslip on
+         disk — income's one way to confirm without a file. */
+      : income
+        ? '<label class="switch"><input type="checkbox" id="rManualPaid" data-f="manualPaid"' + (f.manualPaid ? ' checked' : '') + '>'
+          + '<span>Mark as received manually<span class="d">no file to prove it — shown in a different colour '
+          + 'from a verified payslip</span></span></label>'
+        : '')
     + (c ? '<div class="notebox">A brand-new rule — nothing in the ledger yet. Future months materialize on their own from here.</div>'
          : '<div class="notebox">Past occurrences already in the ledger are left as they were recorded.</div>')
     + '</div></div>'
@@ -1940,11 +2256,86 @@ function ruleFormHTML(t, d){
     + '<button class="btn pri" data-act="' + (c ? 'createRule' : 'saveRule') + '" type="button">'
     + (c ? 'Create rule' : 'Save rule') + ' <kbd>Enter</kbd></button></div>';
 }
+/* The change log pane (gl). Read-only — no drafts, no save — so it reuses
+   the side-pane shell and the arrow, and nothing else from the editors. */
+function openLog(){
+  const t = cur(); if(!t) return;
+  if(S.editing) parkEditing();
+  S.logFor = {id:t.id, p:S.panel, mi:S.mi};
+  render();
+  const pane = document.querySelector('.logpane');
+  if(pane) pane.scrollIntoView({inline:'nearest', block:'nearest'});
+  const first = document.querySelector('.logentry');
+  if(first) first.focus({preventScroll:true});
+}
+function closeLog(){ S.logFor = null; render(); $('#app').focus(); }
+function toggleLogEntry(id){
+  S.logOpen.has(id) ? S.logOpen.delete(id) : S.logOpen.add(id);
+  render();
+}
+const DAY_MS = 86400000;
+function dayLabel(at){
+  const d = new Date(at), now = new Date();
+  const midnight = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((midnight(now) - midnight(d)) / DAY_MS);
+  if(diff === 0) return 'today';
+  if(diff === 1) return 'yesterday';
+  return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+}
+const clockOf = at => { const d = new Date(at); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+const LOG_VERBS = {
+  create:'created', edit:'edited', delete:'deleted', restore:'restored',
+  reattribute:'re-attributed', reorder:'reordered', privacy:'privacy changed',
+  rule_create:'rule created', rule_edit:'rule edited', file_attach:'barcode attached',
+  file_unlink:'barcode unlinked', file_upload:'file uploaded', file_delete:'file deleted',
+  import:'imported', materialize:'materialized'
+};
+function logPaneHTML(){
+  const L = S.logFor; if(!L) return '';
+  const t = MONTHS[L.mi].m[L.p].find(x => x.id === L.id); if(!t) return '';
+  const entries = logFor(t, L.p, L.mi, S.logFilter);
+  const chip = (v, label) => '<button class="chip' + (S.logFilter === v ? ' on' : '') + '" type="button" data-logf="' + v + '">' + label + '</button>';
+  let body = '';
+  if(!entries.length){
+    body = '<div class="notebox">Nothing recorded yet for this row. Every change from here on — edits, '
+      + 'deletes, files, re-attributions — lands here.</div>';
+  } else {
+    let day = '';
+    entries.forEach(e => {
+      const d = dayLabel(e.at);
+      if(d !== day){ day = d; body += '<div class="log-day">' + esc(day) + '</div>'; }
+      const open = S.logOpen.has(e.id);
+      const rule = e.entity === 'rule' ? '<span class="log-tag">rule</span>' : '';
+      const undone = e.undoOf ? '<span class="log-undo">undo of ' + clockOf((S.log.find(x => x.id === e.undoOf) || e).at) + '</span>' : '';
+      const n = e.fields.length;
+      body += '<button class="logentry' + (open ? ' open' : '') + '" id="logE' + e.id + '" type="button" data-logx="' + e.id + '">'
+        + '<span class="log-time">' + clockOf(e.at) + '</span>'
+        + '<span class="log-who">' + esc(e.who) + '</span>'
+        + '<span class="log-what">' + esc(LOG_VERBS[e.action] || e.action)
+        + (n ? ' · ' + n + ' field' + (n > 1 ? 's' : '') : '')
+        + (e.note ? ' · ' + esc(e.note) : '') + ' ' + rule + undone + '</span>'
+        + (n ? '<span class="log-caret">' + (open ? '▾' : '▸') + '</span>' : '')
+        + '</button>';
+      if(open && n){
+        body += '<div class="log-fields">' + e.fields.map(f =>
+          '<div class="log-f"><span class="lf-k">' + esc(f.field) + '</span>'
+          + '<span class="lf-v">' + esc(f.old) + '</span><span class="lf-a">→</span>'
+          + '<span class="lf-v now">' + esc(f.new) + '</span></div>').join('') + '</div>';
+      }
+    });
+  }
+  return '<aside class="sidepane logpane"><div class="rp-arrow"></div>'
+    + '<div class="rp-head"><h3>History</h3>'
+    + '<div class="msub">gl · ' + esc(t.title) + ' · ' + MONTHS[L.mi].key + '</div>'
+    + '<div class="chips">' + chip('row', 'this row') + chip('rule', 'rule') + chip('all', 'all') + '</div></div>'
+    + '<div class="rp-body">' + body + '</div>'
+    + '<div class="rp-foot"><span class="log-hint">j / k move · Enter opens · Esc closes</span></div></aside>';
+}
 function rulePaneHTML(){
   const d = activeDraft();
   if(!d || d.kind !== 'rule') return '';
   const t = draftRow(d);
-  return t ? '<aside class="rulepane"><div class="rp-arrow"></div>' + ruleFormHTML(t, d) + '</aside>' : '';
+  return t ? '<aside class="sidepane rulepane"><div class="rp-arrow"></div>' + ruleFormHTML(t, d) + '</aside>' : '';
 }
 
 /* Field widgets that need JS (the money mask, digits-only, end-date ↔
@@ -1954,7 +2345,7 @@ function wireEditors(){
   const d = activeDraft(); if(!d) return;
   const amt = $(d.kind === 'occ' ? '#eA' : '#rAmount');
   if(amt) maskAmount(amt, amountOf(d.f.cents));
-  ['#eD', '#rDue', '#rInstallments', '#rPages'].forEach(s => { const el = $(s); if(el) restrictToNumeric(el, false); });
+  ['#eD', '#rDue', '#rInstallments', '#rPages', '#rWindow'].forEach(s => { const el = $(s); if(el) restrictToNumeric(el, false); });
   if($('#rStart')) wireInstallmentSync($('#rStart'), $('#rEnd'), $('#rInstallments'));
 }
 /* Reads every field of the open form back into its draft — every field, not
@@ -1970,7 +2361,7 @@ function readForm(){
 /* The arrow sits on the pane's left edge, level with the row it's editing,
    clamped to the pane when that row has scrolled out of view. */
 function positionPaneArrow(){
-  const pane = document.querySelector('.rulepane'), d = activeDraft();
+  const pane = document.querySelector('.sidepane'), d = activeDraft() || S.logFor;
   if(!pane || !d) return;
   const arrow = pane.querySelector('.rp-arrow');
   const entry = document.querySelector('.row[data-id="' + d.id + '"] .entry');
@@ -2008,7 +2399,8 @@ function runEditAct(a){
     t.amount = amountOf(f.cents);
     if(!t.recurring){ const n = parseInt(f.day, 10); if(n >= 1 && n <= 31) t.day = n; }
     t.private = !!f.private;
-    S.undo.push({k:'edit', p:d.p, id:t.id, prev});
+    const c = logChange('edit', {id:t.id, p:d.p, mi:d.mi, ruleId:ruleIdOf(t), fields:diffFields(prev, t)});
+    S.undo.push({k:'edit', p:d.p, id:t.id, prev, c:c.id});
     finishEdit(d);
     say('occurrence updated');
     return;
@@ -2019,7 +2411,9 @@ function runEditAct(a){
       pattern:t.pattern, status:t.status, progress:t.progress, due:t.due,
       ruleStart:t.ruleStart, ruleEnd:t.ruleEnd, barcodeSpansPeriod:t.barcodeSpansPeriod,
       barcodeWindowSize:t.barcodeWindowSize, barcodeWindowStart:t.barcodeWindowStart, barcodePath:t.barcodePath,
-      noBarcode:t.noBarcode, clientCode:t.clientCode, amountInName:t.amountInName};
+      noBarcode:t.noBarcode, clientCode:t.clientCode, amountInName:t.amountInName,
+      varies:t.varies, estimateBasis:t.estimateBasis, estimateWindow:t.estimateWindow};
+    const income = t.kind === 'in';
     t.amount = amountOf(f.cents);
     const dueD = parseInt(f.due, 10);
     if(dueD >= 1 && dueD <= 31){
@@ -2038,7 +2432,31 @@ function runEditAct(a){
     const startD = parseDMY(f.start); if(startD) t.ruleStart = startD;
     t.ruleEnd = parseDMY(f.end);
     t.tracked = !!f.tracked;
-    if(t.tracked){
+    if(income){
+      t.varies = !!f.varies;
+      t.estimateBasis = f.basis;
+      t.estimateWindow = Math.max(1, parseInt(f.window, 10) || 3);
+      /* Turning variance off makes the rule's own number authoritative
+         again — there's nothing left to project, so the period is a fact. */
+      if(!t.varies) t.confirmed = true;
+      t.amountInName = t.tracked && !!f.amountInName;
+      t.pattern = t.tracked
+        ? patternFor(Object.assign({}, f, {bucket:t.bucket, billName:t.billName}), d.mi)
+        : null;
+      /* No boleto behind money arriving — never carry barcode state on an
+         income rule, even if it somehow picked some up. */
+      t.noBarcode = false; t.clientCode = null;
+      t.barcodeSpansPeriod = false; t.barcodeWindowSize = null; t.barcodeWindowStart = null; t.barcodePath = null;
+      if(t.status !== 'received'){
+        t.status = 'expected';
+        if(t.progress == null) t.progress = .25;
+        if(!t.due) t.due = pad(t.day || 1) + '/' + MONTHS[d.mi].key;
+      }
+      /* The manual tick is the untracked rule's stand-in for a payslip on
+         disk; a tracked rule never gets to assert receipt without one. */
+      if(!t.tracked && f.manualPaid){ t.status = 'received'; t.confirmed = true; }
+      else if(!t.tracked && t.status === 'received' && !f.manualPaid){ t.status = 'expected'; t.confirmed = !t.varies; }
+    } else if(t.tracked){
       /* A simplified stand-in for CLAUDE.md's full computed path — matches
          the shorter illustrative form the seed data already uses. */
       t.amountInName = !!f.amountInName;
@@ -2047,8 +2465,16 @@ function runEditAct(a){
       if(t.noBarcode){
         t.barcodeSpansPeriod = false; t.barcodeWindowSize = null; t.barcodeWindowStart = null;
       } else {
-        if(f.removed) t.clientCode = null;
-        else if(f.attached) t.clientCode = clientCodeFor(t);
+        if(f.removed){
+          if(t.clientCode) logChange('file_unlink', {id:t.id, p:d.p, mi:d.mi, entity:'file', ruleId:ruleIdOf(t),
+            fields:[{field:'client code', old:t.clientCode, new:'—'}]});
+          t.clientCode = null;
+        } else if(f.attached){
+          const was = t.clientCode || '—';
+          t.clientCode = clientCodeFor(t);
+          logChange('file_attach', {id:t.id, p:d.p, mi:d.mi, entity:'file', ruleId:ruleIdOf(t),
+            fields:[{field:'client code', old:was, new:t.clientCode}]});
+        }
         t.barcodeSpansPeriod = !!f.multi;
         if(t.barcodeSpansPeriod){
           const pages = parseInt(f.pages, 10);
@@ -2069,17 +2495,23 @@ function runEditAct(a){
         if(t.progress == null) t.progress = .25;
         if(!t.due) t.due = pad(t.day || 1) + '/' + MONTHS[d.mi].key;
       }
-    } else {
+    } else if(!income){
       t.pattern = null; t.noBarcode = false; t.clientCode = null; t.amountInName = false;
     }
-    S.undo.push({k:'edit', p:d.p, id:t.id, prev});
+    const c = logChange('rule_edit', {id:t.id, p:d.p, mi:d.mi, entity:'rule', ruleId:ruleIdOf(t),
+      fields:diffFields(prev, t)});
+    S.undo.push({k:'edit', p:d.p, id:t.id, prev, entity:'rule', c:c.id});
     finishEdit(d);
-    say('rule updated');
+    say(income ? 'income rule updated' : 'rule updated');
     return;
   }
   if(a === 'createRule'){
+    const income = t.kind === 'in';
     const billName = f.billName.trim();
-    if(!billName){ say('a recurring bill needs a name', true); focusField('#rBillName'); return; }
+    if(!billName){
+      say(income ? 'a recurring income needs a source' : 'a recurring bill needs a name', true);
+      focusField('#rBillName'); return;
+    }
     const [curM, curY] = MONTHS[d.mi].key.split('/').map(Number);
     const startD = parseDMY(f.start) || {d:1, m:curM, y:curY};
     const dueD = parseInt(f.due, 10);
@@ -2087,14 +2519,28 @@ function runEditAct(a){
     const inst = parseInt(f.inst, 10);
     const totalInstallments = (isFinite(inst) && inst > 0) ? inst : null;
     const data = {
-      kind:'out', title:billName, billName, day, amount:amountOf(f.cents),
+      kind:income ? 'in' : 'out', title:billName, billName, day, amount:amountOf(f.cents),
       bucket:f.bucket.trim() || null,
       recurring:true, ruleStart:startD, ruleEnd:parseDMY(f.end),
       totalInstallments, installmentsPaid:totalInstallments ? 1 : 0,
       tracked:!!f.tracked, progress:null,
-      status:f.tracked ? 'pending' : 'plain'
+      status:income ? (f.manualPaid ? 'received' : 'expected') : (f.tracked ? 'pending' : 'plain')
     };
-    if(f.tracked){
+    if(income){
+      data.varies = !!f.varies;
+      data.estimateBasis = f.basis;
+      data.estimateWindow = Math.max(1, parseInt(f.window, 10) || 3);
+      /* A brand-new income has no history behind it, so its first period is
+         the rule's own number — the same carve-out a rule's first occurrence
+         already gets. Nothing to estimate from yet means nothing to hedge. */
+      data.confirmed = !data.varies;
+      data.progress = .25;
+      data.due = pad(day) + '/' + MONTHS[d.mi].key;
+      if(f.tracked){
+        data.amountInName = !!f.amountInName;
+        data.pattern = patternFor(Object.assign({}, f, {bucket:data.bucket, billName}), d.mi);
+      }
+    } else if(f.tracked){
       data.amountInName = !!f.amountInName;
       data.pattern = patternFor(Object.assign({}, f, {bucket:data.bucket, billName}), d.mi);
       data.noBarcode = !!f.noBarcode;
@@ -2109,7 +2555,8 @@ function runEditAct(a){
     const at = rowsOf(d.p).findIndex(x => x.id === t.id);
     finishEdit(d);
     if(at >= 0) S.focus[d.p] = at;
-    insertRow(false, data, 'recurring bill created · future months materialize on their own');
+    insertRow(false, data, (income ? 'recurring income' : 'recurring bill')
+      + ' created · future months materialize on their own');
   }
 }
 
@@ -2183,29 +2630,37 @@ function dueDay(t){
   return d ? d.d : (t.day || null);
 }
 
-/* R — edits the rule behind the focused row, in the side pane. On r's
+/* E — edits the rule behind the focused row, in the side pane. On A/I's
    placeholder row it resumes that row's create form. A plain row has no rule
    to edit, and can't become one: rules are only ever created from scratch
-   with r (CLAUDE.md's Recurring rules section explains why). */
+   with A or I (CLAUDE.md's Recurring rules section explains why). */
 function editRule(){
   const t = cur();
   if(!t) return;
-  if(t.state === 'draft'){ openEditor('rule', t, blankRuleFields, true); focusField('#rAmount'); return; }
-  if(!t.recurring){ say('not recurring — press r to create a new recurring bill', true); return; }
+  if(t.state === 'draft'){ openEditor('rule', t, () => blankRuleFields(t.kind), true); focusField('#rAmount'); return; }
+  if(!t.recurring){ say('not recurring — A for a recurring bill, I for recurring income', true); return; }
   openEditor('rule', t, () => ruleFields(t));
   focusField('#rAmount');
 }
 
-/* r — the only way a recurring rule is ever created. There's no row yet for
-   the pane's arrow to point at, so a dashed placeholder row goes in at the
-   cursor; Create turns it into the real row, Cancel removes it. */
-function createRule(){
+/* A / I — the only way a recurring rule is ever created, one key per
+   direction the money moves. There's no row yet for the pane's arrow to
+   point at, so a dashed placeholder row goes in at the cursor; Create turns
+   it into the real row, Cancel removes it.
+
+   Income lands at the top of the pane rather than under the cursor — that's
+   where a household reads what came in — but only at creation: it gets an
+   ordinary sort position and J/K move it anywhere afterwards. */
+function createRule(kind){
   if(S.editing) parkEditing();
   const list = rowsOf(S.panel);
-  const ph = T({state:'draft', title:'New recurring bill', kind:'out'});
-  list.splice(Math.min(list.length, S.focus[S.panel] + 1), 0, ph);
+  const income = kind === 'in';
+  const ph = T({state:'draft', kind:kind || 'out',
+    title:income ? 'New recurring income' : 'New recurring bill'});
+  if(income) list.unshift(ph);
+  else list.splice(Math.min(list.length, S.focus[S.panel] + 1), 0, ph);
   S.focus[S.panel] = list.indexOf(ph);
-  openEditor('rule', ph, blankRuleFields, true);
+  openEditor('rule', ph, () => blankRuleFields(ph.kind), true);
   focusField('#rAmount');
 }
 
@@ -2274,6 +2729,28 @@ document.addEventListener('keydown', e => {
      off the top/bottom of an inline row moves the cursor to the row above
      or below; Ctrl-h off the pane's left edge returns to the ledger with
      the pane still open until the cursor actually moves. */
+  /* The log pane: read-only, so j/k walk its entries, Enter opens one, and
+     Ctrl-h hands focus back to the ledger like the rule pane's left edge. */
+  const logBox = e.target.closest && e.target.closest('.logpane');
+  if(logBox){
+    if(e.key === 'Escape'){ e.preventDefault(); closeLog(); return; }
+    if(e.ctrlKey && e.key === 'h'){ e.preventDefault(); $('#app').focus(); say('back to the ledger · the log closes when the cursor moves'); return; }
+    if(e.key === 'j' || e.key === 'k' || e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      const items = Array.from(logBox.querySelectorAll('.logentry'));
+      const at = items.indexOf(document.activeElement);
+      const next = items[Math.max(0, Math.min(items.length - 1, at + ((e.key === 'j' || e.key === 'ArrowDown') ? 1 : -1)))];
+      if(next) next.focus({preventScroll:false});
+      return;
+    }
+    if(e.key === 'Enter' || e.key === ' '){
+      e.preventDefault();
+      const el = document.activeElement.closest && document.activeElement.closest('[data-logx]');
+      if(el) toggleLogEntry(+el.dataset.logx);
+      return;
+    }
+    return;
+  }
   const edBox = e.target.closest && e.target.closest('.rowedit, .rulepane');
   if(edBox){
     const isPane = edBox.classList.contains('rulepane');
@@ -2335,6 +2812,7 @@ document.addEventListener('keydown', e => {
     S.buf=''; e.preventDefault();
     if(k === 'g'){ S.focus[S.panel]=0; S.count=''; render(); }
     else if(k === 'd'){ S.count=''; showDetailsForFocused(); }
+    else if(k === 'l'){ S.count=''; openLog(); }
     else render();
     return;
   }
@@ -2351,11 +2829,14 @@ document.addEventListener('keydown', e => {
     case 'p': e.preventDefault(); togglePrivate(); break;
     case 'P': e.preventDefault(); openFilePreview(); break;
     case 'u': e.preventDefault(); doUndo(); break;
+    /* The creation matrix: lowercase is the one-off occurrence, uppercase the
+       recurring rule; a/A are money out, i/I money in. */
     case 'e': e.preventDefault(); editOccurrence(); break;
-    case 'R': e.preventDefault(); editRule(); break;
-    case 'r': e.preventDefault(); createRule(); break;
+    case 'E': e.preventDefault(); editRule(); break;
     case 'a': e.preventDefault(); openCmd(':'); $('#cmdInput').value='add '; break;
-    case 'i': e.preventDefault(); openCmd(':'); $('#cmdInput').value='add '; break;
+    case 'A': e.preventDefault(); createRule('out'); break;
+    case 'i': e.preventDefault(); openCmd(':'); $('#cmdInput').value='in '; break;
+    case 'I': e.preventDefault(); createRule('in'); break;
     case '/': case ':': e.preventDefault(); openCmd(k); break;
     case '?': e.preventDefault(); helpModal(); break;
     case 'Escape': e.preventDefault(); S.count=''; S.buf='';
@@ -2386,7 +2867,7 @@ function warnUnlinkedBarcodes(p){
   if(!pending.length) return;
   const names = pending.map(t => t.billName || t.title.split(' · ')[0]).join(', ');
   say((pending.length === 1 ? '1 recurring bill' : pending.length + ' recurring bills')
-    + ' still need a barcode file (' + names + ') — focus it and press R to set it up', true);
+    + ' still need a barcode file (' + names + ') — focus it and press E to set it up', true);
 }
 $('#panels').addEventListener('dragover', e => {
   if(!e.dataTransfer || !e.dataTransfer.types.includes('Files')) return;
@@ -2434,18 +2915,46 @@ $('#panels').addEventListener('input', e => {
   /* Repaint just the computed path — a full render would fight the caret. */
   const path = $('#rPathReal'), d = activeDraft();
   if(path && d) path.textContent = patternFor(d.f, d.mi);
+  repaintEstimate();
 });
 $('#panels').addEventListener('change', e => {
   if(!e.target.closest('.rowedit, .rulepane')) return;
   readForm();
   if(e.target.type === 'checkbox') render();
+  else repaintEstimate();
 });
+/* The estimate box is live for the same reason the path box is: changing the
+   basis should show its answer before anything is saved. Repainted in place
+   rather than re-rendered, so the caret in Periods survives. */
+function repaintEstimate(){
+  const real = $('#rEstReal'); if(!real) return;
+  const d = activeDraft(); if(!d) return;
+  const t = draftRow(d); if(!t) return;
+  const f = d.f;
+  const probe = Object.assign({}, t, {estimateBasis:f.basis, estimateWindow:Math.max(1, parseInt(f.window, 10) || 3)});
+  const e = estimateFor(probe, d.p, d.mi);
+  const basisLabel = (BASES.find(b => b[0] === f.basis) || BASES[0])[1].toLowerCase();
+  real.textContent = (e.months.length ? '~' : '') + fmtMoney(e.value);
+  const why = $('#rEstWhy');
+  if(why) why.textContent = e.months.length
+    ? basisLabel + ' ' + e.months.length + ' confirmed · '
+      + e.months.map(m => m.key.slice(0,2) + ': ' + fmtMoney(m.amount)).join(' · ')
+    : 'no confirmed history yet — the first period uses the amount above';
+}
 /* The ledgers are rebuilt on every render, so listen in the capture phase
    on #panels to catch any of them scrolling. */
 $('#panels').addEventListener('scroll', positionPaneArrow, true);
 $('#panels').addEventListener('click', e => {
   /* Inside the inline row or the pane: run the button, if any, and stop —
      the row-click handling below would refocus and re-render mid-edit. */
+  const logHit = e.target.closest('.logpane');
+  if(logHit){
+    const chip = e.target.closest('[data-logf]');
+    if(chip){ S.logFilter = chip.dataset.logf; render(); return; }
+    const row = e.target.closest('[data-logx]');
+    if(row) toggleLogEntry(+row.dataset.logx);
+    return;
+  }
   if(e.target.closest('.rowedit, .rulepane')){
     const act = e.target.closest('[data-act]');
     if(act) runEditAct(act.dataset.act);
@@ -2465,7 +2974,7 @@ $('#panels').addEventListener('click', e => {
     const id = +rt.dataset.retry;
     for(let p=0;p<2;p++){ const t = rowsOf(p).find(x=>x.id===id);
       if(t){ t.state='skeleton'; render();
-        setTimeout(()=>{ if(S.online){ t.state='ok'; S.undo.push({k:'add',p,id:t.id}); say('added #'+t.id); }
+        setTimeout(()=>{ if(S.online){ t.state='ok'; S.undo.push({k:'add',p,id:t.id,c:logChange('create',{id:t.id,p,ruleId:ruleIdOf(t),note:'retried'}).id}); say('added #'+t.id); }
           else { t.state='error'; say('still unreachable', true); } render(); }, 780); } }
     return;
   }
@@ -2693,34 +3202,37 @@ const SPECS = [
   { n:'h', h:'Manually marked paid',
     r:()=>specRow(T({title:'Spotify Família', status:'manual-paid', amount:34.90, day:22, recurring:true})),
     p:'The one manual tick in the whole model, and only because there is no filesystem proof to contradict it — this rule was never tracking-enabled. Outlined green disc, not the solid fill of a file-verified <code>paid</code>: asserted, not proven. A tracked rule never gets this checkbox.' },
-  { n:'i', h:'Income',
-    r:()=>specRow(T({kind:'in', title:'Salário', status:'in', amount:11800, day:5})),
-    p:'INs are the same component with a positive amount and a filled dot. They sum into the panel header rather than reading as a bill.' },
-  { n:'j', h:'Focused row',
+  { n:'i', h:'Income, received',
+    r:()=>specRow(T({kind:'in', title:'Salário', status:'received', amount:11800, day:5, recurring:true, confirmed:true})),
+    p:'INs are the same component with a positive amount and a filled dot. Income runs on its own axis — <em>arrival</em>, not payment — so it never shows a paid or scheduled mark; the filled dot means the money landed.' },
+  { n:'j', h:'Income, expected',
+    r:()=>specRow(T({kind:'in', title:'Aluguel · Kitnet', status:'expected', amount:2500, day:0, due:'10/09/2026', progress:.6, recurring:true, confirmed:true})),
+    p:'Not arrived yet. The ring is the same elapsed-time arc a pending bill uses, counting toward the <em>expected day</em> instead of a due date — green to amber to red as it runs out, so neither has to be learned twice.' },
+  { n:'k', h:'Income, projected',
+    r:()=>specRow(T({kind:'in', title:'Freelance · Auditoria', status:'expected', amount:2400, day:0, due:'22/09/2026', progress:.35, recurring:true, tracked:true, varies:true, confirmed:false})),
+    p:'A rule whose amount <em>varies</em>. Until the real figure is confirmed, the row shows a projection from its own history — tilde, and deliberately quieter than a real number. The mark carries whether the money moved; the tilde carries whether the number is a fact. One channel per fact.' },
+  { n:'l', h:'Focused row',
     r:()=>'<div style="display:flex;flex-direction:column;gap:2px">'
       + specRow(T({title:'Condomínio', status:'paid', amount:965, day:8, recurring:true, tracked:true, delta:5}), {gut:'1'})
       + specRow(T({title:'IPTU', status:'plain', amount:412.70, day:15, recurring:true}), {gut:'0', focus:true})
       + specRow(T({title:'Mercado · Pão de Açúcar', status:'plain', amount:658.90, day:13, delta:-6}), {gut:'1'}) + '</div>',
     p:'Gutter zero, accent rail, tinted ground. Relative numbers above and below make <code>3j</code> land where you meant.' },
-  { n:'k', h:'Selected',
+  { n:'m', h:'Selected',
     r:()=>specRow(T({title:'Mercado · Pão de Açúcar', status:'plain', amount:658.90, day:13, delta:-6}), {gut:'2', sel:true}),
     p:'<code>x</code> checks the row for a later batch operation. It is a marker, never a delete — the count sits in the statusline.' },
-  { n:'l', h:'Private',
+  { n:'n', h:'Private',
     r:()=>specRow(T({title:'Consulta · dermatologista', status:'plain', amount:450, day:23, private:true}), {gut:'4'}),
     p:'Hidden from the other member, never from the admin. Everything is shared by default; this is the deliberate exception.' },
-  { n:'m', h:'Soft deleted',
+  { n:'o', h:'Soft deleted',
     r:()=>specRow(T({title:'Uber', status:'plain', amount:112.60, day:25, deleted:true}), {gut:'3'}),
-    p:'The row stays. It gets a status and a deletion date, dims, and strikes through. Nothing is removed from the database, ever.' },
-  { n:'n', h:'Restored',
-    r:()=>specRow(T({title:'Uber', status:'plain', amount:112.60, day:25, restored:1042}), {gut:'3'}),
-    p:'Undo inserts a <em>new</em> row pointing at the one it supersedes, so each transaction carries a traceable chain back through its prior versions.' },
-  { n:'o', h:'Optimistic skeleton',
+    p:'The row stays. It gets a status and a deletion date, dims, and strikes through. Nothing is removed from the database, ever. <code>u</code> puts this same row back — there is no second, superseding row; the deleted/restored pair lives in the change log (<code>gl</code>).' },
+  { n:'p', h:'Optimistic skeleton',
     r:()=>specRow(T({state:'skeleton'}), {gut:'0'}),
     p:'Submitted and in flight. The skeleton takes the row\'s exact geometry so nothing shifts when the server\'s HTML fragment lands.' },
-  { n:'p', h:'Failed, retryable',
+  { n:'q', h:'Failed, retryable',
     r:()=>specRow(T({title:'Mercado 84,20', state:'error'}), {gut:'0'}),
     p:'The skeleton resolves to an error row instead of a real one. <b>Try Again</b> resubmits the original action — the wording says what happened and that nothing was written.' },
-  { n:'q', h:'Grouped by bucket',
+  { n:'r', h:'Grouped by bucket',
     r:()=>'<div style="display:flex;flex-direction:column;gap:6px">'
       + '<div style="display:grid;grid-template-columns:14px 1fr auto auto;gap:9px;align-items:center;padding:8px 12px;border-radius:10px;background:var(--surface-3);border:1px solid var(--line-2)">'
       + '<span style="color:var(--accent);font-size:11px;display:inline-block;transform:rotate(90deg)">▸</span>'
@@ -2735,10 +3247,10 @@ const SPECS = [
       + '<span class="mono" style="font-size:10px;color:var(--ink-3)">1 item</span>'
       + '<span class="mono" style="font-size:13px;font-weight:500">R$ 412,70</span></div></div>',
     p:'<code>:group bucket</code> renders real Vim folds — <code>za</code>/<code>zo</code>/<code>zc</code> toggle one, <code>zR</code>/<code>zM</code> open or close every fold at once. A subtotal sits in the header whether it is open (Consumption, above) or closed (Uncategorized, above) — which is why folding everything (<code>zM</code>) already reads as the monthly category report, with no separate screen to build.' },
-  { n:'r', h:'Fixed-length installment',
+  { n:'s', h:'Fixed-length installment',
     r:()=>specRow(T({title:'Financiamento · Honda Biz', status:'plain', amount:687.00, day:20, recurring:true, totalInstallments:12, installmentsPaid:7})),
     p:'A car loan is not a subscription — it has a real end. <code>total_installments</code> counts it down as a bare <code>7/12</code> badge, the same meta slot the due-date and recurring glyphs already occupy. Distinct from a seasonal bill like IPTU, which recurs every year rather than ending for good.' },
-  { n:'s', h:'File badges',
+  { n:'t', h:'File badges',
     r:()=>'<div style="display:flex;flex-direction:column;gap:2px">'
       + specRow(T({title:'Energia · Enel SP', status:'paid', amount:343.62, day:11, recurring:true, tracked:true,
           barcodePath:'energia/2026/07_barcode.pdf', receiptPath:'energia/2026/07.pdf'}), {focus:true})
@@ -2813,7 +3325,7 @@ renderTaxonomy();
 /* ================= keymap ================= */
 const KEYGROUPS = [
   ['Move', [['j / k','row down / up'],['5j · 7k','counted motion'],['gg / G','first / last row'],['H / L','focus member panel, left / right'],['Ctrl-P / Ctrl-N','previous / next month']]],
-  ['Act',  [['a / i','add after / before the current row'],['x','toggle selection for a batch operation'],['e','edit this occurrence, in place — Enter saves, Esc cancels'],['r','create a new recurring bill — opens the rule pane beside the ledger'],['R','edit the recurring rule behind it, in the rule pane — no-op on a plain row'],['Ctrl-hjkl','in a form: move between fields · past the edge, back to the ledger (keeps the draft)'],['gd','show due/cadence/receipt details, keyboard-only (proposal)'],['p','toggle private (proposal)']]],
+  ['Act',  [['a','add a one-off spend'],['A','create a recurring bill — opens the rule pane beside the ledger'],['i','add a one-off income'],['I','create a recurring income — same pane, money the other way'],['x','toggle selection for a batch operation'],['e','edit this occurrence, in place — Enter saves, Esc cancels'],['E','edit the recurring rule behind it, in the rule pane — no-op on a plain row'],['Ctrl-hjkl','in a form: move between fields · past the edge, back to the ledger (keeps the draft)'],['gd','show due/cadence/receipt details, keyboard-only (proposal)'],['gl','change log for the focused row — who changed what, when'],['p','toggle private (proposal)']]],
   ['Undo', [['dd','delete — opens a confirmation'],['y','confirm in the delete modal'],['u','undo the last change'],['Esc','clear count, buffer and selection']]],
   ['Files', [['g1','open the bill file, new tab (proposal)'],['g2','open the scheduled-payment proof (proposal)'],['g3','open the receipt, new tab (proposal)'],['P','preview the row’s files in a carousel, without leaving the ledger (proposal)'],['1 / 2 / 3','inside the carousel — jump straight to that file'],['h / l','inside the carousel — previous / next file'],['+ / -','inside the carousel — zoom in / out'],['0','inside the carousel — reset zoom'],['note','numbered by kind, always — no file of that kind is a no-op']]],
   ['Type', [['/ or :','open the command bar'],[':add 50 mercado publix','a spend, in one line'],[':in 2400 freelance','an incoming'],[':set rnu | nu | nonu','gutter: relative · absolute · off'],[':preview','toggle previewing as a non-admin member'],['?','this keymap']]]
@@ -2822,6 +3334,37 @@ const KEYHTML = KEYGROUPS.map(([g, rows]) =>
   '<div class="kgroup"><h4>' + g + '</h4>' + rows.map(([k,d]) =>
     '<div class="krow"><kbd>' + esc(k) + '</kbd><span class="d">' + esc(d) + '</span></div>').join('') + '</div>').join('');
 $('#keymap').innerHTML = KEYHTML;
+
+/* A little seeded history, so gl has something to show on a fresh load —
+   the same narrative the rows already tell (a rule created before its first
+   period, each period materialized, a receipt filed on the day it was paid),
+   with timestamps fabricated from the month itself since nothing in this
+   mock has a clock. */
+function seedLog(){
+  const seen = new Set();
+  const at = (mi, day, h, m) => new Date(2026, mi, Math.max(1, Math.min(28, day)), h, m).getTime();
+  MONTHS.forEach((M, mi) => M.m.forEach((rows, p) => rows.forEach(t => {
+    if(t.state !== 'ok' || !t.recurring) return;
+    /* A future month is a projection, never materialized (CLAUDE.md's
+       Materialization section) — so it has no history to show, and dating
+       one would put it above today's real entries in the log. */
+    if(mi > TODAY_M) return;
+    const rid = ruleIdOf(t);
+    if(rid && !seen.has(rid)){
+      seen.add(rid);
+      logChange('rule_create', {id:t.id, p, mi, entity:'rule', ruleId:rid, at:at(0, 3, 9, 4),
+        fields:[{field:'bill name', old:'—', new:t.billName || t.title.split(' · ')[0]},
+                {field:'tracking', old:'off', new:logValue(!!t.tracked, 'bool')}]});
+    }
+    logChange('materialize', {id:t.id, p, mi, ruleId:rid, source:'system', at:at(mi, 1, 6, 10),
+      note:'from the rule · ' + M.key});
+    if(t.status === 'paid' && t.receiptPath){
+      logChange('file_upload', {id:t.id, p, mi, entity:'file', ruleId:rid, at:at(mi, t.day || 10, 19, 26),
+        fields:[{field:'receipt', old:'—', new:t.receiptPath}]});
+    }
+  })));
+}
+seedLog();
 
 /* ================= go ================= */
 $('#monthDot').classList.toggle('on', yearHasIssue());

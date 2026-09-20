@@ -314,10 +314,17 @@ build a second path.
 This is the existing `bill_.pdf` → `bill.pdf` convention expressed as uploads
 instead of filesystem watching. Both must converge on the same row.
 
-**Bind by attaching the file inside the rule's own editor** — `r`'s upload
-field at creation, or `R`'s afterward — rather than inferring which rule a
+**Bind by attaching the file inside the rule's own editor** — `A`'s upload
+field at creation, or `E`'s afterward — rather than inferring which rule a
 dropped file belongs to. This is a deliberate reversal of an earlier design;
 see "Drop target" below for why.
+
+**Everything in this document is spend-only.** A recurring *income* rule
+(`I`) has no barcode, no boleto and no issuer to parse — money arriving
+doesn't come with a payable document — so the whole import path is absent
+from its form. Its slot-1 file is the invoice the household issued, which
+is filed like any other attachment and never parsed. See CLAUDE.md's Income
+section.
 
 ### Drop target: a notifier, not a binding path
 
@@ -334,7 +341,7 @@ The replacement removes the inference step entirely rather than trying to
 make it more confident:
 
 - **A barcode file is only ever parsed after it's been dropped into a
-  specific rule's own upload control** (`r` when creating, `R` when
+  specific rule's own upload control** (`A` when creating, `E` when
   editing). Which rule it's for is never in question — the household is
   looking straight at the one they mean, the same way typing an amount
   into a specific occurrence's edit form was never ambiguous either.
@@ -345,7 +352,7 @@ make it more confident:
   need a barcode file (Água, Energia) — focus one and press R to set it
   up."* If nothing is pending, the dropped file is discarded with no
   message at all. The panel still decides member attribution for a
-  **new** rule created via `r` (same "which panel, not who's logged in"
+  **new** rule created via `A` (same "which panel, not who's logged in"
   rule `CLAUDE.md` states for `a`/`i`/`:add`) — it just never resolves a
   dropped file to a rule, because that resolution doesn't happen at the
   panel anymore.
@@ -365,7 +372,7 @@ different: it's the same number every period, because it identifies the
 
 - **Populated by attaching a file in the rule's own editor, not typed by
   hand.** There's no form field for it — it's set (and later re-set) only
-  by dropping a barcode file into `r`'s or `R`'s upload control, the same
+  by dropping a barcode file into `A`'s or `E`'s upload control, the same
   "no separate upload flow, re-attaching is the update" posture `CLAUDE.md`
   already takes for the multi-page-barcode window.
 - **Shown read-only in the rule editor**, once set — not a manual field, so
@@ -495,7 +502,7 @@ changed shape — see "Drop target: a notifier, not a binding path" under §9.
 There's no more "uploaded bill" that needs a member guessed for it: a
 barcode file is only ever attached inside a specific rule's own editor, and
 that rule already has an owner. Panel attribution now only matters for a
-**new** rule created via `r` — whichever panel is focused, exactly like
+**new** rule created via `A` — whichever panel is focused, exactly like
 `a`/`i`/`:add`; `Ctrl-H`/`Ctrl-L` re-attribution still covers correction if
 that's wrong.
 

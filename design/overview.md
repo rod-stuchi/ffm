@@ -47,7 +47,8 @@ This project replaces a shared household spreadsheet used to track finances — 
 ## Data Safety
 
 - **No hard deletes.** There is no destructive delete operation — every piece of information can be recovered. "Deleting" a transaction marks it with a status and a deletion date rather than removing the row.
-- **Recovery creates a new entry.** Restoring a deleted transaction inserts a new row rather than reverting the status on the deleted one, so the deleted entry's history is never overwritten. The new entry references the entry it supersedes, so each transaction carries a traceable chain of prior versions — similar to how a git commit points back to its parent.
+- **Recovery restores the same row.** Undoing a delete clears the deletion mark on the row itself — it does not insert a second, superseding row. That earlier design left two ledger rows for one transaction after a single delete-and-undo, which is a permanent cost paid in the view people read every day for a chain almost nobody followed. The history lives in the change log instead (below), which is both more complete and out of the way.
+- **Every change is recorded.** An append-only change log captures who changed what and when — amounts, names, buckets, privacy, deletes, restores, re-attributions, file uploads — and is read per row with `gl`. Nothing in it is ever rewritten or removed.
 - **Rolling backups.** The SQLite database file is backed up on a rolling two-month window.
 - **Receipts follow the same rule.** Deleting one moves the file into a sibling `.delete/` folder rather than removing it from disk, with a DB row recording the move so it can be undone — no exception to "nothing is destroyed" just because it's a file instead of a row.
 
@@ -65,9 +66,9 @@ The app is designed keyboard-first, Vim-inspired, while remaining fully usable w
 - Ledger navigation uses `j`/`k` to move between rows.
 - Rows display line numbers, configurable as **none**, **relative**, or **incremental** — defaulting to **relative**, so counted motions like `5j` / `7k` can jump straight to a row without stepping through it one line at a time.
 - `x` toggles selection on the current row (like checking an item in a to-do list) for future batch operations — it does not delete anything.
-- `a` / `i` open the add-entry input, vim-style (insert after / insert before the current row).
+- `a` adds a one-off spend and `i` a one-off income; `A` and `I` create the recurring versions of each. Lowercase acts on the single occurrence, uppercase on the rule behind it — the same split Vim uses, applied to money out and money in as a two-by-two grid.
 - `dd` (vim-style double keystroke) deletes the current row, gated behind a confirmation modal — no destructive action fires from a single keystroke. This is still a soft delete under the hood (see Data Safety).
-- `e` edits the selected transaction occurrence; `R` edits the underlying recurring bill definition it was generated from, keeping the same lowercase/uppercase "this occurrence vs. the broader rule" split used elsewhere in Vim.
+- `e` edits the selected transaction occurrence; `E` edits the underlying recurring rule it was generated from, keeping the same lowercase/uppercase "this occurrence vs. the broader rule" split.
 - `u` to undo.
 - `Ctrl-P` / `Ctrl-N` move to the previous/next month view.
 - `H` / `L` (uppercase) move focus between family-member panels, left/right, like Vim window navigation. Early idea (see `FFM_001.pdf`): each member has their own panel with an INs/OUTs header and a ledger below, and the currently focused panel is visually highlighted — full screen layout is still just a sketch at this point.

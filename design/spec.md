@@ -19,14 +19,16 @@ understood:
 | focused | accent left rail, gutter `0`, tinted ground | cursor position |
 | selected | `--info` inset bar | `x` — a marker for a batch op, never a delete |
 | private | lock-icon glyph, full colour when set, faint when not | hidden from other members, never from admin |
-| deleted | dimmed, strikethrough, deletion date | soft delete, row retained |
-| restored | `↩ #id` | new row superseding the deleted one |
+| deleted | dimmed, strikethrough, deletion date | soft delete, row retained; `u` clears the mark on this same row |
 | skeleton | shimmer bars, **identical geometry** | in flight |
 | error | red ground, message + **Try Again** | server said no, nothing was written |
 | editing | the row opens into its own form, Cancel / Save at its foot | `e` — see Edit fields |
-| rule open | accent outline, the rule pane's arrow pointing at it | `R` — see Edit fields |
+| rule open | accent outline, the rule pane's arrow pointing at it | `E` — see Edit fields |
 | unsaved | dashed accent border + `unsaved · e to resume` tag | a draft left behind when the cursor moved on |
-| placeholder | dashed, empty "New recurring bill" row | `r` — where the new rule's row will land |
+| placeholder | dashed, empty "New recurring bill / income" row | `A` / `I` — where the new rule's row will land |
+| expected | ring toward the expected day, `+` at its centre | income, not yet received — the same elapsed-time arc a bill's due date drives |
+| received | filled positive disc + received date | income that landed |
+| estimated | `~R$ …` in a quieter colour, no delta | a varying income's amount is projected from history until confirmed — the mark still carries arrival, the tilde carries "this number isn't a fact yet" |
 
 ### Specifics that carry meaning
 
@@ -97,10 +99,15 @@ Specifics that carry meaning, above. Row 2's `↻ 🔒` render faint/dim, since
 that row is neither recurring nor private; they're still there, just not
 standing out.)
 
-- **Fixed numbering by kind, always**: `1` is the bill, `2` is scheduled, `3`
-  is the receipt — never renumbered based on what happens to exist on a given
-  row. `g1` means "show me the bill" on every row, tracked or not, which is
-  what makes it learnable.
+- **Fixed numbering by kind, always**: `1` states the amount, `2` is the
+  promise, `3` is proof the money moved — never renumbered based on what
+  happens to exist on a given row. Only the *label* changes with which way
+  the money goes: slot 1 is a spend's `Bill` and an income's `Invoice`, slot
+  3 a `Receipt` or a `Payslip`. Slot 2 is spend-only — you don't schedule
+  money arriving — so `g2` on an income row is a no-op with a message
+  (*"no scheduled payment on an income row"*), joining the family a missing
+  file already belongs to. `g1` and `g3` therefore mean one consistent thing
+  on every row in the ledger, which is what makes them learnable.
 - **Only rendered when that file exists.** A row with a bill and a receipt but
   no scheduled file shows `[1] [3]` — nothing sits where `2` would be. No
   ghost/hollow placeholder; the keybinding still works purely off kind, not
@@ -219,12 +226,15 @@ Nothing destructive fires from a single keystroke.
 | `J` / `K` | move the row — or every selected row — down / up |
 | `3J` | move it three places |
 | `Ctrl-H` / `Ctrl-L` | **re-attribute** the row to the member pane left / right |
-| `a` / `i` | add after / before the current row |
+| `a` | add a one-off spend |
+| `i` | add a one-off income |
 | `x` | toggle selection for a batch operation |
 | `e` | edit this occurrence |
-| `r` | create a new recurring bill — opens the rule pane, with a placeholder row at the cursor |
-| `R` | edit the recurring rule behind the focused row; no-op with a statusline message on a plain row |
+| `A` | create a recurring bill — opens the rule pane, with a placeholder row at the cursor |
+| `I` | create a recurring income — the same pane, money the other way |
+| `E` | edit the recurring rule behind the focused row; no-op with a statusline message on a plain row |
 | `gd` | show due/cadence/receipt details for the focused row *(proposal, not in the original spec)* |
+| `gl` | change log for the focused row — who changed what, when — in a side pane *(proposal, not in the original spec)* |
 | `p` | toggle private *(proposal, not in the original spec)* |
 | `P` | preview the row's files in a carousel — see Files below *(proposal, not in the original spec)* |
 
@@ -243,7 +253,7 @@ Nothing destructive fires from a single keystroke.
   panel and content, and is dismissed the same way any hover artifact is —
   the very next keypress, of any kind, closes it, per the rule below. It's a
   no-op with a statusline message on a non-recurring row — the same
-  treatment `R` already gets there — but works the same as hover on any
+  treatment `E` already gets there — but works the same as hover on any
   recurring row, tracked or not.
 
 - **The row's own status text stays short; the full explanation lives in
@@ -297,7 +307,7 @@ Nothing destructive fires from a single keystroke.
 Not stock Vim — a genuine FFM extension of the `g`-prefix "goto" vocabulary
 already in use (`gg`, `gt`), not a new pattern. Pressing a number for a file
 that doesn't exist on that row is a no-op with a statusline message, same
-treatment `R` already gets on a non-recurring row: *"no bill on file for this
+treatment `E` already gets on a non-recurring row: *"no bill on file for this
 row"*, *"no scheduled payment on file for this row"*, *"no receipt on file
 for this row"*.
 
@@ -308,6 +318,12 @@ for this row"*.
 | `y` | confirm in the delete modal |
 | `u` | undo the last change |
 | `Esc` | clear count, buffer, selection and search |
+
+- **Undo restores the deleted row in place.** There is no second,
+  superseding row and no `↩ #id` marker — that earlier design is reversed
+  (see CLAUDE.md's Data model). One `dd` followed by `u` leaves exactly one
+  row in the ledger, undeleted and focused. Both the delete and the restore
+  are entries in the change log, which is where the chain lives now.
 
 ### Type
 | Key | Action |
@@ -332,6 +348,24 @@ for this row"*.
 | `Enter` | save — the form's primary action |
 | `Esc` | cancel: discard the draft, nothing written |
 
+**Creation is a two-by-two grid, not four ad-hoc keys.** Lowercase acts on
+the occurrence, uppercase on the rule; `a`/`A` are money out, `i`/`I` money
+in, and `e`/`E` edit either side of that split:
+
+|  | one-off (occurrence) | recurring (rule) |
+|---|---|---|
+| **spend** | `a` · `:add 50 mercado` | `A` |
+| **income** | `i` · `:in 2400 freelance` | `I` |
+| **edit** | `e` | `E` |
+
+This replaces `r` (create rule) / `R` (edit rule), which were bound that way
+because a barcode binding has to happen at a bill's creation — a reason that
+stops generalising the moment income can recur too. **`i` no longer means
+"add before the current row."** `a` adds below; above is `a` then `K`. That
+gesture was in the keymap table but never in the code (`a` and `i` ran
+identical logic), so nothing working was removed — but it is a deletion, not
+a rename.
+
 **Neither edit form is a modal.** The forms outgrew a centred 560px dialog
 (the rule form especially), and a dialog hides the very ledger you're
 editing. So:
@@ -339,14 +373,14 @@ editing. So:
 - **`e` edits in place.** The focused row opens up into its own form — the
   same fields, with Cancel (`Esc`) and Save (`Enter`) at the bottom of the
   row — and the rest of the ledger stays where it was.
-- **`R` / `r` open the rule pane** — a column of its own in the ledger's
+- **`A` / `I` / `E` open the rule pane** — a column of its own in the ledger's
   grid, right after the member pane being edited, pushing any later panes
   further right. The ledger scrolls sideways when they don't all fit rather
   than hiding a pane: a household can have more than two members. A small
   arrow on the pane's left edge sits level with the row being edited (and
   follows it as the ledger scrolls); the row itself keeps an accent outline
   while its rule is open.
-- **`r` gets a placeholder row.** A brand-new bill has no row yet for the
+- **`A` / `I` get a placeholder row.** A brand-new rule has no row yet for the
   arrow to point at, so a dashed "New recurring bill" row appears at the
   cursor; Create turns it into the real row in that same spot, Cancel
   removes it.
@@ -355,7 +389,7 @@ editing. So:
   collapses it back to read-only. If nothing was changed the draft just
   goes away; if something was, the row stays marked (dashed accent border,
   an `unsaved · e to resume` tag) until the draft is saved or discarded, and
-  the statusline counts them. Several can be parked at once; `e`/`R` on a
+  the statusline counts them. Several can be parked at once; `e`/`E` on a
   marked row picks its draft back up exactly as it was left.
 - **`Ctrl-H/J/K/L` past the form's edge is the keyboard way out.** Off the
   top or bottom of an inline row, the cursor moves to the row above or
@@ -389,7 +423,7 @@ editing. So:
   disk", "no barcode file", "covers multiple months", "hidden from other
   members" all read as states rather than actions, and a pill toggle says
   that in less space than a checkbox plus its label.
-- **`r`'s form is the same field grid as `R`'s, minus the two per-occurrence
+- **A create form is the same field grid as an edit form, minus the two per-occurrence
   noteboxes** (the path box and "past occurrences are left as recorded") —
   there's no real row behind it yet. `Esc`/Cancel removes the placeholder
   row too: nothing has been created to cancel out of.
@@ -413,7 +447,7 @@ editing. So:
 - **A tracked rule's "This bill has no barcode file" checkbox hides the
   upload control and the multi-page checkbox entirely** — set once, for
   bills paid by wire transfer / PIX / TED that will never have a barcode to
-  attach. Decided in `r`'s form at creation, correctable later in `R`'s,
+  attach. Decided in `A`'s form at creation, correctable later in `E`'s,
   never inferred from anything else about the rule.
 - **The computed receipt path is shown live, in two lines** — the real path
   as it stands (`consumption/condominio/house_33a/2026/09.pdf`) above a dim
@@ -453,7 +487,7 @@ editing. So:
     kinds stay recognisable at a glance.
 - **The barcode upload field is a dropzone, not a file `<input>` styled to
   look like one** — attaching a file there is what derives `client_code`
-  on save (see Bill import, below), and it's optional in both `r` and `R`:
+  on save (see Bill import, below), and it's optional in both `A` and `E`:
   a rule can be created and saved with tracking on and no file yet, the
   same way an amount or due date can be filled in later.
 - **A rule with a `client_code` on file shows it read-only**, above the
@@ -469,7 +503,7 @@ editing. So:
   in the same still-open dropzone.
 - **Due date moved from the occurrence form to the rule form.** The
   edit-occurrence form's Day field only renders at all for a non-recurring
-  row; a recurring row's due day is edited on the rule (`R`) instead, so
+  row; a recurring row's due day is edited on the rule (`E`) instead, so
   there's exactly one control for that fact, never two disagreeing about
   which one a future materialized period actually follows.
 - **Bucket is the identical combobox in both forms** — same per-member
@@ -603,6 +637,184 @@ nothing about it is destructive or hard to undo.
 
 ---
 
+## Income
+
+Income has always been in the ledger — `kind = 'in'`, a positive amount,
+summed into the pane header — but without a rule, recurrence or files. It
+now uses the same recurring-rule machinery as a bill, pointed the other way:
+`I` creates one, `E` edits it, `i` adds a one-off.
+
+### Its own axis: arrival, not payment
+
+A bill's status column answers *did the money leave*. Income answers *did it
+arrive*, with two states of its own (see the row-state table above):
+
+- **`expected`** — not yet received. The mark is the identical elapsed-time
+  ring a bill's due date drives, counting toward the rule's **expected day**
+  instead, with the same green → amber → red arc. Past the expected day it
+  goes fully red, and a tracked one counts toward the unresolved-issues
+  badge exactly as an overdue bill does.
+- **`received`** — the money landed: the filled positive disc income rows
+  already used, plus the date.
+
+Income never shows `paid`, `scheduled` or `scheduled overdue`. Those are
+spend states and stay that way.
+
+### Confirming it needs no new verb
+
+- **Tracked income is confirmed by its payslip on disk** — the same single
+  `exists()` check, the same absolute "no manual tick for a tracked rule".
+- **Untracked income uses the manual tick** untracked rules already get,
+  relabelled *"Mark as received manually"*. Same one exception, same reason:
+  there is no filesystem evidence to contradict it.
+
+### A varying amount is projected
+
+A rule with **Amount varies** set can't seed a period from its own number —
+a commission or a freelance invoice lands differently every month. Until the
+period is confirmed, the row shows an **estimate** derived from history.
+
+- **Basis is per rule**: `lowest` | `average` | `last`, over the last N
+  confirmed periods (default N = 3). **`lowest` is the default**, on
+  purpose: for income the dangerous error is over-estimating, which produces
+  a shortfall the household then has to absorb. Bills are the mirror image,
+  which is why their carry-forward default points the other way.
+- **Only confirmed periods count.** An unconfirmed month is skipped, never
+  folded in — two unconfirmed periods back to back would otherwise project a
+  guess from another guess.
+- **A rule's first occurrence has nothing behind it** and falls back to the
+  rule's own stated amount — the identical carve-out bills already have.
+- **The estimate is computed, never stored.** What persists is the rule's
+  baseline or the real confirmed figure; the projection is derived on read,
+  so it follows new history rather than freezing an old guess, and it never
+  writes a spurious "amount changed" entry into the change log.
+
+### Saying so, everywhere the number goes
+
+- The row reads `~R$ 4.133,33` in a quieter colour. The mark carries whether
+  the money moved; the tilde carries whether the number is a fact — one
+  channel per fact, as everywhere else in this document.
+- **The pane's INs and Balance, and the household's IN and NET, all carry
+  the `~`** when any component is a projection. Leaving projections out of
+  the totals would make a future month's NET useless; putting them in
+  unmarked would present a guess as a fact.
+- **The MoM delta inverts.** The arrow is direction, the colour is whether
+  it's good news: more money out is bad, more money in is good, so a raise
+  never paints itself red. A recurring income gets a delta; a one-off and an
+  unconfirmed projection don't — the latter would compare a guess to a fact.
+
+### Where it sits, and what it's called
+
+- **A new income lands at the top of its pane** — where a household reads
+  what came in. That's a starting sort key, not a pin: `J`/`K` move it
+  anywhere afterwards, and `:sort date`/`amount` treat it like any other
+  row. A hard "income always floats" tier was rejected: it would contradict
+  being able to move it, and it would quietly override an explicit sort.
+- **The form is the same field grid with income wording** — `bill_name` is
+  labelled **Source**, the due date **Expected day**, installments
+  **Payments**. Same columns, same computed path
+  (`bucket / source / year / month.ext`); no parallel fields.
+- **The whole barcode apparatus is absent.** No "no barcode file" switch, no
+  client code, no dropzone, no multi-page window — money arriving has no
+  boleto to scan. See `design/spec-bill-import.md`, which is spend-only.
+- **The estimate box mirrors the computed-path box**: the projected figure
+  bright on the first line, the months it came from dim on the second, both
+  recomputing live as the basis or window changes — before anything is
+  saved, exactly like the receipt path.
+
+---
+
+## Change log (`gl`)
+
+Every change to a transaction, a rule or a file is recorded. `gl` on the
+focused row opens its history in a side pane — the same 420px column, arrow
+and cursor-follows behaviour the `A`/`I`/`E` rule editor uses, so nothing new has
+to be learned to read it.
+
+### Tables
+
+Two, not one. A single wide table would either repeat the actor and
+timestamp once per changed field, or bury the diff in a JSON blob nothing can
+query.
+
+```
+change              -- one row per user action ("a save")
+  id                INTEGER PK
+  at                TEXT     -- ISO timestamp
+  member_id         INTEGER  -- who did it: the session's member, never the focused pane
+  source            TEXT     -- 'user' | 'import' | 'materializer' | 'system'
+  action            TEXT     -- create · edit · delete · restore · reattribute ·
+                             -- reorder · privacy · rule_create · rule_edit ·
+                             -- file_attach · file_unlink · file_upload ·
+                             -- file_delete · import · materialize
+  entity            TEXT     -- 'transaction' | 'rule' | 'file'
+  entity_id         INTEGER
+  rule_id           INTEGER  -- nullable; set on transaction changes so a rule's
+                             -- whole history is one query
+  period            TEXT     -- 'mm/yyyy'; null for rule-level changes
+  undo_of           INTEGER  -- nullable FK -> change.id, for an undone action
+  note              TEXT     -- nullable, one line ('superseded by receipt upload')
+
+change_field        -- one row per field actually touched; none for delete/restore
+  change_id         INTEGER FK
+  field             TEXT     -- 'amount' | 'title' | 'bucket' | 'instance' | ...
+  old_value         TEXT     -- storage-neutral: minor units for money, ISO dates
+  new_value         TEXT
+  kind              TEXT     -- 'money' | 'date' | 'day' | 'bool' | 'text' | 'path'
+```
+
+- **`kind` travels with the value**, so the pane formats old/new the way the
+  rest of the app does without inferring from the field name — and a stored
+  amount never depends on the household's *current* `[locale] currency`,
+  the same reasoning the receipt filename's plain amount follows.
+- **`rule_id` on transaction changes** makes "this row plus the rule behind
+  it" one query, which is exactly what the pane shows.
+- **`undo_of` makes an undo a first-class entry**, not a silent rewrite: the
+  log reads "deleted", then "restored · undo of 18:39".
+- **Append-only.** Never updated, never deleted from — the same rule the
+  ledger itself follows. It is the app's one audit mechanism; the file
+  upload/soft-delete records described under Receipt tracking are entries in
+  it, not a parallel table.
+
+### The pane
+
+```
+History · Energia · Enel SP · 09/2026        [ this row | rule | all ]
+---------------------------------------------
+today
+  14:32  Rodrigo   edited · 3 fields                     >
+           amount     R$ 340,66 -> R$ 352,10
+           bucket     Consumption -> Utilities
+           due day    15 -> 18                     (rule)
+  14:05  Rodrigo   barcode attached · 1 field
+           client code  -- -> 325124615-7
+  09:12  system    materialized · 09/2026
+yesterday
+  18:40  Ana       re-attributed
+  18:39  Rodrigo   restored                 undo of 18:39
+  18:39  Rodrigo   deleted
+```
+
+- **Grouped by day, newest first.** Time · actor · verb on the entry line,
+  plus a field count when there is a diff to open.
+- **Rule-level entries sit inline in date order**, tagged `rule`, so the
+  story reads chronologically; the chips narrow to `this row` / `rule` /
+  `all`. A file entry (attach, unlink, upload, delete) counts as the row's
+  own history — it belongs to that occurrence, it just isn't the transaction
+  record itself.
+- **Expanding an entry** shows `old -> new` per field, formatted by `kind`,
+  with an em dash for empty.
+- **Read-only.** No drafts, no save. `Esc` closes; `Ctrl-h` hands focus back
+  to the ledger (matching the rule pane's left-edge behaviour) with the pane
+  still open until the cursor actually moves; `j`/`k` walk the entries and
+  `Enter` toggles one.
+- **It closes when the cursor leaves the row** — the same single check in
+  the render loop that parks an open edit draft.
+- **A row with nothing recorded still opens the pane**, saying so. An empty
+  history is an answer, not an error worth refusing on.
+
+---
+
 ## Receipt tracking & files
 
 No regex, no traversal, no user-authored pattern. A tracked rule's file
@@ -665,9 +877,10 @@ silently reading the same as "nothing has happened yet."
 system moves `{month}_scheduled.{ext}` into `.delete/` the instant
 `{month}.{ext}` lands — the promise is resolved, only the definitive proof is
 left standing. This is a system-triggered soft delete, logged exactly like a
-manual one (`old_path`, `deleted_at`, `deleted_by`) plus a `reason` of
-`superseded` rather than `manual`, so `u` on the receipt upload restores the
-scheduled file too and the audit trail is honest about why it moved.
+manual one — a `file_delete` entry in the change log (below) carrying
+`old_path`, `deleted_at`, `deleted_by` — plus a `reason` of `superseded`
+rather than `manual`, so `u` on the receipt upload restores the scheduled
+file too and the audit trail is honest about why it moved.
 
 ### Multi-page barcode — one file, several months (`spans_period`)
 
@@ -731,8 +944,9 @@ searched for. This also fully retires the earlier concern about excluding
 
 A DB row still accompanies every upload — uploader, upload time, kind
 (`receipt` | `scheduled` | `barcode`), original filename as typed by the user,
-extension — but purely as metadata/audit for undo. It does not decide
-paid/not-paid; the disk does.
+extension — but purely as metadata/audit for undo, recorded as a
+`file_upload` entry in the change log (below) rather than in a separate
+upload table. It does not decide paid/not-paid; the disk does.
 
 ### Extensions
 
@@ -749,8 +963,9 @@ stored file's extension mirrors whatever was actually uploaded.
   original filename is kept as metadata only, for their own reference.
 - **Delete (of any of the three) is a soft delete.** The file moves into a
   `.delete/` subfolder beside where it lived; never removed from disk. The DB
-  row records the move (`old_path`, `deleted_at`, `deleted_by`, `reason`) so
-  `u` restores it exactly.
+  change log records the move (`old_path`, `deleted_at`, `deleted_by`,
+  `reason`) so `u` restores it exactly — the same one audit mechanism every
+  other change goes through, not a second one for files.
 
 ### Bill import — attached inside the rule's own form
 
@@ -765,16 +980,16 @@ decoding, issuer profiles) lives in `design/spec-bill-import.md`; what's
 UI-facing:
 
 - **The only place a barcode file is ever attached is the rule's own
-  dropzone** — `r`'s upload field at creation, or `R`'s afterward. Both are
+  dropzone** — `A`'s upload field at creation, or `E`'s afterward. Both are
   scoped to one specific, already-identified rule, so there's no matching
   left to get wrong; see Edit fields, above, for the dropzone and its
   read-only Client code / Unlink controls.
 - **Dropping a file onto a member's panel binds nothing.** It's downgraded
   to a passive nudge: if that panel has recurring, tracked rules still
   missing a barcode (and not marked "no barcode file"), the statusline
-  names them and points at `R`; otherwise the dropped file is discarded
+  names them and points at `E`; otherwise the dropped file is discarded
   with no message at all. The panel still decides member attribution for
-  a *new* rule (`r`'s form is created against whichever panel is
+  a *new* rule (`A`/`I`'s form is created against whichever panel is
   focused, same as `a`/`i`/`:add`) — it just never decides which rule a
   dropped file belongs to, because a drop no longer resolves to a rule at
   all.

@@ -156,12 +156,12 @@ JS only because it has no template layer.
 ### Editing — forms live in the ledger, not in modals
 
 - **`e` edits the row in place**: the focused row opens into its own form
-  (Cancel / Save at its foot). **`R` / `r` open the rule pane** — a column
+  (Cancel / Save at its foot). **`A` / `I` / `E` open the rule pane** — a column
   in the ledger grid right after the member pane being edited, pushing
   later panes right (the ledger scrolls sideways rather than hiding a pane
   — households can have more than two members), with an arrow on its edge
-  pointing at the row. `r` adds a dashed placeholder row at the cursor for
-  the arrow to point at; Create turns it into the real row.
+  pointing at the row. `A` and `I` add a dashed placeholder row at the cursor
+  for the arrow to point at; Create turns it into the real row.
 - **Why:** the rule form outgrew a dialog, and a dialog hides the ledger
   you're editing — the same argument that made `:config` a vsplit instead
   of a modal (see `design/spec.md`'s Configuration section).
@@ -185,9 +185,15 @@ JS only because it has no template layer.
   time-sliced. There is no "copy last month's sheet" operation, ever.
 - **No hard deletes.** Deleting sets a status and a deletion date. Nothing is
   removed from the database.
-- **Restore inserts a new row** referencing the row it supersedes, so each
-  transaction carries a traceable chain back through its prior versions. Never
-  revert the status on the deleted row.
+- **Restore puts the deleted row back, in place — reversed from the earlier
+  "restore inserts a new superseding row" decision.** Cloning the row on undo
+  meant one `dd` + `u` left two rows in the ledger for one transaction (three
+  after a second round trip), and the ledger is what people read every day;
+  paying that permanent cost for a chain almost nobody follows was the wrong
+  trade. The traceability it was there for now lives in the **change log**
+  (below), which records far more than restores ever did. "No hard deletes"
+  is unchanged: the row is kept and marked deleted, `u` clears that mark, and
+  both facts are logged.
 - **Attribution is a column.** Every transaction belongs to a member; the
   household total is the sum, and either person's pane is a filter.
 - **Privacy is opt-in per transaction.** `household` by default. A `private` row
@@ -231,25 +237,80 @@ JS only because it has no template layer.
   else — see `design/spec.md`'s Auth & sessions section for the full
   reasoning and why that distinction ruled out "impersonate" as the name.
 
+### Change log
+
+Every change to a transaction, a rule or a file is recorded, append-only,
+and read per row with `gl` ("go to log") in a side pane — the same column,
+arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
+
+- **Two tables, not one.** `change` holds one row per user action (a save):
+  `at`, `member_id`, `source` (`user` | `import` | `materializer` |
+  `system`), `action`, `entity` (`transaction` | `rule` | `file`),
+  `entity_id`, a nullable `rule_id`, `period`, a nullable `undo_of` and a
+  one-line `note`. `change_field` holds one row per field actually touched:
+  `field`, `old_value`, `new_value`, `kind`. One wide table would either
+  repeat the actor and time per field or bury the diff in unqueryable JSON.
+- **`kind` travels with the value** (`money` | `date` | `day` | `bool` |
+  `text` | `path`), so the pane formats old/new the way the app does without
+  inferring from the field name, and a stored amount never depends on the
+  household's *current* currency setting.
+- **`rule_id` is stamped on transaction changes**, which makes "this row plus
+  the rule behind it" a single query — exactly what `gl` shows, with the
+  rule's own entries tagged so the two are never confused.
+- **An undo is an entry, not a rewrite.** `undo_of` points at the change
+  being reversed, so the log reads "deleted", then "restored · undo of
+  18:39". Nothing in the log is ever updated or deleted — the same "nothing
+  is destroyed" rule the ledger follows.
+- **It absorbs the audit commitments made elsewhere in this file** — the file
+  soft-delete record (`old_path`, `deleted_at`, `deleted_by`, `reason`) and
+  the upload metadata row (uploader, timestamp, kind, original filename)
+  are `file_*` changes with fields, not a second parallel audit mechanism.
+- **One entry per save, expandable to its fields.** The pane groups by day,
+  newest first, and filters to `this row` / `rule` / `all`. It is read-only:
+  `Esc` closes, `Ctrl-h` hands focus back to the ledger, `j`/`k` walk the
+  entries and `Enter` expands one. It closes when the cursor leaves the row.
+- **A row with nothing recorded still opens the pane**, saying so. An empty
+  history is an answer, not an error.
+
 ### Recurring rules
 
-- **Created from scratch via a dedicated command — `r` — never by turning
-  an existing occurrence into one.** This reverses this repo's earlier "no
-  separate new-rule form" stance: `R` on a row that wasn't recurring yet
-  used to open the rule editor in a creation mode, pre-filled from that
-  transaction. That's gone — `r` opens a blank rule editor with no anchor
-  row at all, and `R` is now edit-only (a no-op with a statusline message
-  on a plain row, the same treatment `gd` already gets there). The reason
-  is the barcode-binding feature below: a recurring rule can optionally be
-  bound to a barcode file, and that binding has to happen at creation time
-  or not at all — there's no still-plain transaction lying around
-  afterward to retroactively attach it to. Saving `r`'s form inserts a
+- **Created from scratch via a dedicated key — never by turning an existing
+  occurrence into one.** This reverses this repo's earlier "no separate
+  new-rule form" stance: `R` on a row that wasn't recurring yet used to open
+  the rule editor in a creation mode, pre-filled from that transaction.
+  That's gone — the create keys open a blank rule editor with no anchor row
+  at all, and editing a rule is its own key (a no-op with a statusline
+  message on a plain row, the same treatment `gd` already gets there). The
+  reason is the barcode-binding feature below: a recurring rule can
+  optionally be bound to a barcode file, and that binding has to happen at
+  creation time or not at all — there's no still-plain transaction lying
+  around afterward to retroactively attach it to. Saving the form inserts a
   genuinely new row (the same `add`-family undo entry as `a`/`i`/`:add`),
   it never mutates one that was already there — materialization's
   `UNIQUE(rule_id, period)` idempotency was never actually at risk from
   this change, since there's still exactly one row per period either way.
+- **The create/edit keys are a matrix, which is a second reversal.** The
+  first pass bound `r` to "create a recurring bill" and `R` to "edit the
+  rule" — a split justified by barcode binding, which is a property of
+  *bills*. That justification doesn't generalise the moment income can
+  recur too, so the bindings are now one consistent grid rather than four
+  ad-hoc keys:
+
+  |  | one-off (occurrence) | recurring (rule) |
+  |---|---|---|
+  | **spend** | `a` · `:add 50 mercado` | `A` |
+  | **income** | `i` · `:in 2400 freelance` | `I` |
+  | **edit** | `e` | `E` |
+
+  Lowercase acts on the occurrence, uppercase on the rule — the rule this
+  repo already claimed to follow, with no exceptions left. `r` and `R` are
+  now unbound. **`i` stops meaning "add before the current row"**: `a` adds
+  below, and above is `a` then `K`. That gesture was documented but never
+  actually implemented (`a` and `i` ran identical code), so nothing real is
+  lost — but it is a deletion, not a rename, and shouldn't be quietly
+  reintroduced.
 - **The due date lives on the rule, not the occurrence, once a row is
-  recurring.** `R`'s Due date field (day-of-month) is the one place it's
+  recurring.** `E`'s Due date field (day-of-month) is the one place it's
   editable; `e`'s Day field disappears entirely for a recurring row, rather
   than offering a second control for the same fact with no rule for which
   one wins on the next materialized period. A non-recurring row has no rule
@@ -258,7 +319,7 @@ JS only because it has no template layer.
   the rule form's Bucket field and the occurrence form's Bucket field both
   read the identical `SELECT DISTINCT bucket WHERE member_id = ?` tag
   cloud (see Categorization & grouping below), not two separately-behaving
-  widgets that happen to share a label. `r`'s form starts Bucket empty —
+  widgets that happen to share a label. A new rule's form starts Bucket empty —
   a fresh rule gets an explicit choice, not an inherited guess.
 - Defined once, **materialized** into the ledger as real rows each period.
 - Receipt tracking is **opt-in per rule** — no regex, no pattern, no traversal.
@@ -328,7 +389,7 @@ JS only because it has no template layer.
   both were rejected as too fragile — a real bill's filename, or its
   content, shouldn't have to line up with what's already in the ledger. The
   only place a barcode file is ever attached now is the rule's own editor:
-  `r`'s optional upload field at creation, or `R`'s upload field afterward —
+  `A`'s optional upload field at creation, or `E`'s upload field afterward —
   both scoped to one specific, already-identified rule, so there's no
   matching left to get wrong. A panel drop just checks that panel for
   recurring, tracked rules still missing a barcode
@@ -336,9 +397,10 @@ JS only because it has no template layer.
   statusline if any exist; otherwise the dropped file is discarded with no
   message at all. Full parsing design (FEBRABAN barcode decoding,
   value/due-date extraction, issuer profiles) still lives in
-  `design/spec-bill-import.md` — it runs on whatever file lands in `r`/`R`'s
+  `design/spec-bill-import.md` — it runs on whatever file lands in `A`/`E`'s
   own upload control, the same as it would have on a panel-dropped file
-  before.
+  before. Income rules never have one at all: money arriving has no boleto
+  to scan, so the whole barcode apparatus is absent from `I`'s form.
   - **`no_barcode` is a rule-level flag, decided once at creation, independent
     of `tracked`.** It exists for bills paid by wire transfer / PIX / TED,
     which never have a barcode at all — but the household may still want
@@ -462,6 +524,71 @@ JS only because it has no template layer.
   the rule, and record the lump payment as an ordinary one-off transaction.
   Simplest thing that works; revisit only if the manual version proves
   annoying in practice.
+
+### Income
+
+Income was always in the ledger — `kind = 'in'`, a positive amount, summed
+into the pane header — but it was second-class: no rule, no recurrence, no
+files. It now uses the same recurring-rule machinery as a bill, pointed the
+other way. `I` creates one, `E` edits it, `i` still adds a one-off.
+
+- **Income runs on its own axis: arrival, not payment.** A bill is
+  `paid`/`scheduled`/`pending`; income is **`expected`** until the money
+  lands and **`received`** after. It never shows a paid or scheduled mark.
+  The ring is the same elapsed-time arc a bill's due date drives, counting
+  toward the rule's **expected day** instead — same fact, same colours, not
+  a second thing to learn.
+- **Confirmation needs no new verb.** A tracked income is confirmed when
+  its payslip exists on disk — the identical `exists()` rule, no manual
+  tick, no exception. An untracked income uses the manual tick that
+  untracked rules already get, relabelled "Mark as received manually".
+- **An amount that varies is projected, not carried forward.** A rule with
+  `varies` set (commission, freelance) can't seed a new period from its own
+  number the way a fixed bill does. Until that period is confirmed the row
+  shows an **estimate**, computed from history by one of `lowest` |
+  `average` | `last` over the last N confirmed periods.
+  - **`lowest` of the last 3 is the default**, deliberately conservative:
+    for income the dangerous error is over-estimating, which produces a
+    shortfall. Bills are the mirror image, which is why their
+    carry-forward default is the opposite.
+  - **Only confirmed periods feed an estimate.** An unconfirmed month is
+    skipped, never folded in — otherwise two unconfirmed periods in a row
+    would project a guess from another guess.
+  - **A rule's first occurrence has nothing behind it** and falls back to
+    the rule's own stated amount, the same carve-out bills already have.
+- **An estimate is computed, never stored.** The persisted amount is always
+  the rule's baseline or the real confirmed figure; the projection is
+  derived on read. That way it follows new history instead of freezing an
+  old guess into the data, and it never writes a spurious "amount changed"
+  entry into the change log.
+- **An estimate is marked everywhere it reaches.** The row shows `~R$ …` in
+  a quieter colour; the pane's INs and Balance and the household's IN and
+  NET all carry the `~` when any component is a projection. Excluding
+  projections from the totals would make a future month's NET useless;
+  showing them unmarked would present a guess as a fact. The mark carries
+  whether the money moved, the tilde carries whether the number is real —
+  one channel per fact, as everywhere else.
+- **The MoM delta inverts for income.** The arrow is direction, the colour
+  is whether it's good news: more money out is bad, more money in is good.
+  A recurring income gets a delta (worth comparing period to period); a
+  one-off and an unconfirmed projection don't — the latter would be
+  comparing a guess against a fact.
+- **Income lands at the top of its pane at creation**, which is where a
+  household reads what came in. That's a starting sort key, not a pin:
+  `J`/`K` move it anywhere afterwards and `:sort date` treats it like any
+  other row. A hard "income always floats" tier was rejected — it would
+  contradict being able to move it, and it would override an explicit sort.
+- **File slots keep their fixed numbering; only the labels change.** Slot 1
+  is the document stating the amount (a spend's `Bill`, an income's
+  `Invoice`), slot 3 is proof the money moved (`Receipt` / `Payslip`).
+  Slot 2 is scheduling, which is spend-only — you don't schedule money
+  arriving — so `g2` on an income row is a no-op with a message, the same
+  treatment a missing file already gets. `g1` and `g3` therefore still mean
+  one consistent thing on every row in the ledger.
+- **Taxonomy is the same columns with income wording.** `bucket` is
+  unchanged; `bill_name` is labelled **Source** and `total_installments`
+  **Payments** in the income form. Same columns, same computed path — do
+  not add parallel fields for them.
 
 ### Materialization
 
@@ -681,8 +808,9 @@ JS only because it has no template layer.
 - **Copy is written from the user's side of the screen.** Name things by what
   people recognise, active voice, a control says exactly what happens. Errors
   explain what went wrong and how to fix it.
-- **Never expose internal ids in UI copy** except where the supersedes chain
-  makes them meaningful (`↩ #1042`).
+- **Never expose internal ids in UI copy.** The old `↩ #1042` exception went
+  away with the superseding restore row — the change log speaks in times,
+  actors and verbs, not row ids.
 
 ---
 
