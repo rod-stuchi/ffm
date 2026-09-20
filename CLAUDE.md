@@ -43,10 +43,20 @@ codebase coherent.
 ## Design reference
 
 `design/ffm-app-mockup.html` — the full-viewport app: real layout, real
-interactions, live `ffm.toml`. This is the **normative** visual and interaction spec.
+interactions. This is the **normative** visual and interaction spec. Its live
+`ffm.toml` editor pane is **superseded** — see `ffm-settings-mockup.html` — and
+will be replaced when this file is next revised.
 
 `design/ffm-prototype.html` — the annotated version: every row state with a written
 explanation of *why* it looks that way. Read this when a state's meaning is unclear.
+
+`design/ffm-auth-mockup.html` — the three pre-auth pages (`/login`, `/setup`,
+`/invite/:token`) and their error states. The only surface that lives **outside**
+the `.app` shell.
+
+`design/ffm-settings-mockup.html` — `:household`, `:profile` and `:members` as
+vsplit panes, shown inside the app shell because watching the ledger while a
+setting takes effect is the entire argument for a vsplit.
 
 ### Port, don't import
 
@@ -113,6 +123,25 @@ Eleven bundled palettes, each dark + light:
 Nord and Dracula have no canonical upstream light variant; those two light palettes
 are derived (Dracula's from Alucard). Everything else uses the real published values.
 
+**Which palette and light-versus-dark are two independent facts, stored in two
+different places.** The palette is a personal preference and belongs to the
+member (`member_settings.theme_name` + `theme_overrides`). Light/dark is a
+property of the **device** — the same person uses a bright laptop and a dark
+phone — so it lives in the `ffm.theme` cookie alongside `system`.
+
+Keeping them separate is what makes a pre-auth page themeable at all: `/login`
+can honour your light/dark without knowing who you are, and falls back to the
+bundled `ffm` palette because an anonymous visitor's palette choice would have
+nowhere to live. `/setup` and `/invite` are the exception that proves it — they
+*do* show the full 11-palette picker, because there it's a form field writing
+`member_settings`, not chrome.
+
+**The picker previews by swapping a server-rendered `<style>` block**, not by
+recomputing colours in JS: the control does an `hx-get` and the server returns
+the 11 tokens plus their `color-mix()` derivations from the same palette table
+the app itself uses. One round trip per click, zero JS, and the preview provably
+cannot drift from the real thing.
+
 ---
 
 See @design/spec.md for the keymap, row states and config schema.
@@ -128,12 +157,19 @@ paint and on every resize. Render the threshold into a media query from Askama:
 
 ```html
 <style>
-  @media (max-width: {{ cfg.layout.min_split_width }}px) { .stage { /* tabs */ } }
+  @media (max-width: {{ me.layout_min_split_width }}px) { .stage { /* tabs */ } }
 </style>
 ```
 
 Zero JS, correct before the first frame, no business logic in Alpine. The mock uses
 JS only because it has no template layer.
+
+**The rule is unchanged; only the source of the number moved** — the threshold is
+a per-member setting now rather than an `ffm.toml` key (see Configuration in
+`design/spec.md`), and it is still rendered into one media query server-side. The
+pre-auth pages are the one place this does not apply: there is no member row
+before you log in, so `.auth` must not read any `layout_*` value and sizes its
+card in plain CSS.
 
 ### Tabs mode
 
@@ -163,7 +199,7 @@ JS only because it has no template layer.
   pointing at the row. `A` and `I` add a dashed placeholder row at the cursor
   for the arrow to point at; Create turns it into the real row.
 - **Why:** the rule form outgrew a dialog, and a dialog hides the ledger
-  you're editing — the same argument that made `:config` a vsplit instead
+  you're editing — the same argument that made `:household` a vsplit instead
   of a modal (see `design/spec.md`'s Configuration section).
 - **Drafts outlive focus.** Leaving a row mid-edit collapses it back to
   read-only; unchanged drafts vanish, changed ones stay marked on the row
@@ -211,15 +247,38 @@ JS only because it has no template layer.
   (append = after the current max).
 - **Rolling two-month backup** of the SQLite file.
 - **Members are real accounts, not just an attribution label.** `members` gets
-  `password_hash` and `role` (0 = admin). No self-registration — an admin creates
-  the row. See `design/spec.md` for the full session/auth model.
-- **Personal display preferences live in the database, not in `ffm.toml`.** Theme
-  and line-number style are per-`member_id` rows (`member_settings`), set at
-  onboarding and editable via `:theme`/`:set` or a `:profile` form — never in the
-  shared config file, which household members would fight over the moment
-  there's more than one person's taste to account for.
-  `ffm.toml` stays process-level: DB path, backup, receipt-vault root, layout
-  thresholds.
+  `password_hash` and `role` (0 = admin). **No self-registration** — household
+  membership stays closed, and there is no `/signup` route. There are three ways
+  in: `/setup` (first run only, creates the household and the first admin),
+  `/invite/:token` (a single-use link an admin issues), and `/login`.
+- **The invitee sets their own password — an admin never types somebody
+  else's.** This reverses the earlier "an admin creates the row and sets its
+  initial password". The admin still decides *who* gets a link, so nothing about
+  the closed household changed; what changed is that there is no initial password
+  to hand over, and the member picks their own name, language and colour scheme
+  when they accept. The `members` row is created on accept, not when the link is
+  issued — so `password_hash` stays `NOT NULL` rather than having a
+  half-real, password-less member in the table. See `design/spec.md`'s Auth &
+  sessions section for the full model, including why there is no password reset.
+- **Configuration is three tiers, and `ffm.toml` is now three keys.** The file
+  holds `db_path`, `receipts_root` and `backup_dir` — **nothing else**. Everything
+  a household would actually want to change moved into the database:
+  - **`household_settings`** (one row, admin-only, via `:household`) — name,
+    currency, default language, default visibility, `show_recurring`. What's here
+    is what cannot coherently differ between members.
+  - **`member_settings`** (one row per member, via `:profile`) — language, theme
+    and overrides, line numbers, all four `layout_*` values, `ledger_sort`,
+    `search_scope`, `show_delta`, group and fold defaults, and a nullable
+    privacy default that falls back to the household's.
+
+  The reason is the one already argued for theme: a shared file that two people
+  both want to edit is the file *disagreeing with itself*. Once that's admitted
+  for theme it applies unchanged to line numbers, sort and every layout
+  threshold — all of which describe a person at a screen, not a process. Only
+  `db_path` genuinely cannot move, since you can't read a setting out of a
+  database you haven't opened. **The live `ffm.toml` editor pane is retired**;
+  the three remaining keys are read once at startup, not watched, and shown
+  read-only in `:household`.
 - **Focused member ≠ logged-in member.** Focus (`H`/`L`/`gt`) decides who a *new
   transaction* is attributed to; login decides whose *settings and private rows*
   you can see and edit. `:profile` and privacy checks use the session's member
@@ -231,8 +290,10 @@ JS only because it has no template layer.
   editable throughout. The one thing it changes is whether admin-only
   visibility and actions are currently in effect — other members' `private`
   rows go back to actually being hidden (the same rule any non-admin already
-  faces) and admin-only config (`ffm.toml`, household currency) becomes
-  inaccessible, exactly as if this member held no admin role at all. No
+  faces) and admin-only settings become inaccessible — `:household`,
+  `:currency` and `:members` all refuse, and the **Household** button
+  disappears from the toolbar rather than sitting there disabled — exactly as if
+  this member held no admin role at all. No
   session swap, no acting-as-someone-else, no writes attributed to anyone
   else — see `design/spec.md`'s Auth & sessions section for the full
   reasoning and why that distinction ruled out "impersonate" as the name.
@@ -745,16 +806,27 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   server-side session idea of "current member" — it drifts the moment the app is
   open in two windows.
 - **Sessions are server-side, not a bare signed cookie.** A `sessions` table
-  (`id`, `member_id`, `created_at`, `last_seen_at`) backs an opaque `HttpOnly`
-  session cookie, so a single lost/stolen device can be logged out without
-  rotating a secret that would log out the whole household. Sized for a
+  (`id`, `member_id`, `created_at`, `last_seen_at`, `label`) backs an opaque
+  `HttpOnly` session cookie, so a single lost/stolen device can be logged out
+  without rotating a secret that would log out the whole household. Sized for a
   LAN/Tailscale-only deployment: long-lived sliding sessions, no lockout or rate
   limiting, `SameSite=Lax` plus checking HTMX's own `HX-Request` header is enough
   CSRF defense at this scale. Revisit all of this if this is ever exposed to the
   open internet.
-- **No self-registration.** An admin (role 0) creates a member row and sets its
-  initial password — household membership is closed, the same way `ffm.toml`
-  editing is admin-only.
+- **The `HX-Request` CSRF check is for *authenticated* routes only.** `/login`,
+  `/setup`, `/invite/:token` and `/lang` are plain form POSTs and never carry
+  that header, so a blanket middleware would reject all four and make the app
+  impossible to enter. They rely on `SameSite=Lax` alone — sound here, because a
+  forged login POST gains an attacker nothing, `/lang` has no security value, and
+  setup and invite-accept are single-use by construction. **This is written down
+  because the obvious "fix" is to apply the check everywhere.**
+- **No self-registration, and no `/signup` route.** Household membership is
+  closed. An admin (role 0) issues a single-use invite link; the person accepting
+  it sets their **own** name and password. An admin never types somebody else's
+  password, and there is no initial password to hand over. First run is `/setup`,
+  which exists only while `members` is empty. There is no password reset — a
+  forgotten password means a fresh invite from an admin, which
+  `member_invites` already supports.
 - **Mutations follow one optimistic flow.** Submit → insert an animated skeleton
   row immediately → the server's fragment replaces it with either the real row or
   an error row carrying a **Try Again** that resubmits the original action.
@@ -779,32 +851,42 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 
 ## Conventions
 
-- **Locale is pt-BR — except currency, which is household-wide config.**
-  Dates stay `dd/mm/yyyy` unconditionally. Money's *symbol and number
-  format* (decimal/thousands separator, digit grouping) come from
-  `ffm.toml`'s `[locale] currency` — admin-only, one value for the whole
-  household, **never a per-member preference like theme**. Every member's
-  transactions land in the same shared totals (INs/OUTs/NET, balances); a
-  per-member currency would mean either fake, unbacked exchange-rate
-  conversion or two members seeing different-looking numbers for the exact
-  same total. Picking a currency picks its whole conventional format as one
-  preset (choosing USD switches to dot-decimal/comma-thousands, not just
-  the `$` glyph) — there's no independent "keep comma-decimal but show $"
-  combination. See `design/spec.md`'s Configuration section for the schema
-  and the supported set. This still isn't a signup-flow setting: there is
-  no self-registration (see Data model, below), so it's set the same way
-  `layout`/`privacy` are — by the admin, in `ffm.toml`, whenever the
-  household is first configured. Format server-side; do not push locale
-  logic into Alpine.
-- **UI copy is a separate axis from the pt-BR locale above, and defaults to
-  English.** `dd/mm/yyyy` dates and the currency-driven number format are
-  fixed regardless of language; the *words* — row status text, statusline
-  messages, modal labels, button copy — are English by default, with i18n
-  support planned but not built yet. Sample/seed data (bill names like
-  "Água · Sabesp", bucket labels) stays realistic Brazilian-household
-  Portuguese on purpose — that's content the household typed in, not app
-  copy — but anything the app itself says needs to be in English until a
-  real i18n layer lands, not written in Portuguese and translated later.
+- **There is no single "locale". There are three independent axes, and fusing
+  them is the mistake to avoid.**
+
+  | axis | source | what it changes |
+  |---|---|---|
+  | date format | **fixed** | nothing — always `dd/mm/yyyy` |
+  | money format | `household_settings.locale_currency` | symbol, decimal and thousands separators |
+  | language | `member_settings.language` | **the words, and only the words** |
+
+  A `pt-BR` UI in a `USD` household shows Portuguese copy and `$1,234.56`. A
+  member switching to English does not move a single decimal point. Format all
+  three server-side; never push any of this into Alpine.
+- **Currency is household-wide and admin-only, never a per-member preference
+  like theme.** Every member's transactions land in the same shared totals
+  (INs/OUTs/NET, balances); a per-member currency would mean either fake,
+  unbacked exchange-rate conversion or two members seeing different-looking
+  numbers for the exact same total. Picking a currency picks its whole
+  conventional format as one preset (choosing USD switches to
+  dot-decimal/comma-thousands, not just the `$` glyph) — there's no independent
+  "keep comma-decimal but show $" combination. It's chosen on `/setup` and
+  edited in `:household`; see `design/spec.md`'s Configuration section for the
+  schema and the supported set.
+- **UI copy defaults to English, and i18n is now designed** — `en` and `pt-BR`,
+  per member, in `member_settings.language`. The catalogs are Fluent files with
+  **compile-time-generated accessors**, so a renamed message id fails
+  `cargo build` rather than surfacing as a blank string at runtime; the build
+  also rejects any date or currency formatting inside a catalog, which is what
+  structurally enforces the three-axis separation above. The pre-login choice
+  lives in an `ffm.lang` cookie, not `localStorage`, so the first byte of HTML is
+  already in the right language with zero JS. See `design/spec.md`'s
+  **Language & copy (i18n)** section.
+- **Sample/seed data stays Brazilian-household Portuguese on purpose** — bill
+  names like "Água · Sabesp", bucket labels like "Mesada". That's content a
+  household typed into its own ledger, not app copy: it never passes through the
+  catalog, it stays Portuguese when the UI language is English, and it must not
+  appear in any `.ftl` file. Anything the *app itself* says is a catalog message.
 - **Copy is written from the user's side of the screen.** Name things by what
   people recognise, active voice, a control says exactly what happens. Errors
   explain what went wrong and how to fix it.
@@ -832,3 +914,11 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   `minmax(64px, max-content)` so long commands fit their own box.
 - **Hardcoded `#fff` on semantic fills** breaks on the fifth theme, not the first.
   Use `var(--paper)`.
+- **Fluent wraps every placeable in invisible BiDi isolation marks
+  (U+2068/U+2069) by default.** In a mono statusline those render as phantom
+  width, breaking the `.st.grow` ellipsis measurement and any string comparison
+  in a test. Call `set_use_isolating(false)` on the bundle.
+- **A pre-auth template has no member row.** Every layout context must carry
+  `me: Option<&Member>`, and the `.auth` layout must not read `layout_*` or
+  `theme_name` — otherwise the login page either won't compile, or worse,
+  compiles against defaults that silently diverge from a real member's.

@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ffm — household, profile, members</title>
+
+<!--
+  ============================================================================
+  FFM — the three settings panes:  :household  ·  :profile  ·  :members
+  ============================================================================
+
+  These replace the live `ffm.toml` textarea in ffm-app-mockup.html (that pane
+  is superseded; it will be removed when the app mock is next revised).
+
+  WHY THIS FILE KEEPS THE APP SHELL, unlike ffm-auth-mockup.html:
+  the entire argument for a vsplit rather than a modal is that you need to
+  WATCH the ledger while a setting takes effect — `layout.panes` and
+  `line_numbers` are exactly the settings you cannot judge with the ledger
+  hidden. A standalone pane could not show that, so the shell is the point.
+  Toggle Panes, Line numbers, Gap or Colour scheme and watch the right-hand
+  side move. The ledger here is deliberately thin — just enough row to make
+  the settings legible.
+
+  CONFIGURATION IS NOW THREE TIERS (design/spec.md § Configuration):
+    · operator  — ffm.toml: db_path, receipts_root, backup_dir. Nothing else.
+                  Read once at startup, NOT watched, shown read-only below.
+    · household — household_settings, one row, admin-only, via :household.
+    · member    — member_settings, one row each, via :profile.
+
+  WHY A FORM IS NOT THE "SETTINGS DIALOG" THE SPEC FORBIDS:
+  the rule protects single source of truth, not a particular widget. The
+  duplication it was written against is gone — those keys are columns now, and
+  a form, a `:set` command and a clickable statusline cell are three gestures
+  writing one row. What keeps these panes honest is that they have NO SAVE
+  BUTTON: every control writes on `change`, the footer confirms, the
+  statusline echoes. No pending state means no moment when the form and the
+  row disagree. A Save/Cancel pair would manufacture exactly that moment.
+
+  Gotcha observed: state classes are `is-`/`has-` prefixed here (`is-paneopen`,
+  `is-tabs`), because an unprefixed `app.cfg` once silently matched a leftover
+  `.cfg` rule and broke the whole shell width.
+
+  ⚠ As in every mock: the JS here holds state in an object and re-renders.
+    That is the client-side data model the real architecture forbids — port the
+    markup, the CSS and the copy, and rewrite the behaviour against HTMX.
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ============ tokens — ported verbatim, triple definition ============ */
+:root{
+  --paper:#F6F3ED; --surface:#FFFDF8; --surface-2:#EEE9DE; --surface-3:#E6E0D2;
+  --ink:#211E19; --ink-2:#5C554A; --ink-3:#8E8578;
+  --line:#E1DACC; --line-2:#CDC4B1;
+  --accent:#A8620A; --accent-2:#C9800F;
+  --accent-soft:rgba(168,98,10,.10); --accent-line:rgba(168,98,10,.35);
+  --pos:#3D7A4B; --pos-soft:rgba(61,122,75,.13);
+  --neg:#B23A2B; --neg-soft:rgba(178,58,43,.11);
+  --info:#3F6288;
+  --shadow-sm:0 1px 2px rgba(46,36,18,.07);
+  --shadow-md:0 2px 4px rgba(46,36,18,.05),0 12px 28px rgba(46,36,18,.09);
+  --sans:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#171512; --surface:#201D18; --surface-2:#2A261E; --surface-3:#353026;
+    --ink:#EEE8DB; --ink-2:#B2A995; --ink-3:#807869;
+    --line:#332E25; --line-2:#474032;
+    --accent:#E9A63F; --accent-2:#F5C173;
+    --accent-soft:rgba(233,166,63,.11); --accent-line:rgba(233,166,63,.34);
+    --pos:#82B47D; --pos-soft:rgba(130,180,125,.14);
+    --neg:#E28470; --neg-soft:rgba(226,132,112,.13);
+    --info:#8FB0D6;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --shadow-md:0 2px 4px rgba(0,0,0,.3),0 14px 32px rgba(0,0,0,.42);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#171512; --surface:#201D18; --surface-2:#2A261E; --surface-3:#353026;
+  --ink:#EEE8DB; --ink-2:#B2A995; --ink-3:#807869;
+  --line:#332E25; --line-2:#474032;
+  --accent:#E9A63F; --accent-2:#F5C173;
+  --accent-soft:rgba(233,166,63,.11); --accent-line:rgba(233,166,63,.34);
+  --pos:#82B47D; --pos-soft:rgba(130,180,125,.14);
+  --neg:#E28470; --neg-soft:rgba(226,132,112,.13);
+  --info:#8FB0D6;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow-md:0 2px 4px rgba(0,0,0,.3),0 14px 32px rgba(0,0,0,.42);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1px solid var(--line-2);
+  border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--ink);white-space:nowrap}
+
+/* ============ app shell — trimmed ============ */
+.app{--gap:16px;height:100dvh;display:flex;flex-direction:column;background:var(--paper)}
+.topbar{flex:none;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:12px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.topbar .brand{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--ink-3)}
+.topbar .month{font-family:var(--mono);font-size:15px;font-weight:500}
+.topbar .sp{flex:1}
+.tbtn{font-family:var(--sans);font-size:12.5px;border-radius:7px;padding:6px 11px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2)}
+.tbtn:hover{border-color:var(--accent-line);color:var(--ink)}
+.tbtn.on{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+
+/* tabs mode: one pane at a time */
+.tabbar{display:none;align-items:center;gap:8px;flex:none;
+  padding:calc(var(--gap) - 2px) var(--gap) 0;overflow-x:auto}
+.app.is-tabs .tabbar{display:flex}
+.tab{display:flex;align-items:center;gap:10px;flex:none;cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
+  padding:7px 13px 7px 9px;color:var(--ink-3)}
+.tab .idx{font-family:var(--mono);font-size:10px;padding:3px 5px;border-radius:4px;
+  background:var(--surface-3);color:var(--ink-3)}
+.tab .nm{font-size:13.5px;font-weight:600}
+.tab .bal{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;opacity:.85}
+.tab.on{background:var(--surface);border-color:var(--accent);color:var(--ink);
+  box-shadow:0 0 0 3px var(--accent-soft)}
+.tab.on .idx{background:var(--accent);color:var(--paper);font-weight:700}
+.tabbar .hint{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);white-space:nowrap}
+
+/* stage: [settings vsplit] + panes */
+.stage{flex:1;min-height:0;display:grid;grid-template-columns:1fr;
+  gap:var(--gap);padding:var(--gap);background:var(--paper)}
+.app.is-paneopen .stage{grid-template-columns:minmax(300px,420px) 1fr}
+@media (max-width:860px){
+  /* the pane takes the whole stage rather than squeezing a ledger to nothing */
+  .app.is-paneopen .stage{grid-template-columns:1fr}
+  .app.is-paneopen .panels{display:none}
+}
+.panels{min-height:0;min-width:0;display:grid;
+  grid-template-columns:repeat(2,minmax(0,var(--pane-max,1fr)));
+  gap:var(--gap);overflow-x:auto;overflow-y:hidden;justify-content:safe center}
+.app.is-tabs .panels{grid-template-columns:minmax(0,var(--pane-max,1fr))}
+.app.is-tabs .panel:not(.active){display:none}
+.app.is-tabs .panel{opacity:1;filter:none}
+
+/* the unfocused pane recedes with opacity AND desaturation — dimming alone
+   leaves the green checks and red deltas shouting from the inactive side */
+.panel{display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;
+  background:var(--surface);border:1px solid var(--line);border-radius:13px;
+  opacity:.46;filter:saturate(.5);transition:opacity .22s ease,filter .22s ease,
+  border-color .22s ease,box-shadow .22s ease}
+.panel:hover{opacity:.78;filter:saturate(.85)}
+.panel.active,.panel.active:hover{opacity:1;filter:none;
+  border-color:var(--accent-line);box-shadow:var(--shadow-md)}
+.p-head{flex:none;background:var(--surface-2);padding:11px 14px;border-bottom:1px solid var(--line);
+  display:flex;align-items:baseline;gap:10px}
+.p-head .nm{font-size:14px;font-weight:600}
+.p-head .role{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3)}
+.p-head .bal{margin-left:auto;font-family:var(--mono);font-size:13.5px;font-weight:500;
+  font-variant-numeric:tabular-nums}
+.ledger{flex:1;min-height:0;overflow:auto;padding:7px 0 10px}
+
+/* the row. Keep the gutter cell in the grid and vary only its WIDTH and
+   content — `display:none` on a grid child reflows its siblings, which is how
+   `nonu` once crushed the row into a 10px first track. */
+.row{display:grid;grid-template-columns:var(--gutw,34px) 26px 1fr max-content;
+  align-items:center;gap:10px;padding:7px 14px 7px 0;
+  border-left:3px solid transparent}
+.row.focus{border-left-color:var(--accent);background:var(--accent-soft)}
+.gut{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);text-align:right;
+  font-variant-numeric:tabular-nums;overflow:hidden;white-space:nowrap}
+.row.focus .gut{color:var(--accent);font-weight:700}
+.mark{width:22px;height:22px;border-radius:50%;justify-self:center}
+.mark.paid{background:var(--pos)}
+.mark.pend{border:2.5px solid var(--accent-2);background:transparent}
+.mark.plain{border:2px solid var(--line-2);background:transparent}
+.mark.inc{background:var(--pos)}
+.nm{min-width:0}
+.nm .t{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm .meta{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.amt{text-align:right}
+.amt .v{font-family:var(--mono);font-size:13.5px;font-weight:500;font-variant-numeric:tabular-nums}
+.amt .d{font-family:var(--mono);font-size:10.5px}
+.amt .d.up{color:var(--neg)}
+.amt .d.dn{color:var(--pos)}
+.amt .d.eq{color:var(--ink-3)}
+
+/* ============ the settings vsplit — .cfgpane, ported ============ */
+.cfgpane{display:none;flex-direction:column;min-height:0;min-width:0;overflow:hidden;
+  background:var(--surface);border:1px solid var(--line-2);border-radius:13px}
+.app.is-paneopen .cfgpane{display:flex}
+.cfg-h{display:flex;align-items:center;gap:9px;flex:none;padding:9px 12px;
+  border-bottom:1px solid var(--line);background:var(--surface-2)}
+.cfg-h b{font-family:var(--mono);font-size:12.5px;font-weight:700}
+.cfg-h .path{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfg-h button{margin-left:auto;flex:none;font-family:var(--mono);font-size:10.5px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line-2);border-radius:5px;
+  padding:2px 7px;color:var(--ink-2)}
+.cfg-h button:hover{border-color:var(--accent-line);color:var(--ink)}
+.cfg-body{flex:1;min-height:0;overflow:auto;padding:14px}
+.cfg-st{flex:none;font-family:var(--mono);font-size:10.5px;line-height:1.55;padding:7px 12px;
+  border-top:1px solid var(--line);background:var(--surface-2);color:var(--pos)}
+.cfg-st.bad{color:var(--neg)}
+.cfg-st .d{color:var(--ink-3)}
+
+/* a settings group is framed like a ledger group — the same .card language,
+   deliberately not a per-group colour */
+.grp{border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden}
+.grp > h4{margin:0;padding:8px 12px;background:var(--surface-2);border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:500}
+.grp > .gb{padding:12px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+.f{display:block}
+.f .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);display:block;margin-bottom:4px}
+input.i,select.i{width:100%;font-family:var(--mono);font-size:13px;background:var(--paper);color:var(--ink);
+  border:1px solid var(--line-2);border-radius:7px;padding:7px 9px}
+input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.hint{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend{padding:0}
+.radios{display:flex;flex-wrap:wrap;gap:7px}
+.radios label{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;
+  border:1px solid var(--line-2);border-radius:8px;padding:6px 10px;background:var(--paper)}
+.radios input{accent-color:var(--accent);margin:0}
+.radios label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.radios label:focus-within{box-shadow:0 0 0 3px var(--accent-soft)}
+
+/* Toggle switch, not a tick box — these read as states ("tracking is on"),
+   and a pill toggle says that in less space than a checkbox plus its label. */
+.switch{display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:12.5px}
+.switch input[type="checkbox"]{appearance:none;-webkit-appearance:none;margin:1px 0 0;flex:none;position:relative;
+  width:34px;height:20px;border-radius:999px;background:var(--surface-3);border:1px solid var(--line-2);
+  cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.switch input[type="checkbox"]::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;
+  border-radius:50%;background:var(--ink-3);transition:transform .15s ease,background .15s ease}
+.switch input[type="checkbox"]:checked{background:var(--accent-soft);border-color:var(--accent)}
+.switch input[type="checkbox"]:checked::after{transform:translateX(14px);background:var(--accent)}
+.switch input[type="checkbox"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.switch .d{display:block;font-size:11px;color:var(--ink-3);margin-top:1px}
+
+.btn{font-family:var(--sans);font-size:12.5px;border-radius:7px;padding:7px 12px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--surface);color:var(--ink)}
+.btn:hover{border-color:var(--accent-line)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--paper);font-weight:600}
+.btn.sm{font-size:11px;padding:4px 8px;font-family:var(--mono)}
+.notebox{background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:8px;
+  padding:9px 11px;font-size:12px;color:var(--ink-2)}
+
+/* ============ the 11-palette picker ============ */
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.swatch{position:relative;display:block;cursor:pointer;border:1px solid var(--line-2);
+  border-radius:8px;overflow:hidden;background:var(--paper)}
+.swatch input{position:absolute;opacity:0;pointer-events:none}
+.swatch .bars{display:flex;height:20px}
+.swatch .bars i{flex:1}
+.swatch .nm{display:block;font-family:var(--mono);font-size:9px;padding:3px 5px;color:var(--ink-3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.swatch:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.swatch:has(input:checked) .nm{color:var(--ink);font-weight:500}
+.swatch:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:1px}
+
+/* read-only operator keys */
+.romount{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;
+  font-family:var(--mono);font-size:11px;color:var(--ink-3);align-items:baseline}
+.romount span{color:var(--ink-2);word-break:break-all}
+
+/* :members */
+.mlist{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}
+.mrow{display:flex;align-items:baseline;gap:9px;padding:7px 9px;border-radius:7px}
+.mrow.focus{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.mrow .nm{font-size:13px;font-weight:500;flex:none}
+.mrow .role{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3)}
+.mrow .seen{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+.mrow .seen.pend{color:var(--accent)}
+.invitelink{display:flex;gap:7px;align-items:stretch;margin-top:7px}
+.invitelink input{flex:1;min-width:0;font-size:11.5px}
+
+/* ============ statusline ============ */
+.status{flex:none;display:flex;align-items:center;background:var(--surface-2);
+  border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;min-height:30px}
+.st{padding:6px 11px;color:var(--ink-2);border-right:1px solid var(--line);white-space:nowrap}
+.st.mode{background:var(--accent);color:var(--paper);font-weight:700;letter-spacing:.1em}
+.st.grow{flex:1;border-right:none;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis}
+.st.msg{color:var(--accent)}
+.st.msg.bad{color:var(--neg)}
+.st.right{border-right:none;border-left:1px solid var(--line);cursor:pointer}
+.st.right:hover{color:var(--accent)}
+@media (max-width:700px){ .st.hideable{display:none} }
+
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+
+<div class="app is-paneopen" id="app">
+
+  <div class="topbar">
+    <span class="brand">ffm</span>
+    <span class="month">set 2026</span>
+    <span class="sp"></span>
+    <!-- Renamed from `ffm.toml`: nothing is called after a file any more. Still
+         admin-only, and it DISAPPEARS under preview-as-non-admin rather than
+         sitting there disabled. -->
+    <button class="tbtn" id="btnHousehold" onclick="openPane('household')">Household</button>
+    <button class="tbtn" id="btnProfile"   onclick="openPane('profile')">Profile</button>
+    <button class="tbtn" id="btnMembers"   onclick="openPane('members')">Members</button>
+    <button class="tbtn" id="btnAdmin"     onclick="togglePreview()">ADMIN</button>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab on"><span class="idx">1</span><span class="nm">Rodrigo</span><span class="bal">R$ 2.418,10</span></div>
+    <div class="tab"><span class="idx">2</span><span class="nm">Nat&aacute;lia</span><span class="bal">R$ 1.902,44</span></div>
+    <span class="hint">gt &middot; gT</span>
+  </div>
+
+  <div class="stage">
+
+    <!-- ===================== the vsplit ===================== -->
+    <div class="cfgpane">
+      <div class="cfg-h">
+        <b id="paneTitle">Household</b>
+        <span class="path" id="panePath">household_settings</span>
+        <button type="button" onclick="closePane()">esc</button>
+      </div>
+      <div class="cfg-body">
+
+        <!-- ============ :household ============ -->
+        <div id="pane-household">
+          <div class="grp">
+            <h4>Shared by everyone</h4>
+            <div class="gb stack">
+              <label class="f">
+                <span class="k">Household name</span>
+                <input class="i" value="Casa Stuchi" oninput="setHousehold(this.value)">
+                <span class="hint">Shown on the sign-in page.</span>
+              </label>
+              <label class="f">
+                <span class="k">Currency</span>
+                <!-- Household-wide and admin-only, deliberately NOT beside theme
+                     in member settings: every member's transactions feed the
+                     same totals, so a per-member currency would mean either
+                     fake exchange-rate conversion or two people seeing
+                     different numbers for the same total. -->
+                <select class="i" id="curSel" onchange="setCurrency(this.value)">
+                  <option value="BRL">Real &middot; R$ 1.234,56</option>
+                  <option value="USD">US dollar &middot; $1,234.56</option>
+                  <option value="EUR">Euro &middot; 1.234,56 &euro;</option>
+                  <option value="GBP">Pound &middot; &pound;1,234.56</option>
+                </select>
+                <span class="hint">Every member's totals use this. Dates stay dd/mm/yyyy either way.</span>
+              </label>
+              <fieldset class="f">
+                <legend class="k">Default language</legend>
+                <div class="radios" onchange="saveMsg('household_settings.default_language', this)">
+                  <label><input type="radio" name="hlang" value="en" checked> English</label>
+                  <label><input type="radio" name="hlang" value="pt-BR"> Portugu&ecirc;s</label>
+                </div>
+                <span class="hint">Used on the sign-in page, and for a member who hasn't chosen.</span>
+              </fieldset>
+              <fieldset class="f">
+                <legend class="k">New rows are</legend>
+                <div class="radios" onchange="saveMsg('household_settings.default_visibility', this)">
+                  <label><input type="radio" name="hvis" value="household" checked> Visible to the household</label>
+                  <label><input type="radio" name="hvis" value="private"> Private</label>
+                </div>
+                <span class="hint">Members can override this for their own rows.</span>
+              </fieldset>
+              <label class="switch">
+                <input type="checkbox" checked onchange="setShowRecurring(this.checked)">
+                <span>Use recurring rules
+                  <span class="d">Off removes the recurring glyph household-wide &mdash; it means
+                    &ldquo;we don't use this concept here&rdquo;, not &ldquo;mute it for me&rdquo;.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- The whole of ffm.toml. Read-only on purpose: db_path cannot
+               change under a running process, and receipts_root cannot move
+               without relocating the vault — so a live-applying editor would
+               accept input and silently not apply it, which is worse than any
+               dialog. Shown here so there is still ONE place to read the whole
+               configuration even though two tiers own it. -->
+          <div class="grp">
+            <h4>Set by the operator &middot; ffm.toml</h4>
+            <div class="gb">
+              <div class="romount">
+                <b>db_path</b><span>/srv/ffm/ffm.db</span>
+                <b>receipts_root</b><span>/disks/vault/ffm/receipts</span>
+                <b>backup_dir</b><span>/srv/ffm/backups</span>
+              </div>
+              <p class="hint">Read once at startup. Edit <span class="mono">ffm.toml</span>
+                (or set <span class="mono">FFM_DB_PATH</span> &amp; co.) and restart to change these.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ :profile ============ -->
+        <div id="pane-profile" hidden>
+          <div class="grp">
+            <h4>Language</h4>
+            <div class="gb">
+              <div class="radios" onchange="setLang(this)">
+                <label><input type="radio" name="mlang" value="en" checked> English</label>
+                <label><input type="radio" name="mlang" value="pt-BR"> Portugu&ecirc;s (Brasil)</label>
+              </div>
+              <p class="hint">Changes the words only. Dates stay dd/mm/yyyy and money follows
+                the household's currency.</p>
+            </div>
+          </div>
+
+          <div class="grp">
+            <h4>Appearance</h4>
+            <div class="gb stack">
+              <fieldset class="f">
+                <legend class="k">Colour scheme</legend>
+                <!-- The app's FIRST palette picker: until now the palette was
+                     only settable via `:theme` or by typing TOML. -->
+                <div class="swatches" id="sw-profile"></div>
+              </fieldset>
+              <fieldset class="f">
+                <legend class="k">Light / dark</legend>
+                <div class="radios" onchange="setVariant(this)">
+                  <label><input type="radio" name="variant" value="" checked> System</label>
+                  <label><input type="radio" name="variant" value="light"> Light</label>
+                  <label><input type="radio" name="variant" value="dark"> Dark</label>
+                </div>
+                <!-- Not a DB column: light/dark is a property of the DEVICE, and
+                     the same person uses a bright laptop and a dark phone. It is
+                     the `ffm.theme` cookie, which is also what lets /login
+                     honour it without knowing who you are. -->
+                <span class="hint">This device only &mdash; it isn't saved to your account.</span>
+              </fieldset>
+              <fieldset class="f">
+                <legend class="k">Line numbers</legend>
+                <div class="radios" onchange="setNu(this)">
+                  <label><input type="radio" name="nu" value="relative" checked> Relative</label>
+                  <label><input type="radio" name="nu" value="absolute"> Absolute</label>
+                  <label><input type="radio" name="nu" value="none"> Off</label>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="grp">
+            <h4>Layout</h4>
+            <div class="gb stack">
+              <fieldset class="f">
+                <legend class="k">Panes</legend>
+                <div class="radios" onchange="setPanes(this)">
+                  <label><input type="radio" name="panes" value="auto" checked> Auto</label>
+                  <label><input type="radio" name="panes" value="split"> Split</label>
+                  <label><input type="radio" name="panes" value="tabs"> Tabs</label>
+                </div>
+                <span class="hint">This is the setting you need the ledger visible to judge &mdash;
+                  which is the whole reason this is a split and not a modal.</span>
+              </fieldset>
+              <div class="fgrid">
+                <label class="f">
+                  <span class="k">Split below</span>
+                  <input class="i" value="900" inputmode="numeric" onchange="saveMsg('layout_min_split_width', null, this.value + ' px')">
+                  <span class="hint">px &mdash; narrower than this, auto becomes tabs.</span>
+                </label>
+                <label class="f">
+                  <span class="k">Pane max width</span>
+                  <input class="i" value="900" inputmode="numeric" onchange="setMaxWidth(this.value)">
+                  <span class="hint">px &middot; 0 = unlimited</span>
+                </label>
+              </div>
+              <label class="f">
+                <span class="k">Gap</span>
+                <input class="i" value="16" inputmode="numeric" onchange="setGap(this.value)">
+                <span class="hint">px between panes. It must read as separation, not as a crack.</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="grp">
+            <h4>Ledger</h4>
+            <div class="gb stack">
+              <fieldset class="f">
+                <legend class="k">Row order</legend>
+                <div class="radios" onchange="setSort(this)">
+                  <label><input type="radio" name="sort" value="manual" checked> Manual</label>
+                  <label><input type="radio" name="sort" value="date"> Date</label>
+                  <label><input type="radio" name="sort" value="amount"> Amount</label>
+                </div>
+                <span class="hint">J / K reorder in manual order only &mdash; you can't reorder a derived view.</span>
+              </fieldset>
+              <fieldset class="f">
+                <legend class="k">Search scope</legend>
+                <div class="radios" onchange="saveMsg('ledger_search_scope', this)">
+                  <label><input type="radio" name="scope" value="pane" checked> This pane</label>
+                  <label><input type="radio" name="scope" value="household"> Whole household</label>
+                </div>
+              </fieldset>
+              <fieldset class="f">
+                <legend class="k">Group by</legend>
+                <div class="radios" onchange="saveMsg('ledger_group', this)">
+                  <label><input type="radio" name="grp" value="none" checked> Nothing</label>
+                  <label><input type="radio" name="grp" value="bucket"> Bucket</label>
+                </div>
+              </fieldset>
+              <fieldset class="f">
+                <legend class="k">Folds on load</legend>
+                <div class="radios" onchange="saveMsg('group_fold_default', this)">
+                  <label><input type="radio" name="fold" value="expanded" checked> Expanded</label>
+                  <label><input type="radio" name="fold" value="collapsed"> Collapsed</label>
+                </div>
+              </fieldset>
+              <label class="switch">
+                <input type="checkbox" checked onchange="setDelta(this.checked)">
+                <span>Show the month-over-month delta
+                  <span class="d">The small arrow comparing each row to the same line last month.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="grp">
+            <h4>Privacy</h4>
+            <div class="gb">
+              <!-- The nullable tri-state rendered honestly: the first option IS
+                   NULL, and it says what it currently resolves to. -->
+              <div class="radios" onchange="saveMsg('member_settings.default_visibility', this)">
+                <label><input type="radio" name="mvis" value="" checked> Whatever the household uses (visible)</label>
+                <label><input type="radio" name="mvis" value="household"> Visible to the household</label>
+                <label><input type="radio" name="mvis" value="private"> Private</label>
+              </div>
+              <p class="hint">Only affects rows you create. A private row is hidden from other
+                members, never from the admin.</p>
+            </div>
+          </div>
+
+          <div class="grp">
+            <h4>Account</h4>
+            <div class="gb stack">
+              <button class="btn" type="button" onclick="say('mock — would expand to current / new / confirm')">Change password</button>
+              <button class="btn" type="button" onclick="say('mock — would revoke every other session')">Sign out of other devices</button>
+              <p class="hint">Sessions are rows in the database, so one lost device is revoked
+                on its own &mdash; nobody else gets logged out.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ :members ============ -->
+        <div id="pane-members" hidden>
+          <div class="grp">
+            <h4>Members</h4>
+            <div class="gb">
+              <div class="mlist">
+                <div class="mrow focus"><span class="nm">Rodrigo</span><span class="role">admin</span><span class="seen">you &middot; now</span></div>
+                <div class="mrow"><span class="nm">Nat&aacute;lia</span><span class="role">member</span><span class="seen">2h ago</span></div>
+                <div class="mrow"><span class="nm">L&eacute;o</span><span class="role">member</span><span class="seen pend">invite pending</span></div>
+              </div>
+              <p class="hint">j / k walk the list, Enter expands one.</p>
+            </div>
+          </div>
+
+          <div class="grp">
+            <h4>Pending invite</h4>
+            <div class="gb">
+              <p class="hint" style="margin-top:0">for &ldquo;L&eacute;o&rdquo; &middot; member &middot; expires 27/09/2026</p>
+              <div class="invitelink">
+                <input class="i" readonly value="https://ffm.tail/invite/8KfQ2xR7wLpA3nZ" onfocus="this.select()">
+                <button class="btn" type="button" onclick="copyLink(this)">Copy</button>
+              </div>
+              <p class="hint">Shown once. Create a new link if it's lost.</p>
+              <div style="display:flex;gap:7px;margin-top:9px">
+                <button class="btn sm" type="button" onclick="say('invite reissued · the old link stops working')">Reissue</button>
+                <button class="btn sm" type="button" onclick="say('invite revoked', true)">Revoke</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="grp">
+            <h4>Invite someone</h4>
+            <div class="gb stack">
+              <label class="f">
+                <span class="k">For whom (optional)</span>
+                <input class="i" placeholder="Lucas">
+                <!-- A note on the invite row, nothing more. The invitee still
+                     picks their own members.name when they accept. -->
+                <span class="hint">Just a note so you can tell two open links apart.</span>
+              </label>
+              <fieldset class="f">
+                <legend class="k">Role</legend>
+                <div class="radios">
+                  <label><input type="radio" name="role" value="1" checked> Member</label>
+                  <label><input type="radio" name="role" value="0"> Admin</label>
+                </div>
+              </fieldset>
+              <button class="btn pri" type="button" onclick="say('invite created · copy it now')">Create invite link</button>
+              <div class="notebox">
+                You never type anyone else's password. They set it on the link, along
+                with their own name, language and colour scheme.
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="cfg-st" id="cfgSt"><span class="d">no changes yet</span></div>
+    </div>
+
+    <!-- ===================== the ledger, so you can watch ===================== -->
+    <div class="panels" id="panels"></div>
+
+  </div>
+
+  <div class="status">
+    <div class="st mode">NORMAL</div>
+    <div class="st hideable" id="stWhere">:household</div>
+    <div class="st grow msg" id="stMsg"></div>
+    <div class="st right hideable" id="stSort" onclick="openPane('profile')">sort manual</div>
+    <div class="st right" id="stNu" onclick="openPane('profile')">rnu</div>
+  </div>
+</div>
+
+<script>
+/* ===========================================================================
+   MOCK-ONLY state object + render loop. This is the client-side data model the
+   real architecture forbids: port the markup, the CSS and the copy, and
+   rewrite the behaviour against HTMX fragments.
+   =========================================================================== */
+const CUR = {
+  BRL:{symbol:'R$ ', dec:',', grp:'.', suffix:''},
+  USD:{symbol:'$',   dec:'.', grp:',', suffix:''},
+  EUR:{symbol:'',    dec:',', grp:'.', suffix:' €'},
+  GBP:{symbol:'£', dec:'.', grp:',', suffix:''}
+};
+
+const S = {
+  pane:'household',
+  admin:true,
+  currency:'BRL',
+  theme:'ffm',
+  variant:null,
+  nu:'relative',
+  panes:'auto',
+  gap:16,
+  maxWidth:900,
+  sort:'manual',
+  showDelta:true,
+  showRecurring:true,
+  household:'Casa Stuchi',
+  focusPane:0,
+  focusRow:1
+};
+
+const MEMBERS = [
+  { name:'Rodrigo', role:'admin', bal:241810, rows:[
+    { t:'Energia · Enel SP',        meta:'11/07/2026', mark:'paid',  amt:34362, d:+20 },
+    { t:'Água · Sabesp',        meta:'vence 18/07', mark:'pend',  amt:10840, d:-3 },
+    { t:'Mercado · Pão de Açúcar', meta:'13/07/2026', mark:'plain', amt:65890, d:-6 },
+    { t:'Salário',                   meta:'05/07/2026', mark:'inc',   amt:820000, d:0, inc:true }
+  ]},
+  { name:'Natália', role:'member', bal:190244, rows:[
+    { t:'Internet · Vivo',          meta:'20/07/2026', mark:'paid',  amt:12990, d:0 },
+    { t:'Farmácia',                  meta:'09/07/2026', mark:'plain', amt:8745,  d:+12 },
+    { t:'Freelance',                     meta:'02/07/2026', mark:'inc',   amt:413333, d:+4, inc:true }
+  ]}
+];
+
+const $  = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+function money(cents){
+  const c = CUR[S.currency];
+  const neg = cents < 0;
+  const s = String(Math.abs(cents)).padStart(3,'0');
+  let int = s.slice(0,-2), frac = s.slice(-2);
+  int = int.replace(/\B(?=(\d{3})+(?!\d))/g, c.grp);
+  return (neg?'-':'') + c.symbol + int + c.dec + frac + c.suffix;
+}
+
+/* ===== the ledger, so a setting can be watched taking effect ===== */
+function renderPanels(){
+  const gutw = S.nu === 'none' ? 10 : 34;
+  $('#panels').style.setProperty('--pane-max', S.maxWidth > 0 ? S.maxWidth + 'px' : '1fr');
+  $('#app').style.setProperty('--gap', S.gap + 'px');
+
+  $('#panels').innerHTML = MEMBERS.map((m, pi) => {
+    const active = pi === S.focusPane;
+    const rows = m.rows.map((r, ri) => {
+      const focused = active && ri === S.focusRow;
+      /* The gutter cell STAYS in the grid; only its width and content vary.
+         `display:none` on a grid child reflows its siblings — that is how
+         `nonu` once crushed the row into a 10px first track. */
+      let g = '';
+      if (S.nu === 'absolute') g = String(ri + 1);
+      else if (S.nu === 'relative') g = focused ? '0' : String(Math.abs(ri - S.focusRow));
+      const cls = r.d > 0 ? 'up' : r.d < 0 ? 'dn' : 'eq';
+      const arrow = r.d > 0 ? '▲' : r.d < 0 ? '▼' : '–';
+      /* the delta inverts for income: the arrow is direction, the colour is
+         whether it is good news */
+      const dcls = r.inc ? (r.d > 0 ? 'dn' : r.d < 0 ? 'up' : 'eq') : cls;
+      const delta = (S.showDelta && r.d !== 0)
+        ? '<div class="d ' + dcls + '">' + arrow + ' ' + (r.d > 0 ? '+' : '') + r.d + '%</div>' : '';
+      const recur = S.showRecurring ? ' · ↻' : '';
+      return '<div class="row' + (focused ? ' focus' : '') + '" style="--gutw:' + gutw + 'px">'
+        + '<div class="gut">' + g + '</div>'
+        + '<div class="mark ' + r.mark + '"></div>'
+        + '<div class="nm"><div class="t">' + r.t + '</div>'
+        +   '<div class="meta">' + r.meta + recur + '</div></div>'
+        + '<div class="amt"><div class="v">' + (r.inc ? '+ ' : '') + money(r.amt) + '</div>'
+        +   delta + '</div>'
+        + '</div>';
+    }).join('');
+    return '<div class="panel' + (active ? ' active' : '') + '" onclick="focusPane(' + pi + ')">'
+      + '<div class="p-head"><span class="nm">' + m.name + '</span>'
+      +   '<span class="role">' + m.role + '</span>'
+      +   '<span class="bal">' + money(m.bal) + '</span></div>'
+      + '<div class="ledger">' + rows + '</div>'
+      + '</div>';
+  }).join('');
+
+  $$('.tab .bal').forEach((el, i) => { el.textContent = money(MEMBERS[i].bal); });
+}
+function focusPane(i){ S.focusPane = i; renderPanels(); }
+
+/* ===== layout ===== */
+function applyLayout(){
+  const app = $('#app');
+  /* `auto` is resolved by available width. In the real app this is a media
+     query rendered from the member's own row — never a server round trip and
+     never a decision made in Alpine. */
+  const tabs = S.panes === 'tabs' || (S.panes === 'auto' && innerWidth < 900);
+  app.classList.toggle('is-tabs', tabs);
+  renderPanels();
+}
+addEventListener('resize', applyLayout);
+
+/* ===== panes ===== */
+const PANE_META = {
+  household:{ title:'Household', path:'household_settings', cmd:':household' },
+  profile:  { title:'Profile · Rodrigo', path:'member_settings', cmd:':profile' },
+  members:  { title:'Members', path:'members · member_invites', cmd:':members' }
+};
+function openPane(name){
+  /* admin-only panes are absent, not disabled, for a non-admin */
+  if (!S.admin && (name === 'household' || name === 'members')){
+    say(name === 'household' ? ':household is admin-only' : ':members is admin-only', true);
+    return;
+  }
+  S.pane = name;
+  $('#app').classList.add('is-paneopen');
+  ['household','profile','members'].forEach(p => {
+    document.getElementById('pane-' + p).hidden = (p !== name);
+  });
+  $('#paneTitle').textContent = PANE_META[name].title;
+  $('#panePath').textContent  = PANE_META[name].path;
+  $('#stWhere').textContent   = PANE_META[name].cmd;
+  ['Household','Profile','Members'].forEach(b => {
+    $('#btn' + b).classList.toggle('on', b.toLowerCase() === name);
+  });
+}
+function closePane(){
+  $('#app').classList.remove('is-paneopen');
+  ['Household','Profile','Members'].forEach(b => $('#btn' + b).classList.remove('on'));
+  $('#stWhere').textContent = 'set 2026';
+}
+
+/* Preview as non-admin: the same session, same identity, same pane, same
+   edits. The only thing toggled is whether admin rights are in effect — and
+   the admin-only buttons DISAPPEAR rather than sitting there disabled, since a
+   real non-admin never sees a control for a pane they can't open. */
+function togglePreview(){
+  S.admin = !S.admin;
+  $('#btnAdmin').textContent = S.admin ? 'ADMIN' : 'PREVIEW';
+  $('#btnAdmin').classList.toggle('on', !S.admin);
+  $('#btnHousehold').hidden = !S.admin;
+  $('#btnMembers').hidden   = !S.admin;
+  if (!S.admin && (S.pane === 'household' || S.pane === 'members')) openPane('profile');
+  say(S.admin ? 'admin rights on' : 'previewing as a non-admin · :preview to switch back');
+}
+
+/* ===== setting writers =====
+   Every one of these writes immediately. There is no Save button, and that is
+   deliberate: no pending state means no moment when the form and the row
+   disagree. A Save/Cancel pair would manufacture exactly that moment. */
+function saved(what){
+  const el = $('#cfgSt');
+  el.classList.remove('bad');
+  el.innerHTML = '✓ ' + what + ' <span class="d">· saved</span>';
+  say(what + ' · saved');
+}
+function saveMsg(key, radioGroup, literal){
+  const v = literal !== undefined ? literal
+          : radioGroup.querySelector('input:checked').value || 'follow the household';
+  saved(key + ' = "' + v + '"');
+}
+function setHousehold(v){ S.household = v.trim() || 'FFM'; saved('household name = "' + S.household + '"'); }
+function setCurrency(v){ S.currency = v; renderPanels(); saved('currency = "' + v + '"'); }
+function setShowRecurring(on){ S.showRecurring = on; renderPanels(); saved('show_recurring = ' + on); }
+function setLang(g){ saveMsg('member_settings.language', g); }
+function setNu(g){
+  S.nu = g.querySelector('input:checked').value;
+  $('#stNu').textContent = S.nu === 'relative' ? 'rnu' : S.nu === 'absolute' ? 'nu' : 'nonu';
+  renderPanels(); saved('line_numbers = "' + S.nu + '"');
+}
+function setPanes(g){ S.panes = g.querySelector('input:checked').value; applyLayout(); saved('layout_panes = "' + S.panes + '"'); }
+function setGap(v){ S.gap = Math.max(0, Math.min(64, parseInt(v,10) || 0)); renderPanels(); saved('layout_gap = ' + S.gap); }
+function setMaxWidth(v){ S.maxWidth = Math.max(0, parseInt(v,10) || 0); renderPanels(); saved('layout_max_width = ' + S.maxWidth); }
+function setDelta(on){ S.showDelta = on; renderPanels(); saved('ledger_show_delta = ' + on); }
+function setSort(g){
+  S.sort = g.querySelector('input:checked').value;
+  $('#stSort').textContent = 'sort ' + S.sort;
+  saved('ledger_sort = "' + S.sort + '"');
+  if (S.sort !== 'manual') say('ledger.sort = "' + S.sort + '" — reorder needs sort = "manual"', true);
+}
+function setVariant(g){
+  const v = g.querySelector('input:checked').value;
+  S.variant = v || null;
+  if (S.variant) document.documentElement.setAttribute('data-theme', S.variant);
+  else document.documentElement.removeAttribute('data-theme');
+  applyTheme();
+  /* Not saved to the account on purpose — this one is the ffm.theme cookie. */
+  const el = $('#cfgSt');
+  el.classList.remove('bad');
+  el.innerHTML = '✓ appearance → ' + (v || 'system') + ' <span class="d">· this device only</span>';
+  say('appearance → ' + (v || 'system') + ' · this device only');
+}
+
+function copyLink(btn){
+  const input = btn.parentElement.querySelector('input');
+  input.select();
+  if (navigator.clipboard) navigator.clipboard.writeText(input.value).catch(()=>{});
+  say('invite link copied');
+}
+
+let sayTimer = null;
+function say(m, bad){
+  const el = $('#stMsg');
+  el.textContent = m || '';
+  el.classList.toggle('bad', !!bad);
+  clearTimeout(sayTimer);
+  if (m) sayTimer = setTimeout(() => { el.textContent=''; el.classList.remove('bad'); }, 3200);
+}
+
+/* ===========================================================================
+   THEMES + applyTheme() — ported from ffm-app-mockup.html:1328. The real app
+   swaps a server-rendered <style> block instead, from the same palette table
+   the rest of the app reads, so a preview cannot drift from the real thing.
+   =========================================================================== */
+const K = ['paper','surface','surface_2','ink','ink_2','ink_3','line','accent','pos','neg','info'];
+const TH = (...v) => Object.fromEntries(K.map((k,i) => [k, v[i]]));
+const THEMES = {
+  ffm: {
+    dark:  TH('#171512','#201D18','#2A261E','#EEE8DB','#B2A995','#807869','#332E25','#E9A63F','#82B47D','#E28470','#8FB0D6'),
+    light: TH('#F6F3ED','#FFFDF8','#EEE9DE','#211E19','#5C554A','#8E8578','#E1DACC','#A8620A','#3D7A4B','#B23A2B','#3F6288') },
+  tokyonight: {
+    dark:  TH('#1A1B26','#1F2335','#24283B','#C0CAF5','#A9B1D6','#565F89','#292E42','#7AA2F7','#9ECE6A','#F7768E','#BB9AF7'),
+    light: TH('#E1E2E7','#F0F0F5','#D9DBE3','#3760BF','#6172B0','#848CB5','#CBCFDA','#2E7DE9','#587539','#F52A65','#9854F1') },
+  catppuccin: {
+    dark:  TH('#181825','#1E1E2E','#292A3B','#CDD6F4','#A6ADC8','#6C7086','#313244','#CBA6F7','#A6E3A1','#F38BA8','#89B4FA'),
+    light: TH('#E6E9EF','#EFF1F5','#DCE0E8','#4C4F69','#6C6F85','#9CA0B0','#CCD0DA','#8839EF','#40A02B','#D20F39','#1E66F5') },
+  kanagawa: {
+    dark:  TH('#16161D','#1F1F28','#2A2A37','#DCD7BA','#C8C093','#727169','#363646','#7E9CD8','#98BB6C','#FF5D62','#E6C384'),
+    light: TH('#F2ECBC','#F7F1CB','#E7DBA0','#545464','#43436C','#8A8980','#DDD2A4','#4D699B','#6F894E','#C84053','#624C83') },
+  everforest: {
+    dark:  TH('#2D353B','#343F44','#3D484D','#D3C6AA','#9DA9A0','#7A8478','#475258','#DBBC7F','#A7C080','#E67E80','#7FBBB3'),
+    light: TH('#FDF6E3','#F4F0D9','#EFEBD4','#5C6A72','#829181','#939F91','#E6E2CC','#DFA000','#8DA101','#F85552','#3A94C5') },
+  gruvbox: {
+    dark:  TH('#1D2021','#282828','#3C3836','#EBDBB2','#BDAE93','#928374','#504945','#FABD2F','#B8BB26','#FB4934','#83A598'),
+    light: TH('#F9F5D7','#FBF1C7','#EBDBB2','#3C3836','#504945','#7C6F64','#D5C4A1','#B57614','#79740E','#9D0006','#076678') },
+  rosepine: {
+    dark:  TH('#191724','#1F1D2E','#26233A','#E0DEF4','#908CAA','#6E6A86','#403D52','#EBBCBA','#9CCFD8','#EB6F92','#C4A7E7'),
+    light: TH('#FAF4ED','#FFFAF3','#F2E9E1','#575279','#797593','#9893A5','#DFDAD9','#D7827E','#56949F','#B4637A','#907AA9') },
+  onedark: {
+    dark:  TH('#21252B','#282C34','#2C323C','#ABB2BF','#828997','#5C6370','#3E4451','#61AFEF','#98C379','#E06C75','#C678DD'),
+    light: TH('#F0F0F1','#FAFAFA','#E5E5E6','#383A42','#696C77','#A0A1A7','#DCDCDD','#4078F2','#50A14F','#E45649','#A626A4') },
+  dracula: {
+    dark:  TH('#21222C','#282A36','#343746','#F8F8F2','#C4C9D4','#6272A4','#44475A','#BD93F9','#50FA7B','#FF5555','#8BE9FD'),
+    light: TH('#F5F1E1','#FFFBEB','#E8E3D0','#1F1F1F','#4A4636','#6C664B','#DED9C4','#644AC9','#14710A','#CB3A2A','#036A96') },
+  nord: {
+    dark:  TH('#2E3440','#3B4252','#434C5E','#ECEFF4','#D8DEE9','#7B88A1','#4C566A','#88C0D0','#A3BE8C','#BF616A','#81A1C1'),
+    light: TH('#E5E9F0','#ECEFF4','#D8DEE9','#2E3440','#434C5E','#6B7794','#C8D0DE','#5E81AC','#56753F','#A54A52','#4C6E8F') },
+  solarized: {
+    dark:  TH('#002B36','#073642','#0E4450','#93A1A1','#839496','#586E75','#14505C','#B58900','#859900','#DC322F','#268BD2'),
+    light: TH('#EEE8D5','#FDF6E3','#E4DCC7','#586E75','#657B83','#93A1A1','#DDD6C1','#B58900','#859900','#DC322F','#268BD2') }
+};
+const THEME_NAMES = Object.keys(THEMES);
+
+function applyTheme(){
+  const th = THEMES[S.theme] || THEMES.ffm;
+  const stamp = document.documentElement.getAttribute('data-theme');
+  const dark = stamp ? stamp === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  const v = th[dark ? 'dark' : 'light'];
+  const mix = (c, pct, w) => 'color-mix(in srgb, ' + c + ' ' + pct + '%, ' + w + ')';
+  const r = document.documentElement.style;
+  r.setProperty('color-scheme', dark ? 'dark' : 'light');
+  r.setProperty('--paper', v.paper);
+  r.setProperty('--surface', v.surface);
+  r.setProperty('--surface-2', v.surface_2);
+  r.setProperty('--surface-3', mix(v.surface_2, 84, v.ink));
+  r.setProperty('--ink', v.ink);
+  r.setProperty('--ink-2', v.ink_2);
+  r.setProperty('--ink-3', v.ink_3);
+  r.setProperty('--line', v.line);
+  r.setProperty('--line-2', mix(v.line, 72, v.ink));
+  r.setProperty('--accent', v.accent);
+  r.setProperty('--accent-2', mix(v.accent, 74, v.ink));
+  r.setProperty('--accent-soft', mix(v.accent, 13, 'transparent'));
+  r.setProperty('--accent-line', mix(v.accent, 38, 'transparent'));
+  r.setProperty('--pos', v.pos);
+  r.setProperty('--pos-soft', mix(v.pos, 15, 'transparent'));
+  r.setProperty('--neg', v.neg);
+  r.setProperty('--neg-soft', mix(v.neg, 14, 'transparent'));
+  r.setProperty('--info', v.info);
+  r.setProperty('--shadow-sm', dark ? '0 1px 2px rgba(0,0,0,.42)' : '0 1px 2px rgba(20,16,10,.07)');
+  r.setProperty('--shadow-md', dark
+    ? '0 2px 4px rgba(0,0,0,.34),0 14px 32px rgba(0,0,0,.44)'
+    : '0 2px 4px rgba(20,16,10,.05),0 12px 28px rgba(20,16,10,.10)');
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+function buildSwatches(){
+  const mount = $('#sw-profile');
+  mount.innerHTML = THEME_NAMES.map(name => {
+    const p = THEMES[name].light;
+    const bars = [p.paper,p.surface_2,p.ink_2,p.accent,p.pos]
+      .map(c => '<i style="background:' + c + '"></i>').join('');
+    return '<label class="swatch"><input type="radio" name="theme" value="' + name + '"'
+      + (name === S.theme ? ' checked' : '') + '>'
+      + '<span class="bars">' + bars + '</span>'
+      + '<span class="nm">' + name + '</span></label>';
+  }).join('');
+  mount.addEventListener('change', e => {
+    if (e.target.name !== 'theme') return;
+    S.theme = e.target.value;
+    applyTheme();
+    saved('theme_name = "' + S.theme + '"');
+  });
+}
+
+/* ===== keyboard — the real modal layer starts here, after login ===== */
+addEventListener('keydown', e => {
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
+  if (e.key === 'Escape'){ closePane(); return; }
+  if (typing) return;
+  if (e.key === 'j' || e.key === 'k'){
+    const n = MEMBERS[S.focusPane].rows.length;
+    S.focusRow = Math.max(0, Math.min(n - 1, S.focusRow + (e.key === 'j' ? 1 : -1)));
+    renderPanels();
+  }
+  if (e.key === 'H'){ S.focusPane = Math.max(0, S.focusPane - 1); S.focusRow = 0; renderPanels(); }
+  if (e.key === 'L'){ S.focusPane = Math.min(MEMBERS.length - 1, S.focusPane + 1); S.focusRow = 0; renderPanels(); }
+});
+
+/* ===== boot ===== */
+buildSwatches();
+applyTheme();
+applyLayout();
+openPane('household');
+</script>
+</body>
+</html>

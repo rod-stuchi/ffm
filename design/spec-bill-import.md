@@ -243,6 +243,15 @@ requires an explicit reason in a comment).
 Parse `R$ 1.234,56` with a single shared pt-BR money parser. Never `f64` — cents as
 integers throughout.
 
+**This parser stays pt-BR permanently, and must not be made to follow the UI
+language or the household's currency setting.** Everything here is *input
+parsing* of a Brazilian document: a boleto is issued in Brazil, in `R$`, with
+comma-decimal — that's a fact about the paper, not a display preference. A future
+i18n pass that "fixes" this to honour `member_settings.language`, or a household
+that switches its display currency to `USD`, would start misreading real bills.
+The three-axis rule in `CLAUDE.md`'s Conventions section governs what the app
+*shows*; this governs what it *reads*, and the two are unrelated.
+
 ---
 
 ## 7. Extraction pipeline

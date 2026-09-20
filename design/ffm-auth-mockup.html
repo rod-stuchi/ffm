@@ -1,0 +1,920 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ffm — sign in / set up / join</title>
+
+<!--
+  ============================================================================
+  FFM — pre-auth pages:  /login  ·  /setup  ·  /invite/:token
+  ============================================================================
+
+  This is the FIRST surface in this app that lives OUTSIDE the full-viewport
+  `.app` shell. Every other mock surface sits inside `.topbar / .tabbar /
+  .stage / .status`; pre-auth there is no ledger, no month and no member, so
+  that shell is simply wrong here. The new layout is `.auth`.
+
+  PORTED, NOT IMPORTED (per CLAUDE.md) — copied verbatim from the other mocks
+  so the app looks like itself before you are in it:
+    · the whole :root token block + the light/dark TRIPLE definition
+    · .card / .card .ch / .card .cb        (from ffm-prototype.html:588)
+    · .f / .f .k / input.i / select.i      (from ffm-app-mockup.html:440)
+    · .btn / .btn.pri / .btn kbd / kbd / .warnbox / .notebox
+    · .status / .st / .st.grow.msg / .st.msg.bad  + the say(msg, bad) contract
+    · THEMES + applyTheme() + its color-mix() derivations
+
+  NEW HERE, and each one is a real decision:
+    1. .auth / .auth-chrome / .auth-stage — the standalone page shell.
+    2. `order:-1` on the chrome strip. It is LAST in the DOM so Tab from the
+       last field reaches Submit rather than the language switcher, and
+       painted FIRST by flex order. No tabindex juggling.
+    3. .swatch — the 11-palette radio grid. The app has no palette picker at
+       all today (palette was only settable via `:theme` or by typing TOML).
+       It is a real <fieldset> of radios so arrow keys walk it natively.
+    4. .romount — the read-only ffm.toml block. Those three keys belong to the
+       operator, and a live-applying editor for them would be a lie.
+    5. .invitelink — readonly input + Copy.
+    6. A statusline with NO mode cell. A mode badge with no modes is a lie.
+
+  DELIBERATELY ABSENT: .st.mode (the NORMAL badge), .cmdbar, .tabbar, .mpick.
+  Pre-auth is NOT modal — plain Tab / Shift-Tab / Enter. That is not an
+  exception to this app's Vim-first identity, it is the rule it already
+  follows: the inline edit row, the rule pane and the command bar all take
+  literal text, and moving between THEIR fields is Ctrl-h/j/k/l, never j/k.
+
+  ⚠ THE STRINGS TABLE BELOW (`STR`) IS MOCK-ONLY SCAFFOLDING.
+    A client-side strings object is exactly the client-side data model this
+    architecture forbids. The real thing is server-side: Fluent .ftl catalogs
+    with build.rs-generated, compile-time-checked accessors, and an `ffm.lang`
+    cookie so the first byte of HTML is already in the right language.
+    See design/spec.md § "Language & copy (i18n)". Do not port this object.
+
+  ⚠ Likewise `applyTheme()` here recomputes palettes in JS. The real app
+    swaps a server-rendered <style> block via hx-get instead, from the same
+    palette table the rest of the app uses.
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ============ tokens — ported verbatim ============ */
+/* Light on bare :root, dark redefined TWICE. Never give a colour its only
+   definition inside a media or [data-theme] block. */
+:root{
+  --paper:#F6F3ED;
+  --surface:#FFFDF8;
+  --surface-2:#EEE9DE;
+  --surface-3:#E6E0D2;
+  --ink:#211E19;
+  --ink-2:#5C554A;
+  --ink-3:#8E8578;
+  --line:#E1DACC;
+  --line-2:#CDC4B1;
+  --accent:#A8620A;
+  --accent-2:#C9800F;
+  --accent-soft:rgba(168,98,10,.10);
+  --accent-line:rgba(168,98,10,.35);
+  --pos:#3D7A4B;
+  --pos-soft:rgba(61,122,75,.13);
+  --neg:#B23A2B;
+  --neg-soft:rgba(178,58,43,.11);
+  --info:#3F6288;
+  --shadow-sm:0 1px 2px rgba(46,36,18,.07);
+  --shadow-md:0 2px 4px rgba(46,36,18,.05),0 12px 28px rgba(46,36,18,.09);
+  --sans:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#171512;
+    --surface:#201D18;
+    --surface-2:#2A261E;
+    --surface-3:#353026;
+    --ink:#EEE8DB;
+    --ink-2:#B2A995;
+    --ink-3:#807869;
+    --line:#332E25;
+    --line-2:#474032;
+    --accent:#E9A63F;
+    --accent-2:#F5C173;
+    --accent-soft:rgba(233,166,63,.11);
+    --accent-line:rgba(233,166,63,.34);
+    --pos:#82B47D;
+    --pos-soft:rgba(130,180,125,.14);
+    --neg:#E28470;
+    --neg-soft:rgba(226,132,112,.13);
+    --info:#8FB0D6;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --shadow-md:0 2px 4px rgba(0,0,0,.3),0 14px 32px rgba(0,0,0,.42);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#171512;
+  --surface:#201D18;
+  --surface-2:#2A261E;
+  --surface-3:#353026;
+  --ink:#EEE8DB;
+  --ink-2:#B2A995;
+  --ink-3:#807869;
+  --line:#332E25;
+  --line-2:#474032;
+  --accent:#E9A63F;
+  --accent-2:#F5C173;
+  --accent-soft:rgba(233,166,63,.11);
+  --accent-line:rgba(233,166,63,.34);
+  --pos:#82B47D;
+  --pos-soft:rgba(130,180,125,.14);
+  --neg:#E28470;
+  --neg-soft:rgba(226,132,112,.13);
+  --info:#8FB0D6;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow-md:0 2px 4px rgba(0,0,0,.3),0 14px 32px rgba(0,0,0,.42);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1px solid var(--line-2);
+  border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--ink);white-space:nowrap}
+
+/* ============ NEW: the standalone pre-auth shell ============ */
+.auth{min-height:100dvh;display:flex;flex-direction:column;background:var(--paper)}
+
+/* The chrome strip is LAST in the DOM and painted FIRST. That is the whole
+   trick: Tab from the final field reaches Submit, not the language switcher,
+   with no tabindex anywhere. */
+.auth-chrome{order:-1;display:flex;align-items:center;gap:10px;padding:11px 16px;
+  border-bottom:1px solid var(--line)}
+.auth-chrome .brand{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--ink-3);margin-right:auto}
+.auth-chrome .ctl{display:flex;align-items:center;gap:7px}
+.auth-chrome kbd{display:inline-block}
+@media (max-width:700px){ .auth-chrome kbd{display:none} }
+
+/* Vertically centred on a wide screen. On a phone it sits high instead:
+   centring a card in the viewport puts it under the software keyboard the
+   moment a field takes focus. */
+/* `safe center` matters: a plain `center` on a card taller than the stage
+   overflows equally top and bottom, and the top half is then unreachable —
+   scroll containers cannot scroll above their start edge. `safe` falls back to
+   start alignment exactly when that would happen. The app mock already uses
+   this on .panels for the same reason. */
+.auth-stage{flex:1;min-height:0;display:grid;place-items:safe center;padding:28px 16px 44px;overflow:auto}
+@media (max-width:560px){
+  .auth-stage{place-items:start center;padding:12vh 16px 32px}
+}
+
+/* ============ .card — ported from ffm-prototype.html:588 ============ */
+.card{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;overflow:hidden;
+  box-shadow:var(--shadow-md);width:100%}
+.card .ch{padding:13px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.card .ch h1{font-size:17px;font-weight:600;margin:0;letter-spacing:-.01em}
+.card .ch p{margin:2px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.card .ch .step{float:right;font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3)}
+.card .cb{padding:16px}
+.card .cf{padding:12px 16px;border-top:1px solid var(--line);background:var(--surface-2);
+  font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+
+/* section rule inside a long form. The frame-and-label language groups
+   already use, rather than a per-section colour. */
+.sect{margin:20px 0 13px;display:flex;align-items:center;gap:10px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.sect::after{content:"";flex:1;height:1px;background:var(--line)}
+.sect:first-child{margin-top:0}
+
+/* ============ fields — ported ============ */
+.stack{display:flex;flex-direction:column;gap:13px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+@media (max-width:560px){ .fgrid{grid-template-columns:1fr} }
+.f{display:block}
+.f .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);display:block;margin-bottom:4px}
+.f .k .aside{float:right;letter-spacing:.02em;text-transform:none;color:var(--ink-3);opacity:.85}
+input.i,select.i{width:100%;font-family:var(--mono);font-size:13px;background:var(--paper);color:var(--ink);
+  border:1px solid var(--line-2);border-radius:7px;padding:8px 10px}
+/* the accent focus rail, unchanged from every other form in this app */
+input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.hint{font-size:12px;color:var(--ink-3);margin-top:5px}
+
+/* radio row — used for language, line numbers, light/dark */
+.radios{display:flex;flex-wrap:wrap;gap:8px}
+.radios label{display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;
+  border:1px solid var(--line-2);border-radius:8px;padding:7px 11px;background:var(--paper)}
+.radios input{accent-color:var(--accent);margin:0}
+.radios label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.radios label:focus-within{box-shadow:0 0 0 3px var(--accent-soft)}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend{padding:0}
+
+/* ============ buttons — ported ============ */
+.btn{font-family:var(--sans);font-size:13px;border-radius:7px;padding:9px 14px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--surface);color:var(--ink)}
+.btn:hover{border-color:var(--accent-line)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--paper);font-weight:600}
+.btn.wide{width:100%;padding:11px 14px;font-size:14px;margin-top:18px}
+/* NOT rgba(255,255,255,…): a hardcoded white overlay breaks on the fifth
+   theme, not the first. --paper IS the correct foreground on a semantic fill. */
+.btn kbd{background:color-mix(in srgb, var(--paper) 22%, transparent);
+  border-color:transparent;color:inherit;margin-left:8px}
+
+/* ============ message boxes — ported ============ */
+.warnbox{background:var(--neg-soft);border:1px solid var(--neg);border-radius:8px;padding:11px 12px;
+  font-size:13px;color:var(--ink);display:flex;gap:10px;align-items:flex-start;margin-bottom:16px}
+.warnbox .g{flex:none;color:var(--neg);line-height:1}
+.warnbox b{display:block}
+.notebox{background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:8px;
+  padding:10px 12px;font-size:12.5px;color:var(--ink-2);margin-top:14px}
+
+/* ============ NEW: the 11-palette picker ============ */
+/* A real fieldset of radios, so ←/→ walk it natively. Do not rebuild this as
+   a grid of buttons and then reimplement arrow keys. */
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+@media (max-width:560px){ .swatches{grid-template-columns:repeat(2,1fr)} }
+.swatch{position:relative;display:block;cursor:pointer;border:1px solid var(--line-2);
+  border-radius:8px;overflow:hidden;background:var(--paper)}
+.swatch input{position:absolute;opacity:0;pointer-events:none}
+.swatch .bars{display:flex;height:22px}
+.swatch .bars i{flex:1}
+.swatch .nm{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.04em;
+  padding:4px 6px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.swatch:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.swatch:has(input:checked) .nm{color:var(--ink);font-weight:500}
+.swatch:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:1px}
+
+/* ============ NEW: read-only operator keys ============ */
+.romount{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;
+  font-family:var(--mono);font-size:11.5px;color:var(--ink-3);align-items:baseline}
+.romount b{font-weight:500;color:var(--ink-3)}
+.romount span{color:var(--ink-2);word-break:break-all}
+
+/* ============ NEW: the one-time invite link ============ */
+.invitelink{display:flex;gap:8px;align-items:stretch}
+.invitelink input{flex:1;min-width:0}
+
+/* ============ statusline — ported, minus the mode cell ============ */
+.status{display:flex;align-items:center;gap:0;background:var(--surface-2);
+  border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;min-height:30px}
+.st{padding:6px 11px;color:var(--ink-2);border-right:1px solid var(--line);white-space:nowrap}
+.st.grow{flex:1;border-right:none;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis}
+.st.msg{color:var(--accent)}
+.st.msg.bad{color:var(--neg)}
+.st.right{border-right:none;border-left:1px solid var(--line)}
+@media (max-width:700px){ .st.right{display:none} }
+
+/* ============ dev-only state switcher ============ */
+/* Same idea as ffm-prototype.html exposing every row state: a mock is only
+   honest if its error states are as reachable as its happy path. */
+.devbar{position:fixed;right:10px;bottom:38px;z-index:50;display:flex;flex-wrap:wrap;gap:4px;
+  max-width:min(460px,calc(100vw - 20px));padding:7px;background:var(--surface);
+  border:1px solid var(--line-2);border-radius:9px;box-shadow:var(--shadow-md)}
+.devbar b{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);width:100%}
+.devbar button{font-family:var(--mono);font-size:10.5px;padding:4px 7px;border-radius:6px;
+  border:1px solid var(--line-2);background:var(--paper);color:var(--ink-2);cursor:pointer}
+.devbar button.on{background:var(--accent);border-color:var(--accent);color:var(--paper);font-weight:700}
+
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+
+<div class="auth">
+
+  <!-- ======================= the stage ======================= -->
+  <div class="auth-stage">
+
+    <!-- ============================================================
+         /login
+         ============================================================ -->
+    <form class="card" id="p-login" style="max-width:380px" onsubmit="return fakeSubmit(event)">
+      <div class="ch">
+        <h1 id="loginHousehold">Casa Stuchi</h1>
+        <p data-t="loginSub">Sign in to the household ledger</p>
+      </div>
+      <div class="cb">
+        <div class="warnbox" id="loginErr" hidden>
+          <span class="g" aria-hidden="true">&#9888;</span>
+          <span>
+            <b data-t="loginErrTitle">That name and password don't match.</b>
+            <span data-t="loginErrBody">Check the name, or ask an admin for a new invite link.</span>
+          </span>
+        </div>
+        <div class="stack">
+          <!-- The identifier is members.name, NOT an email. There is no mail
+               sender in this app; email is nullable and plays no part here. -->
+          <label class="f">
+            <span class="k" data-t="fName">Name</span>
+            <input class="i" id="loginName" autocomplete="username" value="rodrigo" autofocus>
+          </label>
+          <label class="f">
+            <span class="k" data-t="fPassword">Password</span>
+            <input class="i" type="password" id="loginPw" autocomplete="current-password">
+          </label>
+        </div>
+        <button class="btn pri wide" type="submit">
+          <span data-t="btnSignIn">Sign in</span><kbd>&#9166;</kbd>
+        </button>
+      </div>
+    </form>
+
+    <!-- ============================================================
+         /setup — first run only. ONE sectioned form, ONE POST.
+         A wizard would need somewhere to keep step 1's answers and there is
+         nowhere: no household row, no member, therefore no session, and
+         holding them client-side is the forbidden client data model.
+         ============================================================ -->
+    <form class="card" id="p-setup" style="max-width:520px" hidden onsubmit="return fakeSubmit(event)">
+      <div class="ch">
+        <span class="step">1 / 1</span>
+        <h1 data-t="setupTitle">Set up FFM</h1>
+        <p data-t="setupSub">Nobody has an account yet, so this first one is yours — and it's the admin.</p>
+      </div>
+      <div class="cb">
+
+        <div class="sect" data-t="secHousehold">Your household</div>
+        <div class="stack">
+          <label class="f">
+            <span class="k" data-t="fHouseholdName">Household name</span>
+            <input class="i" value="Casa Stuchi" autofocus oninput="syncHousehold(this.value)">
+            <span class="hint" data-t="hHouseholdName">Shown on the sign-in page.</span>
+          </label>
+          <div class="fgrid">
+            <label class="f">
+              <!-- The options show the FORMAT, not the ISO code: picking a
+                   currency picks its whole number format as one preset, so the
+                   label should say so rather than letting the household find
+                   out later. -->
+              <span class="k" data-t="fCurrency">Currency</span>
+              <select class="i" id="setupCur" onchange="say(msg('sayCurrency', {c:this.value}))">
+                <option value="BRL">Real &middot; R$ 1.234,56</option>
+                <option value="USD">US dollar &middot; $1,234.56</option>
+                <option value="EUR">Euro &middot; 1.234,56 &euro;</option>
+                <option value="GBP">Pound &middot; &pound;1,234.56</option>
+              </select>
+            </label>
+            <fieldset class="f">
+              <legend class="k" data-t="fDefaultLang">Default language</legend>
+              <div class="radios">
+                <label><input type="radio" name="hlang" value="en" checked> English</label>
+                <label><input type="radio" name="hlang" value="pt-BR"> Portugu&ecirc;s</label>
+              </div>
+            </fieldset>
+          </div>
+          <div class="notebox" data-t="noteAxes" style="margin-top:2px">
+            Dates are always dd/mm/yyyy. Money follows the currency you pick.
+            Language only changes the words.
+          </div>
+        </div>
+
+        <div class="sect" data-t="secYou">You</div>
+        <div class="stack">
+          <label class="f">
+            <span class="k">
+              <span data-t="fName">Name</span>
+              <span class="aside" data-t="asideSignIn">you'll sign in with this</span>
+            </span>
+            <input class="i" value="rodrigo" autocomplete="username">
+          </label>
+          <div class="fgrid">
+            <label class="f">
+              <span class="k" data-t="fPassword">Password</span>
+              <input class="i" type="password" autocomplete="new-password">
+            </label>
+            <label class="f">
+              <!-- Asked twice on purpose: this is the one password with no
+                   admin above it to reset it, and there is no reset flow. -->
+              <span class="k" data-t="fConfirm">Confirm password</span>
+              <input class="i" type="password" autocomplete="new-password">
+            </label>
+          </div>
+          <fieldset class="f">
+            <legend class="k" data-t="fTheme">Colour scheme</legend>
+            <div class="swatches" id="sw-setup"></div>
+            <span class="hint" data-t="hTheme">Change it any time in <span class="mono">:profile</span>.</span>
+          </fieldset>
+          <fieldset class="f">
+            <legend class="k" data-t="fLineNumbers">Line numbers</legend>
+            <div class="radios">
+              <label><input type="radio" name="nu" value="relative" checked> <span data-t="nuRel">Relative</span></label>
+              <label><input type="radio" name="nu" value="absolute"> <span data-t="nuAbs">Absolute</span></label>
+              <label><input type="radio" name="nu" value="none"> <span data-t="nuOff">Off</span></label>
+            </div>
+          </fieldset>
+        </div>
+
+        <!-- These three are the ENTIRE ffm.toml now, and they belong to the
+             operator. Shown read-only so the admin can confirm the vault is
+             where they think it is before a single receipt is filed — without
+             creating a second place the value can be set. A live-applying
+             editor here would accept input and silently not apply it. -->
+        <div class="sect">Storage &middot; ffm.toml</div>
+        <div class="romount">
+          <b>db_path</b><span>./ffm.db</span>
+          <b>receipts_root</b><span>/disks/vault/ffm/receipts</span>
+          <b>backup_dir</b><span>./backups</span>
+        </div>
+        <p class="hint" data-t="hStorage">Edit <span class="mono">ffm.toml</span> and restart to change these.</p>
+
+        <button class="btn pri wide" type="submit">
+          <span data-t="btnCreateHousehold">Create the household</span><kbd>&#9166;</kbd>
+        </button>
+      </div>
+    </form>
+
+    <!-- ============================================================
+         /invite/:token — the same field grid as /setup's second section.
+         One form, two entry points.
+         ============================================================ -->
+    <form class="card" id="p-invite" style="max-width:440px" hidden onsubmit="return fakeSubmit(event)">
+      <div class="ch">
+        <h1 id="inviteTitle">Join Casa Stuchi</h1>
+        <p data-t="inviteSub">Rodrigo invited you. Pick your own name and password &mdash; nobody else has seen this link.</p>
+      </div>
+      <div class="cb">
+        <div class="warnbox" id="inviteTaken" hidden>
+          <span class="g" aria-hidden="true">&#9888;</span>
+          <span>
+            <b data-t="takenTitle">Somebody already uses that name.</b>
+            <span data-t="takenBody">Pick another &mdash; names are how everyone signs in, so they have to be unique.</span>
+          </span>
+        </div>
+        <div class="stack">
+          <label class="f">
+            <span class="k">
+              <span data-t="fName">Name</span>
+              <span class="aside" data-t="asideSignIn">you'll sign in with this</span>
+            </span>
+            <input class="i" value="nat&aacute;lia" autocomplete="username" autofocus>
+            <!-- Editable HERE and effectively nowhere else: members.slug is the
+                 receipt vault's folder name, so renaming after files exist is a
+                 vault move. At accept time there are no files. -->
+            <span class="hint" data-t="hInviteName">This is also your folder in the receipt vault, so it's easiest to get right now.</span>
+          </label>
+          <div class="fgrid">
+            <label class="f">
+              <span class="k" data-t="fPassword">Password</span>
+              <input class="i" type="password" autocomplete="new-password">
+            </label>
+            <label class="f">
+              <span class="k" data-t="fConfirm">Confirm password</span>
+              <input class="i" type="password" autocomplete="new-password">
+            </label>
+          </div>
+          <fieldset class="f">
+            <legend class="k" data-t="fLanguage">Language</legend>
+            <div class="radios">
+              <label><input type="radio" name="mlang" value="en" checked> English</label>
+              <label><input type="radio" name="mlang" value="pt-BR"> Portugu&ecirc;s (Brasil)</label>
+            </div>
+            <span class="hint" data-t="hLanguage">Dates and money don't change with this.</span>
+          </fieldset>
+          <fieldset class="f">
+            <legend class="k" data-t="fTheme">Colour scheme</legend>
+            <div class="swatches" id="sw-invite"></div>
+          </fieldset>
+        </div>
+        <button class="btn pri wide" type="submit">
+          <span data-t="btnJoin">Join the household</span><kbd>&#9166;</kbd>
+        </button>
+      </div>
+      <div class="cf" id="inviteExpiry">This link works once and expires 27/09/2026.</div>
+    </form>
+
+    <!-- ============================================================
+         /invite/:token — terminal states.
+         A .warnbox and NO FORM AT ALL: a disabled form invites retrying.
+         ============================================================ -->
+    <div class="card" id="p-dead" style="max-width:440px" hidden>
+      <div class="ch"><h1 data-t="deadTitle">Casa Stuchi</h1></div>
+      <div class="cb">
+        <div class="warnbox">
+          <span class="g" aria-hidden="true">&#9888;</span>
+          <span>
+            <b id="deadHead">This invite has already been used.</b>
+            <span id="deadBody">If that wasn't you, ask Rodrigo to revoke it.</span>
+          </span>
+        </div>
+        <button class="btn wide" type="button" onclick="go('login')" data-t="btnToSignIn">Go to sign in</button>
+      </div>
+    </div>
+
+    <!-- /setup, reached after the household already exists -->
+    <div class="card" id="p-done" style="max-width:440px" hidden>
+      <div class="ch"><h1 data-t="doneTitle">Already set up</h1></div>
+      <div class="cb">
+        <div class="notebox" style="margin-top:0" data-t="doneBody">
+          This household already has members, so there is nothing to set up.
+          Sign in instead, or ask an admin for an invite link.
+        </div>
+        <button class="btn wide" type="button" onclick="go('login')" data-t="btnToSignIn">Go to sign in</button>
+      </div>
+    </div>
+
+  </div><!-- /.auth-stage -->
+
+  <!-- ======================= statusline =======================
+       Same channel the app uses after login: one way the app talks to you on
+       both sides of the login. No mode cell — there are no modes here. -->
+  <div class="status">
+    <div class="st" id="stWhere">sign in &middot; casa-stuchi</div>
+    <div class="st grow msg" id="stMsg"></div>
+    <div class="st right" id="stRight">en &middot; ffm &#9680;</div>
+  </div>
+
+  <!-- ======================= chrome =======================
+       LAST in the DOM, painted first via order:-1. -->
+  <div class="auth-chrome">
+    <span class="brand">ffm</span>
+    <div class="ctl">
+      <!-- In the real app this is <form method="post" action="/lang"> with one
+           submit button per language and a hidden `next`: it sets the ffm.lang
+           cookie and redirects, so the first byte of HTML is already in the
+           right language. Zero JS, no flash of the wrong words. -->
+      <button class="btn" type="button" id="langBtn" onclick="cycleLang()">EN</button>
+      <kbd>Alt-L</kbd>
+      <!-- Alt-combinations, not bare letters, so nothing is swallowed while
+           somebody is typing their password. -->
+      <button class="btn" type="button" id="themeBtn" onclick="cycleVariant()">&#9680; System</button>
+      <kbd>Alt-T</kbd>
+    </div>
+  </div>
+</div>
+
+<div class="devbar">
+  <b>dev only &mdash; pre-auth states</b>
+  <button type="button" data-p="login">login</button>
+  <button type="button" data-p="login-err">login &middot; error</button>
+  <button type="button" data-p="setup">setup</button>
+  <button type="button" data-p="done">setup &middot; done</button>
+  <button type="button" data-p="invite">invite</button>
+  <button type="button" data-p="invite-taken">invite &middot; name taken</button>
+  <button type="button" data-p="used">invite &middot; used</button>
+  <button type="button" data-p="expired">invite &middot; expired</button>
+</div>
+
+<script>
+/* ===========================================================================
+   MOCK-ONLY strings table. See the header comment: the real app uses
+   server-side Fluent catalogs with build.rs-generated accessors and an
+   ffm.lang cookie. A JS strings object is the client-side data model this
+   architecture forbids — do not port it.
+
+   Note what is NOT in here: no dates, no currency symbols, no number
+   formats. In the real app build.rs REJECTS a catalog containing any of
+   those, which is what structurally enforces "language changes the words and
+   only the words".
+   =========================================================================== */
+const STR = {
+  en: {
+    loginSub:"Sign in to the household ledger",
+    fName:"Name", fPassword:"Password", fConfirm:"Confirm password",
+    fLanguage:"Language", fDefaultLang:"Default language", fCurrency:"Currency",
+    fTheme:"Colour scheme", fLineNumbers:"Line numbers", fHouseholdName:"Household name",
+    nuRel:"Relative", nuAbs:"Absolute", nuOff:"Off",
+    asideSignIn:"you'll sign in with this",
+    btnSignIn:"Sign in", btnCreateHousehold:"Create the household",
+    btnJoin:"Join the household", btnToSignIn:"Go to sign in",
+    loginErrTitle:"That name and password don't match.",
+    loginErrBody:"Check the name, or ask an admin for a new invite link.",
+    setupTitle:"Set up FFM",
+    setupSub:"Nobody has an account yet, so this first one is yours — and it's the admin.",
+    secHousehold:"Your household", secYou:"You",
+    hHouseholdName:"Shown on the sign-in page.",
+    noteAxes:"Dates are always dd/mm/yyyy. Money follows the currency you pick. Language only changes the words.",
+    hStorage:"Edit ffm.toml and restart to change these.",
+    hTheme:"Change it any time in :profile.",
+    hLanguage:"Dates and money don't change with this.",
+    hInviteName:"This is also your folder in the receipt vault, so it's easiest to get right now.",
+    inviteSub:"Rodrigo invited you. Pick your own name and password — nobody else has seen this link.",
+    takenTitle:"Somebody already uses that name.",
+    takenBody:"Pick another — names are how everyone signs in, so they have to be unique.",
+    doneTitle:"Already set up",
+    doneBody:"This household already has members, so there is nothing to set up. Sign in instead, or ask an admin for an invite link.",
+    joinHousehold:"Join {h}",
+    usedHead:"This invite has already been used.",
+    usedBody:"If that wasn't you, ask Rodrigo to revoke it.",
+    expiredHead:"This invite expired on {d}.",
+    expiredBody:"Ask Rodrigo for a new link.",
+    inviteExpiry:"This link works once and expires {d}.",
+    whereLogin:"sign in", whereSetup:"set up", whereInvite:"join",
+    sayCurrency:"currency → {c} · every member's totals use this",
+    sayTheme:"theme → {t}",
+    sayLang:"language → {l} · dates and money unchanged",
+    sayVariant:"appearance → {v}",
+    sayMock:"this is a mock — nothing was submitted"
+  },
+  "pt-BR": {
+    loginSub:"Entre no caderno da casa",
+    fName:"Nome", fPassword:"Senha", fConfirm:"Confirme a senha",
+    fLanguage:"Idioma", fDefaultLang:"Idioma padrão", fCurrency:"Moeda",
+    fTheme:"Esquema de cores", fLineNumbers:"Números de linha", fHouseholdName:"Nome da casa",
+    nuRel:"Relativos", nuAbs:"Absolutos", nuOff:"Nenhum",
+    asideSignIn:"você vai entrar com isso",
+    btnSignIn:"Entrar", btnCreateHousehold:"Criar a casa",
+    btnJoin:"Entrar na casa", btnToSignIn:"Ir para o login",
+    loginErrTitle:"Esse nome e essa senha não combinam.",
+    loginErrBody:"Confira o nome, ou peça a um administrador um novo link de convite.",
+    setupTitle:"Configurar o FFM",
+    setupSub:"Ainda não existe nenhuma conta, então esta primeira é sua — e é a de administrador.",
+    secHousehold:"Sua casa", secYou:"Você",
+    hHouseholdName:"Aparece na tela de login.",
+    noteAxes:"As datas são sempre dd/mm/aaaa. O dinheiro segue a moeda que você escolher. O idioma muda só as palavras.",
+    hStorage:"Edite o ffm.toml e reinicie para mudar isso.",
+    hTheme:"Mude quando quiser em :profile.",
+    hLanguage:"Datas e valores não mudam com isso.",
+    hInviteName:"Esse nome também vira sua pasta no cofre de comprovantes — mais fácil acertar agora.",
+    inviteSub:"Rodrigo te convidou. Escolha seu próprio nome e senha — mais ninguem viu este link.",
+    takenTitle:"Alguem já usa esse nome.",
+    takenBody:"Escolha outro — o nome é como cada um entra, então precisa ser único.",
+    doneTitle:"Já está configurado",
+    doneBody:"Esta casa já tem integrantes, então não há nada para configurar. Entre com sua conta, ou peça um link de convite a um administrador.",
+    joinHousehold:"Entrar em {h}",
+    usedHead:"Este convite já foi usado.",
+    usedBody:"Se não foi você, peça ao Rodrigo para revogá-lo.",
+    expiredHead:"Este convite venceu em {d}.",
+    expiredBody:"Peça ao Rodrigo um link novo.",
+    inviteExpiry:"Este link funciona uma vez e vence em {d}.",
+    whereLogin:"entrar", whereSetup:"configurar", whereInvite:"entrar na casa",
+    sayCurrency:"moeda → {c} · os totais de todos usam essa",
+    sayTheme:"tema → {t}",
+    sayLang:"idioma → {l} · datas e valores inalterados",
+    sayVariant:"aparência → {v}",
+    sayMock:"isto é uma maquete — nada foi enviado"
+  }
+};
+const LANGS = ['en','pt-BR'];
+const LANG_LABEL = { en:'EN', 'pt-BR':'PT' };
+
+/* ===========================================================================
+   THEMES + applyTheme() — ported verbatim from ffm-app-mockup.html:1328.
+   In the real app this is a server-rendered <style> block swapped by hx-get,
+   from the same Rust palette table the rest of the app reads.
+   =========================================================================== */
+const K = ['paper','surface','surface_2','ink','ink_2','ink_3','line','accent','pos','neg','info'];
+const TH = (...v) => Object.fromEntries(K.map((k,i) => [k, v[i]]));
+
+const THEMES = {
+  ffm: {
+    dark:  TH('#171512','#201D18','#2A261E','#EEE8DB','#B2A995','#807869','#332E25','#E9A63F','#82B47D','#E28470','#8FB0D6'),
+    light: TH('#F6F3ED','#FFFDF8','#EEE9DE','#211E19','#5C554A','#8E8578','#E1DACC','#A8620A','#3D7A4B','#B23A2B','#3F6288') },
+  tokyonight: {
+    dark:  TH('#1A1B26','#1F2335','#24283B','#C0CAF5','#A9B1D6','#565F89','#292E42','#7AA2F7','#9ECE6A','#F7768E','#BB9AF7'),
+    light: TH('#E1E2E7','#F0F0F5','#D9DBE3','#3760BF','#6172B0','#848CB5','#CBCFDA','#2E7DE9','#587539','#F52A65','#9854F1') },
+  catppuccin: {
+    dark:  TH('#181825','#1E1E2E','#292A3B','#CDD6F4','#A6ADC8','#6C7086','#313244','#CBA6F7','#A6E3A1','#F38BA8','#89B4FA'),
+    light: TH('#E6E9EF','#EFF1F5','#DCE0E8','#4C4F69','#6C6F85','#9CA0B0','#CCD0DA','#8839EF','#40A02B','#D20F39','#1E66F5') },
+  kanagawa: {
+    dark:  TH('#16161D','#1F1F28','#2A2A37','#DCD7BA','#C8C093','#727169','#363646','#7E9CD8','#98BB6C','#FF5D62','#E6C384'),
+    light: TH('#F2ECBC','#F7F1CB','#E7DBA0','#545464','#43436C','#8A8980','#DDD2A4','#4D699B','#6F894E','#C84053','#624C83') },
+  everforest: {
+    dark:  TH('#2D353B','#343F44','#3D484D','#D3C6AA','#9DA9A0','#7A8478','#475258','#DBBC7F','#A7C080','#E67E80','#7FBBB3'),
+    light: TH('#FDF6E3','#F4F0D9','#EFEBD4','#5C6A72','#829181','#939F91','#E6E2CC','#DFA000','#8DA101','#F85552','#3A94C5') },
+  gruvbox: {
+    dark:  TH('#1D2021','#282828','#3C3836','#EBDBB2','#BDAE93','#928374','#504945','#FABD2F','#B8BB26','#FB4934','#83A598'),
+    light: TH('#F9F5D7','#FBF1C7','#EBDBB2','#3C3836','#504945','#7C6F64','#D5C4A1','#B57614','#79740E','#9D0006','#076678') },
+  rosepine: {
+    dark:  TH('#191724','#1F1D2E','#26233A','#E0DEF4','#908CAA','#6E6A86','#403D52','#EBBCBA','#9CCFD8','#EB6F92','#C4A7E7'),
+    light: TH('#FAF4ED','#FFFAF3','#F2E9E1','#575279','#797593','#9893A5','#DFDAD9','#D7827E','#56949F','#B4637A','#907AA9') },
+  onedark: {
+    dark:  TH('#21252B','#282C34','#2C323C','#ABB2BF','#828997','#5C6370','#3E4451','#61AFEF','#98C379','#E06C75','#C678DD'),
+    light: TH('#F0F0F1','#FAFAFA','#E5E5E6','#383A42','#696C77','#A0A1A7','#DCDCDD','#4078F2','#50A14F','#E45649','#A626A4') },
+  dracula: {
+    dark:  TH('#21222C','#282A36','#343746','#F8F8F2','#C4C9D4','#6272A4','#44475A','#BD93F9','#50FA7B','#FF5555','#8BE9FD'),
+    light: TH('#F5F1E1','#FFFBEB','#E8E3D0','#1F1F1F','#4A4636','#6C664B','#DED9C4','#644AC9','#14710A','#CB3A2A','#036A96') },
+  nord: {
+    dark:  TH('#2E3440','#3B4252','#434C5E','#ECEFF4','#D8DEE9','#7B88A1','#4C566A','#88C0D0','#A3BE8C','#BF616A','#81A1C1'),
+    light: TH('#E5E9F0','#ECEFF4','#D8DEE9','#2E3440','#434C5E','#6B7794','#C8D0DE','#5E81AC','#56753F','#A54A52','#4C6E8F') },
+  solarized: {
+    dark:  TH('#002B36','#073642','#0E4450','#93A1A1','#839496','#586E75','#14505C','#B58900','#859900','#DC322F','#268BD2'),
+    light: TH('#EEE8D5','#FDF6E3','#E4DCC7','#586E75','#657B83','#93A1A1','#DDD6C1','#B58900','#859900','#DC322F','#268BD2') }
+};
+const THEME_NAMES = Object.keys(THEMES);
+
+/* ===== mock state ===== */
+const S = {
+  page: 'login',
+  lang: 'en',
+  variant: null,          /* null = system, else 'light' | 'dark' */
+  theme: 'ffm',           /* the PALETTE. Per member in the real app, and
+                             therefore unknown on /login — which is exactly why
+                             /login has no palette picker. */
+  household: 'Casa Stuchi',
+  expiry: '27/09/2026'    /* pt-BR dd/mm/yyyy, unconditionally */
+};
+
+const $  = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+/* ===== i18n (mock) ===== */
+function t(key){
+  const table = STR[S.lang] || STR.en;
+  return (key in table) ? table[key] : STR.en[key];
+}
+function msg(key, vars){
+  return t(key).replace(/\{(\w+)\}/g, (_, k) => (vars && k in vars) ? vars[k] : '');
+}
+function applyLang(){
+  document.documentElement.lang = S.lang;
+  $$('[data-t]').forEach(el => { el.textContent = t(el.dataset.t); });
+  $('#langBtn').textContent = LANG_LABEL[S.lang];
+  $('#inviteTitle').textContent = msg('joinHousehold', { h: S.household });
+  $('#inviteExpiry').textContent = msg('inviteExpiry', { d: S.expiry });
+  paintDead();
+  paintStatus();
+}
+function cycleLang(){
+  S.lang = LANGS[(LANGS.indexOf(S.lang) + 1) % LANGS.length];
+  applyLang();
+  say(msg('sayLang', { l: LANG_LABEL[S.lang] }));
+}
+
+/* ===== theme ===== */
+function applyTheme(){
+  const th = THEMES[S.theme] || THEMES.ffm;
+  const stamp = document.documentElement.getAttribute('data-theme');
+  const dark = stamp ? stamp === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  const v = th[dark ? 'dark' : 'light'];
+  const mix = (c, pct, w) => 'color-mix(in srgb, ' + c + ' ' + pct + '%, ' + w + ')';
+  const r = document.documentElement.style;
+  r.setProperty('color-scheme', dark ? 'dark' : 'light');
+  r.setProperty('--paper', v.paper);
+  r.setProperty('--surface', v.surface);
+  r.setProperty('--surface-2', v.surface_2);
+  r.setProperty('--surface-3', mix(v.surface_2, 84, v.ink));
+  r.setProperty('--ink', v.ink);
+  r.setProperty('--ink-2', v.ink_2);
+  r.setProperty('--ink-3', v.ink_3);
+  r.setProperty('--line', v.line);
+  r.setProperty('--line-2', mix(v.line, 72, v.ink));
+  r.setProperty('--accent', v.accent);
+  r.setProperty('--accent-2', mix(v.accent, 74, v.ink));
+  r.setProperty('--accent-soft', mix(v.accent, 13, 'transparent'));
+  r.setProperty('--accent-line', mix(v.accent, 38, 'transparent'));
+  r.setProperty('--pos', v.pos);
+  r.setProperty('--pos-soft', mix(v.pos, 15, 'transparent'));
+  r.setProperty('--neg', v.neg);
+  r.setProperty('--neg-soft', mix(v.neg, 14, 'transparent'));
+  r.setProperty('--info', v.info);
+  r.setProperty('--shadow-sm', dark ? '0 1px 2px rgba(0,0,0,.42)' : '0 1px 2px rgba(20,16,10,.07)');
+  r.setProperty('--shadow-md', dark
+    ? '0 2px 4px rgba(0,0,0,.34),0 14px 32px rgba(0,0,0,.44)'
+    : '0 2px 4px rgba(20,16,10,.05),0 12px 28px rgba(20,16,10,.10)');
+  paintStatus();
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+/* Light/dark is per DEVICE, not per member — the same person uses a bright
+   laptop and a dark phone. In the real app it is the `ffm.theme` cookie, which
+   is what lets /login honour it with zero JS and no pre-paint script. */
+const VARIANTS = [
+  { v:null,      icon:'◐', label:'System' },
+  { v:'light',   icon:'○', label:'Light'  },
+  { v:'dark',    icon:'●', label:'Dark'   }
+];
+function paintVariant(){
+  const cur = VARIANTS.find(x => x.v === S.variant) || VARIANTS[0];
+  $('#themeBtn').innerHTML = cur.icon + ' ' + cur.label;
+  if (S.variant) document.documentElement.setAttribute('data-theme', S.variant);
+  else document.documentElement.removeAttribute('data-theme');
+  applyTheme();
+}
+function cycleVariant(){
+  const i = VARIANTS.findIndex(x => x.v === S.variant);
+  const next = VARIANTS[(i + 1) % VARIANTS.length];
+  S.variant = next.v;
+  paintVariant();
+  say(msg('sayVariant', { v: next.label }));
+}
+
+/* ===== the palette picker =====
+   Rendered as a real fieldset of radios into both /setup and /invite, so ←/→
+   walk it natively. /login deliberately gets none. */
+function buildSwatches(mountId, groupName){
+  const mount = document.getElementById(mountId);
+  if (!mount) return;
+  mount.innerHTML = THEME_NAMES.map(name => {
+    const p = THEMES[name].light;
+    const bars = [p.paper, p.surface_2, p.ink_2, p.accent, p.pos]
+      .map(c => '<i style="background:' + c + '"></i>').join('');
+    return '<label class="swatch">'
+      + '<input type="radio" name="' + groupName + '" value="' + name + '"'
+      + (name === S.theme ? ' checked' : '') + '>'
+      + '<span class="bars">' + bars + '</span>'
+      + '<span class="nm">' + name + '</span>'
+      + '</label>';
+  }).join('');
+  mount.addEventListener('change', (e) => {
+    if (!e.target.name) return;
+    S.theme = e.target.value;
+    /* Applying it to the WHOLE page, not just a preview tile: the honest
+       preview is the page you are looking at. */
+    applyTheme();
+    syncSwatches();
+    say(msg('sayTheme', { t: S.theme }));
+  });
+}
+function syncSwatches(){
+  $$('.swatch input').forEach(i => { i.checked = (i.value === S.theme); });
+}
+
+/* ===== statusline ===== */
+function paintStatus(){
+  const whereKey = S.page.startsWith('setup') || S.page === 'done' ? 'whereSetup'
+                 : S.page.startsWith('invite') || S.page === 'used' || S.page === 'expired' ? 'whereInvite'
+                 : 'whereLogin';
+  const slug = S.household.toLowerCase().replace(/\s+/g,'-');
+  $('#stWhere').textContent = t(whereKey) + ' · ' + slug;
+  const cur = VARIANTS.find(x => x.v === S.variant) || VARIANTS[0];
+  $('#stRight').textContent = S.lang + ' · ' + S.theme + ' ' + cur.icon;
+}
+let sayTimer = null;
+function say(m, bad){
+  const el = $('#stMsg');
+  el.textContent = m || '';
+  el.classList.toggle('bad', !!bad);
+  clearTimeout(sayTimer);
+  if (m) sayTimer = setTimeout(() => { el.textContent = ''; el.classList.remove('bad'); }, 3200);
+}
+
+/* ===== household name, live into /login and /invite ===== */
+function syncHousehold(v){
+  S.household = v.trim() || 'FFM';
+  $('#loginHousehold').textContent = S.household;
+  $('#inviteTitle').textContent = msg('joinHousehold', { h: S.household });
+  $('#p-dead .ch h1').textContent = S.household;
+  paintStatus();
+}
+
+/* ===== the dead-invite copy ===== */
+function paintDead(){
+  const expired = S.page === 'expired';
+  $('#deadHead').textContent = expired ? msg('expiredHead', { d: S.expiry }) : t('usedHead');
+  $('#deadBody').textContent = expired ? t('expiredBody') : t('usedBody');
+}
+
+/* ===== page switching (dev only) ===== */
+const PAGES = {
+  'login':        { card:'p-login',  err:null },
+  'login-err':    { card:'p-login',  err:'loginErr' },
+  'setup':        { card:'p-setup',  err:null },
+  'done':         { card:'p-done',   err:null },
+  'invite':       { card:'p-invite', err:null },
+  'invite-taken': { card:'p-invite', err:'inviteTaken' },
+  'used':         { card:'p-dead',   err:null },
+  'expired':      { card:'p-dead',   err:null }
+};
+function go(page){
+  if (!PAGES[page]) return;
+  S.page = page;
+  const shown = PAGES[page].card;
+  ['p-login','p-setup','p-invite','p-dead','p-done'].forEach(id => {
+    document.getElementById(id).hidden = (id !== shown);
+  });
+  ['loginErr','inviteTaken'].forEach(id => {
+    document.getElementById(id).hidden = (PAGES[page].err !== id);
+  });
+  $$('.devbar button').forEach(b => b.classList.toggle('on', b.dataset.p === page));
+  paintDead();
+  paintStatus();
+  say('');
+  const first = document.querySelector('#' + shown + ' input:not([type=radio]):not([type=hidden])');
+  if (first) first.focus();
+}
+$$('.devbar button').forEach(b => { b.onclick = () => go(b.dataset.p); });
+
+/* ===== keyboard =====
+   NO modality. Plain Tab / Shift-Tab / Enter. The only accelerators are Alt
+   combinations, so nothing is ever swallowed while somebody is typing. */
+addEventListener('keydown', (e) => {
+  if (!e.altKey || e.ctrlKey || e.metaKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'l'){ e.preventDefault(); cycleLang(); }
+  if (k === 't'){ e.preventDefault(); cycleVariant(); }
+});
+
+function fakeSubmit(e){
+  e.preventDefault();
+  say(t('sayMock'));
+  return false;
+}
+
+/* ===== boot ===== */
+buildSwatches('sw-setup', 'theme-setup');
+buildSwatches('sw-invite', 'theme-invite');
+paintVariant();
+applyLang();
+go('login');
+</script>
+</body>
+</html>
