@@ -1,0 +1,22 @@
+# The three display axes are independent, and fusing them is the mistake
+# CLAUDE.md's Conventions section warns about:
+#
+#   * date format   — FIXED at dd/mm/yyyy. Never localized.
+#   * money format  — from household_settings.locale_currency.
+#   * language      — from member_settings.language. The words, and only the words.
+#
+# chrono is already built without "unstable-locales" so most of this is
+# structurally impossible, but `format_localized*` is the API that would bring
+# it back the moment someone enables the feature to "fix" a date.
+#
+# Everything the app renders goes through ui::fmt, whose signatures encode the
+# rule: fmt::money takes a Currency and never a Lang; fmt::date takes neither.
+disallowed-methods = [
+    { path = "chrono::NaiveDate::format_localized", reason = "dates are fixed dd/mm/yyyy — use ui::fmt::date" },
+    { path = "chrono::NaiveDateTime::format_localized", reason = "dates are fixed dd/mm/yyyy — use ui::fmt::date" },
+    { path = "chrono::DateTime::format_localized", reason = "dates are fixed dd/mm/yyyy — use ui::fmt::date" },
+]
+
+# Money is i64 minor units end to end. A float anywhere near an amount is the
+# one bug this codebase cannot tolerate quietly.
+disallowed-types = []

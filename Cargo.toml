@@ -1,0 +1,120 @@
+[package]
+name = "ffm"
+version = "0.1.0"
+edition = "2024"
+
+# The whole dependency tree is resolved here up front — including crates phase 1
+# never calls — so that adding the database or the parser in a later phase does
+# not re-resolve tokio's features and rebuild the world.
+
+[dependencies]
+
+# --- web ---------------------------------------------------------------------
+# default-features = false, and deliberately NO "json" feature: the architecture
+# invariant is HTML fragments over the wire, and leaving the feature enabled is
+# how the first Json<T> response gets written.
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "tokio",
+    "form",
+    "query",
+    "macros",
+    "original-uri",   # the /lang switcher's hidden `next` field
+] }
+# cookie, NOT cookie_private/signed: a session id is an opaque server-side row,
+# so there is nothing to sign.
+axum-extra = { version = "0.10", features = ["cookie"] }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "fs",       # exists() probes on receipt paths
+    "time",     # the hourly materializer tick
+    "signal",   # graceful shutdown -> WAL checkpoint
+] }
+tower = { version = "0.5", features = ["util"] }
+# No "compression": behind a LAN, brotli costs more CPU than it saves.
+tower-http = { version = "0.6", features = ["fs", "trace", "set-header", "catch-panic"] }
+
+# --- templates ---------------------------------------------------------------
+# 0.14 has no askama_axum; src/web/template.rs carries a local HtmlTemplate<T>
+# newtype instead. Most tutorials (and most recalled snippets) are stale here.
+askama = "0.14"
+
+# --- store -------------------------------------------------------------------
+# default-features = false drops the TLS stack — SQLite is a file.
+# "chrono" gives NaiveDate <-> TEXT for the ISO-8601 columns.
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+    "macros",
+    "migrate",
+    "chrono",
+] }
+
+# --- data --------------------------------------------------------------------
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"   # member_settings.theme_overrides is a JSON column
+# The real toml crate, per CLAUDE.md's gotcha: a hand-rolled comment stripper
+# cut `accent = "#c4a7e7"` in half at the colour's own '#'.
+toml = "0.8"
+# chrono over time, and WITHOUT "unstable-locales" on purpose:
+#   * "today" must be household-local, and time's current_local_offset() errors
+#     in a multithreaded process by design — which would mean giving up
+#     #[tokio::main] and carrying a UtcOffset through AppState forever.
+#   * month arithmetic is load-bearing (end_date <-> total_installments, the
+#     barcode window's pages, clamping a rule due on the 31st in February) and
+#     checked_add_months gets it right.
+#   * omitting unstable-locales makes chrono structurally incapable of localized
+#     dates — the same enforcement build.rs gives the catalog. See clippy.toml.
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+
+# --- auth --------------------------------------------------------------------
+argon2 = "0.5"          # members.password_hash
+password-hash = "0.5"   # PHC string types, kept stable across an argon2 bump
+# sha256 for invite/reset tokens, deliberately NOT argon2: there is nothing to
+# brute-force in 256 bits of randomness, and a slow hash on every
+# GET /invite/:token is a self-inflicted DoS.
+sha2 = "0.10"
+rand = "0.9"            # 32-byte tokens, session ids, argon2 salts
+base64 = "0.22"         # base64url of the invite token in the URL
+
+# --- i18n runtime ------------------------------------------------------------
+# Only ever touched by messages that carry a plural selector. If the catalog
+# ends up with none, this is dead code — that is the intended steady state.
+# Everything else is generated into borrowed &'static str / format!.
+fluent-bundle = "0.15"
+unic-langid = { version = "0.9", features = ["macros"] }
+
+# --- ops ---------------------------------------------------------------------
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+thiserror = "2"
+anyhow = "1"
+
+# --- dev only ----------------------------------------------------------------
+# Off by default, and `just dev` turns it on.
+#
+# NOT `[target.'cfg(debug_assertions)'.dependencies]`: Cargo does not support
+# debug_assertions for selecting dependencies. It accepts the section, warns,
+# and links the crate unconditionally — so it looks gated and is not. An
+# optional dependency behind a feature is the mechanism that actually works.
+#
+# The feature is opt-in rather than default-on so the failure mode is
+# "livereload didn't reload", which you notice in seconds, rather than
+# "livereload shipped in the release build", which you never notice.
+tower-livereload = { version = "0.9", optional = true }
+
+[features]
+default = []
+dev-reload = ["dep:tower-livereload"]
+
+[build-dependencies]
+# The .ftl parser. Note it is a BUILD dependency only — the generated catalog
+# has no dependency on it at runtime.
+fluent-syntax = "0.11"
+
+[profile.dev]
+# askama and sqlx are macro-heavy; opt-level 1 roughly halves iteration time
+# without meaningfully slowing the build.
+opt-level = 1

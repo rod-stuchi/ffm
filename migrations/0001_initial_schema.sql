@@ -212,7 +212,15 @@ CREATE TABLE recurring_rules (
     title                 TEXT    NOT NULL,
     kind                  TEXT    NOT NULL,                 -- salary recurs too
     amount_cents          INTEGER,                          -- seed for the first occurrence; NULL = always entered by hand
-    cadence               TEXT    NOT NULL DEFAULT 'monthly',
+
+    -- The interval, as an integer count of months rather than a word. The form
+    -- offers "every 3 months" and "every 4 months" — there is no English word
+    -- for the four-month case, and "bimonthly" ambiguously means both every two
+    -- months and twice a month, which is not a thing to leave lying around in a
+    -- column that feeds money arithmetic. Every read site wants the number
+    -- anyway: end_date = start_date + cadence_months × total_installments, and
+    -- the barcode window's page maths.
+    cadence_months        INTEGER NOT NULL DEFAULT 1,
     due_day               INTEGER,                          -- day of month; NULL = no due date
     start_date            TEXT    NOT NULL,
     end_date              TEXT,                             -- NULL = ongoing
@@ -226,12 +234,44 @@ CREATE TABLE recurring_rules (
     bill_name             TEXT,
     instance              TEXT,                             -- tracked rules only; disambiguates two properties
 
+    -- --- barcode / bill import (design/spec-bill-import.md §9) --------------
+    -- Decided once, at creation. A bill paid by PIX/TED/wire never has a
+    -- barcode at all — but the household may still want its RECEIPT tracked,
+    -- so this is independent of `tracked`.
+    no_barcode            INTEGER NOT NULL DEFAULT 0,
+    -- The subscriber's own account number (Sabesp's matrícula, Enel's número
+    -- do cliente). FEBRABAN never encodes it, so it is a text-layer read.
+    -- Populated ONLY by attaching a file; there is no form field for it.
+    client_code           TEXT,
+
+    -- --- multi-period barcode window ---------------------------------------
+    -- One uploaded document covering several periods (12 or 36 barcodes, one
+    -- page per month). Only the BARCODE file is shared; _scheduled and the
+    -- receipt stay genuinely per-period. The page number is DERIVED from
+    -- window_start and the occurrence's own period, never stored per row.
+    spans_period          INTEGER NOT NULL DEFAULT 0,
+    window_size           INTEGER,                          -- pages in the currently-uploaded file
+    window_start          TEXT,                             -- 'YYYY-MM'; this period is page 1
+
+    -- --- varying income ----------------------------------------------------
+    -- A commission/freelance rule cannot carry its own number forward. Until a
+    -- period is confirmed the row shows a projection computed ON READ — the
+    -- projection itself is never stored, so it follows new history instead of
+    -- freezing an old guess, and never writes a spurious amount-changed entry.
+    varies                INTEGER NOT NULL DEFAULT 0,
+    estimate_basis        TEXT    NOT NULL DEFAULT 'lowest',
+    estimate_window       INTEGER NOT NULL DEFAULT 3,       -- last N confirmed periods
+
+    -- --- filing ------------------------------------------------------------
+    -- '09.pdf' becomes '09_brl122.94.pdf'. Off by default, per tracked rule.
+    amount_in_filename    INTEGER NOT NULL DEFAULT 0,
+
     visibility            TEXT    NOT NULL DEFAULT 'household',
     created_at            TEXT    NOT NULL,
     deleted_at            TEXT,
 
     CHECK (kind       IN ('in', 'out')),
-    CHECK (cadence    IN ('monthly', 'bimonthly', 'quarterly', 'yearly')),
+    CHECK (cadence_months IN (1, 2, 3, 4, 6, 12)),
     CHECK (visibility IN ('household', 'private')),
     CHECK (due_day IS NULL OR (due_day BETWEEN 1 AND 31)),
     CHECK (total_installments IS NULL OR total_installments > 0),
@@ -241,7 +281,38 @@ CREATE TABLE recurring_rules (
     -- '.delete/' is reserved in the vault; full slug validation lives in Rust
     CHECK (bucket    IS NULL OR (bucket    NOT LIKE '.%' AND lower(bucket)    <> 'delete')),
     CHECK (bill_name IS NULL OR (bill_name NOT LIKE '.%' AND lower(bill_name) <> 'delete')),
-    CHECK (instance  IS NULL OR (instance  NOT LIKE '.%' AND lower(instance)  <> 'delete'))
+    CHECK (instance  IS NULL OR (instance  NOT LIKE '.%' AND lower(instance)  <> 'delete')),
+
+    -- the booleans. carry_forward_amount and tracked were missing these.
+    CHECK (carry_forward_amount IN (0, 1)),
+    CHECK (tracked              IN (0, 1)),
+    CHECK (no_barcode           IN (0, 1)),
+    CHECK (spans_period         IN (0, 1)),
+    CHECK (varies               IN (0, 1)),
+    CHECK (amount_in_filename   IN (0, 1)),
+
+    CHECK (estimate_basis  IN ('lowest', 'average', 'last')),
+    CHECK (estimate_window BETWEEN 1 AND 12),
+
+    -- The whole barcode apparatus is spend-only: money arriving carries no
+    -- boleto, no issuer and no client code. `varies` is the mirror image — a
+    -- bill carries its amount forward, it does not get projected.
+    CHECK (kind = 'out' OR (no_barcode = 0 AND client_code IS NULL AND spans_period = 0)),
+    CHECK (kind = 'in'  OR varies = 0),
+
+    -- "always null when no_barcode is true" — spec-bill-import.md §9
+    CHECK (no_barcode = 0 OR client_code IS NULL),
+
+    -- a window needs both of its numbers, and only a tracked rule has files
+    CHECK (spans_period = 0
+           OR (tracked = 1 AND no_barcode = 0
+               AND window_size IS NOT NULL AND window_start IS NOT NULL)),
+    CHECK (window_size  IS NULL OR window_size BETWEEN 1 AND 120),
+    CHECK (window_start IS NULL OR (window_start GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+                                    AND substr(window_start, 6, 2) BETWEEN '01' AND '12')),
+
+    -- the filename suffix only exists on a file, so only on a tracked rule
+    CHECK (amount_in_filename = 0 OR tracked = 1)
 );
 
 CREATE INDEX idx_rules_member ON recurring_rules(member_id) WHERE deleted_at IS NULL;
@@ -270,7 +341,17 @@ CREATE TABLE transactions (
     bill_name      TEXT,
 
     sort_key       TEXT    NOT NULL,                          -- LexoRank-style fractional index, global not per-month
-    supersedes_id  INTEGER REFERENCES transactions(id),       -- restore chain: new row points at the one it replaces
+
+    -- Bill import (design/spec-bill-import.md §9). Per-occurrence by nature:
+    -- a new value, a new source and a new linha digitável every period. The
+    -- client code is NOT here — it identifies the account, not the bill, so it
+    -- lives once on the rule. Recording WHERE each value came from is what
+    -- lets a wrong number be audited later.
+    barcode_raw      TEXT,                                    -- digits only, no separators; the idempotency key
+    barcode_kind     TEXT,                                    -- 'cobranca' | 'consumo'
+    amount_source    TEXT,                                    -- 'barcode' | 'text' | 'user'
+    due_date_source  TEXT,                                    -- 'fator' | 'free_field' | 'text' | 'user'
+    issuer_id        TEXT,                                    -- key into config/issuers.toml; no FK, it is a config file
 
     created_at     TEXT    NOT NULL,
     created_by     INTEGER REFERENCES members(id),
@@ -280,23 +361,60 @@ CREATE TABLE transactions (
     CHECK (kind       IN ('in', 'out')),
     CHECK (visibility IN ('household', 'private')),
     CHECK (manual_paid IN (0, 1)),
-    CHECK (period LIKE '____-__'),
-    CHECK (amount_cents IS NULL OR amount_cents >= 0)         -- direction lives in `kind`, not in the sign
+    -- NOT `LIKE '____-__'`: SQL LIKE's `_` matches ANY character, so that
+    -- accepted 'abcd-ef' and '....-..'. GLOB is case-sensitive and supports
+    -- character classes; the substr half is also required, because
+    -- GLOB '[01][0-9]' on its own still lets month 19 through.
+    CHECK (period GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+           AND substr(period, 6, 2) BETWEEN '01' AND '12'),
+    CHECK (amount_cents IS NULL OR amount_cents >= 0),        -- direction lives in `kind`, not in the sign
+
+    CHECK (barcode_kind    IS NULL OR barcode_kind    IN ('cobranca', 'consumo')),
+    CHECK (amount_source   IS NULL OR amount_source   IN ('barcode', 'text', 'user')),
+    CHECK (due_date_source IS NULL OR due_date_source IN ('fator', 'free_field', 'text', 'user')),
+    CHECK (barcode_raw IS NULL OR (barcode_raw NOT GLOB '*[^0-9]*'
+                                   AND length(barcode_raw) IN (44, 47, 48))),
+    CHECK (barcode_raw IS NULL OR barcode_kind IS NOT NULL),
+    -- a value that claims to come from a barcode must actually have one
+    CHECK (amount_source <> 'barcode' OR barcode_raw IS NOT NULL),
+    CHECK (due_date_source IS NULL
+           OR due_date_source NOT IN ('fator', 'free_field')
+           OR barcode_raw IS NOT NULL)
 );
 
--- One *live* occurrence per rule per period. Partial on purpose:
---   * a soft-deleted occurrence must not block a restore (which inserts a new row);
---   * the materializer's own gap query is what must treat a soft-deleted
---     occurrence as present, so the hourly job never resurrects a deleted row.
-CREATE UNIQUE INDEX idx_tx_rule_period_live
+-- One occurrence per rule per period — LIVE OR SOFT-DELETED.
+--
+-- This index deliberately does NOT carry a `deleted_at IS NULL` clause. It used
+-- to, justified by "a soft-deleted occurrence must not block a restore, which
+-- inserts a new row" — but restore is in place now (it clears the mark on the
+-- row that is already there) and inserts nothing. Meanwhile the materializer's
+-- correctness depends on a soft-deleted occurrence counting as PRESENT, so the
+-- hourly reconciler never resurrects a row the household deleted on purpose.
+-- Making that a schema fact beats leaving it to a WHERE clause somebody
+-- eventually forgets. Still partial on rule_id so one-offs never index.
+CREATE UNIQUE INDEX idx_tx_rule_period
     ON transactions(rule_id, period)
-    WHERE rule_id IS NOT NULL AND deleted_at IS NULL;
+    WHERE rule_id IS NOT NULL;
 
 -- The hot path: one member's pane for one month, in manual order.
-CREATE INDEX idx_tx_pane      ON transactions(member_id, period, sort_key) WHERE deleted_at IS NULL;
-CREATE INDEX idx_tx_period    ON transactions(period)                      WHERE deleted_at IS NULL;
-CREATE INDEX idx_tx_rule      ON transactions(rule_id)                     WHERE rule_id IS NOT NULL;
-CREATE INDEX idx_tx_supersede ON transactions(supersedes_id)               WHERE supersedes_id IS NOT NULL;
+CREATE INDEX idx_tx_pane   ON transactions(member_id, period, sort_key) WHERE deleted_at IS NULL;
+CREATE INDEX idx_tx_period ON transactions(period)                      WHERE deleted_at IS NULL;
+CREATE INDEX idx_tx_rule   ON transactions(rule_id)                     WHERE rule_id IS NOT NULL;
+
+-- The MoM delta's previous-period lookup. A recurring row matches on rule_id,
+-- but a one-off has no rule — and the mockup shows deltas on one-offs. The
+-- match is (member_id, title) within the previous period: it is what a
+-- household means by "the same line", it needs no extra column, and it
+-- degrades gracefully — rename the line and you lose the delta, which is
+-- arguably the correct answer.
+CREATE INDEX idx_tx_delta ON transactions(member_id, title, period) WHERE deleted_at IS NULL;
+
+-- The same boleto can only ever be one live row: re-uploading a bill must not
+-- create a second occurrence. Deleted rows keep theirs so `u` can restore
+-- without a uniqueness fight.
+CREATE UNIQUE INDEX idx_tx_barcode
+    ON transactions(barcode_raw)
+    WHERE barcode_raw IS NOT NULL AND deleted_at IS NULL;
 
 -- ---------------------------------------------------------------------------
 -- receipts — audit/undo metadata only. The DISK decides paid/not-paid; this
@@ -329,3 +447,98 @@ CREATE UNIQUE INDEX idx_receipts_live
     WHERE deleted_at IS NULL;
 
 CREATE INDEX idx_receipts_tx ON receipts(transaction_id);
+
+-- ---------------------------------------------------------------------------
+-- change / change_field — the app's ONE audit mechanism. Append-only.
+--
+-- Two tables, not one: a single wide table would either repeat the actor and
+-- the timestamp once per changed field, or bury the diff in a JSON blob that
+-- nothing can query.
+--
+-- `action` is consolidated HERE from three places that had drifted apart: the
+-- mockup's LOG_VERBS table (design/ffm-app-mockup.html), design/spec.md's
+-- Change log section, and its Auth & sessions section's password_reset /
+-- sessions_revoked. THIS LIST IS THE AUTHORITATIVE ONE.
+--
+-- Two gaps closed on purpose rather than by accident:
+--   * Deleting a RULE uses the plain 'delete'/'restore' verbs with
+--     entity = 'rule'. There is deliberately no 'rule_delete'.
+--   * Settings changes are deliberately NOT logged. household_settings and
+--     member_settings are not ledger entities, `entity` has no value for
+--     them, and the spec never asks for it. If that changes it is a new
+--     entity value plus a new action — not an ad-hoc reuse of 'edit'.
+-- ---------------------------------------------------------------------------
+CREATE TABLE change (
+    id         INTEGER PRIMARY KEY,
+    at         TEXT    NOT NULL,                       -- ISO-8601 UTC
+    member_id  INTEGER REFERENCES members(id),         -- the SESSION's member, never the focused pane
+    source     TEXT    NOT NULL,
+    action     TEXT    NOT NULL,
+    entity     TEXT    NOT NULL,
+    entity_id  INTEGER NOT NULL,
+    rule_id    INTEGER REFERENCES recurring_rules(id), -- stamped on transaction changes, so "this row
+                                                       -- plus the rule behind it" is a single query
+    period     TEXT,                                   -- 'YYYY-MM'; NULL for rule-level changes
+    undo_of    INTEGER REFERENCES change(id),          -- an undo is an ENTRY, never a rewrite
+    note       TEXT,                                   -- one line ('superseded by receipt upload')
+
+    CHECK (source IN ('user', 'import', 'materializer', 'system')),
+    CHECK (entity IN ('transaction', 'rule', 'file', 'member')),
+    CHECK (action IN (
+        'create', 'edit', 'delete', 'restore', 'reattribute', 'reorder', 'privacy',
+        'rule_create', 'rule_edit',
+        'file_attach', 'file_unlink', 'file_upload', 'file_delete',
+        'import', 'materialize',
+        'password_reset', 'sessions_revoked')),
+
+    -- action and entity are not independent. Pinning the fixed pairs makes a
+    -- 'password_reset' on a transaction impossible rather than merely wrong.
+    CHECK (action NOT IN ('rule_create', 'rule_edit')            OR entity = 'rule'),
+    CHECK (action NOT IN ('file_attach', 'file_unlink',
+                          'file_upload', 'file_delete')          OR entity = 'file'),
+    CHECK (action NOT IN ('password_reset', 'sessions_revoked')  OR entity = 'member'),
+    CHECK (action NOT IN ('reattribute', 'reorder', 'privacy',
+                          'materialize')                         OR entity = 'transaction'),
+
+    -- a user action has an actor; a materializer or system one does not
+    CHECK (source <> 'user' OR member_id IS NOT NULL),
+    CHECK (period IS NULL OR (period GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+                              AND substr(period, 6, 2) BETWEEN '01' AND '12')),
+    CHECK (undo_of IS NULL OR undo_of <> id)
+);
+
+CREATE INDEX idx_change_entity ON change(entity, entity_id, at DESC);
+CREATE INDEX idx_change_rule   ON change(rule_id, at DESC) WHERE rule_id IS NOT NULL;
+CREATE INDEX idx_change_at     ON change(at DESC);
+CREATE INDEX idx_change_undo   ON change(undo_of)          WHERE undo_of IS NOT NULL;
+
+CREATE TABLE change_field (
+    id         INTEGER PRIMARY KEY,
+    change_id  INTEGER NOT NULL REFERENCES change(id),
+    field      TEXT    NOT NULL,      -- 'amount' | 'title' | 'bucket' | 'due_day' | ...
+    old_value  TEXT,                  -- storage-neutral: minor units for money, ISO dates.
+    new_value  TEXT,                  -- NULL renders as an em dash in the pane.
+
+    -- `kind` travels WITH the value, so the pane formats old/new the way the
+    -- app does without inferring from the field name — and a stored amount
+    -- never depends on the household's *current* currency setting.
+    kind       TEXT    NOT NULL,
+
+    CHECK (kind IN ('money', 'date', 'day', 'bool', 'text', 'path')),
+    CHECK (old_value IS NOT NULL OR new_value IS NOT NULL)   -- a no-op is not a field change
+);
+
+CREATE INDEX idx_change_field_change ON change_field(change_id);
+
+-- Append-only, enforced by the schema rather than by discipline — the same
+-- posture as household_settings' CHECK (id = 1). "Nothing in it is ever
+-- rewritten or removed" is the entire value of an audit log; a rule that lives
+-- only in prose is one careless UPDATE away from being untrue.
+CREATE TRIGGER change_no_update BEFORE UPDATE ON change
+  BEGIN SELECT RAISE(ABORT, 'change is append-only'); END;
+CREATE TRIGGER change_no_delete BEFORE DELETE ON change
+  BEGIN SELECT RAISE(ABORT, 'change is append-only'); END;
+CREATE TRIGGER change_field_no_update BEFORE UPDATE ON change_field
+  BEGIN SELECT RAISE(ABORT, 'change_field is append-only'); END;
+CREATE TRIGGER change_field_no_delete BEFORE DELETE ON change_field
+  BEGIN SELECT RAISE(ABORT, 'change_field is append-only'); END;
