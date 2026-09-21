@@ -313,3 +313,93 @@ pub async fn one(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<(i64, Period
         }),
     )
 }
+
+/// Moves a row `count` places down (`+`) or up (`-`) within its own pane.
+///
+/// **One write.** The row's new key is the midpoint of the two it lands
+/// between; nothing else is touched. That is the whole reason the sort key is
+/// fractional rather than an integer position — renumbering N rows per move is
+/// write amplification, and two people doing it at once is a conflict SQLite
+/// cannot help with.
+///
+/// Returns `false` when the row is already at the end it is being moved
+/// toward, which is a no-op rather than an error: `J` on the last row should
+/// do nothing quietly.
+pub async fn reorder(pool: &SqlitePool, actor: Actor, id: i64, delta: i64) -> sqlx::Result<bool> {
+    let mut tx = pool.begin().await?;
+
+    let row = sqlx::query!(
+        r#"SELECT member_id AS "member_id!: i64", period AS "period!: String",
+                  sort_key AS "sort_key!: String", rule_id AS "rule_id: i64"
+           FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
+        id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(row) = row else { return Ok(false) };
+
+    // Manual order is what is being moved, so the neighbours are read in
+    // manual order regardless of how the pane happens to be displayed. A
+    // derived view refuses the gesture before it ever reaches here.
+    let keys: Vec<String> = sqlx::query_scalar!(
+        r#"SELECT sort_key AS "k!: String" FROM transactions
+           WHERE member_id = ?1 AND period = ?2 AND deleted_at IS NULL
+           ORDER BY sort_key"#,
+        row.member_id,
+        row.period,
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let Some(from) = keys.iter().position(|k| *k == row.sort_key) else {
+        return Ok(false);
+    };
+    let to = from as i64 + delta;
+    if to < 0 || to >= keys.len() as i64 || delta == 0 {
+        return Ok(false);
+    }
+    let to = to as usize;
+
+    // Landing between the two rows that will end up on either side. Moving
+    // DOWN means the target's neighbour is the one after it; moving up, the
+    // one before.
+    let (before, after) = if delta > 0 {
+        (
+            Some(keys[to].as_str()),
+            keys.get(to + 1).map(|s| s.as_str()),
+        )
+    } else {
+        (
+            to.checked_sub(1)
+                .and_then(|i| keys.get(i))
+                .map(|s| s.as_str()),
+            Some(keys[to].as_str()),
+        )
+    };
+    let new_key = sortkey::between(before, after);
+
+    sqlx::query!(
+        "UPDATE transactions SET sort_key = ?2 WHERE id = ?1",
+        id,
+        new_key
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let mut entry = Change::transaction(actor, TxAction::Reorder, id).from_rule(row.rule_id);
+    if let Some(p) = Period::parse(&row.period) {
+        entry = entry.in_period(p);
+    }
+    entry
+        .diff(
+            "position",
+            Value::Text(Some((from + 1).to_string())),
+            Value::Text(Some((to + 1).to_string())),
+        )
+        .write(&mut tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(true)
+}

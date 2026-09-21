@@ -75,9 +75,10 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
     let show_recurring = house.as_ref().is_none_or(|h| h.show_recurring);
     let ctx = RowCtx {
         today: Local::now().date_naive(),
+        sort: ledger::Sort::parse(&auth.settings.ledger_sort),
         currency,
         show_recurring,
-        show_delta: true,
+        show_delta: auth.settings.ledger_show_delta,
         narrow: false,
     };
 
@@ -125,6 +126,23 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
     )
 }
 
+/// One `bucket` fold: a framed container with its name, a row count and a
+/// subtotal that stays visible whether the fold is open or closed.
+///
+/// **That subtotal is why there is no separate report screen.** `zM` closes
+/// every fold and the ledger already reads as a per-category summary —
+/// browsing and summarising are one mechanism at two zoom levels.
+pub struct Group {
+    pub name: String,
+    /// Already pluralised — the count is a number the catalog has to agree
+    /// with, so it is rendered where the catalog lives rather than cast in a
+    /// template.
+    pub count: String,
+    pub subtotal: String,
+    pub negative: bool,
+    pub rows: Vec<RowView>,
+}
+
 pub struct PaneView {
     /// Sent with every add, because which pane is focused is data — a
     /// server-side idea of "current member" drifts the moment the app is open
@@ -132,6 +150,10 @@ pub struct PaneView {
     pub id: i64,
     pub name: String,
     pub rows: Vec<RowView>,
+    /// Empty unless the member grouped the pane. Grouping never silently drops
+    /// a row: anything with no bucket lands in `Uncategorized`.
+    pub groups: Vec<Group>,
+    pub grouped: bool,
     pub totals: PaneTotals,
 }
 
@@ -191,9 +213,12 @@ pub async fn ledger(
 
     let ctx = RowCtx {
         today,
+        // The member's own choice — it lives in their settings row, which is
+        // the same row `:sort date` and the :profile radio write.
+        sort: ledger::Sort::parse(&auth.settings.ledger_sort),
         currency,
         show_recurring,
-        show_delta: true,
+        show_delta: auth.settings.ledger_show_delta,
         narrow: false,
     };
     let t = Catalog::new(lang);
@@ -203,6 +228,9 @@ pub async fn ledger(
     let mut ins = crate::domain::money::Cents::ZERO;
     let mut outs = crate::domain::money::Cents::ZERO;
     let mut any_estimated = false;
+    // Grouping is a derived view exactly like sort: the moment rows are
+    // re-clustered by category, J/K refuse for the same reason.
+    let grouped = auth.settings.ledger_group == "bucket";
 
     for m in &members {
         // Privacy is applied inside the query, so the rows and the totals
@@ -222,7 +250,7 @@ pub async fn ledger(
         ins += pane.ins;
         outs += pane.outs;
         any_estimated |= pane.estimated;
-        panes.push(view(pane, &t, currency));
+        panes.push(view(pane, &t, currency, grouped));
     }
 
     let net = ins - outs;
@@ -260,7 +288,75 @@ pub async fn ledger(
     })
 }
 
-fn view(pane: Pane, t: &Catalog, currency: crate::domain::money::Currency) -> PaneView {
+/// Clusters a pane's rows by `bucket`, in the order the buckets first appear
+/// — so a grouped pane still reads in something like the order the household
+/// put it in, rather than alphabetically by a word they typed once.
+///
+/// Nesting stops at `bucket`: one level is enough for a household-sized
+/// ledger, and a `bill_name` sub-fold would be a second gesture to learn for
+/// a distinction most rows do not make.
+pub fn group_rows(
+    rows: &[crate::ui::row::LedgerRow],
+    views: Vec<RowView>,
+    t: &Catalog,
+    currency: crate::domain::money::Currency,
+) -> Vec<Group> {
+    let mut order: Vec<String> = Vec::new();
+    let mut buckets: std::collections::HashMap<
+        String,
+        (crate::domain::money::Cents, Vec<RowView>),
+    > = std::collections::HashMap::new();
+
+    for (row, view) in rows.iter().zip(views) {
+        let name = match row
+            .bucket
+            .as_deref()
+            .map(str::trim)
+            .filter(|b| !b.is_empty())
+        {
+            Some(b) => b.to_string(),
+            // Grouping never silently drops a row.
+            None => t.group_uncategorized().to_string(),
+        };
+        if !buckets.contains_key(&name) {
+            order.push(name.clone());
+        }
+        let entry = buckets
+            .entry(name)
+            .or_insert((crate::domain::money::Cents::ZERO, Vec::new()));
+        // A subtotal is what this bucket costs, so income counts against it —
+        // a "Renda" group summing to its own income is the useful reading.
+        if let Some(c) = row.effective_cents() {
+            if row.kind.is_income() {
+                entry.0 += c;
+            } else {
+                entry.0 -= c;
+            }
+        }
+        entry.1.push(view);
+    }
+
+    order
+        .into_iter()
+        .filter_map(|name| {
+            let (total, rows) = buckets.remove(&name)?;
+            Some(Group {
+                count: t.group_rows(rows.len() as i64),
+                subtotal: fmt::money(total.abs(), currency),
+                negative: total.is_negative(),
+                name,
+                rows,
+            })
+        })
+        .collect()
+}
+
+fn view(
+    pane: Pane,
+    t: &Catalog,
+    currency: crate::domain::money::Currency,
+    grouped: bool,
+) -> PaneView {
     let balance = pane.balance();
     PaneView {
         id: pane.member.id,
@@ -272,6 +368,17 @@ fn view(pane: Pane, t: &Catalog, currency: crate::domain::money::Currency) -> Pa
             balance: money(balance.abs(), currency, pane.estimated),
             negative: balance.is_negative(),
         },
-        rows: pane.rows.into_iter().map(|r| r.view(t)).collect(),
+        rows: if grouped {
+            Vec::new()
+        } else {
+            pane.rows.iter().map(|r| r.view(t)).collect()
+        },
+        groups: if grouped {
+            let views = pane.rows.iter().map(|r| r.view(t)).collect();
+            group_rows(&pane.rows, views, t, currency)
+        } else {
+            Vec::new()
+        },
+        grouped,
     }
 }

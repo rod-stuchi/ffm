@@ -125,6 +125,7 @@ impl Ctx {
     fn row_ctx(&self) -> RowCtx {
         RowCtx {
             today: self.today(),
+            sort: Default::default(),
             currency: self.currency(),
             show_recurring: self.recurring != Some(0),
             show_delta: self.delta != Some(0),

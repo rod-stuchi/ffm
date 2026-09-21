@@ -20,6 +20,7 @@ use sqlx::SqlitePool;
 fn ctx() -> RowCtx {
     RowCtx {
         today: chrono::NaiveDate::from_ymd_opt(2026, 9, 21).unwrap(),
+        sort: Default::default(),
         currency: Currency::Brl,
         show_recurring: true,
         show_delta: true,

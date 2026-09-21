@@ -661,3 +661,102 @@
 .logfield .ln {
   color: var(--ink);
 }
+
+/* --- folds --------------------------------------------------------------- */
+
+/* A framed container and a text label — deliberately NOT a per-category
+ * colour: `bucket` is open-vocabulary and unbounded, while the palette is
+ * eleven tokens with pos/neg/accent/info already spoken for. An unbounded set
+ * of user-typed strings either collides with those meanings or needs
+ * hash-based colours for no real gain over a frame. */
+.fold {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  margin: 6px 10px 6px 13px;
+  overflow: hidden;
+}
+
+.foldhead {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 7px 10px;
+  background: var(--surface-2);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.foldhead .fmark {
+  font-family: var(--mono);
+  color: var(--ink-3);
+  width: 1ch;
+}
+
+.foldhead .fcount {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+/* The subtotal stays visible whether the fold is open or closed. That is the
+ * whole reason there is no separate report screen. */
+.foldhead .fsub {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+
+.foldrows {
+  padding: 4px 0;
+}
+
+/* --- search -------------------------------------------------------------- */
+
+.searchbar .caret {
+  color: var(--info);
+}
+
+/* Selection and focus already use different channels; a search match is a
+ * third fact, so it gets a third — a soft ground rather than a rail or a bar. */
+.row.is-match .entry {
+  background: color-mix(in srgb, var(--info) 12%, var(--surface-2));
+}
+
+/* --- grep results -------------------------------------------------------- */
+
+.hit {
+  display: grid;
+  grid-template-columns: max-content max-content 1fr max-content;
+  gap: 9px;
+  align-items: baseline;
+  padding: 6px 7px;
+  border-radius: 7px;
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.hit:hover {
+  background: var(--surface-2);
+}
+
+.hit .hp,
+.hit .hm,
+.hit .ha {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.hit .hp,
+.hit .hm {
+  color: var(--ink-3);
+}
+
+.hit .ht {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

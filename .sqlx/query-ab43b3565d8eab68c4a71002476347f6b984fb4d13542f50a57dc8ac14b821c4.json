@@ -1,0 +1,176 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            t.id                 AS \"id!: i64\",\n            t.rule_id            AS \"rule_id: i64\",\n            t.period             AS \"period!: String\",\n            t.kind               AS \"kind!: String\",\n            t.title              AS \"title!: String\",\n            t.amount_cents       AS \"amount_cents: i64\",\n            t.date               AS \"date: String\",\n            t.due_date           AS \"due_date: String\",\n            t.visibility         AS \"visibility!: String\",\n            t.bucket             AS \"bucket: String\",\n            t.bill_name          AS \"bill_name: String\",\n            t.manual_paid        AS \"manual_paid!: i64\",\n\n            r.tracked            AS \"tracked?: i64\",\n            r.instance           AS \"instance?: String\",\n            r.total_installments AS \"total_installments?: i64\",\n            r.spans_period       AS \"spans_period?: i64\",\n            r.window_size        AS \"window_size?: i64\",\n            r.window_start       AS \"window_start?: String\",\n            r.amount_in_filename AS \"amount_in_filename?: i64\",\n            r.varies             AS \"varies?: i64\",\n            r.estimate_basis     AS \"estimate_basis?: String\",\n            r.estimate_window    AS \"estimate_window?: i64\",\n            r.amount_cents       AS \"rule_amount_cents?: i64\",\n\n            -- \"The same line\" in the previous period: exact title, same member.\n            -- Unambiguous for a recurring row (it is the same rule) and the only\n            -- workable answer for a one-off, which has no rule to match on. It\n            -- degrades the right way: rename the line and the delta disappears,\n            -- because it is not that line any more.\n            (SELECT p.amount_cents\n               FROM transactions p\n              WHERE p.member_id = t.member_id\n                AND p.title     = t.title\n                AND p.period    = ?2\n                AND p.deleted_at IS NULL\n              ORDER BY p.sort_key\n              LIMIT 1)           AS \"prev_amount_cents: i64\",\n\n            -- The barcode window that covered THIS period, not the rule's\n            -- current one. A cyclic bill renews by re-entering the window, and\n            -- reading the current values would silently rewrite history: the\n            -- moment the 2027 window is set, January 2026 stops reading\n            -- \"page 1\" and starts reading \"page -11, outside this file\".\n            -- \"Derived, never stored\" still holds — the page is computed, it\n            -- is the window that persists.\n            (SELECT w.window_start FROM rule_barcode_window w\n              WHERE w.rule_id = t.rule_id AND w.window_start <= t.period\n              ORDER BY w.window_start DESC LIMIT 1)\n                               AS \"hist_window_start?: String\",\n            (SELECT w.window_size FROM rule_barcode_window w\n              WHERE w.rule_id = t.rule_id AND w.window_start <= t.period\n              ORDER BY w.window_start DESC LIMIT 1)\n                               AS \"hist_window_size?: i64\",\n\n            -- The `7/12` badge. Counts occurrences of this rule up to and\n            -- including this period, so it reads as position in the run.\n            (SELECT COUNT(*)\n               FROM transactions o\n              WHERE o.rule_id IS NOT NULL\n                AND o.rule_id = t.rule_id\n                AND o.period <= t.period\n                AND o.deleted_at IS NULL) AS \"installments_paid!: i64\"\n        FROM transactions t\n        LEFT JOIN recurring_rules r ON r.id = t.rule_id\n        WHERE t.member_id  = ?1\n          AND t.period     = ?3\n          AND t.deleted_at IS NULL\n          AND (t.visibility = 'household' OR ?4)\n        -- Ordered three ways from one query rather than three, because the\n        -- SELECT above is the expensive part and duplicating it is how two of\n        -- them quietly stop agreeing about what a row is.\n        ORDER BY\n          CASE ?5\n            -- An unpaid row has no paid-on date yet, so it sorts by the day\n            -- it is DUE. Falling back to nothing would bunch every unpaid row\n            -- at one end, which is the opposite of what sorting by date is\n            -- for.\n            WHEN 'date'   THEN coalesce(t.date, t.due_date, t.period)\n            WHEN 'amount' THEN NULL\n            ELSE t.sort_key\n          END ASC,\n          -- Biggest first: sorting a ledger by amount is asking \"what is\n          -- costing us the most\".\n          CASE ?5 WHEN 'amount' THEN t.amount_cents END DESC,\n          t.sort_key ASC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "date: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "due_date: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "bucket: String",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "bill_name: String",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "manual_paid!: i64",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tracked?: i64",
+        "ordinal": 12,
+        "type_info": "Integer"
+      },
+      {
+        "name": "instance?: String",
+        "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_installments?: i64",
+        "ordinal": 14,
+        "type_info": "Integer"
+      },
+      {
+        "name": "spans_period?: i64",
+        "ordinal": 15,
+        "type_info": "Integer"
+      },
+      {
+        "name": "window_size?: i64",
+        "ordinal": 16,
+        "type_info": "Integer"
+      },
+      {
+        "name": "window_start?: String",
+        "ordinal": 17,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_in_filename?: i64",
+        "ordinal": 18,
+        "type_info": "Integer"
+      },
+      {
+        "name": "varies?: i64",
+        "ordinal": 19,
+        "type_info": "Integer"
+      },
+      {
+        "name": "estimate_basis?: String",
+        "ordinal": 20,
+        "type_info": "Text"
+      },
+      {
+        "name": "estimate_window?: i64",
+        "ordinal": 21,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_amount_cents?: i64",
+        "ordinal": 22,
+        "type_info": "Integer"
+      },
+      {
+        "name": "prev_amount_cents: i64",
+        "ordinal": 23,
+        "type_info": "Integer"
+      },
+      {
+        "name": "hist_window_start?: String",
+        "ordinal": 24,
+        "type_info": "Text"
+      },
+      {
+        "name": "hist_window_size?: i64",
+        "ordinal": 25,
+        "type_info": "Integer"
+      },
+      {
+        "name": "installments_paid!: i64",
+        "ordinal": 26,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "ab43b3565d8eab68c4a71002476347f6b984fb4d13542f50a57dc8ac14b821c4"
+}

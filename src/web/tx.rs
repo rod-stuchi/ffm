@@ -82,12 +82,16 @@ pub fn ascii_json(s: &str) -> String {
     out
 }
 
-fn ctx(currency: crate::domain::money::Currency, show_recurring: bool) -> RowCtx {
+fn ctx(auth: &Auth, currency: crate::domain::money::Currency, show_recurring: bool) -> RowCtx {
     RowCtx {
         today: Local::now().date_naive(),
+        // A fragment is rendered by the same path a page load uses, including
+        // the order the member chose — otherwise a row swapped into a
+        // date-sorted pane would land where manual order would have put it.
+        sort: crate::db::ledger::Sort::parse(&auth.settings.ledger_sort),
         currency,
         show_recurring,
-        show_delta: true,
+        show_delta: auth.settings.ledger_show_delta,
         narrow: false,
     }
 }
@@ -146,7 +150,7 @@ pub async fn pane_fragment(
         &st.pool,
         &member,
         period,
-        ctx(currency, show_recurring),
+        ctx(auth, currency, show_recurring),
         auth.viewer,
         Some(&st.cfg.receipts_root),
     )
@@ -199,7 +203,7 @@ async fn render_row(
         &st.pool,
         &member,
         period,
-        ctx(currency, show_recurring),
+        ctx(auth, currency, show_recurring),
         auth.viewer,
         Some(&st.cfg.receipts_root),
     )
@@ -301,7 +305,7 @@ async fn deleted_row(
             ..RowFlags::default()
         },
         gutter: Gutter::Blank,
-        ctx: ctx(currency, true),
+        ctx: ctx(auth, currency, true),
     };
 
     Ok(Fragment {
@@ -433,6 +437,57 @@ pub async fn delete(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>)
             true,
         ),
     }
+}
+
+/// `J` / `K` — move the row, or refuse and say why.
+///
+/// You cannot reorder a derived view: under `sort = date` the rows are in an
+/// order the household did not put them in, so moving one has nowhere to be
+/// recorded. The app says that instead of pretending, which is the same
+/// treatment `E` gets on a plain row.
+pub async fn move_row(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path(id): Path<i64>,
+    Form(form): Form<MoveForm>,
+) -> Response {
+    let t = auth.catalog();
+    let sort = crate::db::ledger::Sort::parse(&auth.settings.ledger_sort);
+    if sort.is_derived() {
+        return say_only(&t.sort_refuses_reorder(sort.code()), true);
+    }
+    if auth.settings.ledger_group != "none" {
+        return say_only(&t.group_refuses_reorder(&auth.settings.ledger_group), true);
+    }
+    if !may_touch(&st, &auth, id).await {
+        return say_only(t.error_not_written(), true);
+    }
+
+    match tx::reorder(&st.pool, Actor::User(auth.viewer.member_id), id, form.delta).await {
+        Ok(true) => match tx::one(&st.pool, id).await {
+            Ok(Some((member_id, period, _))) => {
+                let moved = t.rows_moved(
+                    1,
+                    &if form.delta > 0 {
+                        t.moved_down().to_string()
+                    } else {
+                        t.moved_up().to_string()
+                    },
+                );
+                pane_fragment(&st, &auth, member_id, period, &moved).await
+            }
+            _ => say_only(t.error_not_written(), true),
+        },
+        // Already at the end it is being moved toward: a quiet no-op, not an
+        // error worth a red statusline.
+        Ok(false) => say_only("", false),
+        Err(_) => say_only(t.error_not_written(), true),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct MoveForm {
+    delta: i64,
 }
 
 /// `u`. Undoes this member's most recent action, and says which one — an undo

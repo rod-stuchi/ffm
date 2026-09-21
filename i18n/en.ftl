@@ -370,3 +370,16 @@ log-field-kind = kind
 log-field-original-filename = original filename
 log-on = on
 log-off = off
+moved-down = down
+moved-up = up
+group-uncategorized = Uncategorized
+group-rows = { $n ->
+        [one] 1 row
+       *[other] { $n } rows
+    }
+grep-title = Found: { $term }
+grep-none = nothing matches that, in any month
+grep-count = { $n ->
+        [one] 1 row
+       *[other] { $n } rows
+    }

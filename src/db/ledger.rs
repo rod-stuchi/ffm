@@ -129,6 +129,43 @@ pub async fn pane(
     pane_with_vault(pool, member, period, ctx, viewer, None).await
 }
 
+/// How the rows are ordered.
+///
+/// `Manual` is the default because this app replaces a spreadsheet where rows
+/// *were* arranged by hand. The other two are **derived views**: the moment
+/// rows are read in an order the household did not put them in, `J`/`K` stop
+/// making sense and say so rather than pretending.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum Sort {
+    #[default]
+    Manual,
+    Date,
+    Amount,
+}
+
+impl Sort {
+    pub fn code(self) -> &'static str {
+        match self {
+            Sort::Manual => "manual",
+            Sort::Date => "date",
+            Sort::Amount => "amount",
+        }
+    }
+
+    pub fn parse(s: &str) -> Sort {
+        match s {
+            "date" => Sort::Date,
+            "amount" => Sort::Amount,
+            _ => Sort::Manual,
+        }
+    }
+
+    /// A derived view cannot be reordered by hand.
+    pub fn is_derived(self) -> bool {
+        self != Sort::Manual
+    }
+}
+
 /// The same query, with the receipt vault available so each tracked row can be
 /// asked what is actually on disk.
 ///
@@ -146,6 +183,7 @@ pub async fn pane_with_vault(
     let period_s = period.to_string();
     let prev_s = period.pred().to_string();
     let sees_private = viewer.sees_private_of(member.id);
+    let sort_code = ctx.sort.code();
 
     let rows = sqlx::query!(
         r#"
@@ -219,12 +257,29 @@ pub async fn pane_with_vault(
           AND t.period     = ?3
           AND t.deleted_at IS NULL
           AND (t.visibility = 'household' OR ?4)
-        ORDER BY t.sort_key
+        -- Ordered three ways from one query rather than three, because the
+        -- SELECT above is the expensive part and duplicating it is how two of
+        -- them quietly stop agreeing about what a row is.
+        ORDER BY
+          CASE ?5
+            -- An unpaid row has no paid-on date yet, so it sorts by the day
+            -- it is DUE. Falling back to nothing would bunch every unpaid row
+            -- at one end, which is the opposite of what sorting by date is
+            -- for.
+            WHEN 'date'   THEN coalesce(t.date, t.due_date, t.period)
+            WHEN 'amount' THEN NULL
+            ELSE t.sort_key
+          END ASC,
+          -- Biggest first: sorting a ledger by amount is asking "what is
+          -- costing us the most".
+          CASE ?5 WHEN 'amount' THEN t.amount_cents END DESC,
+          t.sort_key ASC
         "#,
         member.id,
         prev_s,
         period_s,
         sees_private,
+        sort_code,
     )
     .fetch_all(pool)
     .await?;
@@ -470,4 +525,72 @@ async fn confirmed_history(
 /// A value that does not parse came from outside the app.
 fn parse_date(s: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()
+}
+
+// ---------------------------------------------------------------------------
+// `:grep` — the different verb
+// ---------------------------------------------------------------------------
+
+/// One hit, with enough context to act on it.
+#[derive(Clone, Debug)]
+pub struct Hit {
+    pub id: i64,
+    pub period: Period,
+    pub member: String,
+    pub title: String,
+    pub amount: Option<Cents>,
+    pub is_income: bool,
+}
+
+/// Searches **every** month, which is why it is a different verb from `/`.
+///
+/// Privacy is applied here exactly as it is on a pane read: a row you cannot
+/// see is a row you cannot find, or the search would leak the existence of
+/// something the ledger carefully hides. The FTS index is external-content, so
+/// there is no second copy of a private row's title to leak from either.
+pub async fn grep(pool: &SqlitePool, viewer: Viewer, term: &str) -> sqlx::Result<Vec<Hit>> {
+    let term = term.trim();
+    if term.is_empty() {
+        return Ok(Vec::new());
+    }
+    // FTS5 treats a bare term as a query language — a stray `"` or `*` is a
+    // syntax error, not a search. Quoting makes the whole thing one phrase,
+    // which is what somebody typing into a search box means.
+    let query = format!("\"{}\"*", term.replace('"', "\"\""));
+    let viewer_id = viewer.member_id;
+    let sees_all = viewer.is_admin();
+
+    let rows = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+                  t.title AS "title!: String", t.kind AS "kind!: String",
+                  t.amount_cents AS "amount_cents: i64",
+                  m.name AS "member!: String"
+           FROM transactions_fts f
+           JOIN transactions t ON t.id = f.rowid
+           JOIN members m ON m.id = t.member_id
+           WHERE transactions_fts MATCH ?1
+             AND t.deleted_at IS NULL
+             AND (t.visibility = 'household' OR t.member_id = ?2 OR ?3)
+           ORDER BY t.period DESC, t.sort_key
+           LIMIT 100"#,
+        query,
+        viewer_id,
+        sees_all,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| {
+            Some(Hit {
+                id: r.id,
+                period: Period::parse(&r.period)?,
+                member: r.member,
+                title: r.title,
+                amount: r.amount_cents.map(Cents),
+                is_income: r.kind == "in",
+            })
+        })
+        .collect())
 }

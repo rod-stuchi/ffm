@@ -406,10 +406,53 @@ keystroke stopped working, with nothing in the console. `just js-check` now
 fails on a name declared twice in a component, and the guard was verified by
 reintroducing the bug.
 
-## Phase 11 — sort, grouping/folds, `/`, `:grep`
+## Phase 11 — sort, grouping/folds, `/`, `:grep` ✅
 
-Needs a populated ledger to be worth building. `:grep` is FTS5; `/` stays
-client-side over the rendered month.
+- **Three orders from one query**, not three queries: the SELECT is the
+  expensive part, and duplicating it is how two of them quietly stop agreeing
+  about what a row is. An unpaid row sorts by the day it is **due**, since it
+  has no paid-on date yet; `amount` is biggest first, because sorting a ledger
+  by amount is asking what costs the most.
+- **`J`/`K` move a row, one write.** The new key is the midpoint of the two it
+  lands between and nothing else is touched — which is the whole reason the
+  sort key is fractional. Moving past either end is a quiet no-op, and writes
+  nothing to the log either.
+- **A derived view refuses the gesture and says why**:
+  `ledger.sort = "date" — reorder needs sort = "manual"`, and the same for
+  `ledger.group`. Not a capability check — a statement about what the gesture
+  could even mean when the rows are in an order nobody put them in.
+- **Grouping is real Vim folds**: `za`/`zo`/`zc` toggle one, `zR`/`zM` all.
+  The server renders the whole grouped, subtotaled fragment and folding only
+  hides what is already there, so fold state is Alpine's and nothing else's.
+  Framed and labelled rather than colour-coded, because `bucket` is
+  open-vocabulary while the palette is eleven tokens already spoken for.
+- **The subtotal never disappears, and that is the report.** `zM` turns the
+  ledger into a per-category summary with no second screen built for it.
+- **`/` is client-side and scoped to the month on screen** — a regex, falling
+  back to a literal when it does not compile, matching the title, dates, the
+  formatted amount and the words a row's state implies. `n`/`N` wrap, `Esc`
+  clears.
+- **`:grep` is a different verb**, over an FTS5 index (migration 0004), and
+  deliberately not an overload of `/`: one can answer without a round trip and
+  the other cannot. External-content, so a private row has no second copy of
+  its title in a table the privacy filter knows nothing about — and the filter
+  is applied there exactly as on a pane read.
+
+`tests/browse.rs` — 9 tests, including the one-write move, the quiet no-op,
+grouping's `Uncategorized` catch-all, grep reaching other months while
+respecting privacy, and grep surviving `"`, `*` and `AND` typed into a search
+box.
+
+**A second Alpine-shaped bug, caught the same way as last phase's:** `rows()`
+used a *child* selector, so in a grouped pane — where rows are nested inside
+folds — it returned nothing, taking `j`, `k`, `dd` and `gl` with it. It is a
+descendant selector now, filtered to visible rows, which also gives "`j`/`k`
+skip a closed fold's contents" for free.
+
+**Known simplification:** the spec says `j`/`k` should land on a closed fold's
+*header*. They currently skip the fold entirely. Landing there needs the focus
+model to admit something that is not a row, which is a real change rather than
+a tweak — noted rather than quietly diverged from.
 
 ## Phase 12 — bill import
 

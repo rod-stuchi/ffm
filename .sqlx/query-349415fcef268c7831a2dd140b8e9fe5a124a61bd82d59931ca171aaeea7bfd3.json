@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT sort_key AS \"k!: String\" FROM transactions\n           WHERE member_id = ?1 AND period = ?2 AND deleted_at IS NULL\n           ORDER BY sort_key",
+  "describe": {
+    "columns": [
+      {
+        "name": "k!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "349415fcef268c7831a2dd140b8e9fe5a124a61bd82d59931ca171aaeea7bfd3"
+}

@@ -44,6 +44,7 @@ pub fn router(state: AppState) -> Router {
         .route("/tx", post(tx::add))
         .route("/tx/{id}/delete", post(tx::delete))
         .route("/undo", post(tx::undo))
+        .route("/tx/{id}/move", post(tx::move_row))
         // Files. Three distinct actions rather than one upload plus a
         // question: each kind has its own fixed name on disk and its own
         // effect on state.
@@ -51,6 +52,8 @@ pub fn router(state: AppState) -> Router {
         .route("/tx/{id}/file/{kind}/delete", post(files::delete))
         // `gl` — read-only, and the same column the rule editor uses.
         .route("/tx/{id}/log", get(log::log))
+        // `:grep` — every month, which is what makes it a different verb.
+        .route("/grep", get(log::grep))
         // The rule pane. A / I open it blank, E on a recurring row opens it
         // filled in; saving reconciles immediately so the periods the rule is
         // responsible for arrive in the same response.

@@ -28,6 +28,7 @@ fn d(y: i32, m: u32, day: u32) -> NaiveDate {
 fn ctx() -> RowCtx {
     RowCtx {
         today: d(2026, 9, 21),
+        sort: Default::default(),
         currency: Currency::Brl,
         show_recurring: true,
         show_delta: true,

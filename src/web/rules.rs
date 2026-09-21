@@ -265,6 +265,7 @@ async fn estimates_of(
         period = period.pred();
         let ctx = crate::ui::row::RowCtx {
             today,
+            sort: Default::default(),
             currency,
             show_recurring: true,
             show_delta: false,

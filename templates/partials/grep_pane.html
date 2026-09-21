@@ -1,0 +1,28 @@
+{#- `:grep` — the result list, in the same column every other pane uses.
+
+    Searching every month is a different verb from `/`: one can answer without
+    a round trip and the other cannot, so overloading them would make the fast
+    one slow. Clicking a hit jumps to its month, which is just the navigation
+    that already exists. -#}
+<aside class="rulepane logpane" id="settingspane">
+  <header class="rp-head">
+    <b>{{ t.grep_title(term.as_str()) }}</b>
+    <button class="btn rp-close" type="button" @click="$root.remove()">{{ t.pane_close() }}</button>
+  </header>
+
+  <div class="rp-body logbody">
+    {%- if hits.is_empty() %}
+    <p class="hint">{{ t.grep_none() }}</p>
+    {%- else %}
+    <p class="hint">{{ count }}</p>
+    {%- for h in hits %}
+    <a class="hit" href="/?period={{ h.period }}">
+      <span class="hp">{{ h.label }}</span>
+      <span class="hm">{{ h.member }}</span>
+      <b class="ht">{{ h.title }}</b>
+      <span class="ha {% if h.is_income %}pos{% endif %}">{{ h.amount }}</span>
+    </a>
+    {%- endfor %}
+    {%- endif %}
+  </div>
+</aside>

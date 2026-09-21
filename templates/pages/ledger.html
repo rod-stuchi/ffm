@@ -69,9 +69,36 @@
       </header>
 
       <div class="rows" id="rows-{{ p.id }}">
+        {%- if p.grouped %}
+        {#- Real Vim folds, not an invented gesture: za/zo/zc toggle one,
+            zR/zM open and close every one. The server renders the whole
+            grouped, subtotaled fragment regardless of what is folded —
+            folding only hides what is already here, which is why fold state
+            is Alpine's and nothing else's.
+
+            The subtotal stays visible open OR closed, and that is why there
+            is no separate report screen: zM turns the ledger into a
+            per-category summary with nothing else built. -#}
+        {%- for g in p.groups %}
+        <section class="fold" :class="{ 'is-closed': closed('{{ p.id }}-{{ loop.index0 }}') }">
+          <header class="foldhead" @click="toggle('{{ p.id }}-{{ loop.index0 }}')">
+            <span class="fmark" x-text="closed('{{ p.id }}-{{ loop.index0 }}') ? '▸' : '▾'">▾</span>
+            <b>{{ g.name }}</b>
+            <span class="fcount">{{ g.count }}</span>
+            <span class="fsub {% if g.negative %}neg{% else %}pos{% endif %}">{% if g.negative %}−{% endif %}{{ g.subtotal }}</span>
+          </header>
+          <div class="foldrows" x-show="!closed('{{ p.id }}-{{ loop.index0 }}')">
+            {%- for v in g.rows %}
+            <div id="row-{{ v.id }}">{% include "partials/row.html" %}</div>
+            {%- endfor %}
+          </div>
+        </section>
+        {%- endfor %}
+        {%- else %}
         {%- for v in p.rows %}
         <div id="row-{{ v.id }}">{% include "partials/row.html" %}</div>
         {%- endfor %}
+        {%- endif %}
 
         {#- In flight. Identical geometry to a real row, so nothing shifts when
             the server's fragment lands beside it. -#}
@@ -145,6 +172,17 @@
   <input type="file" x-ref="picker" class="hidden-input"
          accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()">
 
+  {#- `/` — incremental, regex, and scoped to the month already on screen.
+      It filters rows that are ALREADY rendered, which is what makes it feel
+      instant; `:grep` is the different verb that reaches other months. -#}
+  <div class="cmdbar searchbar" x-show="searching" x-cloak>
+    <span class="caret">/</span>
+    <input class="cmdinput" x-ref="search" x-model="search" @input="runSearch()"
+           @keydown.enter.prevent="step(1); $el.blur()"
+           @keydown.escape.prevent="clearSearch()"
+           autocomplete="off" spellcheck="false">
+  </div>
+
   {#- The command bar. `:` is how every setting surface is reached, and the
       same write the panes make — a command, a form control and a statusline
       cell are three gestures writing ONE row. -#}
@@ -176,6 +214,14 @@ function ledger() {
     attaching: null,
     commanding: false,
     logFor: null,
+    // Fold state is PURE visual state — the server already rendered every row
+    // and its subtotal, so folding shows or hides what is in the DOM. That is
+    // exactly the division of responsibility this app draws.
+    folds: {},
+    search: '',
+    searching: false,
+    matches: [],
+    matchAt: 0,
     command: '',
     kind_: 'receipt',
     menuStyle: '',
@@ -193,7 +239,14 @@ function ledger() {
     rows() {
       const panes = document.querySelectorAll('.pane');
       if (!panes[this.pane]) return [];
-      return Array.from(panes[this.pane].querySelectorAll('.rows > div[id^="row-"] .row'));
+      // A DESCENDANT selector, not a child one: a grouped pane nests its rows
+      // inside folds, and a child selector quietly returns nothing there —
+      // taking j, k, dd and gl with it.
+      //
+      // Hidden rows are left out, which is how `j`/`k` skip a closed fold's
+      // contents: there is nothing to skip if they were never in the list.
+      return Array.from(panes[this.pane].querySelectorAll('div[id^="row-"] .row'))
+        .filter(r => r.offsetParent !== null);
     },
 
     paint() {
@@ -267,7 +320,18 @@ function ledger() {
       else if (k === 'd') { if (buffer === 'd') { this.askDelete(); } else { this.pending = 'd'; } }
       else if (k === 'u') { this.undo(); }
       else if (k === ':') { this.openCommand(); }
-      else if (k === 'Escape') { this.adding = null; this.closeRule(); this.say(''); }
+      else if (k === '/') { this.openSearch(); }
+      else if (k === 'n') { this.step(1); }
+      else if (k === 'N') { this.step(-1); }
+      else if (k === 'z') { this.pending = 'z'; }
+      else if (buffer === 'z' && ['a', 'o', 'c'].includes(k)) { this.fold(k); }
+      else if (buffer === 'z' && k === 'R') { this.allFolds(false); }
+      else if (buffer === 'z' && k === 'M') { this.allFolds(true); }
+      else if (k === 'J') { this.move(1); }
+      else if (k === 'K') { this.move(-1); }
+      else if (k === 'Escape') {
+        this.adding = null; this.closeRule(); this.closePane(); this.clearSearch();
+      }
       else return;
       e.preventDefault();
     },
@@ -306,6 +370,104 @@ function ledger() {
 
     closeRule() { document.querySelector('#rulepane')?.remove(); },
 
+    // --- folds -----------------------------------------------------------
+
+    closed(id) { return !!this.folds[id]; },
+
+    toggle(id) { this.folds[id] = !this.folds[id]; },
+
+    /// The fold the cursor is inside, so `za` works from a row rather than
+    /// only from the header.
+    foldAt() {
+      const rows = this.rows();
+      const el = rows[this.row];
+      const section = el && el.closest('.fold');
+      if (!section) return null;
+      const all = Array.from(document.querySelectorAll('.pane')[this.pane].querySelectorAll('.fold'));
+      return document.querySelectorAll('.pane')[this.pane].querySelector('.rows').id.slice(5)
+             + '-' + all.indexOf(section);
+    },
+
+    fold(which) {
+      const id = this.foldAt();
+      if (!id) return;
+      if (which === 'a') this.toggle(id);
+      else this.folds[id] = which === 'c';
+    },
+
+    allFolds(closed) {
+      document.querySelectorAll('.fold').forEach((f, i) => {
+        const rows = f.closest('.rows');
+        this.folds[rows.id.slice(5) + '-' + Array.from(rows.querySelectorAll('.fold')).indexOf(f)] = closed;
+      });
+    },
+
+    // --- search ----------------------------------------------------------
+
+    openSearch() {
+      this.searching = true;
+      this.$nextTick(() => this.$refs.search.focus());
+    },
+
+    /// Incremental, client-side and scoped to the visible month: it filters
+    /// rows already rendered, which is what makes it feel instant. `:grep` is
+    /// the different verb that reaches other months.
+    runSearch() {
+      const term = this.search;
+      document.querySelectorAll('.row.is-match').forEach(r => r.classList.remove('is-match'));
+      this.matches = [];
+      if (!term) return;
+
+      // A regex, falling back to a literal when it does not compile — a
+      // half-typed `(` should narrow the list, not blow up.
+      let re;
+      try { re = new RegExp(term, 'i'); }
+      catch { re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
+
+      this.rows().forEach((row, i) => {
+        // Title, dates, the formatted amount — and the WORDS a row's state
+        // implies, so `/private` and `/paid` find what they look like they
+        // should.
+        const hay = [
+          row.querySelector('.name b')?.textContent || '',
+          row.querySelector('.meta')?.textContent || '',
+          row.querySelector('.amt')?.textContent || '',
+          row.dataset.ruleId ? 'recurring' : '',
+          row.querySelector('.mflag.flag-private.is-on') ? 'private' : '',
+          row.querySelector('.disc.tone-pos') ? 'paid' : '',
+        ].join(' ');
+        if (re.test(hay)) {
+          row.classList.add('is-match');
+          this.matches.push(i);
+        }
+      });
+      this.say(this.matches.length ? (this.matches.length + '/' + this.rows().length) : '', false);
+    },
+
+    step(dir) {
+      if (!this.matches.length) return;
+      // Wrapping, as `n` does in Vim.
+      this.matchAt = (this.matchAt + dir + this.matches.length) % this.matches.length;
+      this.row = this.matches[this.matchAt];
+      this.paint();
+    },
+
+    clearSearch() {
+      this.search = '';
+      this.searching = false;
+      this.matches = [];
+      document.querySelectorAll('.row.is-match').forEach(r => r.classList.remove('is-match'));
+      this.say('');
+    },
+
+    move(delta) {
+      const id = this.focusedId();
+      if (!id) return;
+      htmx.ajax('POST', '/tx/' + id + '/move', {
+        target: 'body', swap: 'none', values: { delta },
+      });
+    },
+
     // --- commands --------------------------------------------------------
 
     openCommand() {
@@ -341,6 +503,10 @@ function ledger() {
         case 'profile': case 'me':        return this.showPane('/profile');
         case 'household': case 'config':  return this.showPane('/household');
         case 'members':                   return this.showPane('/members');
+        // Every month, as opposed to `/`, which filters what is on screen.
+        case 'grep':
+          if (!arg) return this.say(this.notACommand.replace('{cmd}', 'grep'), true);
+          return this.showPane('/grep?q=' + encodeURIComponent(arg));
         case 'invite':
           this.showPane('/members');
           return;

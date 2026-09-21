@@ -104,3 +104,66 @@ pub async fn log(
     })
     .into_response()
 }
+
+// ---------------------------------------------------------------------------
+// `:grep`
+// ---------------------------------------------------------------------------
+
+pub struct HitView {
+    pub period: String,
+    pub label: String,
+    pub member: String,
+    pub title: String,
+    pub amount: String,
+    pub is_income: bool,
+}
+
+#[derive(Template)]
+#[template(path = "partials/grep_pane.html")]
+struct GrepPane {
+    t: Catalog,
+    term: String,
+    count: String,
+    hits: Vec<HitView>,
+}
+
+#[derive(Deserialize)]
+pub struct GrepParams {
+    #[serde(default)]
+    q: String,
+}
+
+pub async fn grep(State(st): State<AppState>, auth: Auth, Query(p): Query<GrepParams>) -> Response {
+    let t = auth.catalog();
+    let currency = ledger::household(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|h| h.currency)
+        .unwrap_or_default();
+
+    let hits = ledger::grep(&st.pool, auth.viewer, &p.q)
+        .await
+        .unwrap_or_default();
+
+    Html(GrepPane {
+        count: t.grep_count(hits.len() as i64),
+        hits: hits
+            .into_iter()
+            .map(|h| HitView {
+                period: h.period.to_string(),
+                label: crate::ui::fmt::period(h.period),
+                member: h.member,
+                title: h.title,
+                amount: h
+                    .amount
+                    .map(|c| crate::ui::fmt::money(c, currency))
+                    .unwrap_or_else(|| crate::ui::fmt::money_placeholder(currency)),
+                is_income: h.is_income,
+            })
+            .collect(),
+        term: p.q,
+        t,
+    })
+    .into_response()
+}

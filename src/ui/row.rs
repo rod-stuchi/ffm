@@ -188,6 +188,10 @@ impl Gutter {
 #[derive(Copy, Clone, Debug)]
 pub struct RowCtx {
     pub today: NaiveDate,
+    /// How the pane is ordered. The row itself does not care, but the query
+    /// that builds it does, and passing it here keeps "what the member chose"
+    /// in one place rather than threading it through every call site.
+    pub sort: crate::db::ledger::Sort,
     pub currency: Currency,
     /// `household_settings.ledger_show_recurring` — "we don't use this concept
     /// here" removes the glyph household-wide.
@@ -859,6 +863,7 @@ mod tests {
 
     fn ctx() -> RowCtx {
         RowCtx {
+            sort: Default::default(),
             today: d(2026, 9, 7),
             currency: Currency::Brl,
             show_recurring: true,

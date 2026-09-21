@@ -338,3 +338,16 @@ log-field-kind = tipo
 log-field-original-filename = nome original
 log-on = ligado
 log-off = desligado
+moved-down = para baixo
+moved-up = para cima
+group-uncategorized = Sem categoria
+group-rows = { $n ->
+        [one] 1 linha
+       *[other] { $n } linhas
+    }
+grep-title = Encontrado: { $term }
+grep-none = nada corresponde a isso, em nenhum mês
+grep-count = { $n ->
+        [one] 1 linha
+       *[other] { $n } linhas
+    }

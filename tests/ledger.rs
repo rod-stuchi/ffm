@@ -16,6 +16,7 @@ use ffm::ui::row::{Gutter, RowCtx};
 
 fn ctx() -> RowCtx {
     RowCtx {
+        sort: Default::default(),
         // Pinned, never `Local::now()`: half the row states are functions of
         // the date, so a real clock would make this test pass in September and
         // fail in October.

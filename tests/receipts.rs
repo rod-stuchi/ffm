@@ -483,6 +483,7 @@ async fn page_of(pool: &SqlitePool, me: i64, period: &str) -> Option<(i32, bool)
         .unwrap();
     let ctx = RowCtx {
         today: d(2027, 3, 1),
+        sort: Default::default(),
         currency: Currency::Brl,
         show_recurring: true,
         show_delta: true,
