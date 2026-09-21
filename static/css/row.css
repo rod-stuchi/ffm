@@ -124,7 +124,9 @@ body:not(.kbd-nav) .row:hover .entry {
   place-items: center;
 }
 
-.mark svg.ring {
+/* `mring`, not `ring`: Tailwind ships a `.ring` utility whose box-shadow would
+ * paint a square halo around this SVG's rectangular box. Namespaced instead. */
+.mark svg.mring {
   position: absolute;
   inset: 0;
   width: 26px;
