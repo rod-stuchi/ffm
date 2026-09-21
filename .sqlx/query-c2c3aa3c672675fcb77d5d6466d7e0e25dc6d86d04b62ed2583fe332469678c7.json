@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT bucket AS \"bucket!: String\" FROM (\n               SELECT bucket FROM recurring_rules\n                WHERE member_id = ?1 AND bucket IS NOT NULL AND deleted_at IS NULL\n               UNION\n               SELECT bucket FROM transactions\n                WHERE member_id = ?1 AND bucket IS NOT NULL AND deleted_at IS NULL\n           ) ORDER BY bucket",
+  "describe": {
+    "columns": [
+      {
+        "name": "bucket!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "c2c3aa3c672675fcb77d5d6466d7e0e25dc6d86d04b62ed2583fe332469678c7"
+}

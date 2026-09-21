@@ -1055,6 +1055,13 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   reloading proves nothing until `cargo build` has run — `just dev` watches for
   it, but a hand-started `cargo run` does not. Half an hour went into "the
   keymap stopped working" that was an old template still in a running process.
+- **Askama escapes the `json` filter's output too, which kills an inline
+  `<script>`.** `{{ x|json }}` inside a script tag renders `&#34;` for every
+  quote, the whole block fails to parse, and *everything* in it stops working —
+  in this case the entire keymap, silently, with nothing in the console about
+  the template. The pairing is `{{ x|json|safe }}`: the `json` filter already
+  escapes the characters that could end the script tag, so `safe` suppresses
+  the *wrong* escaping rather than all of it. `just tpl-check` enforces it.
 - **A quote-blind TOML comment stripper eats hex colours.** `line.replace(/#.*$/, '')`
   cuts `accent = "#c4a7e7"` in half at the colour's own `#`. The real `toml` crate
   handles this — which is a reason not to hand-roll a config reader.

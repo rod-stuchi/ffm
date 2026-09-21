@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO transactions\n               (member_id, rule_id, period, kind, title, amount_cents, date,\n                due_date, manual_paid, visibility, bucket, bill_name, sort_key,\n                created_at, created_by)\n           VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, 0, ?8, ?9, ?10, ?11, ?12, NULL)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "c084023616f7e292cdf8b9eb03e48f57529b86f84b491c73ee5f12b4307cacd8"
+}

@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod csrf;
 pub mod ledger;
+pub mod rules;
 pub mod session;
 pub mod template;
 pub mod tx;
@@ -40,6 +41,14 @@ pub fn router(state: AppState) -> Router {
         .route("/tx", post(tx::add))
         .route("/tx/{id}/delete", post(tx::delete))
         .route("/undo", post(tx::undo))
+        // The rule pane. A / I open it blank, E on a recurring row opens it
+        // filled in; saving reconciles immediately so the periods the rule is
+        // responsible for arrive in the same response.
+        .route("/rules/new", get(rules::new_rule))
+        .route("/rules", post(rules::create))
+        .route("/rules/{id}/edit", get(rules::edit_rule))
+        .route("/rules/{id}", post(rules::save))
+        .route("/rules/{id}/delete", post(rules::delete))
         .layer(axum::middleware::from_fn(csrf::guard));
 
     let app = Router::new()

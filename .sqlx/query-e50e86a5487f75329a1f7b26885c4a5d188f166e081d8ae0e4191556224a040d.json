@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE recurring_rules SET\n               title = ?2, kind = ?3, amount_cents = ?4, cadence_months = ?5,\n               due_day = ?6, start_date = ?7, end_date = ?8,\n               total_installments = ?9, carry_forward_amount = ?10,\n               tracked = ?11, bucket = ?12, bill_name = ?13, instance = ?14,\n               no_barcode = ?15, varies = ?16, estimate_basis = ?17,\n               estimate_window = ?18, amount_in_filename = ?19, visibility = ?20\n           WHERE id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 20
+    },
+    "nullable": []
+  },
+  "hash": "e50e86a5487f75329a1f7b26885c4a5d188f166e081d8ae0e4191556224a040d"
+}

@@ -49,6 +49,11 @@ async fn main() {
         }
     };
 
+    // One pass now, then one an hour. Startup matters as much as the tick: a
+    // process that was down across a month boundary has to catch up the moment
+    // it is back, not up to an hour later.
+    ffm::services::materializer::spawn(pool.clone());
+
     let state = AppState {
         pool,
         cfg: std::sync::Arc::new(cfg),

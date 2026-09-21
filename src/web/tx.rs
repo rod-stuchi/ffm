@@ -92,6 +92,69 @@ fn ctx(currency: crate::domain::money::Currency, show_recurring: bool) -> RowCtx
     }
 }
 
+/// A statusline message and nothing else — for the refusals that change no
+/// data: `E` on a plain row, a `u` with nothing behind it.
+pub fn say_only(message: &str, bad: bool) -> Response {
+    say(
+        (StatusCode::OK, HeaderMap::new(), String::new()).into_response(),
+        message,
+        bad,
+    )
+}
+
+/// A whole pane's rows plus the totals, out of band.
+///
+/// A row mutation answers with one row; a rule save can create several periods
+/// at once, so it answers with the pane. Same contract, one level up — and the
+/// rows come from the same `ledger::pane` call a page load uses, so privacy
+/// filtering cannot come apart from what is rendered.
+pub async fn pane_fragment(
+    st: &AppState,
+    auth: &Auth,
+    member_id: i64,
+    period: Period,
+    message: &str,
+) -> Response {
+    let Ok(members) = ledger::members(&st.pool).await else {
+        return say_only(auth.catalog().error_not_written(), true);
+    };
+    let Some(member) = members.into_iter().find(|m| m.id == member_id) else {
+        return say_only(auth.catalog().error_not_written(), true);
+    };
+    let house = ledger::household(&st.pool).await.ok().flatten();
+    let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
+    let show_recurring = house.as_ref().is_none_or(|h| h.show_recurring);
+
+    let Ok(pane) = ledger::pane(
+        &st.pool,
+        &member,
+        period,
+        ctx(currency, show_recurring),
+        auth.viewer,
+    )
+    .await
+    else {
+        return say_only(auth.catalog().error_not_written(), true);
+    };
+
+    let t = auth.catalog();
+    let rows: Vec<RowView> = pane.rows.into_iter().map(|r| r.view(&t)).collect();
+    let (panes, totals) = crate::web::ledger::totals(st, auth, period).await;
+
+    say(
+        Html(crate::web::rules::PaneRows {
+            t,
+            member_id,
+            rows,
+            pane_totals: panes.into_iter().find(|p| p.id == member_id),
+            house_totals: Some(totals),
+        })
+        .into_response(),
+        message,
+        false,
+    )
+}
+
 /// Re-reads one row through the **pane query**, so a fragment is rendered by
 /// exactly the same path as a full page load. A second, simpler "just this row"
 /// query is how a fragment starts quietly disagreeing with the page it lands in.

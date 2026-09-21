@@ -12,6 +12,7 @@
 pub mod config;
 pub mod db;
 pub mod domain;
+pub mod services;
 pub mod state;
 pub mod ui;
 pub mod web;

@@ -42,7 +42,10 @@ tower-http = { version = "0.6", features = ["fs", "trace", "set-header", "catch-
 # --- templates ---------------------------------------------------------------
 # 0.14 has no askama_axum; src/web/template.rs carries a local HtmlTemplate<T>
 # newtype instead. Most tutorials (and most recalled snippets) are stale here.
-askama = "0.14"
+# "serde_json" enables the `json` filter, which is how a template hands a
+# string to the JavaScript beside it without inventing its own escaping — a
+# bill name with an apostrophe in it would otherwise end the string literal.
+askama = { version = "0.14", features = ["serde_json"] }
 
 # --- store -------------------------------------------------------------------
 # default-features = false drops the TLS stack — SQLite is a file.

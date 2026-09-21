@@ -121,6 +121,9 @@ struct LedgerPage {
     panes: Vec<PaneView>,
     /// `YYYY-MM`, for the forms. The label above is `fmt::period`.
     period_key: String,
+    /// `E` on a row with no rule behind it says so in the statusline rather
+    /// than doing nothing at all.
+    not_a_rule: String,
     house: HouseTotals,
     empty: bool,
 }
@@ -188,6 +191,7 @@ pub async fn ledger(
         household: name,
         period: fmt::period(period),
         period_key: period.to_string(),
+        not_a_rule: t.rule_none_on_row().to_string(),
         prev: period.pred().to_string(),
         next: period.succ().to_string(),
         empty: panes.is_empty(),

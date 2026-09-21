@@ -430,6 +430,12 @@ mod tests {
 
         for spec in fixtures::specs() {
             let title = (spec.build)(c).title;
+            // A placeholder row has no title at all — its label is app copy
+            // rendered from the catalog. An empty needle matches everything,
+            // so skipping it is required rather than lenient.
+            if title.is_empty() {
+                continue;
+            }
             for (name, src) in [("en.ftl", &en), ("pt-BR.ftl", &pt)] {
                 assert!(
                     !src.contains(&title),

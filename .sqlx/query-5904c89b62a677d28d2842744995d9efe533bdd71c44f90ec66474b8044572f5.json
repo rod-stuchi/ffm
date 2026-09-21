@@ -1,0 +1,140 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\", member_id AS \"member_id!: i64\",\n                  kind AS \"kind!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\",\n                  cadence_months AS \"cadence_months!: i64\",\n                  due_day AS \"due_day: i64\",\n                  start_date AS \"start_date!: String\",\n                  end_date AS \"end_date: String\",\n                  total_installments AS \"total_installments: i64\",\n                  carry_forward_amount AS \"carry_forward_amount!: i64\",\n                  tracked AS \"tracked!: i64\",\n                  bucket AS \"bucket: String\", bill_name AS \"bill_name: String\",\n                  instance AS \"instance: String\",\n                  no_barcode AS \"no_barcode!: i64\", varies AS \"varies!: i64\",\n                  estimate_basis AS \"estimate_basis!: String\",\n                  estimate_window AS \"estimate_window!: i64\",\n                  amount_in_filename AS \"amount_in_filename!: i64\",\n                  visibility AS \"visibility!: String\"\n           FROM recurring_rules WHERE id = ?1 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cadence_months!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "due_day: i64",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "start_date!: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "end_date: String",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_installments: i64",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "carry_forward_amount!: i64",
+        "ordinal": 10,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tracked!: i64",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "bucket: String",
+        "ordinal": 12,
+        "type_info": "Text"
+      },
+      {
+        "name": "bill_name: String",
+        "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "instance: String",
+        "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "no_barcode!: i64",
+        "ordinal": 15,
+        "type_info": "Integer"
+      },
+      {
+        "name": "varies!: i64",
+        "ordinal": 16,
+        "type_info": "Integer"
+      },
+      {
+        "name": "estimate_basis!: String",
+        "ordinal": 17,
+        "type_info": "Text"
+      },
+      {
+        "name": "estimate_window!: i64",
+        "ordinal": 18,
+        "type_info": "Integer"
+      },
+      {
+        "name": "amount_in_filename!: i64",
+        "ordinal": 19,
+        "type_info": "Integer"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 20,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5904c89b62a677d28d2842744995d9efe533bdd71c44f90ec66474b8044572f5"
+}

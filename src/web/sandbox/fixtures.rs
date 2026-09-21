@@ -427,7 +427,11 @@ pub fn specs() -> Vec<Spec> {
                   pane's arrow to point at. Create turns it into the real row in that spot; \
                   Cancel removes it.",
             build: |ctx| LedgerRow {
-                title: "New recurring bill".into(),
+                // Deliberately empty: the label is app copy and comes from
+                // the catalog when the row renders. A hardcoded one here would
+                // be a translated string smuggled into a fixture — which is
+                // exactly what the seed-purity test exists to catch.
+                title: String::new(),
                 amount_cents: None,
                 due_date: None,
                 state: RowState::Placeholder,

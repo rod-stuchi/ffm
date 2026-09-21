@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod changes;
 pub mod ledger;
+pub mod rules;
 pub mod settings;
 pub mod tx;
 

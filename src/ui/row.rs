@@ -623,6 +623,10 @@ pub struct RowView {
     /// The transaction's id, so a fragment can be addressed for an
     /// out-of-band swap without the template knowing where the row sits.
     pub id: i64,
+    /// The rule behind this row, if any — what `E` needs, and what makes
+    /// "not generated from a recurring rule" a fact the row already knows
+    /// rather than a round trip to find out.
+    pub rule_id: Option<i64>,
     pub classes: String,
     pub gutter: String,
     pub title: String,
@@ -707,9 +711,18 @@ impl LedgerRow {
 
         RowView {
             id: self.id,
+            rule_id: self.rule_id,
             classes: self.classes().join(" "),
             gutter: self.gutter.text(),
-            title: self.title.clone(),
+            // A placeholder's label is the app talking, not the household:
+            // "New recurring bill" is a prompt for a row that does not exist
+            // yet, so it comes from the catalog rather than from a title
+            // nobody typed. Everything else is content, and is left alone.
+            title: match (&self.state, self.kind.is_income()) {
+                (RowState::Placeholder, false) => t.rule_new_spend().to_string(),
+                (RowState::Placeholder, true) => t.rule_new_income().to_string(),
+                _ => self.title.clone(),
+            },
 
             mark_kind,
             mark_tone,

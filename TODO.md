@@ -192,13 +192,56 @@ Two bugs the browser found that no test would have: a UTF-8 `HX-Trigger` header
 read as latin-1 (`Padaria Â· Manhã`), and totals that sat still while a row
 landed. Both are now part of the contract, and both are in `CLAUDE.md`.
 
-## Phase 6 — recurring rules and the materializer
+## Phase 6 — recurring rules and the materializer ✅
 
-`A` / `I` / `E`, the rule pane, and the reconciler: per rule, find the periods
-between `start_date` and `min(current_month, end_date)` with no occurrence and
-insert those. No watermark. Soft-deleted occurrences count as **present**, or it
-resurrects deleted rows once an hour. Never materialize past the current month.
-Runs at startup *and* hourly.
+- **`db::rules`** — create, edit, soft delete, and the per-member bucket cloud
+  the combobox reads. A rule is created **from scratch**: there is no "turn
+  this row into a recurring one", because a barcode binding has to happen at
+  creation or not at all. `end_date` and `total_installments` are kept in sync
+  by one function in Rust, so the form's JavaScript and the materializer cannot
+  disagree about when a twelve-month loan from March ends (February).
+- **`services::materializer`** — reconcile per rule, **no watermark**. For each
+  live rule, the periods between its start and `min(current_month, end_date)`
+  with no occurrence get one. Runs at startup *and* hourly, which is what
+  catches a process that was down across a month boundary.
+  - Soft-deleted occurrences count as **present**, or the reconciler resurrects
+    every deleted row once an hour and fights the household forever.
+  - Never past the current month: future months stay projections.
+  - `UNIQUE(rule_id, period)` makes the whole job idempotent, so the startup
+    run and a tick can race harmlessly.
+  - The rule owns `due_day`; materializing stamps a real date from it, clamped
+    to the month — a rule due on the 31st means the 28th in February. Editing
+    `due_day` changes future periods only.
+  - Carry-forward seeds from the **previous period's actual value**; off, the
+    row starts with no amount at all, because for a credit-card statement last
+    month's number would be actively wrong.
+  - Every materialized row is logged with `source = materializer` and **no
+    actor**: attributing it to whoever happened to be signed in would be a lie.
+- **The rule pane** (`A` / `I` / `E`) — a column in the ledger's grid that
+  pushes later panes right, with the arrow on its edge. Toggle switches rather
+  than tick boxes, a native bucket combobox, the live computed path in two
+  lines, and end-date ↔ installments syncing both ways. Saving reconciles
+  immediately, so the periods a new rule is responsible for arrive in the same
+  response.
+- **The response shape extends cleanly**: a row mutation answers with one row,
+  a rule save answers with the pane — same out-of-band totals, same statusline
+  header, one level up.
+
+`tests/materializer.rs` (11) and `tests/rules.rs` (4). The ones worth naming:
+a rule created today materializes its whole history (the case a watermark gets
+wrong), a deleted occurrence is not resurrected an hour later, a due day past
+the end of a month is clamped rather than skipped, editing it leaves past
+occurrences alone, and a finite run stops at its installment count.
+
+Two things the browser caught: `{{ x|json }}` inside a `<script>` is
+HTML-escaped by Askama and kills the whole block — taking the entire keymap
+with it, silently — and the rule pane's month has to come from the ledger, not
+from the rule's own start date. The first is now `just tpl-check` and a gotcha
+in `CLAUDE.md`.
+
+The seed-purity test also earned its keep: the new-rule placeholder's label is
+**app copy**, so hardcoding it in a fixture smuggled a translated string into
+one. It now renders from the catalog like every other word the app says.
 
 ## Phase 7 — receipts and files
 

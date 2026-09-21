@@ -163,7 +163,21 @@ css-check:
     fi
     echo "✓ no hardcoded colours outside tokens.css"
 
-check: fmt-check lint test offline-check db-check css-check
+# Askama HTML-escapes every expression, including the json filter's output —
+# and inside a <script> that turns `"` into `&#34;` and kills the whole block,
+# taking the keymap with it silently. `|json|safe` is the correct pairing: the
+# json filter already escapes the characters that could end the script tag, so
+# `safe` is suppressing the WRONG escaping, not all of it.
+tpl-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if grep -rn '|json[^|]' templates/ | grep -v '|json|safe'; then
+        echo "✗ a |json expression is missing |safe — it will render &#34; inside <script>" >&2
+        exit 1
+    fi
+    echo "✓ every |json is paired with |safe"
+
+check: fmt-check lint test offline-check db-check css-check tpl-check
 
 # --- docs --------------------------------------------------------------------
 

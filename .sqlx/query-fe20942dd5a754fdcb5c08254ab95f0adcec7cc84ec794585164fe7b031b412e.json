@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE recurring_rules SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "fe20942dd5a754fdcb5c08254ab95f0adcec7cc84ec794585164fe7b031b412e"
+}

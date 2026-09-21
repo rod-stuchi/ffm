@@ -24,7 +24,7 @@
 <script defer src="/static/js/alpine.min.js"></script>
 </head>
 <body>
-<div class="ledger-shell" x-data="ledger()" @keydown.window="key($event)">
+<div class="ledger-shell" data-period="{{ period_key }}" x-data="ledger()" @keydown.window="key($event)">
   <header class="ledger-bar">
     <b>{{ household }}</b>
     <nav class="mnav">
@@ -109,6 +109,9 @@
       </form>
     </section>
     {%- endfor %}
+    {#- `A` / `I` / `E` drop the rule pane in here: a column of the same grid,
+        pushing later panes right rather than covering one. -#}
+    <div id="rulemount"></div>
   </main>
   {%- endif %}
 
@@ -148,6 +151,7 @@ function ledger() {
     msg: '',
     msgBad: false,
     pending: '',
+    notARule: {{ not_a_rule|json|safe }},
 
     rows() {
       const panes = document.querySelectorAll('.pane');
@@ -203,9 +207,14 @@ function ledger() {
       else if (k === 'H') { this.pane = Math.max(0, this.pane - 1); this.row = 0; this.paint(); }
       else if (k === 'L') { this.pane = Math.min(document.querySelectorAll('.pane').length - 1, this.pane + 1); this.row = 0; this.paint(); }
       else if (k === 'a' || k === 'i') { this.open(k === 'a' ? 'out' : 'in'); }
+      // Uppercase acts on the RULE, lowercase on the occurrence. A/I create
+      // one from scratch — never by promoting the row under the cursor — and
+      // E edits the rule behind it.
+      else if (k === 'A' || k === 'I') { this.newRule(k === 'A' ? 'out' : 'in'); }
+      else if (k === 'E') { this.editRule(); }
       else if (k === 'd') { if (buffer === 'd') { this.askDelete(); } else { this.pending = 'd'; } }
       else if (k === 'u') { this.undo(); }
-      else if (k === 'Escape') { this.adding = null; this.say(''); }
+      else if (k === 'Escape') { this.adding = null; this.closeRule(); this.say(''); }
       else return;
       e.preventDefault();
     },
@@ -218,6 +227,31 @@ function ledger() {
         pane.querySelector('.addrow input[name="title"]').focus();
       });
     },
+
+    paneMemberId() {
+      const pane = document.querySelectorAll('.pane')[this.pane];
+      return pane ? pane.querySelector('.rows').id.slice(5) : null;
+    },
+
+    newRule(kind) {
+      const member = this.paneMemberId();
+      if (!member) return;
+      htmx.ajax('GET', '/rules/new?member_id=' + member + '&kind=' + kind,
+                { target: '#rulemount', swap: 'innerHTML' });
+    },
+
+    editRule() {
+      const rows = this.rows();
+      const el = rows[this.row];
+      const ruleId = el && el.dataset.ruleId;
+      // A no-op with a statusline message on a plain row — the same treatment
+      // `gd` gets there, rather than a different error path to learn.
+      if (!ruleId) { this.say(this.notARule, true); return; }
+      htmx.ajax('GET', '/rules/' + ruleId + '/edit',
+                { target: '#rulemount', swap: 'innerHTML' });
+    },
+
+    closeRule() { document.querySelector('#rulepane')?.remove(); },
 
     askDelete() {
       const id = this.focusedId();

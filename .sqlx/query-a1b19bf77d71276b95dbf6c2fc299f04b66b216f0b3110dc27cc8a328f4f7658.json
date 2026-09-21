@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT amount_cents AS \"a: i64\" FROM transactions\n           WHERE rule_id = ?1 AND amount_cents IS NOT NULL AND deleted_at IS NULL\n           ORDER BY period DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "a: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a1b19bf77d71276b95dbf6c2fc299f04b66b216f0b3110dc27cc8a328f4f7658"
+}

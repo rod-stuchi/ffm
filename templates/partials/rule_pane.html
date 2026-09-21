@@ -1,0 +1,250 @@
+{#- The rule pane: a column in the ledger's grid, not a modal.
+
+    The form outgrew a centred dialog, and a dialog hides the very ledger you
+    are editing — the same argument that made :household a vsplit. It sits
+    after the member pane it belongs to and pushes later panes right; the
+    ledger scrolls sideways rather than hiding one, because a household can
+    have more than two members.
+
+    Field order is deliberate: what NAMES the bill first (Amount, Bill name),
+    then how it is filed (Bucket, Cadence), then the dates. -#}
+<aside class="rulepane" id="rulepane" x-data="rulePane()">
+  <header class="rp-head">
+    <b>{% if id.is_some() %}{{ t.rule_edit() }}{% else %}{% if income %}{{ t.rule_new_income() }}{% else %}{{ t.rule_new_spend() }}{% endif %}{% endif %}</b>
+    <button class="btn rp-close" type="button" @click="$root.remove()">esc</button>
+  </header>
+
+  <form class="rp-body"
+        hx-post="{% if let Some(rid) = id %}/rules/{{ rid }}{% else %}/rules{% endif %}"
+        hx-target="#rulepane" hx-swap="delete">
+    <input type="hidden" name="member_id" value="{{ member_id }}">
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <input type="hidden" name="period" :value="period">
+
+    <div class="fgrid">
+      <label class="f">
+        <span class="k">{{ t.row_amount() }}</span>
+        <input class="i" name="amount" value="{{ amount }}" inputmode="decimal" autocomplete="off" autofocus>
+      </label>
+      <label class="f">
+        {#- What the ROW says. `bill_name` below is a different column doing a
+            different job: it is a path segment, and "Energia · Enel SP" is a
+            title while "Energia" is a folder. -#}
+        <span class="k">{{ t.row_title() }}</span>
+        <input class="i" name="title" value="{{ title }}" autocomplete="off" required x-model="title">
+      </label>
+    </div>
+
+    <div class="fgrid">
+      <label class="f">
+        {#- A native combobox: an input paired with a datalist. A <select>
+            would make typing a brand-new bucket impossible, and a plain input
+            would drop the "pick one you already use" affordance. -#}
+        <span class="k">{{ t.rule_bucket() }}</span>
+        <input class="i" name="bucket" list="buckets" value="{{ bucket }}"
+               autocomplete="off" x-model="bucket">
+        <datalist id="buckets">
+          {%- for b in buckets %}<option value="{{ b }}">{% endfor %}
+        </datalist>
+      </label>
+      <label class="f">
+        <span class="k">{{ t.rule_cadence() }}</span>
+        <select class="i" name="cadence_months" x-model.number="cadence">
+          {%- for c in cadences %}
+          <option value="{{ c.months }}"{% if c.selected %} selected{% endif %}>{{ c.label }}</option>
+          {%- endfor %}
+        </select>
+      </label>
+    </div>
+
+    <div class="fgrid">
+      <label class="f">
+        <span class="k">{{ t.rule_start() }}</span>
+        <input class="i" type="date" name="start" value="{{ start }}" x-model="start">
+      </label>
+      <label class="f">
+        <span class="k">{% if income %}{{ t.rule_expected_day() }}{% else %}{{ t.rule_due_day() }}{% endif %}</span>
+        <input class="i" name="due_day" value="{{ due_day }}" inputmode="numeric" maxlength="2"
+               @beforeinput="digitsOnly($event)">
+      </label>
+    </div>
+
+    {#- End date and installments stay in sync: typing one recomputes the
+        other. End date alone is the correct way to give an ordinary
+        open-ended bill a stopping point without implying it was ever a
+        fixed-length loan. -#}
+    <div class="fgrid">
+      <label class="f">
+        <span class="k">{{ t.rule_end() }}</span>
+        <input class="i" type="date" name="end" value="{{ end }}" x-model="end" @input="syncFromEnd()">
+      </label>
+      <label class="f">
+        <span class="k">{% if income %}{{ t.rule_payments() }}{% else %}{{ t.rule_installments() }}{% endif %}</span>
+        <input class="i" name="installments" value="{{ installments }}" inputmode="numeric"
+               x-model="installments" @input="syncFromCount()" @beforeinput="digitsOnly($event)">
+      </label>
+    </div>
+
+    <div class="rp-toggles">
+      {#- On/off settings are switches, not tick boxes: they read as states
+          rather than actions, and say so in less space. -#}
+      <label class="tog">
+        <input type="checkbox" name="carry_forward"{% if carry_forward %} checked{% endif %}>
+        <span>{{ t.rule_carry_forward() }}</span>
+      </label>
+
+      {%- if income %}
+      <label class="tog">
+        <input type="checkbox" name="varies"{% if varies %} checked{% endif %} x-model="varies">
+        <span>{{ t.rule_varies() }}</span>
+      </label>
+      <div class="f" x-show="varies" x-cloak>
+        <span class="k">{{ t.rule_estimate_basis() }}</span>
+        <div class="radios">
+          <label><input type="radio" name="estimate_basis" value="lowest"{% if estimate_basis == "lowest" %} checked{% endif %}> {{ t.rule_estimate_lowest() }}</label>
+          <label><input type="radio" name="estimate_basis" value="average"{% if estimate_basis == "average" %} checked{% endif %}> {{ t.rule_estimate_average() }}</label>
+          <label><input type="radio" name="estimate_basis" value="last"{% if estimate_basis == "last" %} checked{% endif %}> {{ t.rule_estimate_last() }}</label>
+        </div>
+        <span class="hint">{{ t.rule_estimate_window(*estimate_window) }}</span>
+        <input type="hidden" name="estimate_window" value="{{ estimate_window }}">
+      </div>
+      {%- endif %}
+
+      <label class="tog">
+        <input type="checkbox" name="tracked"{% if tracked %} checked{% endif %} x-model="tracked">
+        <span>{{ t.rule_tracked() }}</span>
+      </label>
+
+      {%- if !income %}
+      <label class="tog" x-show="tracked" x-cloak>
+        <input type="checkbox" name="no_barcode"{% if no_barcode %} checked{% endif %}>
+        <span>{{ t.rule_no_barcode() }}</span>
+      </label>
+      {%- endif %}
+
+      <label class="tog" x-show="tracked" x-cloak>
+        <input type="checkbox" name="amount_in_filename"{% if amount_in_filename %} checked{% endif %}>
+        <span>{{ t.rule_amount_in_filename() }}</span>
+      </label>
+
+      <label class="tog">
+        <input type="checkbox" name="private"{% if private %} checked{% endif %}>
+        <span>{{ t.rule_private() }}</span>
+      </label>
+    </div>
+
+    <div x-show="tracked" x-cloak>
+      <div class="fgrid">
+        <label class="f">
+          {#- The taxonomy field, and only a tracked rule has any use for it:
+              it names the folder, not the row. Left empty it falls back to the
+              title, because for most bills they are the same word. -#}
+          <span class="k">{% if income %}{{ t.rule_source() }}{% else %}{{ t.rule_bill_name() }}{% endif %}</span>
+          <input class="i" name="bill_name" value="{{ bill_name }}" autocomplete="off"
+                 :placeholder="title" x-model="billName">
+        </label>
+      <label class="f">
+        {#- Only a tracked rule has an instance: it exists to disambiguate two
+            properties in a receipt PATH, and that meaning does not generalise. -#}
+        <span class="k">{{ t.rule_instance() }}</span>
+        <input class="i" name="instance" value="{{ instance }}" autocomplete="off" x-model="instance">
+      </label>
+      </div>
+
+      {#- The real path as it stands, above a dim reminder of what makes it up.
+          It recomputes on every keystroke in Bucket, Bill name or Instance, so
+          renaming taxonomy shows where the files will move BEFORE saving. -#}
+      <div class="pathbox">
+        <span class="p1" x-text="path()"></span>
+        <span class="p2">{{ t.rule_path_legend() }}</span>
+      </div>
+    </div>
+
+    {%- if id.is_some() %}
+    <div class="notebox">{{ t.rule_past_note() }}</div>
+    {%- endif %}
+
+    <div class="rp-actions">
+      <button class="btn pri" type="submit">
+        {% if id.is_some() %}{{ t.rule_save() }}{% else %}{{ t.rule_create() }}{% endif %}<kbd>&#9166;</kbd>
+      </button>
+      {%- if let Some(rid) = id %}
+      <button class="btn rp-del" type="button"
+              hx-post="/rules/{{ rid }}/delete" hx-target="#rulepane" hx-swap="delete">
+        {{ t.rule_delete() }}
+      </button>
+      {%- endif %}
+    </div>
+  </form>
+</aside>
+
+<script>
+function rulePane() {
+  return {
+    bucket: {{ bucket|json|safe }},
+    title: {{ title|json|safe }},
+    billName: {{ bill_name|json|safe }},
+    instance: {{ instance|json|safe }},
+    tracked: {{ tracked }},
+    varies: {{ varies }},
+    cadence: Number(document.querySelector('[name=cadence_months]')?.value || 1),
+    start: {{ start|json|safe }},
+    end: {{ end|json|safe }},
+    installments: {{ installments|json|safe }},
+    vault: {{ vault|json|safe }},
+    // The month the ledger is SHOWING, not the rule's start: the path preview
+    // is about "where would this period's receipt go", and the pane is read
+    // beside the rows it belongs to.
+    period: document.querySelector('.ledger-shell')?.dataset.period
+            || {{ start|json|safe }}.slice(0, 7),
+
+    slug(s) {
+      // The same rule domain::slug applies: lowercase, runs of anything else
+      // to one underscore, no leading or trailing separator. Accents are KEPT
+      // — a household filing under "Água" should see `água` in the folder.
+      return (s || '').trim().toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, '_')
+        .replace(/^_+|_+$/g, '');
+    },
+
+    path() {
+      // bill_name names the folder; the title is the fallback, which is what
+      // the field's own placeholder already shows.
+      const file = this.billName.trim() || this.title;
+      const parts = [this.vault, this.slug(this.bucket), this.slug(file)];
+      if (this.instance.trim()) parts.push(this.slug(this.instance));
+      const [y, m] = this.period.split('-');
+      parts.push(y);
+      return parts.join('/') + '/' + m + '.pdf';
+    },
+
+    digitsOnly(e) {
+      // Rejected BEFORE it lands, so typing a letter over a selected value
+      // leaves the value and the selection exactly as they were.
+      if (e.data && /\D/.test(e.data)) e.preventDefault();
+    },
+
+    // End date and installments are two ways of saying the same thing for a
+    // finite rule. The last installment lands (n - 1) cadences after the
+    // start: a twelve-month loan from March ends in February.
+    syncFromCount() {
+      const n = parseInt(this.installments, 10);
+      if (!n || n < 1 || !this.start) return;
+      const [y, m, d] = this.start.split('-').map(Number);
+      const months = (n - 1) * (this.cadence || 1);
+      const end = new Date(Date.UTC(y, m - 1 + months + 1, 0));
+      const day = Math.min(d, end.getUTCDate());
+      this.end = new Date(Date.UTC(y, m - 1 + months, day)).toISOString().slice(0, 10);
+    },
+
+    syncFromEnd() {
+      if (!this.end || !this.start) return;
+      const [sy, sm] = this.start.split('-').map(Number);
+      const [ey, em] = this.end.split('-').map(Number);
+      const months = (ey - sy) * 12 + (em - sm);
+      if (months < 0) return;
+      this.installments = String(Math.floor(months / (this.cadence || 1)) + 1);
+    },
+  };
+}
+</script>

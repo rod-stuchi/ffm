@@ -110,12 +110,21 @@
   color: var(--neg);
 }
 
+/* Panes sit side by side and the rule pane joins them as another column,
+ * pushing later panes right. The ledger scrolls SIDEWAYS rather than hiding a
+ * pane: a household can have more than two members, and covering one to edit
+ * another is the modal this design keeps refusing. */
 .stage {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  display: flex;
   gap: 16px;
   padding: 16px;
   align-items: start;
+  overflow-x: auto;
+}
+
+.pane {
+  flex: 1 1 380px;
+  min-width: 340px;
 }
 
 .pane {
@@ -216,4 +225,160 @@
 
 [x-cloak] {
   display: none !important;
+}
+
+/* --- the rule pane ------------------------------------------------------- */
+
+.rulepane {
+  flex: 0 0 420px;
+  align-self: stretch;
+  background: var(--surface);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r);
+  position: relative;
+}
+
+/* The arrow on its left edge, pointing back at the pane it belongs to. */
+.rulepane::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 22px;
+  width: 12px;
+  height: 12px;
+  background: var(--surface);
+  border-left: 1px solid var(--accent-line);
+  border-bottom: 1px solid var(--accent-line);
+  transform: rotate(45deg);
+}
+
+.rp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: var(--r) var(--r) 0 0;
+}
+
+.rp-head b {
+  font-size: 13.5px;
+}
+
+.rp-close {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+}
+
+.rp-body {
+  padding: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rp-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--line);
+}
+
+/* A pill switch, not a tick box: "track receipt on disk" is a state, not an
+ * action, and a switch says so in less space than a checkbox plus its label. */
+.tog {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.tog input {
+  appearance: none;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.tog input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  transition: transform 0.12s ease;
+}
+
+.tog input:checked {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.tog input:checked::after {
+  background: var(--accent);
+  transform: translateX(14px);
+}
+
+.tog input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The computed path, live: the real thing on top, a dim reminder of what makes
+ * it up underneath. It recomputes as you type, so renaming taxonomy shows
+ * where the files will move BEFORE the rule is saved. */
+.pathbox {
+  margin-top: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.pathbox .p1 {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.pathbox .p2 {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.rp-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 4px;
+}
+
+.rp-del {
+  margin-left: auto;
+  color: var(--neg);
+  border-color: var(--line-2);
+}
+
+.rp-del:hover {
+  border-color: var(--neg);
 }
