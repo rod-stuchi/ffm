@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE transactions SET\n               barcode_raw = ?2, barcode_kind = ?3, issuer_id = ?4,\n               amount_cents = coalesce(?5, amount_cents),\n               due_date = coalesce(?6, due_date),\n               amount_source = coalesce(?7, amount_source),\n               due_date_source = coalesce(?8, due_date_source)\n           WHERE id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "820d429f633594b26fc0449319a20faef5edb606da153d796e1d93c06a239a78"
+}

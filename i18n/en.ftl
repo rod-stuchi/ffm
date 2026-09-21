@@ -383,3 +383,18 @@ grep-count = { $n ->
         [one] 1 row
        *[other] { $n } rows
     }
+
+## Bill import
+
+import-dropzone = Drop the bill here, or choose a file
+import-client-code = Client code
+import-unlink = Unlink
+import-read = read { $what } from the bill
+import-filled = read { $amount } due { $date } from the barcode
+import-amount-differs = the barcode says { $barcode }, this row says { $row } — left as it was
+import-date-differs = the barcode says { $barcode }, this row says { $row } — left as it was
+import-code-differs = this bill's client code is { $found }, but the rule has { $known } — left as it was
+import-unresolved = the barcode did not carry { $what }
+import-no-occurrence = there is no row for this month to attach it to
+import-unlinked = client code unlinked
+import-already-attached = this bill is already on { $period } — one bill, one row

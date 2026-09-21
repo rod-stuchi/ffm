@@ -193,7 +193,37 @@
       </div>
     </div>
 
-    {%- if id.is_some() %}
+    {%- if let Some(rid) = id %}
+    {%- if !income %}
+    {#- The ONE place a barcode file is ever attached. The rule is already
+        identified here, so there is no matching left to get wrong — which is
+        why a panel drop was downgraded to a notifier rather than kept as an
+        upload path. -#}
+    <div x-show="tracked && !noBarcode" x-cloak class="dropwrap">
+      {%- if let Some(code) = client_code %}
+      {#- Read-only once set: the code is only ever populated by attaching a
+          file, never typed, so there is nothing here to edit. Unlink clears
+          just this — it does not touch tracked, bucket or bill name — and
+          exists for "the wrong file got attached the first time". -#}
+      <div class="clientcode">
+        <span class="k">{{ t.import_client_code() }}</span>
+        <span class="mono">{{ code }}</span>
+        <button class="btn" type="button"
+                hx-post="/rules/{{ rid }}/unlink"
+                hx-target="#rulepane" hx-swap="delete">{{ t.import_unlink() }}</button>
+      </div>
+      {%- endif %}
+
+      {#- A dropzone, not a file input styled to look like one. -#}
+      <label class="dropzone" :class="{ 'is-over': over }"
+             @dragover.prevent="over = true" @dragleave="over = false"
+             @drop.prevent="over = false; send($event.dataTransfer.files[0])">
+        <span>{{ t.import_dropzone() }}</span>
+        <input type="file" class="hidden-input" accept=".pdf,.txt,.jpg,.png"
+               @change="send($el.files[0])">
+      </label>
+    </div>
+    {%- endif %}
     <div class="notebox">{{ t.rule_past_note() }}</div>
     {%- endif %}
 
@@ -269,6 +299,35 @@ function rulePane() {
     estimateFrom() {
       const hit = this.estimates.find(e => e[0] === this.basis);
       return hit ? hit[2] : '';
+    },
+
+    over: false,
+
+    /// Uploads the bill and swaps the row it belongs to. A plain fetch
+    /// because htmx.ajax cannot carry a FormData body — the contract is the
+    /// same either way: a row fragment back, the statusline in HX-Trigger.
+    send(file) {
+      if (!file) return;
+      const body = new FormData();
+      body.append('file', file);
+      const period = document.querySelector('.ledger-shell')?.dataset.period || '';
+      fetch('/rules/{{ id.unwrap_or(0) }}/barcode?period=' + period,
+            { method: 'POST', body, headers: { 'HX-Request': 'true' } })
+        .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
+        .then(({ html, trigger }) => {
+          if (html.trim()) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            const fresh = tmp.querySelector('[id^="row-"]');
+            const target = fresh && document.getElementById(fresh.id);
+            if (target) target.replaceWith(fresh);
+          }
+          if (trigger) {
+            const payload = JSON.parse(trigger)['ffm:say'];
+            const shell = document.querySelector('.ledger-shell');
+            if (payload && shell) Alpine.$data(shell).say(payload.message, payload.bad);
+          }
+        });
     },
 
     digitsOnly(e) {

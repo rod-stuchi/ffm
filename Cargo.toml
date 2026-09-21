@@ -65,6 +65,11 @@ serde_json = "1"   # member_settings.theme_overrides is a JSON column
 # The real toml crate, per CLAUDE.md's gotcha: a hand-rolled comment stripper
 # cut `accent = "#c4a7e7"` in half at the colour's own '#'.
 toml = "0.8"
+# Issuer `detect` patterns and the profile's hole-filling rules are regexes in
+# config/issuers.toml — data, not code, so a new biller is a config edit rather
+# than a recompile. This is the only place a regex reaches the money path, and
+# only ever for the holes the BARCODE leaves open.
+regex = "1"
 # chrono over time, and WITHOUT "unstable-locales" on purpose:
 #   * "today" must be household-local, and time's current_local_offset() errors
 #     in a multithreaded process by design — which would mean giving up

@@ -26,3 +26,7 @@
 # The receipt vault, if anyone ever points receipts_root inside the repo.
 # It holds real bills — it must never be committed by accident.
 /receipts
+
+# Issuer profiles are shipped as an example with placeholder CNPJs; a household
+# replacing them with the real ones is editing its own copy, not the repo's.
+# The example IS committed — see config/issuers.toml.

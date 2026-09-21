@@ -454,11 +454,61 @@ skip a closed fold's contents" for free.
 model to admit something that is not a row, which is a real change rather than
 a tweak — noted rather than quietly diverged from.
 
-## Phase 12 — bill import
+## Phase 12 — bill import ✅
 
-The largest isolated chunk, with zero dependencies upward, so it can slide.
-`boleto.rs` is pure integer maths with the seven spec'd vectors plus the
-423-mutation corruption test. See `design/spec-bill-import.md`.
+The largest isolated chunk, and the one with the strongest property behind it.
+
+- **`services::boleto`** — both barcode kinds, the sum types, check-digit
+  validation and the fator rollover. Pure integer arithmetic, no I/O, no
+  dependencies. All **seven verified vectors** pass, and so does the
+  **423-mutation corruption test**: every single-digit change to a valid
+  barcode is rejected rather than parsing to a different amount. That property
+  is the entire reason to prefer a barcode over OCR for something that writes
+  money into a ledger.
+- **The value is a sum type, never a number.** Position 3 of an arrecadação
+  barcode *declares* what its digits mean: a `7`/`9` bill read as reais posts a
+  plausible-looking **wrong number**, which is worse than failing to parse.
+  `Open` is not an error either — on a card fatura the payer chooses.
+- **The rollover is resolved by proximity, not a threshold** — and that is a
+  correction to the spec, which suggested "prefer the new base when the result
+  is ≥ 22/02/2025". That rule does not survive its own vectors: factor 9649 is
+  2024-03-08 under the legacy base and 2048 under the new one, and the
+  threshold picks the absurd answer.
+- **A failed check digit is a hard stop.** Never a cue to read the amount off
+  the page: the printed total might agree with the wrong number, and then
+  nothing catches it.
+- **`services::issuers`** — profiles fill *only* the holes the barcode leaves:
+  who this is, the due date when absent, the amount when `Open`/`Reference`,
+  and the client code, which FEBRABAN never encodes. If the barcode answered
+  it, the profile must not restate it — a profile able to override a
+  checksummed number is a profile able to quietly post the wrong one. Detection
+  is on the **CNPJ**, because layouts get redesigned and brands get renamed.
+- **`services::import`** — the tier pipeline, `pdftotext -layout` as a
+  subprocess, and the fill-or-flag policy as a pure function: **fill what is
+  empty, flag what disagrees, never overwrite.**
+- **Attaching happens in the rule's own editor and nowhere else**, where the
+  rule is already identified — which is why a panel drop was downgraded to a
+  notifier rather than kept as an upload path. The client code shows read-only
+  with its own Unlink; a bill carrying a *different* one is flagged, not
+  silently overwritten.
+- **`barcode_raw` is the idempotency key**, with a unique index behind it: the
+  same bill cannot end up on two rows, and hitting that index says so —
+  "this bill is already on 07/2026 — one bill, one row".
+
+28 unit tests across the three modules. `config/issuers.toml` ships as an
+example with **placeholder CNPJs** and a comment saying to replace each one
+from a real bill.
+
+**Not built, and deliberately:** OCR (tier 5) — most utility bills are digital
+PDFs with a real text layer, and the hook is in place so adding it later does
+not mean rearranging the tiers. Nor the `A`-at-creation dropzone: a rule has no
+id before it is saved, so staging a file for one would need a temp-file
+mechanism that does not exist. `E` covers every rule that exists.
+
+**A bug the fixture found, which a real bill would have reproduced exactly:**
+the candidate regex let a digit run cross a newline, so it swallowed the line
+above the barcode — on an Enel bill that is the client code, and the joined
+digits then parse as nothing at all.
 
 ## Phase 13 — the unresolved badge and ops
 

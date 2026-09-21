@@ -85,6 +85,12 @@ pub struct Rule {
     pub bill_name: Option<String>,
     pub instance: Option<String>,
     pub no_barcode: bool,
+    /// The subscriber's own account number, read from a bill's **text layer**
+    /// — FEBRABAN never encodes it, because the barcode's job is value and due
+    /// date, not who is paying. It lives on the rule rather than the
+    /// occurrence: the same account every period. Populated only by attaching
+    /// a file; there is no form field for it.
+    pub client_code: Option<String>,
     pub spans_period: bool,
     pub window_size: Option<i64>,
     pub window_start: Option<Period>,
@@ -412,6 +418,7 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
                   bucket AS "bucket: String", bill_name AS "bill_name: String",
                   instance AS "instance: String",
                   no_barcode AS "no_barcode!: i64", varies AS "varies!: i64",
+                  client_code AS "client_code: String",
                   spans_period AS "spans_period!: i64",
                   window_size AS "window_size: i64",
                   window_start AS "window_start: String",
@@ -445,6 +452,7 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
             bill_name: r.bill_name,
             instance: r.instance,
             no_barcode: r.no_barcode != 0,
+            client_code: r.client_code,
             spans_period: r.spans_period != 0,
             window_size: r.window_size,
             window_start: r.window_start.as_deref().and_then(Period::parse),

@@ -351,3 +351,18 @@ grep-count = { $n ->
         [one] 1 linha
        *[other] { $n } linhas
     }
+
+## Importação de contas
+
+import-dropzone = Solte a conta aqui, ou escolha um arquivo
+import-client-code = Código do cliente
+import-unlink = Desvincular
+import-read = li { $what } da conta
+import-filled = li { $amount } com vencimento { $date } do código de barras
+import-amount-differs = o código de barras diz { $barcode }, esta linha diz { $row } — mantida como estava
+import-date-differs = o código de barras diz { $barcode }, esta linha diz { $row } — mantida como estava
+import-code-differs = o código do cliente desta conta é { $found }, mas a regra tem { $known } — mantido como estava
+import-unresolved = o código de barras não trazia { $what }
+import-no-occurrence = não há linha deste mês para anexar
+import-unlinked = código do cliente desvinculado
+import-already-attached = esta conta já está em { $period } — uma conta, uma linha

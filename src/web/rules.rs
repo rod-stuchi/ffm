@@ -84,6 +84,10 @@ pub struct RulePane {
     /// The member's vault folder, so the computed path shown in the pane is
     /// the real one rather than a prefix-less approximation.
     vault: String,
+    /// Shown read-only once a bill has been attached; absent until then — the
+    /// same "absent, not a blank field" treatment `instance` gets when a rule
+    /// does not need one.
+    client_code: Option<String>,
     /// One ready-made projection per basis: `(basis, "~R$ 5.033,33",
     /// "08/2026 · 07/2026 · 06/2026")`.
     ///
@@ -167,6 +171,7 @@ pub async fn new_rule(
         amount_in_filename: false,
         private: false,
         vault: vault_of(&st, p.member_id).await,
+        client_code: None,
         // A brand-new rule has no history to project from; the box says so
         // rather than showing a number with nothing behind it.
         estimates: Vec::new(),
@@ -226,6 +231,7 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         amount_in_filename: r.amount_in_filename,
         private: r.visibility == Visibility::Private,
         vault: vault_of(&st, r.member_id).await,
+        client_code: r.client_code.clone(),
         estimates: estimates_of(&st, &auth, &r).await,
         no_history: t.estimate_no_history().to_string(),
         t,

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE recurring_rules SET client_code = ?2 WHERE id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "702c4e59b48789a705fec18b7b4ee9ce3cca3fbcf2316a85c9fca9ca7e83d64b"
+}

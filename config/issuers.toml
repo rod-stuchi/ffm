@@ -1,0 +1,55 @@
+# Issuer profiles — the small amount of per-biller config that is genuinely
+# necessary. Data, not code: a new biller is an edit here, not a recompile.
+#
+# A profile declares rules ONLY for the holes the barcode leaves open:
+#
+#   1. Who is this?           — never in the barcode
+#   2. The due date           — only when the barcode carries none
+#   3. The amount             — only when it is Open or Reference
+#   4. The client code        — never in the barcode, always a text read
+#
+# If the barcode answered it, the profile must not restate it. That is not
+# tidiness: a profile able to override a checksummed number is a profile able
+# to quietly post the wrong one.
+#
+# DETECT ON THE CNPJ, NOT THE TRADE NAME. Layouts get redesigned and brands get
+# renamed; the number in the footer does not move. The names below are real
+# companies but the CNPJs are PLACEHOLDERS — replace each one from an actual
+# bill before trusting the profile, and add a fixture under tests/fixtures/
+# while you have the bill open.
+
+[[issuer]]
+id        = "enel-sp"
+name      = "Energia · Enel SP"
+detect    = ['\b00\.?000\.?000/?0001-?00\b']   # ← replace from a real bill
+kind      = "consumo"
+recurring = "energia"
+
+# No [issuer.amount] and no [issuer.due_date]: a tipo-6 arrecadação barcode
+# carries both, and the free field carries the date.
+
+[issuer.client_code]
+regex = 'N[uú]mero do cliente:?\s*([\d-]{6,})'
+
+[[issuer]]
+id        = "sabesp"
+name      = "Água · Sabesp"
+detect    = ['\b00\.?000\.?000/?0001-?01\b']   # ← replace from a real bill
+kind      = "consumo"
+recurring = "agua"
+
+[issuer.client_code]
+regex = 'Matr[ií]cula:?\s*([\d-]{6,})'
+
+[[issuer]]
+id        = "cartao-exemplo"
+name      = "Cartão"
+detect    = ['\bFatura do cart[aã]o\b']
+kind      = "cobranca"
+
+# A card fatura's barcode carries zeros on purpose — the payer chooses between
+# the full total, the minimum and anything between — so this is one of the few
+# places a profile is genuinely allowed to read the amount off the page.
+[issuer.amount]
+when  = "open"
+regex = 'Total da fatura\s*R\$\s*([\d.,]+)'

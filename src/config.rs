@@ -93,6 +93,17 @@ struct Resolved {
 }
 
 impl Config {
+    /// Where the issuer profiles live — beside `ffm.toml`, because they are
+    /// the same tier: data an operator edits, read at the moment it is needed
+    /// rather than held in memory.
+    pub fn issuers_path(&self) -> std::path::PathBuf {
+        self.file
+            .as_ref()
+            .and_then(|f| f.parent())
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("config/issuers.toml")
+    }
+
     /// Reads `$FFM_CONFIG` (or `./ffm.toml`), lets the environment win, and
     /// validates. Any failure names the line to edit.
     pub fn load() -> Result<Config, ConfigError> {

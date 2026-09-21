@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", member_id AS \"member_id!: i64\",\n                  kind AS \"kind!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\",\n                  cadence_months AS \"cadence_months!: i64\",\n                  due_day AS \"due_day: i64\",\n                  start_date AS \"start_date!: String\",\n                  end_date AS \"end_date: String\",\n                  total_installments AS \"total_installments: i64\",\n                  carry_forward_amount AS \"carry_forward_amount!: i64\",\n                  tracked AS \"tracked!: i64\",\n                  bucket AS \"bucket: String\", bill_name AS \"bill_name: String\",\n                  instance AS \"instance: String\",\n                  no_barcode AS \"no_barcode!: i64\", varies AS \"varies!: i64\",\n                  spans_period AS \"spans_period!: i64\",\n                  window_size AS \"window_size: i64\",\n                  window_start AS \"window_start: String\",\n                  estimate_basis AS \"estimate_basis!: String\",\n                  estimate_window AS \"estimate_window!: i64\",\n                  amount_in_filename AS \"amount_in_filename!: i64\",\n                  visibility AS \"visibility!: String\"\n           FROM recurring_rules WHERE id = ?1 AND deleted_at IS NULL",
+  "query": "SELECT id AS \"id!: i64\", member_id AS \"member_id!: i64\",\n                  kind AS \"kind!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\",\n                  cadence_months AS \"cadence_months!: i64\",\n                  due_day AS \"due_day: i64\",\n                  start_date AS \"start_date!: String\",\n                  end_date AS \"end_date: String\",\n                  total_installments AS \"total_installments: i64\",\n                  carry_forward_amount AS \"carry_forward_amount!: i64\",\n                  tracked AS \"tracked!: i64\",\n                  bucket AS \"bucket: String\", bill_name AS \"bill_name: String\",\n                  instance AS \"instance: String\",\n                  no_barcode AS \"no_barcode!: i64\", varies AS \"varies!: i64\",\n                  client_code AS \"client_code: String\",\n                  spans_period AS \"spans_period!: i64\",\n                  window_size AS \"window_size: i64\",\n                  window_start AS \"window_start: String\",\n                  estimate_basis AS \"estimate_basis!: String\",\n                  estimate_window AS \"estimate_window!: i64\",\n                  amount_in_filename AS \"amount_in_filename!: i64\",\n                  visibility AS \"visibility!: String\"\n           FROM recurring_rules WHERE id = ?1 AND deleted_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -89,38 +89,43 @@
         "type_info": "Integer"
       },
       {
-        "name": "spans_period!: i64",
+        "name": "client_code: String",
         "ordinal": 17,
-        "type_info": "Integer"
+        "type_info": "Text"
       },
       {
-        "name": "window_size: i64",
+        "name": "spans_period!: i64",
         "ordinal": 18,
         "type_info": "Integer"
       },
       {
-        "name": "window_start: String",
+        "name": "window_size: i64",
         "ordinal": 19,
-        "type_info": "Text"
+        "type_info": "Integer"
       },
       {
-        "name": "estimate_basis!: String",
+        "name": "window_start: String",
         "ordinal": 20,
         "type_info": "Text"
       },
       {
-        "name": "estimate_window!: i64",
+        "name": "estimate_basis!: String",
         "ordinal": 21,
-        "type_info": "Integer"
+        "type_info": "Text"
       },
       {
-        "name": "amount_in_filename!: i64",
+        "name": "estimate_window!: i64",
         "ordinal": 22,
         "type_info": "Integer"
       },
       {
-        "name": "visibility!: String",
+        "name": "amount_in_filename!: i64",
         "ordinal": 23,
+        "type_info": "Integer"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 24,
         "type_info": "Text"
       }
     ],
@@ -145,6 +150,7 @@
       true,
       false,
       false,
+      true,
       false,
       true,
       true,
@@ -154,5 +160,5 @@
       false
     ]
   },
-  "hash": "9b2ff2d2fdcc8bf40b2f531ae0ab1d6657e25ce070ba596a3388dd0e0c757baf"
+  "hash": "b9196f0de9add438b3d8921f20259fb65749e8c3bf421fecedc8b6e65dd977e5"
 }

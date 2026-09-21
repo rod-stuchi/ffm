@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod csrf;
 pub mod files;
+pub mod import;
 pub mod ledger;
 pub mod log;
 pub mod rules;
@@ -62,6 +63,10 @@ pub fn router(state: AppState) -> Router {
         .route("/rules/{id}/edit", get(rules::edit_rule))
         .route("/rules/{id}", post(rules::save))
         .route("/rules/{id}/delete", post(rules::delete))
+        // The ONE place a barcode file is ever attached: the rule's own
+        // editor, where the rule is already identified.
+        .route("/rules/{id}/barcode", post(import::attach))
+        .route("/rules/{id}/unlink", post(import::unlink))
         // The settings surfaces. Vsplit panes with no Save button: every
         // control writes on `change`, so there is never a pending second copy
         // of the truth.
