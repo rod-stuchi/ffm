@@ -11,10 +11,11 @@
 use crate::db::ledger::{self, Pane};
 use crate::domain::period::Period;
 use crate::state::AppState;
+use crate::ui::fmt;
 use crate::ui::i18n::Catalog;
 use crate::ui::row::{RowCtx, RowView};
-use crate::ui::theme::{self, ModePref, ThemeName};
-use crate::ui::{fmt, i18n::Lang};
+use crate::ui::theme;
+use crate::web::session::Auth;
 use crate::web::template::Html;
 use askama::Template;
 use axum::extract::{Query, State};
@@ -43,6 +44,9 @@ pub struct PaneView {
 struct LedgerPage {
     theme_css: String,
     attr: Option<&'static str>,
+    me: String,
+    admin: bool,
+    previewing: bool,
     t: Catalog,
     household: String,
     period: String,
@@ -56,7 +60,11 @@ struct LedgerPage {
     empty: bool,
 }
 
-pub async fn ledger(State(st): State<AppState>, Query(p): Query<Params>) -> impl IntoResponse {
+pub async fn ledger(
+    State(st): State<AppState>,
+    auth: Auth,
+    Query(p): Query<Params>,
+) -> impl IntoResponse {
     let today = Local::now().date_naive();
     let period = p
         .period
@@ -65,18 +73,14 @@ pub async fn ledger(State(st): State<AppState>, Query(p): Query<Params>) -> impl
         .unwrap_or_else(|| Period::of(today));
 
     let house = ledger::household(&st.pool).await.unwrap_or(None);
-    let (name, currency, lang, show_recurring) = match &house {
-        Some(h) => (
-            h.name.clone(),
-            h.currency,
-            h.default_language,
-            h.show_recurring,
-        ),
-        // No household row means nobody has run /setup. That page does not
-        // exist yet, so say so plainly rather than rendering an empty ledger
-        // that looks like a household with no money.
-        None => ("FFM".to_string(), Default::default(), Lang::En, true),
+    let (name, currency, show_recurring) = match &house {
+        Some(h) => (h.name.clone(), h.currency, h.show_recurring),
+        None => ("FFM".to_string(), Default::default(), true),
     };
+    // Language is the SESSION member's, full stop — the pre-login cookie is
+    // never read on an authenticated request. Currency is the household's,
+    // because every member's rows feed the same totals. Two axes, two sources.
+    let lang = auth.settings.language;
 
     let ctx = RowCtx {
         today,
@@ -93,7 +97,9 @@ pub async fn ledger(State(st): State<AppState>, Query(p): Query<Params>) -> impl
     let mut outs = crate::domain::money::Cents::ZERO;
 
     for m in &members {
-        let Ok(pane) = ledger::pane(&st.pool, m, period, ctx).await else {
+        // Privacy is applied inside the query, so the rows and the totals
+        // below cannot disagree about what this viewer can see.
+        let Ok(pane) = ledger::pane(&st.pool, m, period, ctx, auth.viewer).await else {
             continue;
         };
         ins += pane.ins;
@@ -103,9 +109,17 @@ pub async fn ledger(State(st): State<AppState>, Query(p): Query<Params>) -> impl
 
     let net = ins - outs;
     Html(LedgerPage {
-        theme_css: theme::render(ThemeName::default(), ModePref::System, &Default::default())
-            .to_css(),
-        attr: None,
+        // The member's palette, the device's light/dark — two facts, two homes.
+        theme_css: theme::render(
+            auth.settings.theme,
+            auth.mode,
+            &auth.settings.theme_overrides,
+        )
+        .to_css(),
+        attr: auth.mode.attr(),
+        me: auth.session.member.name.clone(),
+        admin: auth.viewer.is_admin(),
+        previewing: auth.session.preview,
         household: name,
         period: fmt::period(period),
         prev: period.pred().to_string(),

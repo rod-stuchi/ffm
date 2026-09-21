@@ -24,6 +24,9 @@ axum = { version = "0.8", default-features = false, features = [
 # cookie, NOT cookie_private/signed: a session id is an opaque server-side row,
 # so there is nothing to sign.
 axum-extra = { version = "0.10", features = ["cookie"] }
+# Only for cookie Max-Age, which is what the `cookie` crate's API speaks. Not a
+# second date library: chrono still owns every date the app reasons about.
+time = "0.3"
 tokio = { version = "1", features = [
     "rt-multi-thread",
     "macros",

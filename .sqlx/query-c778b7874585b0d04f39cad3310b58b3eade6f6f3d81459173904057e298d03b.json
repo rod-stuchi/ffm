@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO household_settings\n               (id, name, locale_currency, default_language, default_visibility,\n                ledger_show_recurring, created_at, updated_at)\n           VALUES (1, ?1, ?2, ?3, 'household', 1, ?4, ?4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "c778b7874585b0d04f39cad3310b58b3eade6f6f3d81459173904057e298d03b"
+}

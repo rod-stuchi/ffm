@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO members (uuid, name, slug, password_hash, role, created_at)\n           VALUES (?1, ?2, ?3, ?4, 0, ?5)\n           RETURNING id AS \"id!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "615429774d8fb0ca65a3c05e4970d26265b1d2b7aad027fec1f0fe54b620fc9c"
+}

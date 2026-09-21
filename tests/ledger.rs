@@ -11,6 +11,7 @@ use ffm::db;
 use ffm::domain::money::{Cents, Currency};
 use ffm::domain::period::Period;
 use ffm::domain::status::RowStatus;
+use ffm::domain::viewer::Viewer;
 use ffm::ui::row::{Gutter, RowCtx};
 
 fn ctx() -> RowCtx {
@@ -42,9 +43,15 @@ async fn a_month_reads_back_as_the_household_typed_it() {
     assert!(members[0].is_admin, "role 0 is the admin");
 
     let sep = Period::parse("2026-09").unwrap();
-    let pane = db::ledger::pane(&pool, &members[0], sep, ctx())
-        .await
-        .unwrap();
+    let pane = db::ledger::pane(
+        &pool,
+        &members[0],
+        sep,
+        ctx(),
+        Viewer::new(members[0].id, true),
+    )
+    .await
+    .unwrap();
 
     // Manual order, not insertion order: ORDER BY sort_key is what J/K moves.
     assert_eq!(
@@ -80,9 +87,15 @@ async fn a_month_reads_back_as_the_household_typed_it() {
 async fn the_delta_matches_the_same_line_in_the_previous_period() {
     let pool = seeded().await;
     let me = &db::ledger::members(&pool).await.unwrap()[0];
-    let pane = db::ledger::pane(&pool, me, Period::parse("2026-09").unwrap(), ctx())
-        .await
-        .unwrap();
+    let pane = db::ledger::pane(
+        &pool,
+        me,
+        Period::parse("2026-09").unwrap(),
+        ctx(),
+        Viewer::new(me.id, true),
+    )
+    .await
+    .unwrap();
 
     let by = |t: &str| pane.rows.iter().find(|r| r.title == t).unwrap();
 
@@ -112,9 +125,15 @@ async fn installments_count_occurrences_up_to_this_period() {
     let me = &db::ledger::members(&pool).await.unwrap()[0];
 
     for (period, want) in [("2026-08", 1), ("2026-09", 2)] {
-        let pane = db::ledger::pane(&pool, me, Period::parse(period).unwrap(), ctx())
-            .await
-            .unwrap();
+        let pane = db::ledger::pane(
+            &pool,
+            me,
+            Period::parse(period).unwrap(),
+            ctx(),
+            Viewer::new(me.id, true),
+        )
+        .await
+        .unwrap();
         let car = pane
             .rows
             .iter()
@@ -132,9 +151,15 @@ async fn a_tracked_row_with_no_file_reads_pending_not_paid() {
     // inheriting a claim from the database.
     let pool = seeded().await;
     let me = &db::ledger::members(&pool).await.unwrap()[0];
-    let pane = db::ledger::pane(&pool, me, Period::parse("2026-09").unwrap(), ctx())
-        .await
-        .unwrap();
+    let pane = db::ledger::pane(
+        &pool,
+        me,
+        Period::parse("2026-09").unwrap(),
+        ctx(),
+        Viewer::new(me.id, true),
+    )
+    .await
+    .unwrap();
 
     let energia = pane
         .rows
@@ -154,11 +179,13 @@ async fn a_tracked_row_with_no_file_reads_pending_not_paid() {
     assert_eq!(internet.status(), RowStatus::ManualPaid);
 
     // Income runs on its own axis and never borrows a spend word.
+    let her = db::ledger::members(&pool).await.unwrap()[1].clone();
     let consult = db::ledger::pane(
         &pool,
-        &db::ledger::members(&pool).await.unwrap()[1],
+        &her,
         Period::parse("2026-09").unwrap(),
         ctx(),
+        Viewer::new(her.id, false),
     )
     .await
     .unwrap();
@@ -179,8 +206,14 @@ async fn a_private_row_is_still_read_here_and_filtered_later() {
     // leaks by making the numbers not add up.
     let pool = seeded().await;
     let me = &db::ledger::members(&pool).await.unwrap()[0];
-    let pane = db::ledger::pane(&pool, me, Period::parse("2026-09").unwrap(), ctx())
-        .await
-        .unwrap();
+    let pane = db::ledger::pane(
+        &pool,
+        me,
+        Period::parse("2026-09").unwrap(),
+        ctx(),
+        Viewer::new(me.id, true),
+    )
+    .await
+    .unwrap();
     assert!(pane.rows.iter().any(|r| r.flags.private));
 }

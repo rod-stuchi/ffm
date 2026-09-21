@@ -1,7 +1,9 @@
 //! The store. One SQLite file, one process, one household.
 
+pub mod auth;
 pub mod changes;
 pub mod ledger;
+pub mod settings;
 
 use crate::config::Config;
 use sqlx::SqlitePool;

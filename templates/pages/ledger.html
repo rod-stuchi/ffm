@@ -25,10 +25,23 @@
       <a class="btn" href="?period={{ next }}" title="next month">›</a>
     </nav>
     <div class="htotals">
+      <span class="who">{{ me }}</span>
+      {#- ADMIN ↔ PREVIEW. Clicking it switches this session's own admin powers
+          off, which is not impersonation: same member, same pane, own private
+          rows still fully visible. Reversible any time, nothing destructive,
+          so no confirmation. -#}
+      {%- if admin || previewing %}
+      <form method="post" action="/preview" class="signout">
+        <button class="btn badge{% if previewing %} is-preview{% endif %}" type="submit">{% if previewing %}PREVIEW{% else %}ADMIN{% endif %}</button>
+      </form>
+      {%- endif %}
       <span><i>IN</i> <b class="pos">{{ ins }}</b></span>
       <span><i>OUT</i> <b class="neg">{{ outs }}</b></span>
       <span><i>NET</i> <b class="{% if net_negative %}neg{% else %}pos{% endif %}">{% if net_negative %}−{% endif %}{{ net }}</b></span>
     </div>
+    <form method="post" action="/logout" class="signout">
+      <button class="btn" type="submit">{{ t.sign_out() }}</button>
+    </form>
   </header>
 
   {%- if empty %}

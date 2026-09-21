@@ -892,12 +892,20 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   CSRF defense at this scale. Revisit all of this if this is ever exposed to the
   open internet.
 - **The `HX-Request` CSRF check is for *authenticated* routes only.** `/login`,
-  `/setup`, `/invite/:token` and `/lang` are plain form POSTs and never carry
-  that header, so a blanket middleware would reject all four and make the app
-  impossible to enter. They rely on `SameSite=Lax` alone — sound here, because a
+  `/setup`, `/invite/:token`, `/lang` and `/theme` are plain form POSTs and never
+  carry that header, so a blanket middleware would reject all five and make the
+  app impossible to enter. They rely on `SameSite=Lax` alone — sound here, because a
   forged login POST gains an attacker nothing, `/lang` has no security value, and
   setup and invite-accept are single-use by construction. **This is written down
   because the obvious "fix" is to apply the check everywhere.**
+- **The check accepts `Sec-Fetch-Site: same-origin` as well as `HX-Request` —
+  an amendment, made while building it.** Requiring the HTMX header alone would
+  mean a control has to be HTMX *before* it can be safe, which is backwards: a
+  plain `<form>` is the more robust thing, and `/logout` and `/preview` are
+  plain forms. Browsers attach `Sec-Fetch-Site` to form posts and a page on
+  another origin cannot forge it, so it proves the same fact. A request with
+  neither header is allowed through, because refusing would break a client with
+  no way to comply and `SameSite=Lax` is still standing behind it.
 - **No self-registration, and no `/signup` route.** Household membership is
   closed. An admin (role 0) issues a single-use invite link; the person accepting
   it sets their **own** name and password. An admin never types somebody else's

@@ -1,0 +1,73 @@
+{#- The pre-auth shell — the one layout outside the .app grid.
+
+    Two things here are load-bearing rather than cosmetic:
+
+    * The chrome strip is LAST in the DOM and painted first with `order:-1`, so
+      Tab from the final field reaches Submit rather than the language switcher,
+      with no tabindex anywhere.
+    * Nothing reads a `layout_*` value. There is no member row before you sign
+      in; the card is sized in plain CSS. -#}
+<!doctype html>
+<html lang="{{ chrome.lang_code }}"{% if let Some(a) = chrome.attr %} data-theme="{{ a }}"{% endif %}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ chrome.household }}</title>
+<link rel="stylesheet" href="/static/css/build.css">
+{#- The 11 tokens as the full light/dark triple. An anonymous visitor has
+    nowhere to keep a palette choice, so this is always the bundled `ffm` one —
+    but their light/dark still applies, which is the whole reason the two facts
+    live in different places. -#}
+<style id="ffm-theme">{{ chrome.theme_css|safe }}</style>
+</head>
+<body>
+<div class="auth">
+
+  <div class="auth-stage">
+    {% block card %}{% endblock %}
+  </div>
+
+  {#- The same statusline channel the app uses after login, minus the mode
+      badge: a mode badge with no modes is a lie. -#}
+  <div class="status">
+    <div class="st">{{ chrome.where_label }} · {{ chrome.household_slug }}</div>
+    <div class="st grow msg{% if chrome.msg_bad %} bad{% endif %}">{{ chrome.msg }}</div>
+    <div class="st right">{{ chrome.lang_code }} · ffm</div>
+  </div>
+
+  <div class="auth-chrome">
+    <span class="brand">ffm</span>
+    <div class="ctl">
+      {#- Plain forms, not fetch(): they set a cookie and redirect, so the next
+          page's first byte is already right. Works with JS off and with HTMX
+          absent, which is the point. -#}
+      <form method="post" action="/lang">
+        <input type="hidden" name="next" value="{{ chrome.path }}">
+        <input type="hidden" name="lang" value="{{ chrome.next_lang }}">
+        <button class="btn" type="submit" title="{{ t.auth_lang_switch() }}">{{ chrome.lang_label }}</button>
+      </form>
+      <kbd>Alt-L</kbd>
+      <form method="post" action="/theme">
+        <input type="hidden" name="next" value="{{ chrome.path }}">
+        <input type="hidden" name="mode" value="{{ chrome.next_mode }}">
+        <button class="btn" type="submit">{{ chrome.mode_label }}</button>
+      </form>
+      <kbd>Alt-T</kbd>
+    </div>
+  </div>
+</div>
+
+{#- Alt-combinations, never bare letters: pre-auth is not modal, so a bare key
+    would be swallowed the moment somebody types it into a password field. -#}
+<script>
+document.addEventListener('keydown', function (e) {
+  if (!e.altKey || e.ctrlKey || e.metaKey) return;
+  var k = e.key.toLowerCase();
+  var form = k === 'l' ? 'lang' : k === 't' ? 'theme' : null;
+  if (!form) return;
+  e.preventDefault();
+  document.querySelector('form[action="/' + form + '"]').submit();
+});
+</script>
+</body>
+</html>

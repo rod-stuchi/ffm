@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE member_invites SET accepted_at = ?2, accepted_member_id = ?3\n           WHERE id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "5e082fe4c4e63c60198409e3eef57d73a3f7a5700aa4ae087ce1ca7f0a48657b"
+}

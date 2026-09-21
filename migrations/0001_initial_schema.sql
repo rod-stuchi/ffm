@@ -75,7 +75,17 @@ CREATE TABLE sessions (
     member_id     INTEGER NOT NULL REFERENCES members(id),
     created_at    TEXT    NOT NULL,
     last_seen_at  TEXT    NOT NULL,                   -- sliding expiry
-    label         TEXT                                -- derived from User-Agent, so :profile can name a device
+    label         TEXT,                               -- derived from User-Agent, so :profile can name a device
+
+    -- Preview-as-non-admin: this admin has switched their OWN admin powers off
+    -- to see what a member sees. Deliberately NOT impersonation — same session,
+    -- same member, same pane, own private rows still fully visible; the only
+    -- thing it changes is whether admin-only visibility and actions are in
+    -- effect. It lives on the session rather than in a cookie because it
+    -- decides what DATA comes back, which makes it the server's business.
+    preview       INTEGER NOT NULL DEFAULT 0,
+
+    CHECK (preview IN (0, 1))
 );
 
 CREATE INDEX idx_sessions_member ON sessions(member_id);

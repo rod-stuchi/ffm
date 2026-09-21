@@ -97,18 +97,58 @@ reversed while the original stays, every action the API can spell is one the
 schema accepts — and a hand-written bad pair is refused, so that last test is
 not vacuous.
 
-## Phase 4 ★ — auth, sessions, the pre-auth shell, `Viewer`
+## Phase 4 ★ — auth, sessions, the pre-auth shell, `Viewer` ✅
 
-**Privacy filtering is the most expensive retrofit on the list**: a `WHERE`
-clause on every read *and* a predicate inside every total, because a hidden row
-must not leak by making the numbers fail to add up.
+**Privacy filtering was the reason this came before any mutation work**: it is a
+`WHERE` clause on every read *and* a predicate inside every total, because a row
+filtered out of the list but still counted in the balance announces its own
+existence.
 
-- `/setup` (one sectioned form, one POST, one transaction), `/invite/:token`,
-  `/login`, `/lang`. No `/signup`, ever.
-- `sessions` table + opaque `HttpOnly` cookie. `HX-Request` CSRF check on
-  **authenticated** routes only — a blanket middleware breaks all four plain
-  form POSTs and makes the app impossible to enter.
-- `Viewer` carries member id, role and whether preview-as-non-admin is on.
+- **`domain::viewer::Viewer`** — member id, role, preview. In `domain` rather
+  than `web` because the same answer has to be given by the query and by the
+  sum. `is_admin()` folds preview in, so preview mode is one flag instead of a
+  hundred call sites to remember; `sees_private_of()` grants visibility by
+  ownership independent of role, which is what makes preview a *view* rather
+  than an impersonation.
+- **Privacy is applied once, in the SELECT**, and the totals are summed from the
+  rows it returned. There is no second predicate to keep in step because there
+  is no second predicate.
+- **`db::auth`** — Argon2 passwords, SHA-256 invite tokens (deliberately *not*
+  Argon2: nothing to brute-force in 256 bits, and a slow hash on every
+  `GET /invite/:token` is a self-inflicted DoS), a real `sessions` table with
+  sliding `last_seen_at`, and `sessions.preview` so one browser can preview
+  while another does not.
+- **`/setup`** — one sectioned form, one POST, one transaction creating
+  `household_settings` + `members` + `member_settings` + `sessions` or nothing.
+  The freshness check runs *inside* that transaction, so two browsers racing the
+  form cannot both create an admin.
+- **`/invite/:token`** — the members row is created on **accept**, which is why
+  `password_hash` stays `NOT NULL`. Single-use; a used, expired or unknown token
+  renders a page with no form at all.
+- **Resets share the mechanism** (`member_invites.member_id` non-null) and ask
+  for password + confirm only. Issuing one revokes every session that member has
+  and writes `password_reset` + `sessions_revoked` to the change log — phase 3
+  existing first is what made that possible.
+- **`/login`**, one error message for both halves; **`/logout`**; **`/lang`** and
+  **`/theme`** as plain form posts setting cookies and redirecting, so the first
+  byte of the next page is already right with zero JS.
+- **The `.auth` shell**, ported from the mockup: chrome strip last in the DOM and
+  painted first with `order:-1` so Tab reaches Submit, `safe center` so a tall
+  card stays reachable, `12vh` on a phone so the card is not under the keyboard,
+  the 11-palette picker as a real `<fieldset>` of radios. It reads no `layout_*`
+  value — there is no member row before you sign in. Shared components went to
+  `static/css/ui.css`, which the app shell will reuse.
+- **CSRF** — `SameSite=Lax` plus a same-origin check on authenticated
+  state-changing routes only. See the amendment in `CLAUDE.md`: the check also
+  accepts `Sec-Fetch-Site`, so a plain `<form>` can be safe without being HTMX
+  first.
+
+`tests/auth.rs` — 13 tests: setup is genuinely once-only, the seeded household
+cannot be signed into, one device revokes without touching the others, an invite
+creates nobody until it is accepted, a taken name is refused but the link
+survives, a reset renames nobody and is logged, a second reset click replaces the
+first, and — the two that matter most — a private row is absent from the list
+*and* the totals, and an admin sees everyone until they preview.
 
 ## Phase 5 ★ — mutations and the optimistic-UI flow
 

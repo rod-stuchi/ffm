@@ -1,0 +1,8 @@
+{#- One palette in the picker. A real radio inside a label, so ←/→ walk the
+    fieldset natively — do not rebuild this as a grid of buttons and then
+    reimplement arrow keys. -#}
+<label class="swatch">
+  <input type="radio" name="theme" value="{{ s.key }}"{% if s.selected %} checked{% endif %}>
+  <span class="bars">{% for c in s.bars %}<i style="background:{{ c }}"></i>{% endfor %}</span>
+  <span class="nm">{{ s.label }}</span>
+</label>

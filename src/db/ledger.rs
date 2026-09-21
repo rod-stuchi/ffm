@@ -14,6 +14,7 @@
 use crate::domain::money::{Cents, Currency};
 use crate::domain::period::Period;
 use crate::domain::status::{RowFlags, RowState, TxKind, Visibility};
+use crate::domain::viewer::Viewer;
 use crate::ui::i18n::Lang;
 use crate::ui::row::{FilePresence, Gutter, LedgerRow, RowCtx};
 use chrono::NaiveDate;
@@ -99,20 +100,29 @@ pub async fn members(pool: &SqlitePool) -> sqlx::Result<Vec<Member>> {
         .collect())
 }
 
-/// One member's rows for one period, in stored manual order.
+/// One member's rows for one period, in stored manual order, as **this viewer**
+/// is allowed to see them.
 ///
 /// Soft-deleted rows are left out here. They are not gone — nothing is — but
 /// the pane is what the household reads every day, and a deleted row comes back
 /// into it through `u`, which is the mutation phase's job rather than this
 /// query's.
+///
+/// Privacy is applied **once**, in the SELECT, and the totals are then summed
+/// from the rows it returned. That is deliberate and load-bearing: filtering
+/// the list in one place and the sum in another is how a hidden row announces
+/// itself by making the numbers fail to add up. There is no second predicate
+/// to keep in step because there is no second predicate.
 pub async fn pane(
     pool: &SqlitePool,
     member: &Member,
     period: Period,
     ctx: RowCtx,
+    viewer: Viewer,
 ) -> sqlx::Result<Pane> {
     let period_s = period.to_string();
     let prev_s = period.pred().to_string();
+    let sees_private = viewer.sees_private_of(member.id);
 
     let rows = sqlx::query!(
         r#"
@@ -166,11 +176,13 @@ pub async fn pane(
         WHERE t.member_id  = ?1
           AND t.period     = ?3
           AND t.deleted_at IS NULL
+          AND (t.visibility = 'household' OR ?4)
         ORDER BY t.sort_key
         "#,
         member.id,
         prev_s,
         period_s,
+        sees_private,
     )
     .fetch_all(pool)
     .await?;

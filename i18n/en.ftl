@@ -89,3 +89,84 @@ rows-moved =
         [one] moved 1 row { $dir }
        *[other] moved { $n } rows { $dir }
     }
+
+## Pre-auth chrome — shared by /login, /setup and /invite
+
+auth-brand-sub = household ledger
+auth-where-login = sign in
+auth-where-setup = first run
+auth-where-invite = invite
+auth-lang-switch = Language
+auth-theme-system = System
+auth-theme-light = Light
+auth-theme-dark = Dark
+auth-to-sign-in = Go to sign in
+
+## /login
+
+login-subtitle = Sign in to the household ledger.
+# The second half of the one error message: the copy rule says tell people what
+# to do about it, and a wrong name and a wrong password have the same answer.
+login-error-body = Check the name, or ask an admin for a new invite link.
+
+## /setup — first run only
+
+setup-step = 1 / 1
+setup-subtitle = Nobody has an account yet, so this first one is yours — and it is the admin.
+setup-household-hint = Shown on the sign-in page.
+# The date pattern is NOT written here: it is passed in from ui::fmt, which is
+# the only thing that decides it. A catalog that spelled it out would be a
+# second place for it to disagree.
+setup-note-axes = Dates are always { $format }. Money follows the currency you pick. Language only changes the words.
+setup-aside-signin = you will sign in with this
+setup-theme = Colour scheme
+setup-theme-hint = Change it any time in :profile.
+setup-line-numbers = Line numbers
+setup-nu-relative = Relative
+setup-nu-absolute = Absolute
+setup-nu-none = Off
+setup-storage-hint = Edit ffm.toml and restart to change these.
+setup-done-title = Already set up
+setup-done-body = This household already has members, so there is nothing to set up. Sign in instead, or ask an admin for an invite link.
+
+## Currency names. The FORMAT beside each one is rendered by ui::fmt::money
+## from the same table the ledger uses — never written out here.
+
+currency-brl = Real
+currency-usd = US dollar
+currency-eur = Euro
+currency-gbp = Pound
+
+## /invite/:token
+
+invite-subtitle = { $admin } invited you. Pick your own name and password — nobody else has seen this link.
+invite-name-hint = This is also your folder in the receipt vault, so it is easiest to get right now.
+invite-language = Language
+invite-language-hint = Dates and money do not change with this.
+invite-submit = Join the household
+invite-expiry = This link works once and expires { $date }.
+invite-used-title = This invite has already been used.
+invite-used-body = If that was not you, ask an admin to revoke it.
+invite-expired-title = This invite expired on { $date }.
+invite-expired-body = Ask an admin for a new link.
+invite-unknown-title = This link does not work.
+invite-unknown-body = Check you copied all of it, or ask an admin for a new one.
+
+## Password reset — the same link mechanism, pointed at a member who exists
+
+reset-title = Set a new password
+reset-subtitle = Your account is unchanged — only the password.
+reset-submit = Set the password
+
+## What a form refuses, and what to do about it
+
+field-required = { $field } cannot be empty.
+password-too-short = Use at least { $n } characters.
+password-mismatch = The two passwords do not match.
+name-taken = Somebody already uses that name.
+name-taken-body = Pick another — names are how everyone signs in, so they have to be unique.
+
+## Session
+
+sign-out = Sign out
+signed-out = Signed out.

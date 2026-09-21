@@ -29,7 +29,7 @@ VALUES (1, 'Casa Stuchi', 'BRL', 'pt-BR', 'household', 1,
 
 INSERT INTO members (id, uuid, name, slug, password_hash, role, created_at) VALUES
     (1, '7c3f1a20-0f1c-4a55-9a1b-2f0c9d5e1a01', 'Rodrigo', 'rodrigo', '!seed-cannot-sign-in', 0, '2026-01-04T10:00:00Z'),
-    (2, '4b8e2d31-6a77-4b12-8c90-1d7e3f4a2b02', 'Natália', 'natalia', '!seed-cannot-sign-in', 1, '2026-01-04T10:05:00Z'),
+    (2, '4b8e2d31-6a77-4b12-8c90-1d7e3f4a2b02', 'Natália', 'natália', '!seed-cannot-sign-in', 1, '2026-01-04T10:05:00Z'),
     (3, '9f1c7e42-2b53-4c88-b7a3-5e6d8c9f3c03', 'Miguel',  'miguel',  '!seed-cannot-sign-in', 1, '2026-02-11T19:20:00Z');
 
 INSERT INTO member_settings (member_id, language, theme_name) VALUES

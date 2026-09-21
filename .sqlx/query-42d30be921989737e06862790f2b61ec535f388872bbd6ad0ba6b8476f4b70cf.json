@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT i.id AS \"id!: i64\",\n                  i.member_id AS \"member_id: i64\",\n                  i.role AS \"role!: i64\",\n                  i.expires_at AS \"expires_at!: String\",\n                  i.accepted_at AS \"accepted_at: String\",\n                  i.revoked_at AS \"revoked_at: String\",\n                  a.name AS \"inviter!: String\"\n           FROM member_invites i\n           JOIN members a ON a.id = i.created_by\n           WHERE i.token_hash = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "role!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "expires_at!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "accepted_at: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "revoked_at: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "inviter!: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "42d30be921989737e06862790f2b61ec535f388872bbd6ad0ba6b8476f4b70cf"
+}

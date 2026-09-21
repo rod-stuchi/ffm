@@ -79,6 +79,30 @@
   margin-right: 4px;
 }
 
+.who {
+  color: var(--ink-3);
+}
+
+.signout {
+  display: contents;
+}
+
+/* The mode badge: accent for "you are here", the warning colour while admin
+ * powers are switched off — so the state is never ambiguous at a glance. */
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 4px 8px;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.badge.is-preview {
+  border-color: var(--neg);
+  color: var(--neg);
+}
+
 .pos {
   color: var(--pos);
 }

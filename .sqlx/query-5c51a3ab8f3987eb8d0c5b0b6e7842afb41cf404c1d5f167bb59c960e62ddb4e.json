@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM sessions WHERE member_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "5c51a3ab8f3987eb8d0c5b0b6e7842afb41cf404c1d5f167bb59c960e62ddb4e"
+}

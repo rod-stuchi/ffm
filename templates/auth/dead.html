@@ -1,0 +1,21 @@
+{% extends "auth/base.html" %}
+{#- A used, expired or unknown link renders a PAGE, never an error — and with
+    no form at all, because a disabled form invites retrying. One way onward. -#}
+{% block card %}
+<div class="card" style="max-width:440px">
+  <div class="ch"><h1>{{ chrome.household }}</h1></div>
+  <div class="cb">
+    {%- if note %}
+    <div class="notebox" style="margin-top:0">{{ body }}</div>
+    {%- else %}
+    <div class="warnbox">
+      <span class="g" aria-hidden="true">&#9888;</span>
+      <span><b>{{ title }}</b><span>{{ body }}</span></span>
+    </div>
+    {%- endif %}
+    <form method="get" action="/login">
+      <button class="btn wide" type="submit">{{ t.auth_to_sign_in() }}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

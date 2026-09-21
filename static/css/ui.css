@@ -1,0 +1,361 @@
+/* Components shared by both sides of the login.
+ *
+ * Ported near-verbatim from design/ffm-auth-mockup.html, which is itself the
+ * prototype's card/field/button language. They live here rather than in
+ * auth.css because the app shell reuses every one of them — the statusline is
+ * literally the same message channel, which is the point: there is one way the
+ * app talks to you before and after you sign in.
+ *
+ * Every colour is a var(--token); `just css-check` enforces that.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+kbd {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 1px 5px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* --- card ---------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  width: 100%;
+}
+
+.card .ch {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.card .ch h1 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.card .ch p {
+  margin: 2px 0 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.card .ch .step {
+  float: right;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.card .cb {
+  padding: 16px;
+}
+
+.card .cf {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* A section rule inside a long form — the same frame-and-label language groups
+ * use, rather than a per-section colour. */
+.sect {
+  margin: 20px 0 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sect::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.sect:first-child {
+  margin-top: 0;
+}
+
+/* --- fields -------------------------------------------------------------- */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.fgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 13px;
+}
+
+@media (max-width: 560px) {
+  .fgrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.f {
+  display: block;
+}
+
+.f .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.f .k .aside {
+  float: right;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--ink-3);
+  opacity: 0.85;
+}
+
+input.i,
+select.i {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  padding: 8px 10px;
+}
+
+/* The accent focus rail, unchanged from every other form in this app. */
+input.i:focus,
+select.i:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 5px;
+}
+
+fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+legend {
+  padding: 0;
+}
+
+.radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.radios label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: var(--paper);
+}
+
+.radios input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.radios label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.radios label:focus-within {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* --- buttons ------------------------------------------------------------- */
+
+.btn {
+  font-family: var(--sans);
+  font-size: 13px;
+  border-radius: 7px;
+  padding: 9px 14px;
+  cursor: pointer;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.btn:hover {
+  border-color: var(--accent-line);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn.pri {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
+  font-weight: 600;
+}
+
+.btn.wide {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 14px;
+  margin-top: 18px;
+}
+
+/* NOT a hardcoded white overlay: --paper IS the correct foreground on a
+ * semantic fill, and white breaks on the fifth theme rather than the first. */
+.btn kbd {
+  background: color-mix(in srgb, var(--paper) 22%, transparent);
+  border-color: transparent;
+  color: inherit;
+  margin-left: 8px;
+}
+
+/* --- message boxes ------------------------------------------------------- */
+
+.warnbox {
+  background: var(--neg-soft);
+  border: 1px solid var(--neg);
+  border-radius: 8px;
+  padding: 11px 12px;
+  font-size: 13px;
+  color: var(--ink);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.warnbox .g {
+  flex: none;
+  color: var(--neg);
+  line-height: 1;
+}
+
+.warnbox b {
+  display: block;
+}
+
+.notebox {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  margin-top: 14px;
+}
+
+/* --- statusline ---------------------------------------------------------- */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--surface-2);
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  min-height: 30px;
+}
+
+.st {
+  padding: 6px 11px;
+  color: var(--ink-2);
+  border-right: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.st.grow {
+  flex: 1;
+  border-right: none;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.st.msg {
+  color: var(--accent);
+}
+
+.st.msg.bad {
+  color: var(--neg);
+}
+
+.st.right {
+  border-right: none;
+  border-left: 1px solid var(--line);
+}
+
+@media (max-width: 700px) {
+  .st.right {
+    display: none;
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT language AS \"language!: String\",\n                  theme_name AS \"theme_name!: String\",\n                  theme_overrides AS \"theme_overrides!: String\",\n                  line_numbers AS \"line_numbers!: String\"\n           FROM member_settings WHERE member_id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "language!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "theme_name!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "theme_overrides!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "line_numbers!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "805d805da955877aa75de470400f7b1808349da6fa017dfa327e60b948590fc6"
+}

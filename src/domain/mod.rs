@@ -8,3 +8,4 @@ pub mod money;
 pub mod period;
 pub mod slug;
 pub mod status;
+pub mod viewer;

@@ -1,0 +1,69 @@
+{% extends "auth/base.html" %}
+{#- The same field grid as /setup's second section: one form, two entry points.
+    A reset drops everything but the password — that person is not new, renaming
+    is a vault move once files exist, and a reset has no business resetting
+    taste. -#}
+{% block card %}
+<form class="card" style="max-width:440px" method="post" action="{{ action }}">
+  <div class="ch">
+    <h1>{% if is_reset %}{{ t.reset_title() }}{% else %}{{ t.invite_title(chrome.household.as_str()) }}{% endif %}</h1>
+    <p>{% if is_reset %}{{ t.reset_subtitle() }}{% else %}{{ t.invite_subtitle(inviter.as_str()) }}{% endif %}</p>
+  </div>
+  <div class="cb">
+    {%- if let Some(err) = error %}
+    <div class="warnbox">
+      <span class="g" aria-hidden="true">&#9888;</span>
+      <span><b>{{ err.0 }}</b><span>{{ err.1 }}</span></span>
+    </div>
+    {%- endif %}
+    <div class="stack">
+      {%- if !is_reset %}
+      <label class="f">
+        <span class="k">
+          <span>{{ t.login_name() }}</span>
+          <span class="aside">{{ t.setup_aside_signin() }}</span>
+        </span>
+        <input class="i" name="name" value="{{ name }}" autocomplete="username" autofocus>
+        {#- Editable here and effectively nowhere else: members.slug is the
+            receipt vault's folder, so renaming once files exist is a vault
+            move. At accept time there are none, which makes this the one
+            moment it costs nothing. -#}
+        <span class="hint">{{ t.invite_name_hint() }}</span>
+      </label>
+      {%- endif %}
+      <div class="fgrid">
+        <label class="f">
+          <span class="k">{{ t.login_password() }}</span>
+          <input class="i" type="password" name="password" autocomplete="new-password"
+                 {% if is_reset %}autofocus{% endif %}>
+        </label>
+        <label class="f">
+          <span class="k">{{ t.setup_password_confirm() }}</span>
+          <input class="i" type="password" name="confirm" autocomplete="new-password">
+        </label>
+      </div>
+      {%- if !is_reset %}
+      <fieldset class="f">
+        <legend class="k">{{ t.invite_language() }}</legend>
+        <div class="radios">
+          {%- for l in languages %}
+          <label><input type="radio" name="language" value="{{ l.code }}"{% if l.selected %} checked{% endif %}> {{ l.label }}</label>
+          {%- endfor %}
+        </div>
+        <span class="hint">{{ t.invite_language_hint() }}</span>
+      </fieldset>
+      <fieldset class="f">
+        <legend class="k">{{ t.setup_theme() }}</legend>
+        <div class="swatches">
+          {%- for s in themes %}{% include "auth/swatch.html" %}{% endfor %}
+        </div>
+      </fieldset>
+      {%- endif %}
+    </div>
+    <button class="btn pri wide" type="submit">
+      <span>{% if is_reset %}{{ t.reset_submit() }}{% else %}{{ t.invite_submit() }}{% endif %}</span><kbd>&#9166;</kbd>
+    </button>
+  </div>
+  <div class="cf">{{ t.invite_expiry(expires.as_str()) }}</div>
+</form>
+{% endblock %}

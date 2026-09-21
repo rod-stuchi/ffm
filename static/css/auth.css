@@ -1,0 +1,165 @@
+/* The pre-auth shell — the one layout outside the .app grid.
+ *
+ * It must never read a layout_* value: there is no member row before you sign
+ * in, so the card is sized here in plain CSS.
+ */
+
+.auth {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+
+/* LAST in the DOM, painted FIRST. That is the whole trick: Tab from the final
+ * field reaches Submit rather than the language switcher, with no tabindex
+ * anywhere. */
+.auth-chrome {
+  order: -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.auth-chrome .brand {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-right: auto;
+}
+
+.auth-chrome .ctl {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.auth-chrome form {
+  display: contents;
+}
+
+.auth-chrome kbd {
+  display: inline-block;
+}
+
+@media (max-width: 700px) {
+  .auth-chrome kbd {
+    display: none;
+  }
+}
+
+/* `safe center` matters: a plain `center` on a card taller than the stage
+ * overflows equally top and bottom, and the top half is then unreachable —
+ * scroll containers cannot scroll above their start edge. */
+.auth-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: safe center;
+  padding: 28px 16px 44px;
+  overflow: auto;
+}
+
+/* On a phone the card is not vertically centred: centring it puts it under the
+ * software keyboard the moment a field takes focus. */
+@media (max-width: 560px) {
+  .auth-stage {
+    place-items: start center;
+    padding: 12vh 16px 32px;
+  }
+}
+
+/* --- the 11-palette picker ----------------------------------------------- */
+
+/* A real fieldset of radios, so arrow keys walk it natively. Do not rebuild
+ * this as a grid of buttons and then reimplement ←/→. */
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .swatches {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.swatch {
+  position: relative;
+  display: block;
+  cursor: pointer;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.swatch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.swatch .bars {
+  display: flex;
+  height: 22px;
+}
+
+.swatch .bars i {
+  flex: 1;
+}
+
+.swatch .nm {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  padding: 4px 6px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.swatch:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.swatch:has(input:checked) .nm {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.swatch:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* --- the operator's three keys, read-only -------------------------------- */
+
+.romount {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  align-items: baseline;
+}
+
+.romount b {
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.romount span {
+  color: var(--ink-2);
+  word-break: break-all;
+}

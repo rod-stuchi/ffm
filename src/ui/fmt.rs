@@ -80,6 +80,13 @@ pub fn money_filename(amount: Cents, currency: Currency) -> String {
     )
 }
 
+/// How this app writes a date, spelled out for copy that needs to *say* it.
+///
+/// It lives here rather than in the catalog on purpose: a `.ftl` containing a
+/// date pattern fails the build, precisely so there is one place that decides
+/// this. Copy interpolates it as an argument.
+pub const DATE_PATTERN: &str = "dd/mm/yyyy";
+
 /// `11/07/2026`. Fixed, forever, in every language.
 ///
 /// There is no locale parameter and there will not be one: a household reading

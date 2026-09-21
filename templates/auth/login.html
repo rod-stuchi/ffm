@@ -1,0 +1,39 @@
+{% extends "auth/base.html" %}
+{% block card %}
+<form class="card" style="max-width:380px" method="post" action="/login">
+  <div class="ch">
+    <h1>{{ chrome.household }}</h1>
+    <p>{{ t.login_subtitle() }}</p>
+  </div>
+  <div class="cb">
+    {%- if failed %}
+    <div class="warnbox">
+      <span class="g" aria-hidden="true">&#9888;</span>
+      <span>
+        <b>{{ t.login_error_mismatch() }}</b>
+        <span>{{ t.login_error_body() }}</span>
+      </span>
+    </div>
+    {%- endif %}
+    <div class="stack">
+      {#- The identifier is members.name, never an email: there is no mail
+          sender in this app, and `email` plays no part in signing in. -#}
+      <label class="f">
+        <span class="k">{{ t.login_name() }}</span>
+        <input class="i" name="name" autocomplete="username" value="{{ name }}"
+               {% if !failed %}autofocus{% endif %}>
+      </label>
+      <label class="f">
+        <span class="k">{{ t.login_password() }}</span>
+        {#- On failure the name is kept, the password cleared, and focus comes
+            back here — which is where the correction almost always is. -#}
+        <input class="i" type="password" name="password" autocomplete="current-password"
+               {% if failed %}autofocus{% endif %}>
+      </label>
+    </div>
+    <button class="btn pri wide" type="submit">
+      <span>{{ t.login_submit() }}</span><kbd>&#9166;</kbd>
+    </button>
+  </div>
+</form>
+{% endblock %}
