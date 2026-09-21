@@ -41,6 +41,24 @@ pub struct PaneTotals {
     pub negative: bool,
 }
 
+/// Money, with the tilde when any part of it is a projection.
+///
+/// The mark carries whether the money moved; the tilde carries whether the
+/// number is a fact. One channel per fact, as everywhere else — and the two
+/// are asked separately, so a confirmed income in an estimated pane still
+/// reads as the fact it is.
+fn money(
+    amount: crate::domain::money::Cents,
+    currency: crate::domain::money::Currency,
+    estimated: bool,
+) -> String {
+    if estimated {
+        fmt::money_estimated(amount, currency)
+    } else {
+        fmt::money(amount, currency)
+    }
+}
+
 pub struct HouseTotals {
     pub ins: String,
     pub outs: String,
@@ -66,19 +84,31 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
     let mut panes = Vec::new();
     let mut ins = crate::domain::money::Cents::ZERO;
     let mut outs = crate::domain::money::Cents::ZERO;
+    let mut any_estimated = false;
 
     for m in ledger::members(&st.pool).await.unwrap_or_default() {
-        let Ok(pane) = ledger::pane(&st.pool, &m, period, ctx, auth.viewer).await else {
+        let Ok(pane) = ledger::pane_with_vault(
+            &st.pool,
+            &m,
+            period,
+            ctx,
+            auth.viewer,
+            Some(&st.cfg.receipts_root),
+        )
+        .await
+        else {
             continue;
         };
         ins += pane.ins;
         outs += pane.outs;
+        any_estimated |= pane.estimated;
         let balance = pane.balance();
         panes.push(PaneTotals {
             id: m.id,
-            ins: fmt::money(pane.ins, currency),
+            ins: money(pane.ins, currency, pane.estimated),
+            // Only income varies, so OUTs are never a projection.
             outs: fmt::money(pane.outs, currency),
-            balance: fmt::money(balance.abs(), currency),
+            balance: money(balance.abs(), currency, pane.estimated),
             negative: balance.is_negative(),
         });
     }
@@ -87,9 +117,9 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
     (
         panes,
         HouseTotals {
-            ins: fmt::money(ins, currency),
+            ins: money(ins, currency, any_estimated),
             outs: fmt::money(outs, currency),
-            net: fmt::money(net.abs(), currency),
+            net: money(net.abs(), currency, any_estimated),
             negative: net.is_negative(),
         },
     )
@@ -169,6 +199,7 @@ pub async fn ledger(
     let mut panes = Vec::new();
     let mut ins = crate::domain::money::Cents::ZERO;
     let mut outs = crate::domain::money::Cents::ZERO;
+    let mut any_estimated = false;
 
     for m in &members {
         // Privacy is applied inside the query, so the rows and the totals
@@ -187,6 +218,7 @@ pub async fn ledger(
         };
         ins += pane.ins;
         outs += pane.outs;
+        any_estimated |= pane.estimated;
         panes.push(view(pane, &t, currency));
     }
 
@@ -215,9 +247,9 @@ pub async fn ledger(
         empty: panes.is_empty(),
         panes,
         house: HouseTotals {
-            ins: fmt::money(ins, currency),
+            ins: money(ins, currency, any_estimated),
             outs: fmt::money(outs, currency),
-            net: fmt::money(net.abs(), currency),
+            net: money(net.abs(), currency, any_estimated),
             negative: net.is_negative(),
         },
         t,
@@ -231,9 +263,9 @@ fn view(pane: Pane, t: &Catalog, currency: crate::domain::money::Currency) -> Pa
         name: pane.member.name,
         totals: PaneTotals {
             id: pane.member.id,
-            ins: fmt::money(pane.ins, currency),
+            ins: money(pane.ins, currency, pane.estimated),
             outs: fmt::money(pane.outs, currency),
-            balance: fmt::money(balance.abs(), currency),
+            balance: money(balance.abs(), currency, pane.estimated),
             negative: balance.is_negative(),
         },
         rows: pane.rows.into_iter().map(|r| r.view(t)).collect(),

@@ -219,3 +219,4 @@ file-page-outside = página { $page } — fora das { $total } páginas deste arq
 rule-spans-period = O código de barras cobre vários meses
 rule-window-size = Páginas neste arquivo
 rule-window-start = A primeira página é de
+estimate-no-history = nenhum mês confirmado ainda — usa o valor da própria regra

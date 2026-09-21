@@ -84,6 +84,17 @@ pub struct RulePane {
     /// The member's vault folder, so the computed path shown in the pane is
     /// the real one rather than a prefix-less approximation.
     vault: String,
+    /// One ready-made projection per basis: `(basis, "~R$ 5.033,33",
+    /// "08/2026 · 07/2026 · 06/2026")`.
+    ///
+    /// Computed and **formatted server-side**, by the same `domain::estimate`
+    /// and `ui::fmt::money` the ledger uses. The pane only chooses which one
+    /// to show as the radio changes — it never does the arithmetic, and it
+    /// certainly never formats money, which would put the household's currency
+    /// convention in a second place to drift.
+    estimates: Vec<(String, String, String)>,
+    /// What the estimate box says with nothing behind it yet.
+    no_history: String,
 }
 
 fn cadences(t: &Catalog, selected: i64) -> Vec<CadenceChoice> {
@@ -156,6 +167,10 @@ pub async fn new_rule(
         amount_in_filename: false,
         private: false,
         vault: vault_of(&st, p.member_id).await,
+        // A brand-new rule has no history to project from; the box says so
+        // rather than showing a number with nothing behind it.
+        estimates: Vec::new(),
+        no_history: t.estimate_no_history().to_string(),
         t,
     })
     .into_response()
@@ -211,9 +226,96 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         amount_in_filename: r.amount_in_filename,
         private: r.visibility == Visibility::Private,
         vault: vault_of(&st, r.member_id).await,
+        estimates: estimates_of(&st, &auth, &r).await,
+        no_history: t.estimate_no_history().to_string(),
         t,
     })
     .into_response()
+}
+
+/// The confirmed periods behind a varying income, formatted for the pane.
+///
+/// Read through the same pane query the ledger uses, so "confirmed" means
+/// exactly what it means everywhere else: a payslip on disk for a tracked
+/// rule, the manual tick for an untracked one.
+async fn estimates_of(
+    st: &AppState,
+    auth: &Auth,
+    rule: &rules::Rule,
+) -> Vec<(String, String, String)> {
+    if !rule.varies {
+        return Vec::new();
+    }
+    let Ok(members) = ledger::members(&st.pool).await else {
+        return Vec::new();
+    };
+    let Some(member) = members.into_iter().find(|m| m.id == rule.member_id) else {
+        return Vec::new();
+    };
+    let house = ledger::household(&st.pool).await.ok().flatten();
+    let currency = house.map(|h| h.currency).unwrap_or_default();
+
+    let today = Local::now().date_naive();
+    let mut history: Vec<crate::domain::estimate::Confirmed> = Vec::new();
+    let mut labels: Vec<String> = Vec::new();
+    // A year back is enough to fill any window the form offers, and bounded —
+    // the same instinct as the unresolved badge's calendar-year lookback.
+    let mut period = Period::of(today);
+    for _ in 0..12 {
+        period = period.pred();
+        let ctx = crate::ui::row::RowCtx {
+            today,
+            currency,
+            show_recurring: true,
+            show_delta: false,
+            narrow: false,
+        };
+        let Ok(pane) = ledger::pane_with_vault(
+            &st.pool,
+            &member,
+            period,
+            ctx,
+            auth.viewer,
+            Some(&st.cfg.receipts_root),
+        )
+        .await
+        else {
+            continue;
+        };
+        for row in pane.rows.iter().filter(|r| r.rule_id == Some(rule.id)) {
+            if let (true, Some(cents)) = (row.is_confirmed(), row.amount_cents) {
+                history.push(crate::domain::estimate::Confirmed {
+                    period: period.to_string(),
+                    amount: cents,
+                });
+                labels.push(crate::ui::fmt::period(period));
+            }
+        }
+    }
+
+    let window = rule.estimate_window.clamp(1, 12) as usize;
+    let from = labels
+        .iter()
+        .take(window)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" · ");
+
+    [
+        crate::domain::estimate::Basis::Lowest,
+        crate::domain::estimate::Basis::Average,
+        crate::domain::estimate::Basis::Last,
+    ]
+    .into_iter()
+    .filter_map(|basis| {
+        let p = crate::domain::estimate::project(&history, basis, window, rule.amount)?;
+        Some((
+            basis.code().to_string(),
+            crate::ui::fmt::money_estimated(p.amount, currency),
+            from.clone(),
+        ))
+    })
+    .collect()
 }
 
 async fn vault_of(st: &AppState, member_id: i64) -> String {

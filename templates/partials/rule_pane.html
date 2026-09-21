@@ -101,12 +101,20 @@
       <div class="f" x-show="varies" x-cloak>
         <span class="k">{{ t.rule_estimate_basis() }}</span>
         <div class="radios">
-          <label><input type="radio" name="estimate_basis" value="lowest"{% if estimate_basis == "lowest" %} checked{% endif %}> {{ t.rule_estimate_lowest() }}</label>
-          <label><input type="radio" name="estimate_basis" value="average"{% if estimate_basis == "average" %} checked{% endif %}> {{ t.rule_estimate_average() }}</label>
-          <label><input type="radio" name="estimate_basis" value="last"{% if estimate_basis == "last" %} checked{% endif %}> {{ t.rule_estimate_last() }}</label>
+          <label><input type="radio" name="estimate_basis" value="lowest"{% if estimate_basis == "lowest" %} checked{% endif %} x-model="basis"> {{ t.rule_estimate_lowest() }}</label>
+          <label><input type="radio" name="estimate_basis" value="average"{% if estimate_basis == "average" %} checked{% endif %} x-model="basis"> {{ t.rule_estimate_average() }}</label>
+          <label><input type="radio" name="estimate_basis" value="last"{% if estimate_basis == "last" %} checked{% endif %} x-model="basis"> {{ t.rule_estimate_last() }}</label>
         </div>
         <span class="hint">{{ t.rule_estimate_window(*estimate_window) }}</span>
         <input type="hidden" name="estimate_window" value="{{ estimate_window }}">
+
+        {#- Mirrors the computed-path box: the projected figure bright on the
+            first line, the months it came from dim on the second, both
+            recomputing live as the basis changes — before anything is saved. -#}
+        <div class="pathbox">
+          <span class="p1" x-text="estimate()"></span>
+          <span class="p2" x-text="estimateFrom()"></span>
+        </div>
       </div>
       {%- endif %}
 
@@ -212,6 +220,7 @@ function rulePane() {
     instance: {{ instance|json|safe }},
     tracked: {{ tracked }},
     noBarcode: {{ no_barcode }},
+    noHistory: {{ no_history|json|safe }},
     spans: {{ spans_period }},
     varies: {{ varies }},
     cadence: Number(document.querySelector('[name=cadence_months]')?.value || 1),
@@ -219,6 +228,13 @@ function rulePane() {
     end: {{ end|json|safe }},
     installments: {{ installments|json|safe }},
     vault: {{ vault|json|safe }},
+    // [basis, formatted money, the months it came from] — one ready-made
+    // projection per basis, computed and formatted by the SERVER. The pane
+    // only chooses which to show; it never does the arithmetic and never
+    // formats money, which would put the household's currency convention in a
+    // second place to drift.
+    estimates: {{ estimates|json|safe }},
+    basis: document.querySelector('[name=estimate_basis]:checked')?.value || 'lowest',
     // The month the ledger is SHOWING, not the rule's start: the path preview
     // is about "where would this period's receipt go", and the pane is read
     // beside the rows it belongs to.
@@ -243,6 +259,16 @@ function rulePane() {
       const [y, m] = this.period.split('-');
       parts.push(y);
       return parts.join('/') + '/' + m + '.pdf';
+    },
+
+    estimate() {
+      const hit = this.estimates.find(e => e[0] === this.basis);
+      return hit ? hit[1] : this.noHistory;
+    },
+
+    estimateFrom() {
+      const hit = this.estimates.find(e => e[0] === this.basis);
+      return hit ? hit[2] : '';
     },
 
     digitsOnly(e) {

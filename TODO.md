@@ -282,10 +282,45 @@ yet"), so the focused row grows a `+` control opening a three-item menu. The
 server side is settled — three endpoints, one per kind — but the affordance is
 a placeholder for a real design decision, listed below.
 
-## Phase 8 ★ — income estimates and the `~`
+## Phase 8 ★ — income estimates and the `~` ✅
 
-Every money surface must accept an `estimated` flag. `fmt::money` already takes
-it from phase 1, so this is plumbing rather than surgery.
+- **`domain::estimate`** — the projection, pure and unit-tested. `lowest` is
+  the default on purpose: for income the dangerous error is over-estimating,
+  which produces a shortfall the household then has to absorb. `average`
+  truncates, which rounds *down*, the same instinct.
+- **Only confirmed periods feed it**, where confirmed means exactly what it
+  means everywhere else: a payslip on disk for a tracked rule, the manual tick
+  for an untracked one. An unconfirmed month is skipped, never folded in —
+  otherwise two in a row project a guess from another guess. The candidate list
+  reaches past skipped months so a window of three finds three *real* ones.
+- **The projection is never written down.** A varying rule does not carry an
+  amount forward, so the stored value stays NULL and the number on screen is
+  derived on read — which is what lets it follow new history instead of
+  freezing an old guess, and why it never writes a spurious "amount changed"
+  entry into the log.
+- **The totals include it and say so.** The pane's INs and Balance and the
+  household's IN and NET carry the `~` when any component is a projection.
+  Leaving projections out would make a future month's balance useless; putting
+  them in unmarked would present a guess as a fact. OUTs never carry it —
+  only income varies.
+- **A projection gets no delta**: comparing a guess against a fact is not a
+  comparison worth drawing. Confirmed, it compares like any other recurring
+  income, with the colour inverted so a raise never paints itself red.
+- **The rule pane's estimate box mirrors the computed-path box** — the figure
+  bright on the first line, the months it came from dim on the second, both
+  recomputing as the basis changes, before anything is saved.
+
+`tests/estimates.rs` — 8 tests, including the skipped unconfirmed month, each
+basis, the first-period fallback, and the totals carrying the projection rather
+than the stored baseline.
+
+One thing the browser caught that the tests did not: the pane first computed
+the average **in JavaScript** and then tried to reuse one of the history's
+formatted strings for it, which only works when the answer happens to be one of
+the inputs — so `average` rendered as `last`. Fixed by computing all three bases
+server-side with the same `domain::estimate` and `ui::fmt::money` the ledger
+uses. The pane now chooses which to display and does no arithmetic and no money
+formatting at all, which is where the currency convention belongs.
 
 ## Phase 9 — the settings surfaces
 
@@ -312,6 +347,63 @@ The largest isolated chunk, with zero dependencies upward, so it can slide.
 A query over everything above — it cannot be right until privacy, tracking and
 materialization are. Plus the rolling two-month backup and a graceful shutdown
 that checkpoints the WAL.
+
+---
+
+## Scheduled for revisit
+
+Not phases — decisions already taken, with a date attached to the next look.
+
+### htmx 2 → 4 · revisit between 21/01/2027 and 21/05/2027
+
+**Decided 21/09/2026: stay on the vendored htmx 2.0.4. Re-evaluate in 4–8
+months.** htmx 4.0.0 shipped 28/08/2026 and is deliberately not `latest` — npm
+and the CDN keep serving 2.x until early 2027, and 2 stays supported and
+maintained. There is no clock running on us: `static/js/htmx.min.js` is
+self-hosted, so there is no drift, no dependency bot and no security deadline.
+
+**Nothing in 4.0 buys this app anything.** The headline feature is `hx-live` —
+declarative reactive bindings, a client-side reactive engine — which is exactly
+what `CLAUDE.md`'s *hypermedia over the wire, no client-side data model*
+invariant forbids. We would be upgrading for features we are not allowed to
+use. The one genuine improvement, 4xx/5xx responses being swapped by default,
+is already worked around and written down: an error row is HTTP 200 on purpose
+(phase 5), and that workaround costs nothing.
+
+**The argument on the other side, which is why this is dated rather than
+dropped:** the htmx surface is ten attributes today and will be several hundred
+once the rule pane, the change-log pane, the carousel and the settings vsplits
+exist. Migrating is cheapest now and gets monotonically worse. The window above
+is the trade — late enough that 4.x and its extensions have settled, early
+enough that phases 8–13 have not multiplied the surface.
+
+**What the migration would touch, as of 21/09/2026:**
+
+| site | change |
+|---|---|
+| `templates/pages/ledger.html:98` | `hx-disabled-elt` → `hx-disable` (and `hx-disable` → `hx-ignore`, which we do not use — rename in that order or one migrates into the other) |
+| `templates/pages/ledger.html:99` | `@htmx:after-request` → `@htmx:after:request`; every event listener renames, camelCase → colon-separated |
+| `ledger.html:96-97`, `rule_pane.html:19,198` | inheritance is explicit in 4 (`hx-target:inherited`). Ours look self-contained — confirm, don't assume |
+| `src/web/csrf.rs:33` | **verify `HX-Request` survives the XHR → `fetch()` move.** If it does not, the check degrades to `Sec-Fetch-Site` alone — still sound, but half the documented story, and the amendment in `CLAUDE.md` would need rewriting rather than silently becoming untrue |
+| `totals.html:7,12`, `pane_rows.html:6`, `fragment.html:7` | **verify `hx-swap-oob` semantics are unchanged.** Out-of-band swaps are how every mutation returns the totals it moved; 4.0 adds `hx-partial` for multi-target, which may or may not supersede them |
+
+The last two were not answerable from the release notes and are the load-bearing
+ones — settle them first, before touching a single attribute.
+
+**Also removed in 4**, none of which we use today, so keep it that way: `hx-ext`,
+`hx-inherit`, `hx-disinherit`, `hx-history`, `hx-vars`, `hx-params`,
+`hx-request`, `hx-prompt`. History navigation also changes from a DOM snapshot
+to a server round-trip.
+
+**Alpine.** htmx/Alpine compatibility is an extension in 4, not built in. This
+app pairs the two tightly and already has one hard-won gotcha about a swap
+destroying the Alpine state that holds parked drafts. That extension's maturity
+is a gate on this migration, not a footnote to it.
+
+**First step when the date comes:** `npx htmx.org@4.0.0 upgrade-check` walks the
+templates and prints deprecated patterns with file and line numbers. Run it
+before deciding anything — it is a minute, and it tells you whether the table
+above is still complete.
 
 ---
 

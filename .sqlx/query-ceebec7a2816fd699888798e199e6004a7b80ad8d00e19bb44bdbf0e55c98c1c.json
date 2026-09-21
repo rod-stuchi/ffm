@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                  t.amount_cents AS \"amount_cents: i64\",\n                  t.manual_paid AS \"manual_paid!: i64\",\n                  t.bucket AS \"bucket: String\", t.bill_name AS \"bill_name: String\",\n                  r.tracked AS \"tracked!: i64\",\n                  r.instance AS \"instance: String\",\n                  r.amount_in_filename AS \"amount_in_filename!: i64\"\n           FROM transactions t\n           JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.rule_id = ?1 AND t.period < ?2 AND t.deleted_at IS NULL\n             AND t.amount_cents IS NOT NULL\n           ORDER BY t.period DESC\n           LIMIT ?3",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "manual_paid!: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "bucket: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "bill_name: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "tracked!: i64",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "instance: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_in_filename!: i64",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "ceebec7a2816fd699888798e199e6004a7b80ad8d00e19bb44bdbf0e55c98c1c"
+}

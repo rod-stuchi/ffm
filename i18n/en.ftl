@@ -249,3 +249,4 @@ file-page-outside = page { $page } — outside this file's { $total } pages, a n
 rule-spans-period = Barcode covers multiple months
 rule-window-size = Pages in this file
 rule-window-start = First page covers
+estimate-no-history = no confirmed months yet — the rule's own amount is used

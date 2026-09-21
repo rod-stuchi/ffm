@@ -11,6 +11,7 @@
 //! delta's only input), how many occurrences of a rule have happened (the
 //! `7/12` badge), and — later — whether each file exists on disk.
 
+use crate::domain::estimate;
 use crate::domain::money::{Cents, Currency};
 use crate::domain::period::Period;
 use crate::domain::status::{RowFlags, RowState, TxKind, Visibility};
@@ -165,6 +166,9 @@ pub async fn pane_with_vault(
             r.window_start       AS "window_start?: String",
             r.amount_in_filename AS "amount_in_filename?: i64",
             r.varies             AS "varies?: i64",
+            r.estimate_basis     AS "estimate_basis?: String",
+            r.estimate_window    AS "estimate_window?: i64",
+            r.amount_cents       AS "rule_amount_cents?: i64",
 
             -- "The same line" in the previous period: exact title, same member.
             -- Unambiguous for a recurring row (it is the same rule) and the only
@@ -223,6 +227,11 @@ pub async fn pane_with_vault(
     let mut out = Vec::with_capacity(rows.len());
     let mut ins = Cents::ZERO;
     let mut outs = Cents::ZERO;
+    // The rule facts a projection needs, kept beside the rows rather than on
+    // them: they decide the estimate, they are not rendered.
+    let mut basis_of: Vec<Option<String>> = Vec::with_capacity(rows.len());
+    let mut window_of: Vec<Option<i64>> = Vec::with_capacity(rows.len());
+    let mut rule_amount_of: Vec<Option<i64>> = Vec::with_capacity(rows.len());
 
     for (i, r) in rows.into_iter().enumerate() {
         let kind = TxKind::parse(&r.kind).unwrap_or(TxKind::Out);
@@ -236,6 +245,9 @@ pub async fn pane_with_vault(
 
         let recurring = r.rule_id.is_some();
         let private = r.visibility == "private";
+        basis_of.push(r.estimate_basis.clone());
+        window_of.push(r.estimate_window);
+        rule_amount_of.push(r.rule_amount_cents);
 
         out.push(LedgerRow {
             id: r.id,
@@ -271,10 +283,10 @@ pub async fn pane_with_vault(
             member_slug: member.slug.clone(),
 
             prev_amount_cents: r.prev_amount_cents.map(Cents),
-            // Phase 8. The projection is computed on read, never stored, so
-            // this stays a derived value hung on the row — it just does not
-            // exist yet, and a varying income renders its own baseline in the
-            // meantime rather than a wrong guess.
+            // Computed below, once the row exists to be asked about. Derived
+            // on read and never stored, so it follows new history instead of
+            // freezing an old guess — and never writes a spurious "amount
+            // changed" entry into the log.
             estimate_cents: None,
             installments_paid: recurring.then_some(r.installments_paid as u16),
             // Filled in below, once the row exists to be asked about.
@@ -289,6 +301,32 @@ pub async fn pane_with_vault(
             gutter: Gutter::Absolute(i as u32 + 1),
             ctx,
         });
+    }
+
+    // A varying income shows a projection until the money lands. Done here
+    // rather than in `LedgerRow` because it needs the last N confirmed
+    // periods, which is a query — and the row's contract is that every visual
+    // channel is a function of fields ON the row.
+    for (i, row) in out.iter_mut().enumerate() {
+        if !row.kind.is_income() || !row.varies {
+            continue;
+        }
+        let basis =
+            estimate::Basis::parse(basis_of.get(i).and_then(|b| b.as_deref()).unwrap_or(""))
+                .unwrap_or_default();
+        let window = window_of
+            .get(i)
+            .copied()
+            .flatten()
+            .unwrap_or(3)
+            .clamp(1, 12) as usize;
+        let fallback = rule_amount_of.get(i).copied().flatten().map(Cents);
+        let Some(rule_id) = row.rule_id else { continue };
+
+        let history = confirmed_history(pool, root, member, rule_id, row.period, window).await?;
+        if let Some(p) = estimate::project(&history, basis, window, fallback) {
+            row.estimate_cents = Some(p.amount);
+        }
     }
 
     // The disk decides `paid`, so it is consulted per tracked row — one exact
@@ -316,13 +354,111 @@ pub async fn pane_with_vault(
         }
     }
 
+    // Any projection in the pane marks its INs and Balance. Leaving
+    // projections out of the totals would make a future month's balance
+    // useless; putting them in unmarked would present a guess as a fact.
+    let estimated = out.iter().any(|r| r.is_estimated());
+
+    // The totals were summed from the STORED amounts as the rows were read;
+    // a projected row contributes its projection instead, or the balance
+    // would disagree with the row right above it.
+    for row in out.iter().filter(|r| r.is_estimated()) {
+        if let (Some(est), stored) = (row.estimate_cents, row.amount_cents) {
+            ins += est;
+            ins -= stored.unwrap_or(Cents::ZERO);
+        }
+    }
+
     Ok(Pane {
         member: member.clone(),
         rows: out,
         ins,
         outs,
-        estimated: false,
+        estimated,
     })
+}
+
+/// The last `window` **confirmed** periods of a rule, newest first.
+///
+/// Confirmed means the same thing it means everywhere else: a payslip on disk
+/// for a tracked rule, the manual tick for an untracked one. An unconfirmed
+/// month is skipped rather than folded in — two of them back to back would
+/// otherwise project a guess from another guess.
+async fn confirmed_history(
+    pool: &SqlitePool,
+    root: Option<&std::path::Path>,
+    member: &Member,
+    rule_id: i64,
+    before: Period,
+    window: usize,
+) -> sqlx::Result<Vec<estimate::Confirmed>> {
+    let before_s = before.to_string();
+    // A generous candidate list: unconfirmed months are skipped, so the window
+    // has to be able to reach past them to find real ones.
+    let limit = (window as i64 * 6).clamp(6, 48);
+
+    let rows = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+                  t.amount_cents AS "amount_cents: i64",
+                  t.manual_paid AS "manual_paid!: i64",
+                  t.bucket AS "bucket: String", t.bill_name AS "bill_name: String",
+                  r.tracked AS "tracked!: i64",
+                  r.instance AS "instance: String",
+                  r.amount_in_filename AS "amount_in_filename!: i64"
+           FROM transactions t
+           JOIN recurring_rules r ON r.id = t.rule_id
+           WHERE t.rule_id = ?1 AND t.period < ?2 AND t.deleted_at IS NULL
+             AND t.amount_cents IS NOT NULL
+           ORDER BY t.period DESC
+           LIMIT ?3"#,
+        rule_id,
+        before_s,
+        limit,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut out = Vec::new();
+    for r in rows {
+        if out.len() >= window {
+            break;
+        }
+        let amount = Cents(r.amount_cents.unwrap_or(0));
+        let confirmed = if r.tracked != 0 {
+            // No manual tick for a tracked rule, ever — the disk answers.
+            match (root, r.bucket.as_deref(), r.bill_name.as_deref()) {
+                (Some(root), Some(bucket), Some(bill_name)) => {
+                    let slot = crate::services::receipts::Slot {
+                        transaction_id: r.id,
+                        vault: format!("{}-{}", member.uuid, member.slug),
+                        bucket: bucket.to_string(),
+                        bill_name: bill_name.to_string(),
+                        instance: r.instance.clone(),
+                        period: Period::parse(&r.period).unwrap_or(before),
+                        amount: Some((amount, Currency::default())),
+                        amount_in_filename: r.amount_in_filename != 0,
+                    };
+                    crate::services::receipts::presence(pool, root, &slot)
+                        .await
+                        .map(|p| p.receipt.is_some())
+                        .unwrap_or(false)
+                }
+                // No vault to consult: nothing is confirmed, which is the
+                // honest answer rather than a convenient one.
+                _ => false,
+            }
+        } else {
+            r.manual_paid != 0
+        };
+
+        if confirmed {
+            out.push(estimate::Confirmed {
+                period: r.period,
+                amount,
+            });
+        }
+    }
+    Ok(out)
 }
 
 /// Dates are ISO-8601 TEXT, fixed width, so this is exact rather than lenient.
