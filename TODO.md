@@ -63,16 +63,39 @@ Privacy filtering is phase 4 and the pane query does **not** filter; there is a
 test saying so, because the filter has to land where the totals are computed
 too, or a hidden row leaks by making the numbers not add up.
 
-## Phase 3 ★ — the change-log write path
+## Phase 3 ★ — the change-log write path ✅
 
-**Must exist before the first mutation.** The log is append-only (enforced by
-`BEFORE UPDATE`/`BEFORE DELETE` triggers), so an entry missed at the time can
-never be honestly backfilled.
+**Built before the first mutation, on purpose.** The log is append-only, so an
+entry that was not written at the time can never be honestly backfilled: the
+timestamp would be a lie and the actor a guess.
 
-- One writer taking `&mut Transaction`, so a change and the row it describes
-  commit together or not at all.
-- `change` + `change_field`, `kind` travelling with the value, `rule_id` stamped
-  on transaction changes, `undo_of` making an undo a first-class entry.
+`src/db/changes.rs`. Three things are shaped by the type system rather than left
+to a comment, because all three are otherwise a `CHECK` that only fires at
+runtime — by which point a handler has already been written wrong:
+
+- **An entry and the row it describes commit together or not at all.**
+  `Change::write` takes `&mut Transaction`, never the pool. There is no way to
+  record something that did not happen.
+- **Action and entity are not independent.** A separate action enum per entity
+  (`TxAction` / `RuleAction` / `FileAction` / `MemberAction`), so
+  `password_reset` on a ledger row cannot be spelled. `RuleAction::Delete` maps
+  to the plain `delete` verb — there is deliberately no `rule_delete`.
+- **A user action has an actor.** `Actor::User(i64)` carries the id rather than
+  leaving `member_id` an `Option` a handler forgets. `Materializer` and `System`
+  structurally have none.
+
+`Value` carries the `kind` **with** the value (`money` | `date` | `day` | `bool`
+| `text` | `path`) and stores it neutrally — minor units, ISO dates — so the
+`gl` pane formats it without inferring from the field name, and a logged amount
+never depends on the currency the household has configured *today*. `diff()`
+records a field only when it actually moved.
+
+`tests/changes.rs` — six tests through a real database, since most of what makes
+this table trustworthy is enforced by SQLite: the append-only triggers really
+abort, a rollback loses the entry *and* the row, an undo points at what it
+reversed while the original stays, every action the API can spell is one the
+schema accepts — and a hand-written bad pair is refused, so that last test is
+not vacuous.
 
 ## Phase 4 ★ — auth, sessions, the pre-auth shell, `Viewer`
 

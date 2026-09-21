@@ -4,39 +4,14 @@
 //! obliged to *carry* — the three facts a single row cannot know about itself.
 //! Both halves have to hold for a rendered row to be true.
 
-use ffm::config::Config;
+mod common;
+
+use common::seeded;
 use ffm::db;
 use ffm::domain::money::{Cents, Currency};
 use ffm::domain::period::Period;
 use ffm::domain::status::RowStatus;
 use ffm::ui::row::{Gutter, RowCtx};
-use sqlx::SqlitePool;
-
-async fn seeded() -> SqlitePool {
-    let dir = std::env::temp_dir().join(format!("ffm-test-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let db = dir.join(format!("{:?}.db", std::thread::current().id()));
-    let _ = std::fs::remove_file(&db);
-
-    let cfg = Config {
-        db_path: db,
-        receipts_root: dir.clone(),
-        backup_dir: dir,
-        file: None,
-    };
-    let pool = db::connect(&cfg).await.expect("migrate");
-
-    // The same file `just seed` applies, so the fixture cannot drift from what
-    // a developer is actually looking at in the browser.
-    let sql = include_str!("../seeds/household.sql");
-    for stmt in sql.split(";\n") {
-        if stmt.trim().is_empty() {
-            continue;
-        }
-        sqlx::query(stmt).execute(&pool).await.expect(stmt);
-    }
-    pool
-}
 
 fn ctx() -> RowCtx {
     RowCtx {

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO change_field (change_id, field, old_value, new_value, kind)\n                   VALUES (?1, ?2, ?3, ?4, ?5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "8c0b69a0156ef78dad6e7fde235154b3f7d07c3888d1067b44959fd10336e9d7"
+}

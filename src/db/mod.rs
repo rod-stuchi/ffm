@@ -1,5 +1,6 @@
 //! The store. One SQLite file, one process, one household.
 
+pub mod changes;
 pub mod ledger;
 
 use crate::config::Config;
