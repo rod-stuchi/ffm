@@ -925,10 +925,12 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 
 ## Development workflow
 
-- `tailwindcss --watch` — regenerates CSS as templates change.
-- `cargo watch -x run` — recompiles and restarts on save.
-- `tower-livereload`, dev-only behind `#[cfg(debug_assertions)]` — refreshes the
-  browser once the server restarts.
+- `just dev` — Tailwind build, then `cargo watch` recompiling and restarting on
+  save. `just css` in a second pane for CSS-only iteration.
+- `tower-livereload` **0.10+**, behind the opt-in `dev-reload` feature (which is
+  what `just dev` turns on) — refreshes the browser once the server restarts.
+  Not `#[cfg(debug_assertions)]`, and not a default feature: see the gotcha
+  below for why both of those are wrong.
 - **Dev-only UI sandbox router**, also behind `#[cfg(debug_assertions)]`: renders
   every template — including success, error and skeleton states — against dummy
   data, so UI and CSS can be iterated without touching the real database. Keep it
@@ -1027,3 +1029,20 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   `me: Option<&Member>`, and the `.auth` layout must not read `layout_*` or
   `theme_name` — otherwise the login page either won't compile, or worse,
   compiles against defaults that silently diverge from a real member's.
+- **`[target.'cfg(debug_assertions)'.dependencies]` does not gate anything.**
+  Cargo accepts the section, emits a warning, and links the crate in *every*
+  profile — so a dev-only dependency written that way looks gated and ships.
+  Use an optional dependency behind a feature. Keep that feature **opt-in**
+  rather than default-on, so a forgotten flag fails as "livereload didn't
+  reload" (noticed in seconds) instead of "livereload shipped in release"
+  (never noticed).
+- **tower-livereload before 0.10 reload-loops against hyper 1.x.** Its
+  `LongPollBody::poll_frame` `take()`s the receiver, so the body can return
+  `Pending` exactly once; the next poll hits the `None` arm and ends the
+  stream. The injected client reads a completed long-poll as "the server
+  restarted", fetches `back-up`, gets 200, and calls `location.reload()` —
+  forever, on every page. **Symptom to recognise:** the page reloads endlessly
+  while the server PID never changes (so it is *not* a cargo-watch rebuild
+  loop), and the long-poll endpoint returns 200 in under a millisecond instead
+  of hanging. 0.10 replaced it with a real SSE state machine that holds the
+  connection open. Do not pin back below 0.10.
