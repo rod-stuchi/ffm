@@ -219,3 +219,32 @@ These are decisions, not tasks — they get scheduled when there is evidence.
    start/end dates. Distinct from `total_installments`, which ends permanently.
 3. **Split mode assumes exactly two panes.** Revisit when a household bigger
    than two is an actual case rather than a hypothetical.
+
+4. **A form's error belongs next to the field it is about, not at the top of
+   the card.** Today every pre-auth failure renders one `.warnbox` above the
+   whole form: *"Use at least 8 characters."* sits at the top of `/setup` with
+   nothing connecting it to Password, three sections further down and possibly
+   off screen. The copy rule says an error explains what went wrong **and how to
+   fix it**, and "which box do I retype" is half of that.
+
+   What needs deciding, rather than just implementing:
+   - **Per-field, card-level, or both?** A field-level message is the one that
+     locates the problem; a card-level summary is what a screen reader announces
+     on submit. Both is the accessible answer and two places to keep in step.
+   - **Which field owns a cross-field rule.** "The two passwords do not match"
+     is about a *pair* — Confirm is the likelier fix, but that is a guess.
+   - **Focus.** `/login` already moves focus to the password on failure. Whether
+     a rejected `/setup` should focus its first bad field is the same question
+     asked once per form, and it is worth answering once.
+   - **What it looks like.** The mockups only ever draw the card-level
+     `.warnbox`; a per-field state (red rail on `input.i`, message under it)
+     does not exist in the visual system yet and would be a new component.
+   - **Where it is enforced.** Validation lives in the handler today. A field
+     error means the handler has to say *which* field, so `Result<_, Vec<(field,
+     message)>>` rather than `Result<_, String>` — worth settling before the
+     mutation handlers in phase 5 copy the current shape everywhere.
+
+   Raised from a real `/setup` submission (21/09/2026): password too short,
+   warning at the top, both password boxes visually full because the browser's
+   password manager had refilled them — so the message and the fields it
+   described disagreed on screen.
