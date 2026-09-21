@@ -28,7 +28,13 @@ use axum::routing::get;
 use chrono::NaiveDate;
 use serde::Deserialize;
 
-pub fn router() -> Router {
+/// Generic over the app state so it can be merged into the real router while
+/// taking none of it. That is the "no handler here takes a pool" rule as a type
+/// signature rather than as a comment.
+pub fn router<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route("/__sandbox", get(index))
         .route("/__sandbox/rows", get(rows))

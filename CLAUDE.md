@@ -931,6 +931,11 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   what `just dev` turns on) — refreshes the browser once the server restarts.
   Not `#[cfg(debug_assertions)]`, and not a default feature: see the gotcha
   below for why both of those are wrong.
+- `just db` creates the database and applies every migration with the plain
+  `sqlite3` CLI — which exists to break a bootstrap deadlock: `sqlx::query!`
+  checks queries against a real schema at **compile** time, but
+  `sqlx::migrate!()` only applies migrations at **startup**. `just seed` puts a
+  household in it. Neither needs `cargo-sqlx` installed.
 - **Dev-only UI sandbox router**, also behind `#[cfg(debug_assertions)]`: renders
   every template — including success, error and skeleton states — against dummy
   data, so UI and CSS can be iterated without touching the real database. Keep it
@@ -1011,6 +1016,13 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   gutter for `nonu` pulled the row's content into the 10px first track and crushed
   it. Keep the gutter cell in the grid and vary only its width and content. The
   same bug appears in Tailwind via `hidden` on a grid child.
+- **`just db` must write `_sqlx_migrations` itself, or startup re-runs the
+  migration.** Applying the schema with the `sqlite3` CLI leaves SQLx's own
+  bookkeeping table empty, so the migrator at startup cheerfully tries to
+  `CREATE TABLE` everything again and dies. The recipe inserts the row with the
+  same **SHA-384 over the migration file** that SQLx computes, so the two agree.
+  Change a migration and the checksums disagree on purpose — that is SQLx saying
+  `just db-reset`, which is safe only while no household database exists.
 - **A quote-blind TOML comment stripper eats hex colours.** `line.replace(/#.*$/, '')`
   cuts `accent = "#c4a7e7"` in half at the colour's own `#`. The real `toml` crate
   handles this — which is a reason not to hand-roll a config reader.

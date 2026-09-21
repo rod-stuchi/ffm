@@ -1,4 +1,4 @@
-use ffm::web;
+use ffm::{config::Config, db, state::AppState, web};
 
 #[tokio::main]
 async fn main() {
@@ -9,7 +9,52 @@ async fn main() {
         )
         .init();
 
-    let app = web::router();
+    // Config failures name the line to edit and stop the process. For three
+    // paths there is no sensible partial state: starting with the vault
+    // pointing nowhere would file receipts into a directory nobody meant.
+    let cfg = match Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e}");
+            eprintln!(
+                "  see ffm.example.toml, or set FFM_DB_PATH / FFM_RECEIPTS_ROOT / FFM_BACKUP_DIR"
+            );
+            std::process::exit(1);
+        }
+    };
+
+    // "Today" is the process's LOCAL date, and every date-shaped decision in
+    // the app reads it: the due ring, `scheduled overdue`, the unresolved
+    // badge, and the materializer's current month. ffm.toml has no timezone key
+    // and should not grow one — one process serves one household in one place,
+    // so the deployment sets TZ. Logging it is what gives a household watching
+    // a bill go overdue at 21:00 any way to find out why.
+    tracing::info!(
+        "ffm · timezone {} · today {}",
+        timezone_name(),
+        ffm::ui::fmt::date(chrono::Local::now().date_naive())
+    );
+    tracing::info!(
+        "db {} · receipts {} · backups {}",
+        cfg.db_path.display(),
+        cfg.receipts_root.display(),
+        cfg.backup_dir.display()
+    );
+
+    let pool = match db::connect(&cfg).await {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("✗ cannot open {} — {e}", cfg.db_path.display());
+            std::process::exit(1);
+        }
+    };
+
+    let state = AppState {
+        pool,
+        cfg: std::sync::Arc::new(cfg),
+    };
+
+    let app = web::router(state);
 
     #[cfg(feature = "dev-reload")]
     let app = app.layer(tower_livereload::LiveReloadLayer::new());
@@ -34,6 +79,26 @@ async fn main() {
     tracing::info!("sandbox · http://{shown}/__sandbox/rows");
 
     axum::serve(listener, app).await.unwrap();
+}
+
+/// The IANA name, for the boot line. `chrono::Local` knows the offset but not
+/// the name, so this reads the two places the name actually lives: `TZ`, then
+/// what `/etc/localtime` points at.
+fn timezone_name() -> String {
+    if let Ok(tz) = std::env::var("TZ")
+        && !tz.trim().is_empty()
+    {
+        return tz;
+    }
+    if let Ok(link) = std::fs::read_link("/etc/localtime") {
+        let p = link.to_string_lossy();
+        if let Some(i) = p.find("zoneinfo/") {
+            return p[i + "zoneinfo/".len()..].to_string();
+        }
+    }
+    // Not knowing the name is not a reason to hide the offset — that is the
+    // number that actually decides whether a bill is overdue.
+    format!("UTC{}", chrono::Local::now().offset())
 }
 
 /// The address of the interface this machine would use to reach the rest of the

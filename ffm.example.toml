@@ -1,0 +1,27 @@
+# FFM — the operator's tier. Three keys, and deliberately nothing else.
+#
+# Copy this to ffm.toml and edit. Everything a household would actually want to
+# change lives in the database instead: currency, language, theme, layout and
+# every ledger view preference. What is left here is what a running process
+# cannot change about itself.
+#
+# Read once at startup and NOT watched: swapping db_path under open
+# transactions is not a thing, and moving receipts_root means relocating the
+# whole vault. Edit this file and restart.
+#
+# Each key is also readable from the environment, and the environment WINS:
+#   FFM_DB_PATH  FFM_RECEIPTS_ROOT  FFM_BACKUP_DIR
+# so a container deployment needs no file at all.
+
+[storage]
+# The SQLite file. This is the one setting that genuinely cannot live in the
+# database, for the obvious reason.
+db_path       = "./ffm.db"
+
+# The receipt vault. Per-member folders ({uuid}-{slug}) are generated under it.
+# It must already exist and be writable — the process refuses to start
+# otherwise, rather than conjuring an empty vault at a mistyped path.
+receipts_root = "./receipts"
+
+# Rolling two-month backups of the database. Created if missing.
+backup_dir    = "./backups"

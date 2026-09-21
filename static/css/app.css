@@ -44,5 +44,6 @@
  * `.row.is-focus .fbadge` beat any utility and you would fight it within a week. */
 @layer components {
   @import "./row.css";
+  @import "./ledger.css";
   @import "./sandbox.css";
 }

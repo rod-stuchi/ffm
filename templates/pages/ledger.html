@@ -1,0 +1,64 @@
+{#- The ledger, read-only.
+
+    Deliberately not the full app shell: no command bar, no tab bar, no month
+    picker. Those arrive with the keymap they belong to. What is here is the
+    part that had to become true first — real rows, from the database, through
+    the same row partial the sandbox renders from fixtures. -#}
+<!doctype html>
+<html lang="{{ t.lang.code() }}"{% if let Some(a) = attr %} data-theme="{{ a }}"{% endif %}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ household }} · {{ period }}</title>
+<link rel="stylesheet" href="/static/css/build.css">
+{#- The only source of colour in the page: the full light/dark triple, rendered
+    server-side because `theme = system` means we cannot know the device's mode. -#}
+<style id="ffm-theme">{{ theme_css|safe }}</style>
+</head>
+<body>
+<div class="ledger-shell">
+  <header class="ledger-bar">
+    <b>{{ household }}</b>
+    <nav class="mnav">
+      <a class="btn" href="?period={{ prev }}" title="previous month">‹</a>
+      <span class="mlabel">{{ period }}</span>
+      <a class="btn" href="?period={{ next }}" title="next month">›</a>
+    </nav>
+    <div class="htotals">
+      <span><i>IN</i> <b class="pos">{{ ins }}</b></span>
+      <span><i>OUT</i> <b class="neg">{{ outs }}</b></span>
+      <span><i>NET</i> <b class="{% if net_negative %}neg{% else %}pos{% endif %}">{% if net_negative %}−{% endif %}{{ net }}</b></span>
+    </div>
+  </header>
+
+  {%- if empty %}
+  <div class="ledger-empty">
+    <p><b>No household yet.</b></p>
+    <p>Run <code>just seed</code> to put one in the database, or wait for
+       <code>/setup</code> — the page that creates a real one.</p>
+  </div>
+  {%- else %}
+  <main class="stage">
+    {%- for p in panes %}
+    <section class="pane">
+      <header class="pane-head">
+        <b>{{ p.name }}</b>
+        <span class="ptotals">
+          <i>in</i> <b class="pos">{{ p.ins }}</b>
+          <i>out</i> <b class="neg">{{ p.outs }}</b>
+          <i>bal</i> <b class="{% if p.negative %}neg{% else %}pos{% endif %}">{% if p.negative %}−{% endif %}{{ p.balance }}</b>
+        </span>
+      </header>
+      <div class="rows">
+        {%- for v in p.rows %}{% include "partials/row.html" %}{% endfor %}
+        {%- if p.rows.is_empty() %}
+        <p class="pane-empty">Nothing in this month.</p>
+        {%- endif %}
+      </div>
+    </section>
+    {%- endfor %}
+  </main>
+  {%- endif %}
+</div>
+</body>
+</html>

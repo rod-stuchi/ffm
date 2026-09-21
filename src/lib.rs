@@ -9,6 +9,9 @@
 //!
 //! It also means the test suite exercises the same surface a caller would.
 
+pub mod config;
+pub mod db;
 pub mod domain;
+pub mod state;
 pub mod ui;
 pub mod web;

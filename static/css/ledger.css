@@ -1,0 +1,133 @@
+/* The read-only ledger's scaffolding.
+ *
+ * Small on purpose: the real app shell (.topbar / .tabbar / .stage / .status,
+ * the command bar, the month picker) is ported with the keymap that gives it
+ * meaning. What is here frames real panes around the already-ported row.
+ */
+
+.ledger-shell {
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  display: flex;
+  flex-direction: column;
+}
+
+.ledger-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.ledger-bar > b {
+  font-size: 14px;
+}
+
+.mnav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mnav .btn {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1;
+  padding: 5px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  color: var(--ink-2);
+  text-decoration: none;
+  background: var(--surface-2);
+}
+
+.mnav .btn:hover {
+  border-color: var(--accent-line);
+  color: var(--ink);
+}
+
+/* Money lines up column to column, which is the whole reason for the mono
+ * face and tabular figures. */
+.mlabel,
+.htotals,
+.ptotals {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.mlabel {
+  font-size: 12.5px;
+  min-width: 9ch;
+  text-align: center;
+}
+
+.htotals {
+  margin-left: auto;
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+}
+
+.htotals i,
+.ptotals i {
+  font-style: normal;
+  color: var(--ink-3);
+  margin-right: 4px;
+}
+
+.pos {
+  color: var(--pos);
+}
+.neg {
+  color: var(--neg);
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px;
+  padding: 16px;
+  align-items: start;
+}
+
+.pane {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.pane-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ptotals {
+  margin-left: auto;
+  font-size: 11px;
+  display: flex;
+  gap: 10px;
+}
+
+.rows {
+  padding: 6px 0;
+}
+
+.pane-empty,
+.ledger-empty {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  padding: 14px 16px;
+}
+
+.ledger-empty code {
+  font-family: var(--mono);
+  color: var(--ink-2);
+}

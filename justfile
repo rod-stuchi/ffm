@@ -49,16 +49,57 @@ fonts:
 # STARTUP — so a fresh checkout cannot compile a query until the schema exists.
 # Doing it here with sqlite3 avoids making cargo-sqlx a prerequisite just to get
 # the project to build the first time.
+#
+# It also writes _sqlx_migrations itself, with the same SHA-384 over the file
+# that sqlx computes, so the migrator at startup agrees the migration is already
+# applied instead of trying to re-create every table. Change a migration and the
+# checksums disagree on purpose — that is sqlx telling you to `just db-reset`,
+# which is fine only while no household database exists anywhere.
 db:
-    @mkdir -p "$(dirname {{db_path}})"
-    sqlite3 {{db_path}} < migrations/0001_initial_schema.sql
-    @echo "✓ {{db_path}}"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p "$(dirname {{db_path}})"
+    for f in migrations/*.sql; do
+        base=$(basename "$f" .sql)
+        version=${base%%_*}
+        description=${base#*_}
+        sum=$(shasum -a 384 "$f" | cut -d' ' -f1)
+        # Idempotent: applying a migration twice is an error, not a no-op, so
+        # ask whether this version is already recorded before running it.
+        done_already=$(sqlite3 {{db_path}} "SELECT count(*) FROM sqlite_master
+            WHERE type='table' AND name='_sqlx_migrations';" | grep -q 1 &&
+            sqlite3 {{db_path}} "SELECT count(*) FROM _sqlx_migrations WHERE version=$version;" || echo 0)
+        if [ "$done_already" = "1" ]; then
+            echo "· $base already applied"
+            continue
+        fi
+        sqlite3 {{db_path}} < "$f"
+        sqlite3 {{db_path}} "
+            CREATE TABLE IF NOT EXISTS _sqlx_migrations (
+                version BIGINT PRIMARY KEY,
+                description TEXT NOT NULL,
+                installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                success BOOLEAN NOT NULL,
+                checksum BLOB NOT NULL,
+                execution_time BIGINT NOT NULL);
+            INSERT OR REPLACE INTO _sqlx_migrations
+                (version, description, success, checksum, execution_time)
+            VALUES ($version, '$description', 1, X'$sum', 0);"
+    done
+    echo "✓ {{db_path}}"
 
 # Throw it away and rebuild. Safe while no household database exists anywhere;
 # the migration's own PRE-RELEASE note stops applying the moment one does.
 db-reset:
     rm -f {{db_path}} {{db_path}}-wal {{db_path}}-shm
     @just db
+
+# A household to look at. Content is Brazilian-household Portuguese on purpose
+# — it is what a household typed into its own ledger, not app copy, so it never
+# passes through the translation catalog.
+seed: db
+    sqlite3 {{db_path}} < seeds/household.sql
+    @echo "✓ seeded {{db_path}}"
 
 # Apply the migration to a scratch file inside a transaction — which is how sqlx
 # runs it — and throw it away. Catches anything that cannot run in one, the way
