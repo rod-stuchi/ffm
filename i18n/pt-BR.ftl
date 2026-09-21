@@ -200,3 +200,22 @@ cadence-quarterly = A cada 3 meses
 cadence-four = A cada 4 meses
 cadence-half = A cada 6 meses
 cadence-yearly = Anual
+
+## Arquivos
+
+file-add-bill = Anexar conta
+file-add-scheduled = Anexar agendamento
+file-add-receipt = Anexar comprovante
+file-added = arquivo anexado
+file-removed = arquivo movido para .delete · u para trazer de volta
+file-open = Abrir em nova aba
+file-delete = Excluir arquivo
+file-not-tracked = esta linha não tem onde arquivar
+file-too-big = esse arquivo é grande demais para guardar
+file-preview = Arquivos
+file-no-files = nenhum arquivo nesta linha
+file-page-of = Um arquivo, { $total } páginas — este mês é a página { $page }
+file-page-outside = página { $page } — fora das { $total } páginas deste arquivo, é preciso enviar um novo para este mês
+rule-spans-period = O código de barras cobre vários meses
+rule-window-size = Páginas neste arquivo
+rule-window-start = A primeira página é de

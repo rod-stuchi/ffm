@@ -102,6 +102,23 @@ pub fn say_only(message: &str, bad: bool) -> Response {
     )
 }
 
+/// One row plus the totals it moved — the shape every row-level mutation
+/// answers with, exposed so the file handlers use the identical path rather
+/// than a second one that renders "the same" row slightly differently.
+pub async fn row_fragment(
+    st: &AppState,
+    auth: &Auth,
+    id: i64,
+    _member_id: i64,
+    _period: Period,
+    message: &str,
+) -> Response {
+    match render_row(st, auth, id, true).await {
+        Ok(f) => say(Html(f).into_response(), message, false),
+        Err(e) => say(error_row(&auth.catalog(), e), e, true),
+    }
+}
+
 /// A whole pane's rows plus the totals, out of band.
 ///
 /// A row mutation answers with one row; a rule save can create several periods
@@ -125,12 +142,13 @@ pub async fn pane_fragment(
     let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
     let show_recurring = house.as_ref().is_none_or(|h| h.show_recurring);
 
-    let Ok(pane) = ledger::pane(
+    let Ok(pane) = ledger::pane_with_vault(
         &st.pool,
         &member,
         period,
         ctx(currency, show_recurring),
         auth.viewer,
+        Some(&st.cfg.receipts_root),
     )
     .await
     else {
@@ -177,12 +195,13 @@ async fn render_row(
     let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
     let show_recurring = house.as_ref().is_none_or(|h| h.show_recurring);
 
-    let Ok(pane) = ledger::pane(
+    let Ok(pane) = ledger::pane_with_vault(
         &st.pool,
         &member,
         period,
         ctx(currency, show_recurring),
         auth.viewer,
+        Some(&st.cfg.receipts_root),
     )
     .await
     else {
@@ -430,8 +449,25 @@ pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
         );
     };
 
-    match tx::undo(&st.pool, Actor::User(auth.viewer.member_id), &u).await {
-        Ok(true) => match render_row(&st, &auth, u.entity_id, true).await {
+    // A file change is undone by the vault service, which is the only thing
+    // that may move a file; a transaction change by the ledger. `u` does not
+    // care which it was, and neither should the person pressing it.
+    let (ok, row_id) = if u.entity == "file" {
+        (
+            undo_file(&st, &auth, &u).await,
+            file_row(&st, u.entity_id).await,
+        )
+    } else {
+        (
+            tx::undo(&st.pool, Actor::User(auth.viewer.member_id), &u)
+                .await
+                .unwrap_or(false),
+            Some(u.entity_id),
+        )
+    };
+
+    match (ok, row_id) {
+        (true, Some(id)) => match render_row(&st, &auth, id, true).await {
             Ok(f) => say(Html(f).into_response(), t.undone(), false),
             Err(e) => say(error_row(&t, e), e, true),
         },
@@ -440,6 +476,84 @@ pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
             t.error_not_written(),
             true,
         ),
+    }
+}
+
+/// Which row a `receipts` entry belongs to, so an undone file change can be
+/// rendered back into the ledger it came from.
+async fn file_row(st: &AppState, receipt_id: i64) -> Option<i64> {
+    sqlx::query_scalar!(
+        r#"SELECT transaction_id AS "t!: i64" FROM receipts WHERE id = ?1"#,
+        receipt_id
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .ok()
+    .flatten()
+}
+
+/// Reverses a file change: a delete puts the file back, an upload takes it
+/// away again. The vault is only ever touched through `services::receipts`.
+async fn undo_file(st: &AppState, auth: &Auth, u: &tx::Undoable) -> bool {
+    let actor = Actor::User(auth.viewer.member_id);
+    let Some(tx_id) = file_row(st, u.entity_id).await else {
+        tracing::error!("undo: receipts row {} has no transaction", u.entity_id);
+        return false;
+    };
+    let Some((slot, _, _)) = crate::web::files::slot_for(st, auth, tx_id).await else {
+        tracing::error!("undo: row {tx_id} has nothing to file under");
+        return false;
+    };
+
+    let result = match u.action.as_str() {
+        "file_delete" => {
+            crate::services::receipts::restore(
+                &st.pool,
+                &st.cfg.receipts_root,
+                actor,
+                u.entity_id,
+                Some(u.change_id),
+            )
+            .await
+        }
+        "file_upload" => {
+            let kind: Option<String> = sqlx::query_scalar!(
+                r#"SELECT kind AS "k!: String" FROM receipts WHERE id = ?1"#,
+                u.entity_id
+            )
+            .fetch_optional(&st.pool)
+            .await
+            .ok()
+            .flatten();
+            let Some(kind) = kind
+                .as_deref()
+                .and_then(crate::domain::receipt_path::Kind::parse)
+            else {
+                return false;
+            };
+            crate::services::receipts::soft_delete(
+                &st.pool,
+                &st.cfg.receipts_root,
+                actor,
+                &slot,
+                kind,
+                "manual",
+                Some(u.change_id),
+            )
+            .await
+        }
+        _ => return false,
+    };
+
+    match result {
+        Ok(ok) => ok,
+        // A failure that only ever becomes a statusline message is invisible
+        // to whoever has to fix it. The person gets the short version; the log
+        // gets the reason.
+        Err(e) => {
+            tracing::error!("undo of file {}: {e}", u.entity_id);
+            false
+        }
     }
 }
 

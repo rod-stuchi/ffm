@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO rule_barcode_window\n               (rule_id, window_start, window_size, uploaded_at)\n           VALUES (?1, ?2, ?3, ?4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "1d642f2f71f3c6d44a8d04578735b78c99f1630fea0dd0b0915855fd544e2394"
+}

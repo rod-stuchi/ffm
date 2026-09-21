@@ -72,18 +72,33 @@
     </div>
 
     {#- file rail. Numbers are fixed by kind: g1 is always the bill. -#}
-    {%- if v.files.is_empty() -%}
+    {%- if v.files.is_empty() && !v.attachable -%}
     <div></div>
     {%- else -%}
     <div class="fbadges">
       {%- for f in v.files -%}
-      <a class="fbadge{% if f.warn %} is-warn{% endif %}" href="/files/{{ f.path }}"
+      {#- Opening a file is a plain link to a new tab: all four allowed
+          extensions render natively, which is exactly why no custom renderer
+          exists. The href is built from the row's id and the file's KIND,
+          never from the computed path — a URL made of user-typed taxonomy is
+          a traversal waiting to be written. -#}
+      <a class="fbadge{% if f.warn %} is-warn{% endif %}" href="{{ f.href }}"
          target="_blank" rel="noopener" title="{{ f.label }} — {{ f.path }}">
         <kbd>{{ f.number }}</kbd>
         <span class="ficon">{{ f.svg|safe }}</span>
         <span class="flabel">{{ f.label }}{% if let Some(p) = f.page %} · {{ p }}{% endif %}</span>
       </a>
       {%- endfor -%}
+      {#- Compact by default, an action on the focused row. The rail itself
+          still shows only files that EXIST — no ghost placeholders — so
+          attaching one lives behind a single control rather than three empty
+          slots pretending to be files. -#}
+      {%- if v.attachable -%}
+      <button class="fbadge fadd" type="button"
+              @click.stop="attach({{ v.id }}, $event)" title="{{ t.file_add_receipt() }}">
+        <kbd>+</kbd>
+      </button>
+      {%- endif -%}
     </div>
     {%- endif -%}
 

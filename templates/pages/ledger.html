@@ -131,6 +131,20 @@
     </div>
   </div>
 
+  {#- Attaching a file. Three distinct actions rather than one upload plus a
+      question: each kind has its own fixed name on disk and its own effect on
+      state, so asking afterwards would be asking about something already
+      decided. An income row has no slot 2 — you do not schedule money
+      arriving. The gesture itself is provisional — see TODO.md. -#}
+  <div class="filemenu" x-show="attaching" x-cloak :style="menuStyle"
+       @click.outside="attaching = null">
+    <button class="btn" type="button" @click="pick('barcode')">{{ t.file_add_bill() }}</button>
+    <button class="btn" type="button" @click="pick('scheduled')">{{ t.file_add_scheduled() }}</button>
+    <button class="btn" type="button" @click="pick('receipt')">{{ t.file_add_receipt() }}</button>
+  </div>
+  <input type="file" x-ref="picker" class="hidden-input"
+         accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()">
+
   {#- The same message channel the pre-auth pages use, so there is one way the
       app talks to you on both sides of the login. -#}
   <div class="status">
@@ -148,10 +162,18 @@ function ledger() {
     adding: null,
     kind: 'out',
     confirming: null,
+    attaching: null,
+    kind_: 'receipt',
+    menuStyle: '',
     msg: '',
     msgBad: false,
     pending: '',
     notARule: {{ not_a_rule|json|safe }},
+    noFile: {
+      barcode: {{ no_bill|json|safe }},
+      scheduled: {{ no_scheduled|json|safe }},
+      receipt: {{ no_receipt|json|safe }},
+    },
 
     rows() {
       const panes = document.querySelectorAll('.pane');
@@ -203,6 +225,10 @@ function ledger() {
       if (k === 'j') { this.row++; this.paint(); }
       else if (k === 'k') { this.row--; this.paint(); }
       else if (k === 'g') { this.pending = 'g'; }
+      // g1 / g2 / g3 — a genuine extension of the g-prefix "goto" vocabulary
+      // already in use (gg, gt), with numbering fixed by KIND so g1 means the
+      // bill on every row in the ledger.
+      else if (buffer === 'g' && ['1', '2', '3'].includes(k)) { this.openFile(Number(k)); }
       else if (k === 'G') { this.row = this.rows().length - 1; this.paint(); }
       else if (k === 'H') { this.pane = Math.max(0, this.pane - 1); this.row = 0; this.paint(); }
       else if (k === 'L') { this.pane = Math.min(document.querySelectorAll('.pane').length - 1, this.pane + 1); this.row = 0; this.paint(); }
@@ -252,6 +278,59 @@ function ledger() {
     },
 
     closeRule() { document.querySelector('#rulepane')?.remove(); },
+
+    // --- files -----------------------------------------------------------
+
+    attach(id, e) {
+      // Anchored to the control that opened it, because the ledger scrolls
+      // sideways and a centred menu would point at nothing.
+      const r = e.currentTarget.getBoundingClientRect();
+      this.attaching = id;
+      this.menuStyle = 'top:' + (r.bottom + 6) + 'px; left:' + Math.max(8, r.left - 80) + 'px';
+    },
+
+    pick(kind) {
+      this.kind_ = kind;
+      this.$refs.picker.click();
+    },
+
+    send() {
+      const input = this.$refs.picker;
+      if (!input.files.length || !this.attaching) return;
+      const body = new FormData();
+      body.append('file', input.files[0]);
+      const id = this.attaching;
+      this.attaching = null;
+      // htmx.ajax cannot carry a FormData body, so this one request is a plain
+      // fetch and the response is swapped by hand. It still speaks the same
+      // contract: a row fragment back, and the statusline in HX-Trigger.
+      fetch('/tx/' + id + '/file/' + this.kind_, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
+        .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
+        .then(({ html, trigger }) => {
+          if (html.trim()) {
+            const target = document.querySelector('#row-' + id);
+            if (target) target.outerHTML = html;
+          }
+          if (trigger) {
+            const payload = JSON.parse(trigger)['ffm:say'];
+            if (payload) this.say(payload.message, payload.bad);
+          }
+          this.paint();
+        });
+      input.value = '';
+    },
+
+    openFile(n) {
+      const rows = this.rows();
+      const el = rows[this.row];
+      const kind = { 1: 'barcode', 2: 'scheduled', 3: 'receipt' }[n];
+      const badge = el && el.querySelector('.fbadge[href$="/' + kind + '"]');
+      // Pressing a number for a file that is not there is a no-op with a
+      // message — the same family a missing file already belongs to, not a
+      // different error path to learn.
+      if (!badge) { this.say(this.noFile[kind], true); return; }
+      window.open(badge.getAttribute('href'), '_blank', 'noopener');
+    },
 
     askDelete() {
       const id = this.focusedId();

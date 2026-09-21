@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE receipts SET deleted_at = ?3, deleted_by = ?4,\n                               delete_reason = 'manual', deleted_from_path = path\n           WHERE transaction_id = ?1 AND kind = ?2 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "d04672fae2cf3d9e6f3eccccb1c3066d140c502d8a72496ac664801bf154a6bb"
+}

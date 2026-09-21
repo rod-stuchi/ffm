@@ -120,6 +120,23 @@ pub async fn pane(
     ctx: RowCtx,
     viewer: Viewer,
 ) -> sqlx::Result<Pane> {
+    pane_with_vault(pool, member, period, ctx, viewer, None).await
+}
+
+/// The same query, with the receipt vault available so each tracked row can be
+/// asked what is actually on disk.
+///
+/// `root` is optional because the sandbox and most tests have no vault — and a
+/// row with no files is a perfectly honest row: it reads `pending`, which is
+/// what "nothing has happened yet" means.
+pub async fn pane_with_vault(
+    pool: &SqlitePool,
+    member: &Member,
+    period: Period,
+    ctx: RowCtx,
+    viewer: Viewer,
+    root: Option<&std::path::Path>,
+) -> sqlx::Result<Pane> {
     let period_s = period.to_string();
     let prev_s = period.pred().to_string();
     let sees_private = viewer.sees_private_of(member.id);
@@ -162,6 +179,22 @@ pub async fn pane(
                 AND p.deleted_at IS NULL
               ORDER BY p.sort_key
               LIMIT 1)           AS "prev_amount_cents: i64",
+
+            -- The barcode window that covered THIS period, not the rule's
+            -- current one. A cyclic bill renews by re-entering the window, and
+            -- reading the current values would silently rewrite history: the
+            -- moment the 2027 window is set, January 2026 stops reading
+            -- "page 1" and starts reading "page -11, outside this file".
+            -- "Derived, never stored" still holds — the page is computed, it
+            -- is the window that persists.
+            (SELECT w.window_start FROM rule_barcode_window w
+              WHERE w.rule_id = t.rule_id AND w.window_start <= t.period
+              ORDER BY w.window_start DESC LIMIT 1)
+                               AS "hist_window_start?: String",
+            (SELECT w.window_size FROM rule_barcode_window w
+              WHERE w.rule_id = t.rule_id AND w.window_start <= t.period
+              ORDER BY w.window_start DESC LIMIT 1)
+                               AS "hist_window_size?: i64",
 
             -- The `7/12` badge. Counts occurrences of this rule up to and
             -- including this period, so it reads as position in the run.
@@ -222,8 +255,15 @@ pub async fn pane(
             instance: r.instance,
             total_installments: r.total_installments.map(|n| n as u16),
             spans_period: r.spans_period.unwrap_or(0) != 0,
-            window_size: r.window_size.map(|n| n as u16),
-            window_start: r.window_start.as_deref().and_then(Period::parse),
+            // The historical window wins where there is one; the rule's own
+            // columns are the fallback for a rule whose window predates this
+            // table, and the editor's current values for a brand-new one.
+            window_size: r.hist_window_size.or(r.window_size).map(|n| n as u16),
+            window_start: r
+                .hist_window_start
+                .as_deref()
+                .or(r.window_start.as_deref())
+                .and_then(Period::parse),
             amount_in_filename: r.amount_in_filename.unwrap_or(0) != 0,
             varies: r.varies.unwrap_or(0) != 0,
 
@@ -237,8 +277,7 @@ pub async fn pane(
             // meantime rather than a wrong guess.
             estimate_cents: None,
             installments_paid: recurring.then_some(r.installments_paid as u16),
-            // Phase 7. Until the vault is real, nothing is on disk, so a
-            // tracked row honestly reads `pending` rather than pretending.
+            // Filled in below, once the row exists to be asked about.
             files: FilePresence::default(),
 
             state: RowState::Ok,
@@ -250,6 +289,31 @@ pub async fn pane(
             gutter: Gutter::Absolute(i as u32 + 1),
             ctx,
         });
+    }
+
+    // The disk decides `paid`, so it is consulted per tracked row — one exact
+    // path per kind, never a traversal. An untracked row has no taxonomy to
+    // file under and is skipped entirely.
+    if let Some(root) = root {
+        for row in out.iter_mut().filter(|r| r.tracked) {
+            let (Some(bucket), Some(bill_name)) = (row.bucket.clone(), row.bill_name.clone())
+            else {
+                continue;
+            };
+            let slot = crate::services::receipts::Slot {
+                transaction_id: row.id,
+                vault: format!("{}-{}", member.uuid, member.slug),
+                bucket,
+                bill_name,
+                instance: row.instance.clone(),
+                period: row.period,
+                amount: row.amount_cents.map(|c| (c, ctx.currency)),
+                amount_in_filename: row.amount_in_filename,
+            };
+            if let Ok(found) = crate::services::receipts::presence(pool, root, &slot).await {
+                row.files = found;
+            }
+        }
     }
 
     Ok(Pane {

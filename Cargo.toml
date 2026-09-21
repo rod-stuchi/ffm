@@ -20,6 +20,7 @@ axum = { version = "0.8", default-features = false, features = [
     "query",
     "macros",
     "original-uri",   # the /lang switcher's hidden `next` field
+    "multipart",      # receipt uploads; the ONLY place bytes come in
 ] }
 # cookie, NOT cookie_private/signed: a session id is an opaque server-side row,
 # so there is nothing to sign.

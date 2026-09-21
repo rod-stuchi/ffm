@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE rule_barcode_window SET retired_at = ?2\n          WHERE rule_id = ?1 AND retired_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "588c70d8a9d51b0b73401539b9472c82ac9ee9ed3203dbe0133ebf6baf088b0f"
+}

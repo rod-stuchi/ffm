@@ -243,13 +243,44 @@ The seed-purity test also earned its keep: the new-rule placeholder's label is
 **app copy**, so hardcoding it in a fixture smuggled a translated string into
 one. It now renders from the catalog like every other word the app says.
 
-## Phase 7 — receipts and files
+## Phase 7 — receipts and files ✅
 
-What finally makes `RowStatus::Paid` real rather than a fixture. Computed paths,
-the three file kinds, the two-step `exists()` check (read `receipts.ext`, else
-probe the four extensions), soft delete into `.delete/`, and the
-`rule_barcode_window` table that fixes the recorded KNOWN HOLE about a renewed
-window rewriting history.
+What finally makes `RowStatus::Paid` real rather than a fixture: the status mark
+is now decided by the disk.
+
+- **`domain::receipt_path`** — the *one* path builder. The row renders its rail
+  from it and the store writes to it; two builders that agreed on Tuesday is
+  exactly how a vault ends up with files the app cannot see.
+- **The two-step `exists()` check, and both steps matter.** Read `receipts.ext`,
+  build the one exact path, stat it — so a file deleted by hand reads as unpaid.
+  With no row, probe the four allowed extensions — so a file *added* by hand is
+  still found. Skip the second and hand-filing silently stops working, which
+  removes the whole reason the filesystem is authoritative.
+- **Upload / open / delete**, three distinct actions rather than one upload plus
+  a question. The file is renamed to the deterministic convention; the user's
+  own filename is kept as metadata. Uploading the receipt **supersedes** the
+  scheduled file automatically, logged with `reason = superseded` so the trail
+  is honest about why it moved.
+- **Nothing is destroyed**: a delete moves the file into a sibling `.delete/`,
+  and `u` puts it back — undo now reaches file entries, not only transaction
+  ones, because the statusline promises it does.
+- **`rule_barcode_window` closes the recorded KNOWN HOLE** (migration 0003). An
+  occurrence resolves against the window that covered *its own* period, so
+  renewing a cyclic bill's window no longer turns last January into "page −11".
+  Re-entering the two fields **is** the renewal; the old window is retired, not
+  overwritten.
+- **The file rail is live**: fixed numbering by kind, only the files that exist,
+  `g1`/`g2`/`g3` opening in a new tab and saying so when there is nothing there.
+
+`tests/receipts.rs` — 12 tests, including a file deleted by hand reading as
+unpaid, one added by hand being found, the supersede, and the window renewal
+leaving last year's pages exactly as they were.
+
+**Provisional, and flagged as such:** the *gesture* for attaching a file. The
+spec never designed one ("there's no separate upload flow modelled for this
+yet"), so the focused row grows a `+` control opening a three-item menu. The
+server side is settled — three endpoints, one per kind — but the affordance is
+a placeholder for a real design decision, listed below.
 
 ## Phase 8 ★ — income estimates and the `~`
 
@@ -324,3 +355,20 @@ These are decisions, not tasks — they get scheduled when there is evidence.
    warning at the top, both password boxes visually full because the browser's
    password manager had refilled them — so the message and the fields it
    described disagreed on screen.
+
+5. **How a file actually gets attached is not designed.** Phase 7 built the
+   whole server side — three endpoints, one per kind, with the supersede and
+   the soft delete — but the spec explicitly leaves the gesture open, and the
+   `+` control on the focused row is a placeholder rather than a decision.
+
+   What needs settling:
+   - **Where it lives.** A control on the row, a drop target on the row, the
+     `gd` details popup, or the `P` carousel — which currently refuses on a row
+     with no files, so it cannot be the only home.
+   - **Drag and drop onto a *row*.** A panel drop was deliberately downgraded
+     to a notifier because inferring which rule a file belongs to is fragile.
+     A row drop infers nothing — the row is identified by where you dropped it
+     — which is the same reasoning that makes the rule editor's dropzone fine.
+   - **A keystroke, or none.** Every other action on a row has one; upload has
+     no obvious letter left, and inventing `gu` for it may be worse than
+     reaching for the mouse on something done a few times a month.

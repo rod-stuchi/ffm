@@ -6,6 +6,7 @@
 
 pub mod money;
 pub mod period;
+pub mod receipt_path;
 pub mod slug;
 pub mod sortkey;
 pub mod status;

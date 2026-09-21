@@ -215,6 +215,9 @@ pub async fn restore(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Undoable {
     pub change_id: i64,
+    /// `transaction` or `file`. A file's soft delete is undoable too — the
+    /// statusline says `u` puts it back, and it has to be true.
+    pub entity: String,
     pub entity_id: i64,
     pub action: String,
 }
@@ -225,11 +228,11 @@ pub struct Undoable {
 pub async fn last_undoable(pool: &SqlitePool, member_id: i64) -> sqlx::Result<Option<Undoable>> {
     let row = sqlx::query!(
         r#"SELECT c.id AS "id!: i64", c.entity_id AS "entity_id!: i64",
-                  c.action AS "action!: String"
+                  c.entity AS "entity!: String", c.action AS "action!: String"
            FROM change c
            WHERE c.member_id = ?1
-             AND c.entity = 'transaction'
-             AND c.action IN ('create', 'delete', 'restore')
+             AND ((c.entity = 'transaction' AND c.action IN ('create', 'delete', 'restore'))
+                  OR (c.entity = 'file' AND c.action IN ('file_upload', 'file_delete')))
              AND c.undo_of IS NULL
              -- Already undone: its reversal points back at it. Without this,
              -- `u` twice in a row would toggle the same change forever instead
@@ -244,13 +247,20 @@ pub async fn last_undoable(pool: &SqlitePool, member_id: i64) -> sqlx::Result<Op
 
     Ok(row.map(|r| Undoable {
         change_id: r.id,
+        entity: r.entity,
         entity_id: r.entity_id,
         action: r.action,
     }))
 }
 
 /// Applies the reverse of `undoable`, writing the reversal as its own entry.
+/// Reverses a **transaction** change. A file change is undone by
+/// `services::receipts`, which is the only thing that may touch the vault —
+/// this module never moves a file.
 pub async fn undo(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Result<bool> {
+    if u.entity != "transaction" {
+        return Ok(false);
+    }
     let done = match u.action.as_str() {
         // Undoing an add is a soft delete like any other — the row stays, it is
         // simply marked, and the log says who reversed what.

@@ -12,7 +12,7 @@ use crate::domain::money::Cents;
 use crate::domain::period::Period;
 use crate::domain::status::{TxKind, Visibility};
 use chrono::{NaiveDate, Utc};
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, Transaction};
 
 fn now() -> String {
     Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
@@ -53,6 +53,12 @@ pub struct RuleForm {
     pub bill_name: Option<String>,
     pub instance: Option<String>,
     pub no_barcode: bool,
+    /// One uploaded document covering several periods. Off by default: most
+    /// bills genuinely do get a new file each month.
+    pub spans_period: bool,
+    pub window_size: Option<i64>,
+    /// Which period is page 1 of the current file.
+    pub window_start: Option<Period>,
     pub varies: bool,
     pub estimate_basis: String,
     pub estimate_window: i64,
@@ -79,6 +85,9 @@ pub struct Rule {
     pub bill_name: Option<String>,
     pub instance: Option<String>,
     pub no_barcode: bool,
+    pub spans_period: bool,
+    pub window_size: Option<i64>,
+    pub window_start: Option<Period>,
     pub varies: bool,
     pub estimate_basis: String,
     pub estimate_window: i64,
@@ -126,6 +135,8 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
     let no_barcode = i64::from(form.no_barcode);
     let varies = i64::from(form.varies);
     let in_filename = i64::from(form.amount_in_filename);
+    let spans = i64::from(form.spans_period);
+    let window_start = form.window_start.map(|p| p.to_string());
 
     let id = sqlx::query_scalar!(
         r#"INSERT INTO recurring_rules
@@ -133,9 +144,9 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
                 start_date, end_date, total_installments, carry_forward_amount,
                 tracked, bucket, bill_name, instance, no_barcode, varies,
                 estimate_basis, estimate_window, amount_in_filename,
-                visibility, created_at)
+                visibility, created_at, spans_period, window_size, window_start)
            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-                   ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+                   ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
            RETURNING id AS "id!: i64""#,
         form.member_id,
         form.title,
@@ -158,9 +169,14 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
         in_filename,
         visibility,
         at,
+        spans,
+        form.window_size,
+        window_start,
     )
     .fetch_one(&mut *tx)
     .await?;
+
+    record_window(&mut tx, id, form, &at).await?;
 
     Change::rule(actor, RuleAction::Create, id)
         .diff("title", Value::Text(None), Value::text(&form.title))
@@ -199,6 +215,8 @@ pub async fn edit(pool: &SqlitePool, actor: Actor, id: i64, form: &RuleForm) -> 
     let no_barcode = i64::from(form.no_barcode);
     let varies = i64::from(form.varies);
     let in_filename = i64::from(form.amount_in_filename);
+    let spans = i64::from(form.spans_period);
+    let window_start = form.window_start.map(|p| p.to_string());
 
     sqlx::query!(
         r#"UPDATE recurring_rules SET
@@ -207,7 +225,8 @@ pub async fn edit(pool: &SqlitePool, actor: Actor, id: i64, form: &RuleForm) -> 
                total_installments = ?9, carry_forward_amount = ?10,
                tracked = ?11, bucket = ?12, bill_name = ?13, instance = ?14,
                no_barcode = ?15, varies = ?16, estimate_basis = ?17,
-               estimate_window = ?18, amount_in_filename = ?19, visibility = ?20
+               estimate_window = ?18, amount_in_filename = ?19, visibility = ?20,
+               spans_period = ?21, window_size = ?22, window_start = ?23
            WHERE id = ?1"#,
         id,
         form.title,
@@ -229,9 +248,14 @@ pub async fn edit(pool: &SqlitePool, actor: Actor, id: i64, form: &RuleForm) -> 
         form.estimate_window,
         in_filename,
         visibility,
+        spans,
+        form.window_size,
+        window_start,
     )
     .execute(&mut *tx)
     .await?;
+
+    record_window(&mut tx, id, form, &now()).await?;
 
     let entry = Change::rule(actor, RuleAction::Edit, id)
         .diff("title", Value::text(&old.title), Value::text(&form.title))
@@ -312,6 +336,67 @@ pub async fn soft_delete(pool: &SqlitePool, actor: Actor, id: i64) -> sqlx::Resu
     Ok(true)
 }
 
+/// Records the rule's current barcode window as a row, retiring whatever was
+/// live before it.
+///
+/// This is what closes the KNOWN HOLE: the page an occurrence shows is derived
+/// from the window that covered **its own** period, so renewing a cyclic
+/// bill's window no longer rewrites last year's rows into "page −11, outside
+/// this file". Re-entering the two fields *is* the renewal — there is no
+/// separate control, and none is needed.
+async fn record_window(
+    tx: &mut Transaction<'_, Sqlite>,
+    rule_id: i64,
+    form: &RuleForm,
+    at: &str,
+) -> sqlx::Result<()> {
+    let (Some(size), Some(start)) = (form.window_size, form.window_start) else {
+        return Ok(());
+    };
+    if !form.spans_period {
+        return Ok(());
+    }
+    let start = start.to_string();
+
+    // Unchanged is not a renewal: an ordinary save must not retire the live
+    // window and insert an identical one, or every edit would add a row.
+    let live: Option<(String, i64)> = sqlx::query_as(
+        "SELECT window_start, window_size FROM rule_barcode_window
+          WHERE rule_id = ?1 AND retired_at IS NULL",
+    )
+    .bind(rule_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if live
+        .as_ref()
+        .is_some_and(|(s, n)| *s == start && *n == size)
+    {
+        return Ok(());
+    }
+
+    sqlx::query!(
+        "UPDATE rule_barcode_window SET retired_at = ?2
+          WHERE rule_id = ?1 AND retired_at IS NULL",
+        rule_id,
+        at
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query!(
+        r#"INSERT INTO rule_barcode_window
+               (rule_id, window_start, window_size, uploaded_at)
+           VALUES (?1, ?2, ?3, ?4)"#,
+        rule_id,
+        start,
+        size,
+        at,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
     let row = sqlx::query!(
         r#"SELECT id AS "id!: i64", member_id AS "member_id!: i64",
@@ -327,6 +412,9 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
                   bucket AS "bucket: String", bill_name AS "bill_name: String",
                   instance AS "instance: String",
                   no_barcode AS "no_barcode!: i64", varies AS "varies!: i64",
+                  spans_period AS "spans_period!: i64",
+                  window_size AS "window_size: i64",
+                  window_start AS "window_start: String",
                   estimate_basis AS "estimate_basis!: String",
                   estimate_window AS "estimate_window!: i64",
                   amount_in_filename AS "amount_in_filename!: i64",
@@ -357,6 +445,9 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
             bill_name: r.bill_name,
             instance: r.instance,
             no_barcode: r.no_barcode != 0,
+            spans_period: r.spans_period != 0,
+            window_size: r.window_size,
+            window_start: r.window_start.as_deref().and_then(Period::parse),
             varies: r.varies != 0,
             estimate_basis: r.estimate_basis,
             estimate_window: r.estimate_window,

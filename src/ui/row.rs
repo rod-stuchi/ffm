@@ -15,7 +15,7 @@
 
 use crate::domain::money::{Cents, Currency};
 use crate::domain::period::Period;
-use crate::domain::slug::slugify;
+use crate::domain::receipt_path;
 use crate::domain::status::{RowFlags, RowState, RowStatus, TxKind, Visibility};
 use crate::ui::fmt;
 use crate::ui::i18n::Catalog;
@@ -91,13 +91,25 @@ impl FileKind {
         }
     }
 
-    /// The filename suffix before the extension. The receipt has none — its
-    /// bare presence is what `paid` means.
-    pub fn suffix(self) -> &'static str {
+    /// How the store names this kind. The rail calls slot 1 a *Bill* (or an
+    /// *Invoice*); on disk it is the `_barcode` file. One is what a person
+    /// reads, the other is what the filesystem holds, and they are allowed to
+    /// differ — but only through this one mapping.
+    pub fn storage(self) -> crate::domain::receipt_path::Kind {
+        use crate::domain::receipt_path::Kind;
         match self {
-            FileKind::Bill => "_barcode",
-            FileKind::Scheduled => "_scheduled",
-            FileKind::Receipt => "",
+            FileKind::Bill => Kind::Barcode,
+            FileKind::Scheduled => Kind::Scheduled,
+            FileKind::Receipt => Kind::Receipt,
+        }
+    }
+
+    pub fn of_storage(kind: crate::domain::receipt_path::Kind) -> FileKind {
+        use crate::domain::receipt_path::Kind;
+        match kind {
+            Kind::Barcode => FileKind::Bill,
+            Kind::Scheduled => FileKind::Scheduled,
+            Kind::Receipt => FileKind::Receipt,
         }
     }
 }
@@ -466,36 +478,28 @@ impl LedgerRow {
     /// relabel them.
     pub fn file_path(&self, kind: FileKind) -> Option<String> {
         let ext = self.files.get(kind)?;
-        let bucket = slugify(self.bucket.as_deref()?);
-        let bill = slugify(self.bill_name.as_deref()?);
-
-        let mut path = format!(
-            "{}-{}/{}/{}",
-            self.member_uuid, self.member_slug, bucket, bill
-        );
-        if let Some(instance) = self.instance.as_deref() {
-            path.push('/');
-            path.push_str(&slugify(instance));
-        }
-        path.push('/');
-        path.push_str(&self.period.path_year());
-        path.push('/');
-        path.push_str(&self.period.path_month());
-
-        // `09_brl122.94.pdf`. Only the definitive receipt carries the amount —
-        // and only when a real value is known, so nothing is ever named after a
-        // zero nobody owes.
-        if kind == FileKind::Receipt
-            && self.amount_in_filename
-            && let Some(c) = self.amount_cents
-        {
-            path.push('_');
-            path.push_str(&fmt::money_filename(c, self.ctx.currency));
-        }
-        path.push_str(kind.suffix());
-        path.push('.');
-        path.push_str(ext);
-        Some(path)
+        // `{uuid}-{slug}`: files live under their owner's folder, so two
+        // members using the same bucket name never collide.
+        let vault = format!("{}-{}", self.member_uuid, self.member_slug);
+        let tax = receipt_path::Taxonomy {
+            vault: &vault,
+            bucket: self.bucket.as_deref()?,
+            bill_name: self.bill_name.as_deref()?,
+            instance: self.instance.as_deref(),
+        };
+        Some(receipt_path::file(
+            &tax,
+            self.period,
+            kind.storage(),
+            ext,
+            // Only the receipt ever carries it, and only when the rule opted
+            // in — the builder enforces both, so the row just hands over what
+            // it knows.
+            self.amount_in_filename
+                .then_some(self.amount_cents)
+                .flatten()
+                .map(|c| (c, self.ctx.currency)),
+        ))
     }
 
     /// Which page of a multi-period barcode document this occurrence is.
@@ -647,6 +651,10 @@ pub struct RowView {
 
     // files
     pub files: Vec<FileView>,
+    /// Whether this row can hold files at all. A one-off has no taxonomy to
+    /// file under, so it gets no attach control — the feature is scoped to
+    /// recurring-rule occurrences, and the row says which it is.
+    pub attachable: bool,
 
     // amount
     pub amount: String,
@@ -669,7 +677,15 @@ pub struct FileView {
     pub svg: &'static str,
     pub number: u8,
     pub label: &'static str,
+    /// The computed path, shown in the control's tooltip — the vault is meant
+    /// to be browsable by hand, so knowing where a file actually is matters.
     pub path: String,
+    /// The route that serves it. Never the path: a URL built from user-typed
+    /// taxonomy is a path traversal waiting to be written, so the server
+    /// recomputes it from the row's own id and kind instead.
+    pub href: String,
+    /// `barcode` | `scheduled` | `receipt`, for the delete and upload actions.
+    pub kind: &'static str,
     pub page: Option<String>,
     pub warn: bool,
 }
@@ -770,9 +786,16 @@ impl LedgerRow {
                     label: c.label,
                     page: c.page.map(|p| format!("p.{}", p.page)),
                     warn: c.page.is_some_and(|p| !p.in_window),
+                    href: format!("/tx/{}/file/{}", self.id, c.kind.storage().code()),
+                    kind: c.kind.storage().code(),
                     path: c.path,
                 })
                 .collect(),
+
+            attachable: self.tracked
+                && self.bucket.is_some()
+                && self.bill_name.is_some()
+                && !matches!(self.state, RowState::Skeleton | RowState::Placeholder),
 
             amount: amount.text,
             amount_income: amount.is_income,

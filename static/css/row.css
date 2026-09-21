@@ -350,6 +350,20 @@ body:not(.kbd-nav) .row:hover .entry {
   stroke-linejoin: round;
 }
 
+/* Attaching a file is an ACTION, so it appears only on the row you are
+ * actually looking at — the rail itself keeps showing only files that exist,
+ * with no ghost placeholders. Pure CSS: the focus class is already on the row,
+ * and making this Alpine state would put a second answer in a second place. */
+.fadd {
+  display: none;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.row.is-focus .fadd {
+  display: inline-flex;
+}
+
 /* Compact by default, labelled on the focused row. */
 .fbadge .flabel {
   max-width: 0;

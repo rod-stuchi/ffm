@@ -455,18 +455,19 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   barcode specifically: `{month}_scheduled.{ext}` and `{month}.{ext}` stay
   genuinely per-period regardless — each installment is still scheduled and
   paid on its own, only the *bill document* is shared.
-  - **KNOWN HOLE: renewing a window silently rewrites history.** The page is
-    derived from the rule's *current* `window_start`, and a cyclic bill renews
-    by re-entering it — so the moment the 2027 window is set, January 2026's
-    row stops reading "page 1" and starts reading "page −11, outside this
-    file's 10 pages". The file rail and the `P` carousel would both begin
-    flagging history that was never wrong. The fix is a
-    `rule_barcode_window(rule_id, window_start, window_size, file_path,
-    uploaded_at, retired_at)` table, with an occurrence resolving against the
-    window that covered *its own* period. "Derived, never stored" still holds:
-    the page number is not stored, the **window** is. Deferred to the receipts
-    phase, but written down here so it stays a decision rather than becoming a
-    discovery.
+  - **Renewing a window used to rewrite history; it no longer does.** The
+    page was derived from the rule's *current* `window_start`, and a cyclic
+    bill renews by re-entering it — so the moment the 2027 window was set,
+    January 2026's row stopped reading "page 1" and started reading "page
+    −11, outside this file's 10 pages", flagging history that was never
+    wrong. Closed by `rule_barcode_window(rule_id, window_start,
+    window_size, file_path, uploaded_at, retired_at)`: an occurrence
+    resolves against the window that covered **its own** period, and
+    re-entering the two fields retires the live window rather than
+    overwriting it. "Derived, never stored" still holds — the page number is
+    computed; it is the **window** that persists. The rule's own
+    `spans_period`/`window_size`/`window_start` stay as its *current*
+    window, which is what the editor writes and what a new upload sets.
   - **This applies whether the rule itself is finite or cyclic — the window
     doesn't have to span the rule's entire life.** A fixed-length loan gets
     exactly one window for its whole run (`window_size` = its

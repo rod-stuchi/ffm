@@ -124,6 +124,12 @@ struct LedgerPage {
     /// `E` on a row with no rule behind it says so in the statusline rather
     /// than doing nothing at all.
     not_a_rule: String,
+    /// The three "there is no such file" messages — `g1`/`g2`/`g3` on a row
+    /// that has not got one. Three fields rather than a JSON blob, so each is
+    /// escaped by the same filter as every other string handed to the page.
+    no_bill: String,
+    no_scheduled: String,
+    no_receipt: String,
     house: HouseTotals,
     empty: bool,
 }
@@ -167,7 +173,16 @@ pub async fn ledger(
     for m in &members {
         // Privacy is applied inside the query, so the rows and the totals
         // below cannot disagree about what this viewer can see.
-        let Ok(pane) = ledger::pane(&st.pool, m, period, ctx, auth.viewer).await else {
+        let Ok(pane) = ledger::pane_with_vault(
+            &st.pool,
+            m,
+            period,
+            ctx,
+            auth.viewer,
+            Some(&st.cfg.receipts_root),
+        )
+        .await
+        else {
             continue;
         };
         ins += pane.ins;
@@ -192,6 +207,9 @@ pub async fn ledger(
         period: fmt::period(period),
         period_key: period.to_string(),
         not_a_rule: t.rule_none_on_row().to_string(),
+        no_bill: t.file_none_bill().to_string(),
+        no_scheduled: t.file_none_scheduled().to_string(),
+        no_receipt: t.file_none_receipt().to_string(),
         prev: period.pred().to_string(),
         next: period.succ().to_string(),
         empty: panes.is_empty(),

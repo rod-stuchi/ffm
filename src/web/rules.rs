@@ -72,6 +72,9 @@ pub struct RulePane {
     installments: String,
     tracked: bool,
     no_barcode: bool,
+    spans_period: bool,
+    window_size: String,
+    window_start: String,
     carry_forward: bool,
     varies: bool,
     estimate_basis: String,
@@ -141,6 +144,9 @@ pub async fn new_rule(
         installments: String::new(),
         tracked: false,
         no_barcode: false,
+        spans_period: false,
+        window_size: String::new(),
+        window_start: String::new(),
         // Checked by default: most bills drift slowly, and a household that
         // wants an explicit number every period says so.
         carry_forward: true,
@@ -195,6 +201,9 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
             .unwrap_or_default(),
         tracked: r.tracked,
         no_barcode: r.no_barcode,
+        spans_period: r.spans_period,
+        window_size: r.window_size.map(|n| n.to_string()).unwrap_or_default(),
+        window_start: r.window_start.map(|p| p.to_string()).unwrap_or_default(),
         carry_forward: r.carry_forward_amount,
         varies: r.varies,
         estimate_basis: r.estimate_basis.clone(),
@@ -246,6 +255,12 @@ pub struct RuleFormInput {
     tracked: Option<String>,
     #[serde(default)]
     no_barcode: Option<String>,
+    #[serde(default)]
+    spans_period: Option<String>,
+    #[serde(default)]
+    window_size: Option<i64>,
+    #[serde(default)]
+    window_start: String,
     #[serde(default)]
     carry_forward: Option<String>,
     #[serde(default)]
@@ -322,6 +337,17 @@ impl RuleFormInput {
             // The whole barcode apparatus is spend-only: money arriving has no
             // boleto to scan, and the schema has a CHECK saying so.
             no_barcode: !kind.is_income() && on(&self.no_barcode),
+            // A window belongs to a tracked SPEND with a barcode: the schema
+            // has a CHECK for each of those, and building the form value the
+            // same way means a contradictory rule never reaches it.
+            spans_period: tracked
+                && !kind.is_income()
+                && !on(&self.no_barcode)
+                && on(&self.spans_period)
+                && self.window_size.is_some()
+                && !self.window_start.trim().is_empty(),
+            window_size: self.window_size.filter(|n| (1..=120).contains(n)),
+            window_start: Period::parse(self.window_start.trim()),
             varies: kind.is_income() && on(&self.varies),
             estimate_basis: match self.estimate_basis.as_str() {
                 "average" | "last" => self.estimate_basis.clone(),

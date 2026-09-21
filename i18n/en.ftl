@@ -230,3 +230,22 @@ cadence-quarterly = Every 3 months
 cadence-four = Every 4 months
 cadence-half = Every 6 months
 cadence-yearly = Yearly
+
+## Files
+
+file-add-bill = Add bill
+file-add-scheduled = Add scheduled
+file-add-receipt = Add receipt
+file-added = file added
+file-removed = file moved to .delete · u to put it back
+file-open = Open in new tab
+file-delete = Delete file
+file-not-tracked = this row has nothing to file under
+file-too-big = that file is too large to keep
+file-preview = Files
+file-no-files = no files on this row
+file-page-of = One file, { $total } pages — this month is page { $page }
+file-page-outside = page { $page } — outside this file's { $total } pages, a new upload is needed for this month
+rule-spans-period = Barcode covers multiple months
+rule-window-size = Pages in this file
+rule-window-start = First page covers

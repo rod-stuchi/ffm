@@ -2,6 +2,7 @@
 
 pub mod auth;
 pub mod csrf;
+pub mod files;
 pub mod ledger;
 pub mod rules;
 pub mod session;
@@ -41,6 +42,11 @@ pub fn router(state: AppState) -> Router {
         .route("/tx", post(tx::add))
         .route("/tx/{id}/delete", post(tx::delete))
         .route("/undo", post(tx::undo))
+        // Files. Three distinct actions rather than one upload plus a
+        // question: each kind has its own fixed name on disk and its own
+        // effect on state.
+        .route("/tx/{id}/file/{kind}", get(files::open).post(files::upload))
+        .route("/tx/{id}/file/{kind}/delete", post(files::delete))
         // The rule pane. A / I open it blank, E on a recurring row opens it
         // filled in; saving reconciles immediately so the periods the rule is
         // responsible for arrive in the same response.
