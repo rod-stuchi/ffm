@@ -14,9 +14,10 @@
  */
 
 :root {
-  /* Self-hosted, per CLAUDE.md — the mockups use Google Fonts only because they
-   * have no build step. The fallbacks are real rather than decorative, because
-   * the woff2 files are not in the repo yet (see static/fonts/README.md). */
+  /* Self-hosted, per CLAUDE.md — the mockups link Google Fonts only because
+   * they have no build step. The @font-face rules live in fonts.css, generated
+   * by `just fonts`; the fallback stacks stay anyway, for the moment between
+   * first paint and the woff2 arriving (font-display: swap). */
   --sans: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --r: 10px;

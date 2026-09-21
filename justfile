@@ -25,6 +25,11 @@ css:
 css-build:
     npx @tailwindcss/cli -i static/css/app.css -o static/css/build.css --minify
 
+# Re-download the self-hosted font subsets and regenerate static/css/fonts.css.
+# The output is committed, so this is only needed when the weights change.
+fonts:
+    python3 scripts/fetch-fonts.py
+
 # --- database ----------------------------------------------------------------
 
 # Create the database and apply every migration with the plain sqlite3 CLI.
