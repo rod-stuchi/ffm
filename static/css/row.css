@@ -1,0 +1,493 @@
+/* The ledger row.
+ *
+ * Ported from design/ffm-app-mockup.html, with one systematic change: state
+ * classes carry an `is-` / `has-` prefix. The mockup's bare `.focus`, `.sel`,
+ * `.deleted` are renamed here rather than later, because an unprefixed state
+ * class has already collided with a leftover rule once in this project and
+ * broken the shell width. Doing it during the port is find-and-replace; doing
+ * it afterwards is archaeology.
+ *
+ * Every colour is a var(--token). There are no hex values in this file, which
+ * `just css-check` enforces — that is what lets a palette swap actually reach
+ * the row.
+ */
+
+.row {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: stretch;
+  border-left: 3px solid transparent;
+  padding: 1px 10px 1px 0;
+  position: relative;
+}
+
+.row.is-focus {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* --- gutter ------------------------------------------------------------- */
+
+.gut {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  text-align: right;
+  padding: 11px 8px 0 0;
+  user-select: none;
+}
+
+.row.is-focus .gut {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* `nonu` narrows the track and empties the cell. It never removes it:
+ * display:none on a grid child reflows its siblings, which pulled .entry into
+ * the 10px first track and crushed the row. The same bug arrives via Tailwind's
+ * `hidden` on a grid child. */
+.row.is-nogut {
+  grid-template-columns: 10px 1fr;
+}
+
+.row.is-nogut .gut {
+  padding-right: 0;
+  overflow: hidden;
+}
+
+/* --- the entry ---------------------------------------------------------- */
+
+.entry {
+  display: grid;
+  grid-template-columns: 26px 1fr auto auto;
+  gap: 11px;
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: var(--r);
+  padding: 8px 12px;
+  min-width: 0;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.1s;
+}
+
+/* Suppressed while navigating by keyboard: otherwise the physical mouse
+ * position keeps painting a second, unrelated highlight while j/k moves the
+ * real cursor somewhere else. Any real mouse movement clears `kbd-nav`. */
+body:not(.kbd-nav) .row:hover .entry {
+  background: var(--surface-3);
+}
+
+.row.is-focus .entry {
+  background: var(--surface-2);
+  border-color: var(--accent-line);
+}
+
+/* Selection and focus use different channels on purpose: one is "where I am",
+ * the other is "what I picked". */
+.row.is-selected .entry {
+  box-shadow: inset 3px 0 0 var(--info);
+}
+
+.row.is-deleted .entry {
+  opacity: 0.5;
+}
+.row.is-deleted .name b,
+.row.is-deleted .amt .v {
+  text-decoration: line-through;
+}
+
+.row.has-draft .entry {
+  border-style: dashed;
+  border-color: var(--accent-line);
+}
+
+.row.is-placeholder .entry {
+  border-style: dashed;
+  border-color: var(--line-2);
+  background: transparent;
+  color: var(--ink-3);
+}
+
+.row.is-error .entry {
+  background: var(--neg-soft);
+  border-color: var(--neg);
+}
+
+/* --- status mark -------------------------------------------------------- */
+
+.mark {
+  width: 26px;
+  height: 26px;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.mark svg.ring {
+  position: absolute;
+  inset: 0;
+  width: 26px;
+  height: 26px;
+  transform: rotate(-90deg);
+}
+
+.mark .disc {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Text on a semantic fill takes var(--paper), never #fff: --pos and --neg are
+ * chosen to contrast with the page ground, so the ground is the correct
+ * foreground. Hardcoded white breaks on the fifth theme, not the first. */
+.mark .disc.tone-pos {
+  background: var(--pos);
+  color: var(--paper);
+  box-shadow: 0 0 0 3px var(--pos-soft);
+}
+
+.mark .disc.tone-neg {
+  background: var(--neg);
+  color: var(--paper);
+}
+
+/* Outlined rather than filled: asserted, not proven. This is the visual
+ * difference between a receipt on disk and somebody ticking a box, and the two
+ * must never share a mark. */
+.mark .disc.is-outline {
+  background: transparent;
+  border: 2px solid var(--pos);
+  color: var(--pos);
+  box-shadow: none;
+}
+
+.mark .disc.is-inner {
+  width: 17px;
+  height: 17px;
+  font-size: 10px;
+  background: var(--surface-3);
+  color: var(--ink-3);
+}
+
+.mark .disc.is-inner.tone-info {
+  color: var(--info);
+}
+
+.mark .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-2);
+}
+
+.mark .dot.tone-pos {
+  background: var(--pos);
+}
+
+/* --- name and meta ------------------------------------------------------ */
+
+.name {
+  min-width: 0;
+}
+
+.name b {
+  font-weight: 600;
+  font-size: 13.5px;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.name .meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.meta .warn {
+  color: var(--neg);
+}
+.meta .info {
+  color: var(--info);
+}
+.meta .ok {
+  color: var(--pos);
+}
+
+/* Recurring and private are always BOTH rendered, dimmed when off, so the row's
+ * width does not jump as rows scroll past. Active is full opacity in the fact's
+ * own colour; inactive is the same icon at low opacity. */
+.mflag {
+  display: inline-flex;
+  opacity: 0.28;
+  color: var(--ink-3);
+}
+.mflag svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.mflag.is-on {
+  opacity: 1;
+}
+.mflag.is-on.flag-recurring {
+  color: var(--accent);
+}
+.mflag.is-on.flag-private {
+  color: var(--info);
+}
+
+.inst {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- file rail ---------------------------------------------------------- */
+
+/* Files are actions, not payment state — so they stay neutral and subordinate
+ * to the 26px status mark. The keycap is part of the control rather than a
+ * floating badge, which is what makes the fixed g1/g2/g3 mapping obvious. */
+.fbadges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-right: 18px;
+  min-width: 0;
+}
+
+.fbadge {
+  height: 26px;
+  min-width: 34px;
+  max-width: 112px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px 0 5px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid var(--line-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-decoration: none;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease,
+    max-width 0.16s ease;
+}
+
+.fbadge:hover,
+.fbadge:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* A multi-period bill whose computed page falls outside the uploaded file's
+ * page count: the window ran out and needs a fresh upload. Same warning channel
+ * as scheduled-overdue — not a new colour meaning. */
+.fbadge.is-warn {
+  border-color: var(--neg);
+  color: var(--neg);
+}
+.fbadge.is-warn:hover,
+.fbadge.is-warn:focus-visible {
+  border-color: var(--neg);
+  color: var(--neg);
+  background: var(--neg-soft);
+}
+
+.fbadge kbd {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1.25;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  background: var(--surface-2);
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.fbadge .ficon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  flex: none;
+  pointer-events: none;
+}
+.fbadge .ficon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Compact by default, labelled on the focused row. */
+.fbadge .flabel {
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--ink-3);
+  transition:
+    max-width 0.16s ease,
+    opacity 0.12s ease;
+}
+
+.row.is-focus .fbadge .flabel {
+  max-width: 72px;
+  opacity: 1;
+}
+
+/* Narrow screens stay icon-only regardless of focus — there is no room for a
+ * label, and the number is what the keybinding uses anyway. */
+@media (max-width: 700px) {
+  .row.is-focus .fbadge .flabel {
+    max-width: 0;
+    opacity: 0;
+  }
+}
+
+/* --- amount ------------------------------------------------------------- */
+
+.amt {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.amt .v {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.amt .v.is-income {
+  color: var(--pos);
+}
+
+/* A projection is quieter than a fact, and carries a tilde. Two channels
+ * saying the same thing, neither inferred from the other. */
+.amt .v.is-estimated {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.amt .v.is-placeholder {
+  color: var(--ink-3);
+}
+
+.amt .d {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  margin-top: 1px;
+}
+
+/* The arrow is direction; the colour is whether that direction is good news.
+ * For income they disagree, which is the point. */
+.amt .d.is-bad {
+  color: var(--neg);
+}
+.amt .d.is-good {
+  color: var(--pos);
+}
+.amt .d.is-flat {
+  color: var(--ink-3);
+}
+
+/* --- skeleton and error ------------------------------------------------- */
+
+/* Geometry must match the real row exactly, so nothing shifts when the
+ * server's fragment lands. */
+.sk-bar {
+  height: 9px;
+  border-radius: 4px;
+  background: var(--skeleton);
+  background-size: 220% 100%;
+  animation: sk-shimmer 1.15s linear infinite;
+}
+
+.sk-disc {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--skeleton);
+  background-size: 220% 100%;
+  animation: sk-shimmer 1.15s linear infinite;
+}
+
+@keyframes sk-shimmer {
+  from {
+    background-position: 110% 0;
+  }
+  to {
+    background-position: -110% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-bar,
+  .sk-disc {
+    animation: none;
+  }
+  .entry,
+  .fbadge,
+  .fbadge .flabel {
+    transition: none;
+  }
+}
+
+.errtxt {
+  display: block;
+  font-size: 12.5px;
+  color: var(--neg);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.errsub {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
+
+.retry {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--neg);
+  color: var(--paper);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+}

@@ -1,0 +1,101 @@
+{#- The ledger row. Rendered from a RowView, whose every field was decided in
+    Rust — the status mark, the delta arrow and the meta glyphs are pure
+    functions of LedgerRow's fields, so there is almost nothing to decide here.
+
+    The gutter cell is always present. `is-nogut` narrows its track and empties
+    it; display:none on a grid child reflows its siblings and crushes the row. -#}
+<div class="row {{ v.classes }}">
+  <div class="gut">{{ v.gutter }}</div>
+
+  {%- if v.is_skeleton -%}
+  <div class="entry">
+    <div class="mark"><div class="sk-disc"></div></div>
+    <div class="name">
+      <div class="sk-bar" style="width:56%"></div>
+      <div class="sk-bar" style="width:32%;height:7px;margin-top:6px"></div>
+    </div>
+    <div></div>
+    <div class="amt"><div class="sk-bar" style="width:74px"></div></div>
+  </div>
+  {%- else if let Some(err) = v.error -%}
+  {#- Says what happened AND that nothing was written. No apologies. -#}
+  <div class="entry">
+    <div class="mark"><div class="disc tone-neg">!</div></div>
+    <div class="name">
+      <span class="errtxt">{{ err }}</span>
+      <span class="errsub">nothing was written</span>
+    </div>
+    <div></div>
+    <div class="amt"><button class="retry" type="button">{{ t.row_try_again() }}</button></div>
+  </div>
+  {%- else -%}
+  <div class="entry">
+    {#- status mark -#}
+    <div class="mark">
+      {%- if v.mark_kind == "ring" -%}
+      <svg class="ring" viewBox="0 0 26 26" aria-hidden="true">
+        <circle cx="13" cy="13" r="10.5" fill="none" stroke="var(--line-2)" stroke-width="2.5"></circle>
+        <circle cx="13" cy="13" r="10.5" fill="none" stroke="var(--{{ v.mark_tone }})"
+                stroke-width="2.5" stroke-linecap="round"
+                stroke-dasharray="65.973" stroke-dashoffset="{{ v.ring_offset }}"></circle>
+      </svg>
+      {%- if let Some(inner) = v.mark_inner -%}
+      <div class="disc is-inner tone-{{ v.mark_tone }}">{{ inner }}</div>
+      {%- endif -%}
+      {%- else if v.mark_kind == "disc" -%}
+      <div class="disc tone-{{ v.mark_tone }}">{{ v.mark_glyph }}</div>
+      {%- else if v.mark_kind == "outline" -%}
+      <div class="disc is-outline tone-{{ v.mark_tone }}">{{ v.mark_glyph }}</div>
+      {%- else -%}
+      <span class="dot{% if v.mark_tone != "muted" %} tone-{{ v.mark_tone }}{% endif %}"></span>
+      {%- endif -%}
+    </div>
+
+    {#- name + meta -#}
+    <div class="name">
+      <b>{{ v.title }}</b>
+      <div class="meta">
+        {%- if let Some(m) = v.meta_text -%}
+        <span class="{{ v.meta_tone }}">{{ m }}</span>
+        {%- endif -%}
+        {%- if let Some(i) = v.installments -%}
+        <span class="inst">{{ i }}</span>
+        {%- endif -%}
+        {#- Recurring and private always BOTH render, dimmed when off, so the
+            row's width does not jump as rows scroll past. -#}
+        {%- for f in v.flags -%}
+        <span class="mflag flag-{{ f.icon }}{% if f.on %} is-on{% endif %}">
+          {{ f.svg|safe }}
+        </span>
+        {%- endfor -%}
+      </div>
+    </div>
+
+    {#- file rail. Numbers are fixed by kind: g1 is always the bill. -#}
+    {%- if v.files.is_empty() -%}
+    <div></div>
+    {%- else -%}
+    <div class="fbadges">
+      {%- for f in v.files -%}
+      <a class="fbadge{% if f.warn %} is-warn{% endif %}" href="/files/{{ f.path }}"
+         target="_blank" rel="noopener" title="{{ f.label }} — {{ f.path }}">
+        <kbd>{{ f.number }}</kbd>
+        <span class="ficon">{{ f.svg|safe }}</span>
+        <span class="flabel">{{ f.label }}{% if let Some(p) = f.page %} · {{ p }}{% endif %}</span>
+      </a>
+      {%- endfor -%}
+    </div>
+    {%- endif -%}
+
+    {#- amount + delta -#}
+    <div class="amt">
+      <div class="v{% if v.amount_income %} is-income{% endif %}{% if v.amount_estimated %} is-estimated{% endif %}{% if v.amount_placeholder %} is-placeholder{% endif %}">
+        {%- if v.amount_income %}+ {% endif -%}{{ v.amount }}
+      </div>
+      {%- if let Some(d) = v.delta -%}
+      <div class="d {{ d.tone }}">{{ d.arrow }} {{ d.text }}</div>
+      {%- endif -%}
+    </div>
+  </div>
+  {%- endif -%}
+</div>

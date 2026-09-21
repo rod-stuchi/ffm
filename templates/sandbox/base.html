@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"{% if let Some(a) = attr %} data-theme="{{ a }}"{% endif %}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}FFM sandbox{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/tokens.css">
+<link rel="stylesheet" href="/static/css/row.css">
+<link rel="stylesheet" href="/static/css/sandbox.css">
+{#- The theme is server-rendered as the full light/dark triple. It is the ONLY
+    source of colour: no palette is duplicated into a stylesheet, so the picker
+    provably cannot drift from the real thing. -#}
+<style id="ffm-theme">{{ theme_css|safe }}</style>
+</head>
+<body>
+{% block body %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,30 @@
+{% extends "sandbox/base.html" %}
+{% block title %}Themes · FFM sandbox{% endblock %}
+{% block body %}
+<div class="sb-bar"><span class="sb-k">sandbox</span>
+  <a href="/__sandbox/rows">rows</a>
+  <a href="/__sandbox/themes" class="is-on">themes</a>
+  <a href="/__sandbox/catalog">catalog</a>
+</div>
+<div class="sb-wrap">
+  <h1>Eleven palettes, light and dark</h1>
+  <p class="sb-lede">
+    Every theme in both modes, rendered from the same <code>ui::theme::derive()</code>
+    the app and the picker both call. A theme is eleven values; everything else here —
+    borders, soft fills, the skeleton gradient, both shadows — is a <code>color-mix()</code>
+    derivation, which is why overriding one token stays coherent with the rest.
+  </p>
+  <div class="sb-swatches">
+    {% for s in swatches %}
+    <div class="sb-swatch" style="{{ s.css|safe }}">
+      <div class="sb-swatch-name" style="background:var(--surface-2);color:var(--ink)">
+        {{ s.label }} · {{ s.mode }}
+      </div>
+      <div class="sb-chips">
+        {% for c in s.chips %}<i style="background:var(--{{ c }})" title="--{{ c }}"></i>{% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

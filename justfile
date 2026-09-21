@@ -72,9 +72,23 @@ fmt-check:
 
 # No hex below tokens.css: every component rule reads var(--token), so a palette
 # swap can actually reach it. This is the grep that keeps that true.
+# Strips /* */ comments before grepping: a comment may legitimately say
+# "never #fff", and flagging the rule that forbids a thing is not the same as
+# flagging the thing. Same trap as build.rs's forbidden-content scan.
 css-check:
     #!/usr/bin/env bash
-    if rg -n '#[0-9a-fA-F]{3,8}\b' static/css/ --glob '!tokens.css' 2>/dev/null; then
+    set -euo pipefail
+    found=0
+    for f in static/css/*.css; do
+        case "$f" in */tokens.css) continue;; esac
+        stripped=$(perl -0777 -pe 's{/\*.*?\*/}{}gs' "$f")
+        if echo "$stripped" | grep -nE '#[0-9a-fA-F]{3,8}\b' >/dev/null; then
+            echo "✗ $f:"
+            echo "$stripped" | grep -nE '#[0-9a-fA-F]{3,8}\b'
+            found=1
+        fi
+    done
+    if [ "$found" = 1 ]; then
         echo "✗ hardcoded colour outside tokens.css" >&2
         exit 1
     fi

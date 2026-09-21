@@ -18,6 +18,7 @@ use crate::domain::period::Period;
 use crate::domain::slug::slugify;
 use crate::domain::status::{RowFlags, RowState, RowStatus, TxKind, Visibility};
 use crate::ui::fmt;
+use crate::ui::i18n::Catalog;
 use chrono::NaiveDate;
 
 // ---------------------------------------------------------------------------
@@ -595,6 +596,207 @@ impl LedgerRow {
             c.push("is-nogut");
         }
         c
+    }
+}
+
+// ---------------------------------------------------------------------------
+// the render-ready view
+// ---------------------------------------------------------------------------
+
+/// Everything a template needs, flattened to primitives.
+///
+/// Askama can match on an enum, but doing so drags type paths into the markup
+/// and puts branching where the spec says it must not be: *"the status mark,
+/// delta arrow and meta glyphs are pure functions of fields — put them as
+/// methods on the struct, not as logic in the template."* Computing the view
+/// here keeps that literally true, and leaves `row.html` with almost no
+/// decisions left to make.
+pub struct RowView {
+    pub classes: String,
+    pub gutter: String,
+    pub title: String,
+
+    // mark
+    pub mark_kind: &'static str, // disc | outline | ring | dot | skeleton | error
+    pub mark_tone: &'static str,
+    pub mark_glyph: &'static str,
+    pub mark_inner: Option<&'static str>,
+    /// Pre-computed `stroke-dashoffset` for a 10.5px-radius ring.
+    pub ring_offset: f32,
+
+    // meta
+    pub meta_text: Option<String>,
+    pub meta_tone: &'static str,
+    pub installments: Option<String>,
+    pub flags: Vec<FlagView>,
+
+    // files
+    pub files: Vec<FileView>,
+
+    // amount
+    pub amount: String,
+    pub amount_income: bool,
+    pub amount_estimated: bool,
+    pub amount_placeholder: bool,
+    pub delta: Option<DeltaView>,
+
+    pub error: Option<String>,
+    pub is_skeleton: bool,
+}
+
+pub struct FlagView {
+    pub icon: &'static str,
+    pub svg: &'static str,
+    pub on: bool,
+}
+
+pub struct FileView {
+    pub svg: &'static str,
+    pub number: u8,
+    pub label: &'static str,
+    pub path: String,
+    pub page: Option<String>,
+    pub warn: bool,
+}
+
+pub struct DeltaView {
+    pub arrow: &'static str,
+    pub text: String,
+    pub tone: &'static str,
+}
+
+/// Circumference of the ring: 2 * PI * 10.5.
+const RING_CIRCUMFERENCE: f32 = 65.973;
+
+impl LedgerRow {
+    /// Takes the catalog because the meta line has WORDS in it ("due",
+    /// "overdue since"). Money and dates inside it do not — they come from
+    /// `fmt`, which takes a currency and never a language. The three axes stay
+    /// separate even where they share a line.
+    pub fn view(&self, t: &Catalog) -> RowView {
+        let status = self.status();
+        let amount = self.amount();
+        let mark = self.mark();
+
+        let (mark_kind, mark_tone, mark_glyph, mark_inner) = match &mark {
+            Mark::Skeleton => ("skeleton", "muted", "", None),
+            Mark::Error => ("error", "neg", "alert", None),
+            Mark::Disc { tone, glyph } => ("disc", tone.css(), *glyph, None),
+            Mark::Outline { tone, glyph } => ("outline", tone.css(), *glyph, None),
+            Mark::Ring { tone, glyph, .. } => ("ring", tone.css(), "", *glyph),
+            Mark::Dot { tone, filled } => {
+                ("dot", if *filled { tone.css() } else { "muted" }, "", None)
+            }
+        };
+
+        let progress = match &mark {
+            Mark::Ring { progress, .. } => *progress,
+            _ => 0.0,
+        };
+
+        RowView {
+            classes: self.classes().join(" "),
+            gutter: self.gutter.text(),
+            title: self.title.clone(),
+
+            mark_kind,
+            mark_tone,
+            // The mark's glyph is chosen here rather than in the template so
+            // an unmapped name can never reach the page as literal text.
+            mark_glyph: match mark_glyph {
+                "check" => "✓",
+                "alert" => "!",
+                other => {
+                    debug_assert!(other.is_empty(), "unmapped mark glyph: {other}");
+                    ""
+                }
+            },
+            mark_inner: mark_inner.map(|_| "◷"),
+            ring_offset: RING_CIRCUMFERENCE * (1.0 - progress),
+
+            meta_text: self.meta_text(t),
+            meta_tone: match status {
+                RowStatus::ScheduledOverdue => "warn",
+                RowStatus::Scheduled => "info",
+                RowStatus::Paid | RowStatus::Received | RowStatus::ManualPaid => "ok",
+                _ => "",
+            },
+            installments: self.installments().map(|(a, b)| format!("{a}/{b}")),
+            flags: self
+                .flag_pair()
+                .into_iter()
+                .map(|(icon, on)| FlagView {
+                    icon,
+                    svg: crate::ui::icons::svg(icon),
+                    on,
+                })
+                .collect(),
+
+            files: self
+                .file_rail()
+                .into_iter()
+                .map(|c| FileView {
+                    svg: crate::ui::icons::svg(match c.kind {
+                        FileKind::Bill => "bill",
+                        FileKind::Scheduled => "scheduled",
+                        FileKind::Receipt => "receipt",
+                    }),
+                    number: c.number,
+                    label: c.label,
+                    page: c.page.map(|p| format!("p.{}", p.page)),
+                    warn: c.page.is_some_and(|p| !p.in_window),
+                    path: c.path,
+                })
+                .collect(),
+
+            amount: amount.text,
+            amount_income: amount.is_income,
+            amount_estimated: amount.is_estimated,
+            amount_placeholder: amount.is_placeholder,
+            delta: self.delta().map(|d| DeltaView {
+                arrow: if d.pct == 0 {
+                    "—"
+                } else if d.up {
+                    "▲"
+                } else {
+                    "▼"
+                },
+                text: if d.pct == 0 {
+                    "0%".to_string()
+                } else {
+                    format!("{}{}%", if d.up { "+" } else { "" }, d.pct)
+                },
+                tone: if d.pct == 0 {
+                    "is-flat"
+                } else if d.good {
+                    "is-good"
+                } else {
+                    "is-bad"
+                },
+            }),
+
+            error: match &self.state {
+                RowState::Error { message } => Some(message.clone()),
+                _ => None,
+            },
+            is_skeleton: matches!(self.state, RowState::Skeleton),
+        }
+    }
+
+    /// The meta line's short form. The full sentence lives in the `gd` popup —
+    /// a row's own status text stays short so the line does not wrap.
+    fn meta_text(&self, t: &Catalog) -> Option<String> {
+        match self.status() {
+            RowStatus::Paid | RowStatus::Received | RowStatus::Plain => self.date.map(fmt::date),
+            RowStatus::ScheduledOverdue => {
+                self.due_date.map(|d| t.row_overdue_since(&fmt::date(d)))
+            }
+            RowStatus::Scheduled => self.due_date.map(|d| t.row_scheduled_for(&fmt::date(d))),
+            RowStatus::Pending | RowStatus::Expected => {
+                self.due_date.map(|d| t.row_due(&fmt::date(d)))
+            }
+            RowStatus::ManualPaid => Some(t.row_manual_paid().to_string()),
+        }
     }
 }
 

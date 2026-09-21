@@ -1,0 +1,21 @@
+{% extends "sandbox/base.html" %}
+{% block title %}Catalog · FFM sandbox{% endblock %}
+{% block body %}
+<div class="sb-bar"><span class="sb-k">sandbox</span>
+  <a href="/__sandbox/rows">rows</a>
+  <a href="/__sandbox/themes">themes</a>
+  <a href="/__sandbox/catalog" class="is-on">catalog</a>
+</div>
+<div class="sb-wrap">
+  <h1>{{ count }} message ids</h1>
+  <p class="sb-lede">
+    Every id <code>build.rs</code> generated an accessor for. Both locales are checked at
+    build time for the same id set and the same placeables, so this list is identical in
+    either language — a missing translation fails the build rather than appearing here.
+  </p>
+  <div class="spec-stage">
+    <pre style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2);margin:0;white-space:pre-wrap">{% for id in ids %}{{ id }}
+{% endfor %}</pre>
+  </div>
+</div>
+{% endblock %}

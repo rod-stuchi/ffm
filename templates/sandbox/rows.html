@@ -1,0 +1,70 @@
+{% extends "sandbox/base.html" %}
+{% block title %}Row states · FFM sandbox{% endblock %}
+{% block body %}
+{#- Plain <a> elements throughout: the sandbox must never depend on the
+    machinery (HTMX, Alpine) it exists to test. -#}
+<div class="sb-bar">
+  <span class="sb-k">sandbox</span>
+  <a href="/__sandbox/rows" class="is-on">rows</a>
+  <a href="/__sandbox/themes">themes</a>
+  <a href="/__sandbox/catalog">catalog</a>
+
+  <span class="sb-group"><span class="sb-k">lang</span>
+    {% for (k, label, on) in langs %}<a href="{{ ctx.with("lang", k) }}"{% if on %} class="is-on"{% endif %}>{{ label }}</a>{% endfor %}
+  </span>
+  <span class="sb-group"><span class="sb-k">mode</span>
+    {% for (k, label, on) in modes %}<a href="{{ ctx.with("mode", k) }}"{% if on %} class="is-on"{% endif %}>{{ label }}</a>{% endfor %}
+  </span>
+  <span class="sb-group"><span class="sb-k">gutter</span>
+    {% for (k, label, on) in nus %}<a href="{{ ctx.with("nu", k) }}"{% if on %} class="is-on"{% endif %}>{{ label }}</a>{% endfor %}
+  </span>
+  <span class="sb-group"><span class="sb-k">currency</span>
+    {% for (k, label, on) in currencies %}<a href="{{ ctx.with("currency", k) }}"{% if on %} class="is-on"{% endif %}>{{ label }}</a>{% endfor %}
+  </span>
+  <span class="sb-group"><span class="sb-k">theme</span>
+    {% for (k, label, on) in themes %}<a href="{{ ctx.with("theme", k) }}"{% if on %} class="is-on"{% endif %}>{{ label }}</a>{% endfor %}
+  </span>
+</div>
+
+<div class="sb-wrap">
+  <h1>Row states</h1>
+  <p class="sb-lede">
+    Every state a ledger row can be in, rendered from pure fixtures — no database, no
+    filesystem, no clock. <code>today</code> is pinned to 07/09/2026 so the gallery is a
+    stable artifact rather than something that renders differently every day. Each
+    specimen carries the written reason it looks the way it does.
+  </p>
+
+  <div class="spec">
+    <div class="spec-head"><span class="spec-n">00</span><h2>A pane, for context</h2></div>
+    <div class="spec-stage">
+      {% for s in ledger %}{% let v = s.view %}{% include "partials/row.html" %}{% endfor %}
+    </div>
+  </div>
+
+  {% for spec in specs %}
+  <div class="spec" id="{{ spec.id }}">
+    <div class="spec-head">
+      <span class="spec-n">{{ spec.n }}</span>
+      <h2>{{ spec.heading }}</h2>
+      <span class="spec-status">{{ spec.status }}</span>
+    </div>
+    {% if spec.specimens.len() > 1 %}
+    <div class="sb-cols">
+      {% for s in spec.specimens %}
+      <div>
+        <div class="sb-col-tag">{{ s.lang }}</div>
+        <div class="spec-stage">{% let v = s.view %}{% include "partials/row.html" %}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    {% for s in spec.specimens %}
+    <div class="spec-stage">{% let v = s.view %}{% include "partials/row.html" %}</div>
+    {% endfor %}
+    {% endif %}
+    <p>{{ spec.why|safe }}</p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

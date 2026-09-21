@@ -1,0 +1,32 @@
+/* Scalar tokens and fonts.
+ *
+ * NOTE WHAT IS NOT HERE: colours.
+ *
+ * The plan called for this file to also carry a baseline copy of the bundled
+ * `ffm` palette, as a fallback if the server-rendered <style> block failed to
+ * appear. That was dropped on purpose — it would put the eleven token values in
+ * a second place, and "the picker provably cannot drift from the real thing"
+ * only holds while there is exactly one source for them. A request that fails to
+ * render the theme block has bigger problems than being unstyled.
+ *
+ * So every colour comes from `ui::theme::render()`, emitted into <head> as the
+ * full light/dark triple. This file holds only what never varies by theme.
+ */
+
+:root {
+  /* Self-hosted, per CLAUDE.md — the mockups use Google Fonts only because they
+   * have no build step. The fallbacks are real rather than decorative, because
+   * the woff2 files are not in the repo yet (see static/fonts/README.md). */
+  --sans: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --r: 10px;
+}
+
+/* Digits line up wherever they are compared down a column: amounts, dates,
+ * line numbers, the delta. */
+.mono,
+.amt .v,
+.amt .d,
+.gut {
+  font-variant-numeric: tabular-nums;
+}
