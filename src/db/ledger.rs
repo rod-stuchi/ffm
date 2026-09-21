@@ -28,6 +28,9 @@ pub struct Household {
     pub name: String,
     pub currency: Currency,
     pub default_language: Lang,
+    /// The household's stated policy for new rows. A member may override it,
+    /// and `:profile` labels that override with what this resolves to.
+    pub default_visibility: String,
     pub show_recurring: bool,
 }
 
@@ -61,7 +64,8 @@ impl Pane {
 
 pub async fn household(pool: &SqlitePool) -> sqlx::Result<Option<Household>> {
     let row = sqlx::query!(
-        r#"SELECT name, locale_currency, default_language, ledger_show_recurring
+        r#"SELECT name, locale_currency, default_language, default_visibility,
+                  ledger_show_recurring
            FROM household_settings WHERE id = 1"#
     )
     .fetch_optional(pool)
@@ -75,6 +79,7 @@ pub async fn household(pool: &SqlitePool) -> sqlx::Result<Option<Household>> {
         name: r.name,
         currency: Currency::parse(&r.locale_currency).unwrap_or_default(),
         default_language: Lang::parse(&r.default_language).unwrap_or(Lang::En),
+        default_visibility: r.default_visibility,
         show_recurring: r.ledger_show_recurring != 0,
     }))
 }

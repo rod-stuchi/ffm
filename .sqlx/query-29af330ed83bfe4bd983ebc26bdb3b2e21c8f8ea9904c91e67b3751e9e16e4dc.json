@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE member_settings SET ledger_group = ?2 WHERE member_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "29af330ed83bfe4bd983ebc26bdb3b2e21c8f8ea9904c91e67b3751e9e16e4dc"
+}

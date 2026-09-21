@@ -145,6 +145,17 @@
   <input type="file" x-ref="picker" class="hidden-input"
          accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()">
 
+  {#- The command bar. `:` is how every setting surface is reached, and the
+      same write the panes make — a command, a form control and a statusline
+      cell are three gestures writing ONE row. -#}
+  <div class="cmdbar" x-show="commanding" x-cloak>
+    <span class="caret">:</span>
+    <input class="cmdinput" x-ref="cmd" x-model="command"
+           @keydown.enter.prevent="runCommand()"
+           @keydown.escape.prevent="commanding = false; command = ''"
+           placeholder="{{ t.command_placeholder() }}" autocomplete="off" spellcheck="false">
+  </div>
+
   {#- The same message channel the pre-auth pages use, so there is one way the
       app talks to you on both sides of the login. -#}
   <div class="status">
@@ -163,12 +174,15 @@ function ledger() {
     kind: 'out',
     confirming: null,
     attaching: null,
+    commanding: false,
+    command: '',
     kind_: 'receipt',
     menuStyle: '',
     msg: '',
     msgBad: false,
     pending: '',
     notARule: {{ not_a_rule|json|safe }},
+    notACommand: {{ not_a_command|json|safe }},
     noFile: {
       barcode: {{ no_bill|json|safe }},
       scheduled: {{ no_scheduled|json|safe }},
@@ -240,6 +254,7 @@ function ledger() {
       else if (k === 'E') { this.editRule(); }
       else if (k === 'd') { if (buffer === 'd') { this.askDelete(); } else { this.pending = 'd'; } }
       else if (k === 'u') { this.undo(); }
+      else if (k === ':') { this.openCommand(); }
       else if (k === 'Escape') { this.adding = null; this.closeRule(); this.say(''); }
       else return;
       e.preventDefault();
@@ -278,6 +293,72 @@ function ledger() {
     },
 
     closeRule() { document.querySelector('#rulepane')?.remove(); },
+
+    // --- commands --------------------------------------------------------
+
+    openCommand() {
+      this.commanding = true;
+      this.$nextTick(() => this.$refs.cmd.focus());
+    },
+
+    closePane() { document.querySelector('#settingspane')?.remove(); },
+
+    pane(url) {
+      this.closePane();
+      this.closeRule();
+      htmx.ajax('GET', url, { target: '#rulemount', swap: 'innerHTML' });
+    },
+
+    runCommand() {
+      const raw = this.command.trim();
+      this.commanding = false;
+      this.command = '';
+      if (!raw) return;
+      const [name, ...rest] = raw.split(/\s+/);
+      const arg = rest.join(' ');
+
+      switch (name) {
+        // The settings surfaces. `:config` survives as an alias so muscle
+        // memory and the keymap entry do not break; `:household` is the real
+        // name, because nothing is called after a file any more.
+        case 'profile': case 'me':        return this.pane('/profile');
+        case 'household': case 'config':  return this.pane('/household');
+        case 'members':                   return this.pane('/members');
+        case 'invite':
+          this.pane('/members');
+          return;
+        case 'logout':                    return this.post('/logout');
+        case 'preview':                   return this.post('/preview');
+
+        // A command and a form control write the same row: `:theme nord` is
+        // the swatch in :profile, reached with the keyboard instead.
+        case 'theme':    return this.setting('/settings/member', 'theme_name', arg);
+        case 'lang':     return this.setting('/settings/member', 'language', arg);
+        case 'sort':     return this.setting('/settings/member', 'ledger_sort', arg);
+        case 'group':    return this.setting('/settings/member', 'ledger_group', arg);
+        case 'currency': return this.setting('/settings/household', 'locale_currency', arg);
+        case 'set': {
+          // `:set rnu` / `nu` / `nonu`, the Vim spellings.
+          const nu = { rnu: 'relative', relativenumber: 'relative', nu: 'absolute',
+                       number: 'absolute', nonu: 'none', nonumber: 'none' }[arg];
+          if (nu) return this.setting('/settings/member', 'line_numbers', nu);
+          break;
+        }
+      }
+      this.say(this.notACommand.replace('{cmd}', name), true);
+    },
+
+    post(url) {
+      const f = document.createElement('form');
+      f.method = 'post';
+      f.action = url;
+      document.body.appendChild(f);
+      f.submit();
+    },
+
+    setting(url, key, value) {
+      htmx.ajax('POST', url, { target: 'body', swap: 'none', values: { key, value } });
+    },
 
     // --- files -----------------------------------------------------------
 

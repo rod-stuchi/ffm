@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT name, locale_currency, default_language, ledger_show_recurring\n           FROM household_settings WHERE id = 1",
+  "query": "SELECT name, locale_currency, default_language, default_visibility,\n                  ledger_show_recurring\n           FROM household_settings WHERE id = 1",
   "describe": {
     "columns": [
       {
@@ -19,8 +19,13 @@
         "type_info": "Text"
       },
       {
-        "name": "ledger_show_recurring",
+        "name": "default_visibility",
         "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "ledger_show_recurring",
+        "ordinal": 4,
         "type_info": "Integer"
       }
     ],
@@ -31,8 +36,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "aff14a4e7b5e8fb9cc9e8b41d880c96b9805674ee03b83395573a6b85ca3c3be"
+  "hash": "c81ce942cac59b0919073dc172e209ac1cc3651cb788d26df1a983cb485ca8be"
 }

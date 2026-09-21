@@ -6,6 +6,7 @@ pub mod files;
 pub mod ledger;
 pub mod rules;
 pub mod session;
+pub mod settings;
 pub mod template;
 pub mod tx;
 
@@ -55,6 +56,18 @@ pub fn router(state: AppState) -> Router {
         .route("/rules/{id}/edit", get(rules::edit_rule))
         .route("/rules/{id}", post(rules::save))
         .route("/rules/{id}/delete", post(rules::delete))
+        // The settings surfaces. Vsplit panes with no Save button: every
+        // control writes on `change`, so there is never a pending second copy
+        // of the truth.
+        .route("/profile", get(settings::profile))
+        .route("/household", get(settings::household))
+        .route("/members", get(settings::members_view))
+        .route("/settings/member", post(settings::set_member))
+        .route("/settings/household", post(settings::set_household))
+        .route("/members/invite", post(settings::invite))
+        .route("/members/{id}/reset", post(settings::reset))
+        .route("/members/{id}/signout", post(settings::sign_out))
+        .route("/members/invites/{id}/revoke", post(settings::revoke))
         .layer(axum::middleware::from_fn(csrf::guard));
 
     let app = Router::new()

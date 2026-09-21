@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE member_settings SET ledger_show_delta = ?2 WHERE member_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "116767033b383c68779d359e3fb8cf625b193cd50cdcd57a17f54e2fbdf94fbd"
+}

@@ -322,10 +322,49 @@ server-side with the same `domain::estimate` and `ui::fmt::money` the ledger
 uses. The pane now chooses which to display and does no arithmetic and no money
 formatting at all, which is where the currency convention belongs.
 
-## Phase 9 — the settings surfaces
+## Phase 9 — the settings surfaces ✅
 
-`:household`, `:profile`, `:members`, invites, resets. Vsplit panes with **no
-Save button** — every control writes on `change`.
+`:profile`, `:household` and `:members` as vertical splits beside the ledger,
+reusing the rule pane's column — one visual language for "a pane beside the
+ledger" rather than a second thing to learn.
+
+- **No Save button anywhere**, which is the point rather than an omission.
+  Every control writes on `change`, the statusline echoes, and there is no
+  pending state — so there is never a moment when the form and the row
+  disagree. That is what the single-source-of-truth rule actually forbids; a
+  form in a vsplit was never the problem.
+- **One form per setting, not one form per pane.** Radios are grouped by `name`
+  *within a form*, so a single form made the entire pane one radio group and
+  let exactly one control be checked at a time. A form per setting is also what
+  the pane genuinely is: a list of independent writes.
+- **`MemberKey` / `HouseholdKey` are closed enums**, not string column names.
+  The alternative is a handler taking a field name from a form and putting it
+  into SQL — `role` and `password_hash` are not settings, and now cannot be
+  spelled as ones.
+- **Validation lives with the write**, in the `✗ …` dialect the pane speaks,
+  and a refusal leaves the previous value alone — which falls out of not
+  writing it. Every constraint is also a `CHECK`, so a bad value cannot reach
+  the table even if a handler forgets.
+- **The privacy default is a real tri-state**: NULL means "follow the
+  household", and the first radio says what that currently resolves to rather
+  than leaving somebody to guess.
+- **The command bar**, because a surface you cannot reach is not finished:
+  `:profile`/`:me`, `:household`/`:config`, `:members`, `:invite`, `:logout`,
+  `:preview`, `:theme`, `:lang`, `:sort`, `:group`, `:currency`, `:set
+  rnu|nu|nonu`. A command and a form control write the same row — three
+  gestures, one place. An unknown one says `not a command: x`.
+- **Admin-only refuses under preview** exactly as it would for a real
+  non-admin, and `:members` offers no reset against yourself: the first session
+  a reset revokes would be the one issuing it. That is what `ffm reset-link`
+  at the console is for.
+- **`:members`** lists who is signed in on what, shows a new link **once**
+  (the token is not in the database to re-show — only its SHA-256 is), and
+  keeps the reset's accountability: every session revoked, two entries in the
+  append-only log.
+
+`tests/settings.rs` — 9 tests, including a refusal leaving the previous value,
+the tri-state's third state being NULL, currency switching a whole number
+format rather than a glyph, and a revoked link reading as used.
 
 ## Phase 10 — the change-log pane (`gl`)
 

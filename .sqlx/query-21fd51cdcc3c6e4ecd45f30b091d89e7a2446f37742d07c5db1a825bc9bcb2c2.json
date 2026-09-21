@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT language AS \"language!: String\",\n                  theme_name AS \"theme_name!: String\",\n                  theme_overrides AS \"theme_overrides!: String\",\n                  line_numbers AS \"line_numbers!: String\",\n                  layout_panes AS \"layout_panes!: String\",\n                  layout_min_split_width AS \"layout_min_split_width!: i64\",\n                  layout_max_width AS \"layout_max_width!: i64\",\n                  layout_gap AS \"layout_gap!: i64\",\n                  ledger_sort AS \"ledger_sort!: String\",\n                  ledger_search_scope AS \"ledger_search_scope!: String\",\n                  ledger_show_delta AS \"ledger_show_delta!: i64\",\n                  ledger_group AS \"ledger_group!: String\",\n                  group_fold_default AS \"group_fold_default!: String\",\n                  default_visibility AS \"default_visibility: String\"\n           FROM member_settings WHERE member_id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "language!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "theme_name!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "theme_overrides!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "line_numbers!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "layout_panes!: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "layout_min_split_width!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "layout_max_width!: i64",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "layout_gap!: i64",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "ledger_sort!: String",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "ledger_search_scope!: String",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "ledger_show_delta!: i64",
+        "ordinal": 10,
+        "type_info": "Integer"
+      },
+      {
+        "name": "ledger_group!: String",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "group_fold_default!: String",
+        "ordinal": 12,
+        "type_info": "Text"
+      },
+      {
+        "name": "default_visibility: String",
+        "ordinal": 13,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "21fd51cdcc3c6e4ecd45f30b091d89e7a2446f37742d07c5db1a825bc9bcb2c2"
+}

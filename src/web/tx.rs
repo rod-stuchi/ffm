@@ -68,7 +68,7 @@ fn say(mut res: Response, message: &str, bad: bool) -> Response {
 /// UTF-8 `·` arrives as `Â·` and a household's own bill names come back
 /// mangled in the statusline. Escaping is not a workaround: `\uXXXX` is
 /// exactly what JSON has for this, and `JSON.parse` puts the character back.
-fn ascii_json(s: &str) -> String {
+pub fn ascii_json(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         if c.is_ascii() {

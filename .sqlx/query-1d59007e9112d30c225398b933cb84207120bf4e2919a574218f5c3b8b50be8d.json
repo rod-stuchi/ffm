@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE member_invites SET revoked_at = ?2\n           WHERE id = ?1 AND accepted_at IS NULL AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1d59007e9112d30c225398b933cb84207120bf4e2919a574218f5c3b8b50be8d"
+}

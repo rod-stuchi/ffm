@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT m.id AS \"id!: i64\", m.name AS \"name!: String\", m.role AS \"role!: i64\",\n                  (SELECT count(*) FROM sessions s WHERE s.member_id = m.id) AS \"sessions!: i64\"\n           FROM members m WHERE m.deleted_at IS NULL ORDER BY m.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "role!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "sessions!: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "37ae011ba4d2e90145df33e69a1f7aa77bd3f4209799d1560221b9d6d9a57c76"
+}

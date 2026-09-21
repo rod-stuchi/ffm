@@ -250,3 +250,69 @@ rule-spans-period = Barcode covers multiple months
 rule-window-size = Pages in this file
 rule-window-start = First page covers
 estimate-no-history = no confirmed months yet — the rule's own amount is used
+
+## Settings panes — :profile, :household, :members
+
+settings-profile = Your settings
+settings-household = Household
+settings-members = Members
+settings-saved = { $name } saved
+settings-admin-only = that is admin only
+pane-close = esc
+
+profile-appearance = Appearance
+profile-ledger = Ledger
+profile-layout = Layout
+profile-privacy = New rows
+profile-theme = Colour scheme
+profile-line-numbers = Line numbers
+profile-panes = Panes
+profile-min-split = Split below this width, use tabs
+profile-max-width = Maximum pane width
+profile-gap = Gap between panes
+profile-sort = Row order
+profile-sort-manual = Manual
+profile-sort-date = Date
+profile-sort-amount = Amount
+profile-search-scope = Search scope
+profile-scope-pane = This pane
+profile-scope-household = The household
+profile-show-delta = Show month-over-month change
+profile-fold-default = Groups start
+profile-fold-expanded = Open
+profile-fold-collapsed = Closed
+profile-visibility-inherit = Follow the household ({ $resolved })
+profile-visibility-household = Shared with the household
+profile-visibility-private = Private to me
+profile-devices = Signed in on
+profile-no-devices = no other devices
+
+household-name = Household name
+household-currency = Currency
+household-language = Default language
+household-visibility = Default for new rows
+household-show-recurring = Use recurring rules
+household-storage = Set by the operator
+household-storage-note = Edit ffm.toml and restart to change these.
+
+members-role-admin = Admin
+members-role-member = Member
+members-invite-label = For whom (optional)
+members-invite-create = Create invite link
+members-invite-note = You never type anyone else's password. They set it on the link, along with their name.
+members-link-once = This link is shown once. Create a new one if it is lost.
+members-copy = Copy
+members-pending = Pending links
+members-expires = expires { $date }
+members-expired = expired
+members-revoke = Revoke
+members-reset = Reset password
+members-signout = Sign out everywhere
+members-reset-note = Issuing a reset signs { $name } out everywhere and is recorded in the change log.
+members-signed-out = signed { $name } out of { $n } device(s)
+members-no-sessions = not signed in anywhere
+
+## The command bar
+
+command-placeholder = command
+members-self-note = This is you. Change a password you know in :profile; recover one you have lost with `ffm reset-link` at the console.

@@ -157,6 +157,9 @@ struct LedgerPage {
     /// The three "there is no such file" messages — `g1`/`g2`/`g3` on a row
     /// that has not got one. Three fields rather than a JSON blob, so each is
     /// escaped by the same filter as every other string handed to the page.
+    /// `not a command: {cmd}` — with the placeholder left in, so the pane can
+    /// fill it without the catalog having to know about JavaScript.
+    not_a_command: String,
     no_bill: String,
     no_scheduled: String,
     no_receipt: String,
@@ -239,6 +242,7 @@ pub async fn ledger(
         period: fmt::period(period),
         period_key: period.to_string(),
         not_a_rule: t.rule_none_on_row().to_string(),
+        not_a_command: t.not_a_command("{cmd}"),
         no_bill: t.file_none_bill().to_string(),
         no_scheduled: t.file_none_scheduled().to_string(),
         no_receipt: t.file_none_receipt().to_string(),

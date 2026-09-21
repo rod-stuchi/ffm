@@ -220,3 +220,67 @@ rule-spans-period = O código de barras cobre vários meses
 rule-window-size = Páginas neste arquivo
 rule-window-start = A primeira página é de
 estimate-no-history = nenhum mês confirmado ainda — usa o valor da própria regra
+
+## Configurações
+
+settings-profile = Suas preferências
+settings-household = Casa
+settings-members = Membros
+settings-saved = { $name } salvo
+settings-admin-only = isso é só para administradores
+pane-close = esc
+
+profile-appearance = Aparência
+profile-ledger = Livro
+profile-layout = Layout
+profile-privacy = Linhas novas
+profile-theme = Tema de cores
+profile-line-numbers = Números de linha
+profile-panes = Painéis
+profile-min-split = Abaixo desta largura, usar abas
+profile-max-width = Largura máxima do painel
+profile-gap = Espaço entre painéis
+profile-sort = Ordem das linhas
+profile-sort-manual = Manual
+profile-sort-date = Data
+profile-sort-amount = Valor
+profile-search-scope = Onde buscar
+profile-scope-pane = Neste painel
+profile-scope-household = Na casa toda
+profile-show-delta = Mostrar variação em relação ao mês anterior
+profile-fold-default = Grupos começam
+profile-fold-expanded = Abertos
+profile-fold-collapsed = Fechados
+profile-visibility-inherit = Seguir a casa ({ $resolved })
+profile-visibility-household = Compartilhado com a casa
+profile-visibility-private = Só meu
+profile-devices = Conectado em
+profile-no-devices = nenhum outro aparelho
+
+household-name = Nome da casa
+household-currency = Moeda
+household-language = Idioma padrão
+household-visibility = Padrão para linhas novas
+household-show-recurring = Usar regras recorrentes
+household-storage = Definido por quem roda o programa
+household-storage-note = Edite o ffm.toml e reinicie para mudar isto.
+
+members-role-admin = Administrador
+members-role-member = Membro
+members-invite-label = Para quem (opcional)
+members-invite-create = Criar link de convite
+members-invite-note = Você nunca digita a senha de outra pessoa. Ela define na hora de aceitar o link, junto com o nome.
+members-link-once = Este link aparece uma vez só. Crie outro se perder.
+members-copy = Copiar
+members-pending = Links pendentes
+members-expires = expira em { $date }
+members-expired = expirado
+members-revoke = Revogar
+members-reset = Redefinir senha
+members-signout = Desconectar de tudo
+members-reset-note = Redefinir a senha desconecta { $name } de tudo e fica registrado no histórico.
+members-signed-out = { $name } foi desconectado de { $n } aparelho(s)
+members-no-sessions = não está conectado em lugar nenhum
+
+command-placeholder = comando
+members-self-note = Este é você. Troque uma senha que você sabe em :profile; recupere uma que esqueceu com `ffm reset-link` no console.

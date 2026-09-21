@@ -1,0 +1,92 @@
+{#- :household — admin only, and a vsplit for the same reason :profile is: a
+    modal would hide the ledger you are watching the setting take effect on.
+
+    No Save button here either. Currency and the name move every amount and
+    every heading on the page, so those writes answer with HX-Refresh rather
+    than pretending a partial swap told the whole truth. -#}
+<aside class="rulepane settingspane" id="settingspane">
+  <header class="rp-head">
+    <b>{{ t.settings_household() }}</b>
+    <button class="btn rp-close" type="button" @click="$root.remove()">{{ t.pane_close() }}</button>
+  </header>
+
+  {#- One form per setting, for the same reason :profile has: a radio group is
+      scoped to its form, and the pane is a list of independent writes rather
+      than a document being edited. -#}
+  <div class="rp-body">
+
+    <form class="setting" hx-post="/settings/household" hx-trigger="change" hx-swap="none">
+      <input type="hidden" name="key" value="name">
+      <label class="f">
+        <span class="k">{{ t.household_name() }}</span>
+        <input class="i" name="value" value="{{ name }}">
+        <span class="hint">{{ t.setup_household_hint() }}</span>
+      </label>
+    </form>
+
+    <form class="setting" hx-post="/settings/household" hx-trigger="change" hx-swap="none">
+      <input type="hidden" name="key" value="locale_currency">
+      <label class="f">
+      {#- Household-wide and admin-only, never a per-member preference like
+          theme: every member's rows feed the same totals, so two people seeing
+          different-looking numbers for one total is not a thing to allow. The
+          label shows the FORMAT, because picking a currency picks all of it. -#}
+      <span class="k">{{ t.household_currency() }}</span>
+        <select class="i" name="value">
+          {%- for c in currencies %}
+          <option value="{{ c.code }}"{% if c.selected %} selected{% endif %}>{{ c.label }}</option>
+          {%- endfor %}
+        </select>
+      </label>
+    </form>
+
+    <form class="setting" hx-post="/settings/household" hx-trigger="change" hx-swap="none">
+      <input type="hidden" name="key" value="default_language">
+      <fieldset class="f">
+        <legend class="k">{{ t.household_language() }}</legend>
+        <div class="radios">
+          {%- for l in languages %}
+          <label><input type="radio" name="value" value="{{ l.code }}"{% if l.selected %} checked{% endif %}> {{ l.label }}</label>
+          {%- endfor %}
+        </div>
+        <span class="hint">{{ t.setup_note_axes(date_pattern) }}</span>
+      </fieldset>
+    </form>
+
+    <form class="setting" hx-post="/settings/household" hx-trigger="change" hx-swap="none">
+      <input type="hidden" name="key" value="default_visibility">
+      <fieldset class="f">
+        <legend class="k">{{ t.household_visibility() }}</legend>
+        <div class="radios">
+          {%- for c in visibilities %}
+          <label><input type="radio" name="value" value="{{ c.code }}"{% if c.selected %} checked{% endif %}> {{ c.label }}</label>
+          {%- endfor %}
+        </div>
+      </fieldset>
+    </form>
+
+    <form class="setting" hx-post="/settings/household" hx-trigger="change" hx-swap="none">
+      <input type="hidden" name="key" value="ledger_show_recurring">
+      <label class="tog">
+        {#- "We don't use this concept here" — which is why it is
+            household-wide rather than a per-member mute. -#}
+        <input type="checkbox" name="value" value="{% if show_recurring %}on{% else %}off{% endif %}"
+               {% if show_recurring %}checked{% endif %}
+               @change="$el.value = $el.checked ? 'on' : 'off'">
+        <span>{{ t.household_show_recurring() }}</span>
+      </label>
+    </form>
+
+    {#- The entire ffm.toml, read-only. They are the operator's, not the
+        admin's, and showing them lets the admin confirm the vault is where
+        they think it is before a single receipt is filed — without creating a
+        second place the value can be set. -#}
+    <div class="sect">{{ t.household_storage() }}</div>
+    <div class="romount">
+      <b>db_path</b><span>{{ db_path }}</span>
+      <b>receipts_root</b><span>{{ receipts_root }}</span>
+      <b>backup_dir</b><span>{{ backup_dir }}</span>
+    </div>
+    <p class="hint">{{ t.household_storage_note() }}</p>
+  </div>
+</aside>
