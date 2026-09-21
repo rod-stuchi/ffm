@@ -1,7 +1,25 @@
+use ffm::db::auth;
+use ffm::db::changes::Actor;
 use ffm::{config::Config, db, state::AppState, web};
 
 #[tokio::main]
 async fn main() {
+    // Parsed before anything else is set up, so `--help` and a typo both
+    // answer instantly instead of after opening a database they never needed.
+    let cmd = match Cmd::parse(std::env::args().skip(1)) {
+        Ok(Cmd::Help) => {
+            println!("{USAGE}");
+            return;
+        }
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("✗ {e}");
+            eprintln!();
+            eprintln!("{USAGE}");
+            std::process::exit(2);
+        }
+    };
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -48,6 +66,14 @@ async fn main() {
             std::process::exit(1);
         }
     };
+
+    // A console command runs against the same config and the same migrated
+    // schema the server would have used, then exits. It deliberately happens
+    // after the two log lines above: "which database did that touch" is the
+    // first thing anyone asks afterwards.
+    if let Cmd::ResetLink(name) = &cmd {
+        std::process::exit(reset_link(&pool, name).await);
+    }
 
     // One pass now, then one an hour. Startup matters as much as the tick: a
     // process that was down across a month boundary has to catch up the moment
@@ -114,4 +140,151 @@ fn lan_addr() -> Option<std::net::IpAddr> {
     let sock = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
     sock.connect("192.0.2.1:80").ok()?; // TEST-NET-1, routed but never answered
     sock.local_addr().ok().map(|a| a.ip())
+}
+
+// ---------------------------------------------------------------------------
+// the console
+// ---------------------------------------------------------------------------
+
+const USAGE: &str = "\
+ffm — a shared household ledger
+
+  ffm                          serve the ledger (the default)
+  ffm serve                    the same thing, said out loud
+  ffm reset-link <name>        issue a password-reset link for a member
+  ffm --help                   this
+
+`reset-link` is the way back in when the only admin has forgotten their own
+password — the one account nobody else can reset. It prints the same link
+:members issues: single-use, good for 7 days, and it signs that member out
+everywhere. It never prints or sets a password; the member picks their own on
+the link, exactly as they would have.
+
+Which database it touches comes from ffm.toml or FFM_DB_PATH, and is logged.";
+
+/// What this invocation is. Hand-rolled rather than pulled from an argument
+/// parser: there are two commands and one argument between them, and a
+/// dependency that generates `--help` for that is more machinery than the
+/// thing it parses.
+enum Cmd {
+    Serve,
+    ResetLink(String),
+    Help,
+}
+
+impl Cmd {
+    fn parse(mut args: impl Iterator<Item = String>) -> Result<Cmd, String> {
+        let Some(first) = args.next() else {
+            return Ok(Cmd::Serve);
+        };
+
+        match first.as_str() {
+            "serve" => Ok(Cmd::Serve),
+            "help" | "-h" | "--help" => Ok(Cmd::Help),
+            "reset-link" => {
+                // A member name can contain spaces ("Maria Clara"), so the
+                // shell has to quote it — and an unquoted one arrives here as
+                // two arguments. Saying which is wrong beats resetting the
+                // wrong account because only the first word was read.
+                let name = args
+                    .next()
+                    .ok_or("reset-link needs a member name: ffm reset-link rodrigo")?;
+                let rest: Vec<String> = args.collect();
+                if !rest.is_empty() {
+                    return Err(format!(
+                        "reset-link takes one name. Quote it if it has spaces: \
+                         ffm reset-link \"{name} {}\"",
+                        rest.join(" ")
+                    ));
+                }
+                Ok(Cmd::ResetLink(name))
+            }
+            other => Err(format!("not a command: {other}")),
+        }
+    }
+}
+
+/// Issues a reset link for `name` and prints it. Returns the process's exit
+/// code, so a script can tell "no such member" from "here is your link".
+///
+/// This is deliberately the *same* call `:members` makes rather than a
+/// shortcut that sets `password_hash` directly. Two reasons, both of which get
+/// quietly lost if somebody later "simplifies" this into an UPDATE:
+///
+/// * There stays exactly one code path that writes a password — the accept
+///   form — so a change to how passwords are stored cannot reach one and miss
+///   the other.
+/// * A reset hands over the ability to write to the ledger as somebody else,
+///   which is the one thing preview-as-non-admin was built to refuse. The web
+///   path pays for that with two change-log entries and every session revoked;
+///   a console path that skipped them would be the same power, unrecorded.
+///
+/// A password on `argv` was never on the table either: it lands in the shell's
+/// history file and in `ps` output for every user on the machine.
+async fn reset_link(pool: &sqlx::SqlitePool, name: &str) -> i32 {
+    let member = match auth::member_by_name(pool, name).await {
+        Ok(Some(m)) => m,
+        Ok(None) => {
+            eprintln!("✗ no member called \"{name}\"");
+            match ffm::db::ledger::members(pool).await {
+                Ok(all) if !all.is_empty() => {
+                    let names: Vec<&str> = all.iter().map(|m| m.name.as_str()).collect();
+                    eprintln!("  this household has: {}", names.join(", "));
+                }
+                // An empty members table is not a typo, it is a household that
+                // was never set up — and /setup only exists while it is empty,
+                // so that is genuinely the next thing to do.
+                Ok(_) => eprintln!("  this household has no members yet — open /setup"),
+                Err(e) => eprintln!("  (could not list the others — {e})"),
+            }
+            return 1;
+        }
+        Err(e) => {
+            eprintln!("✗ cannot read members — {e}");
+            return 1;
+        }
+    };
+
+    let role = if member.is_admin { 0 } else { 1 };
+    let token = match auth::issue_link(pool, Actor::System, Some(member.id), None, role).await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("✗ could not issue the link — {e}");
+            return 1;
+        }
+    };
+
+    let expires = (chrono::Utc::now() + chrono::Duration::days(auth::LINK_DAYS)).date_naive();
+
+    println!();
+    println!(
+        "✓ reset link for {} · expires {}",
+        member.name,
+        ffm::ui::fmt::date(expires)
+    );
+    println!();
+    println!("  http://{}/invite/{token}", console_addr());
+    println!();
+    println!(
+        "  It works once. {} is now signed out everywhere, and",
+        member.name
+    );
+    println!("  sets their own password on that page — nobody types it for them.");
+    println!();
+
+    0
+}
+
+/// The address to put in the printed link. The server resolves this from the
+/// listener it actually bound; there is no listener here, so `FFM_ADDR` is read
+/// the same way and a wildcard is resolved the same way — a link saying
+/// `0.0.0.0:3000` is one nobody can open.
+fn console_addr() -> String {
+    let raw = std::env::var("FFM_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".into());
+    match raw.parse::<std::net::SocketAddr>() {
+        Ok(s) if s.ip().is_unspecified() => lan_addr()
+            .map(|ip| format!("{ip}:{}", s.port()))
+            .unwrap_or(raw),
+        _ => raw,
+    }
 }

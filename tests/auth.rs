@@ -9,6 +9,7 @@ mod common;
 
 use common::{pool, seeded};
 use ffm::db::auth::{self, AcceptError, Link};
+use ffm::db::changes::Actor;
 use ffm::db::ledger;
 use ffm::domain::money::{Cents, Currency};
 use ffm::domain::period::Period;
@@ -224,7 +225,7 @@ async fn an_invite_creates_the_member_when_it_is_accepted_not_when_it_is_issued(
         .member
         .id;
 
-    let token = auth::issue_link(&pool, admin, None, Some("for Natália"), 1)
+    let token = auth::issue_link(&pool, Actor::User(admin), None, Some("for Natália"), 1)
         .await
         .unwrap();
 
@@ -291,7 +292,9 @@ async fn a_taken_name_is_refused_with_something_to_do_about_it() {
         .unwrap()
         .member
         .id;
-    let token = auth::issue_link(&pool, admin, None, None, 1).await.unwrap();
+    let token = auth::issue_link(&pool, Actor::User(admin), None, None, 1)
+        .await
+        .unwrap();
 
     let err = auth::accept_invite(
         &pool,
@@ -330,7 +333,9 @@ async fn an_unknown_or_expired_token_is_a_page_not_an_error() {
         Link::Unknown
     );
 
-    let token = auth::issue_link(&pool, admin, None, None, 1).await.unwrap();
+    let token = auth::issue_link(&pool, Actor::User(admin), None, None, 1)
+        .await
+        .unwrap();
     sqlx::query("UPDATE member_invites SET expires_at = '2020-01-01T00:00:00Z'")
         .execute(&pool)
         .await
@@ -360,7 +365,9 @@ async fn a_reset_sets_a_password_without_renaming_anybody() {
         .unwrap()
         .member
         .id;
-    let invite = auth::issue_link(&pool, admin, None, None, 1).await.unwrap();
+    let invite = auth::issue_link(&pool, Actor::User(admin), None, None, 1)
+        .await
+        .unwrap();
     let their_sid = auth::accept_invite(
         &pool,
         &invite,
@@ -380,7 +387,7 @@ async fn a_reset_sets_a_password_without_renaming_anybody() {
         .member
         .id;
 
-    let token = auth::issue_link(&pool, admin, Some(them), None, 1)
+    let token = auth::issue_link(&pool, Actor::User(admin), Some(them), None, 1)
         .await
         .unwrap();
     assert!(matches!(
@@ -434,13 +441,15 @@ async fn a_reset_is_written_to_the_append_only_log() {
         .unwrap()
         .member
         .id;
-    let invite = auth::issue_link(&pool, admin, None, None, 1).await.unwrap();
+    let invite = auth::issue_link(&pool, Actor::User(admin), None, None, 1)
+        .await
+        .unwrap();
     let sid = auth::accept_invite(&pool, &invite, "ana", "hunter2hunter2", "en", "ffm", 1, "x")
         .await
         .unwrap();
     let them = auth::session(&pool, &sid).await.unwrap().unwrap().member.id;
 
-    auth::issue_link(&pool, admin, Some(them), None, 1)
+    auth::issue_link(&pool, Actor::User(admin), Some(them), None, 1)
         .await
         .unwrap();
 
@@ -478,16 +487,18 @@ async fn a_second_reset_click_replaces_the_first_link() {
         .unwrap()
         .member
         .id;
-    let invite = auth::issue_link(&pool, admin, None, None, 1).await.unwrap();
+    let invite = auth::issue_link(&pool, Actor::User(admin), None, None, 1)
+        .await
+        .unwrap();
     let sid = auth::accept_invite(&pool, &invite, "ana", "hunter2hunter2", "en", "ffm", 1, "x")
         .await
         .unwrap();
     let them = auth::session(&pool, &sid).await.unwrap().unwrap().member.id;
 
-    let first = auth::issue_link(&pool, admin, Some(them), None, 1)
+    let first = auth::issue_link(&pool, Actor::User(admin), Some(them), None, 1)
         .await
         .unwrap();
-    let second = auth::issue_link(&pool, admin, Some(them), None, 1)
+    let second = auth::issue_link(&pool, Actor::User(admin), Some(them), None, 1)
         .await
         .unwrap();
 
@@ -612,4 +623,87 @@ async fn an_admin_sees_every_private_row_until_they_preview_as_a_member() {
         .await
         .unwrap();
     assert!(own.rows.iter().any(|r| r.title == "Presente · aniversário"));
+}
+
+// ---------------------------------------------------------------------------
+// the console: the sole admin, locked out of the one account nobody can reset
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_console_can_reset_the_only_admin_and_the_log_says_who_did_it() {
+    let pool = pool().await;
+    let admin_sid = first_household(&pool).await;
+    let admin = auth::session(&pool, &admin_sid)
+        .await
+        .unwrap()
+        .unwrap()
+        .member
+        .id;
+
+    // The name is exact, not a search: the console resets an account, and
+    // resolving "rod" to the nearest match would be the wrong kind of helpful.
+    assert!(auth::member_by_name(&pool, "rod").await.unwrap().is_none());
+    let me = auth::member_by_name(&pool, "rodrigo")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(me.id, admin);
+
+    let token = auth::issue_link(&pool, Actor::System, Some(me.id), None, 0)
+        .await
+        .unwrap();
+    assert!(matches!(
+        auth::read_link(&pool, &token).await.unwrap(),
+        Link::Reset { .. }
+    ));
+
+    // It costs exactly what the web path costs. A console reset that skipped
+    // either of these would be the same power, unrecorded.
+    assert!(
+        auth::session(&pool, &admin_sid).await.unwrap().is_none(),
+        "a console reset must revoke sessions like any other"
+    );
+
+    // `source = 'system'` with no member id is the truth: nobody was signed
+    // in. Naming an admin would be a lie in the one record built to catch
+    // exactly this action — and the note is what separates "a person with the
+    // database file in their hands" from the app acting on its own.
+    let entries: Vec<(String, String, Option<i64>, Option<String>)> = sqlx::query_as(
+        "SELECT action, source, member_id, note
+         FROM change WHERE entity = 'member' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    let note = Some("reset link issued from the console".to_string());
+    assert_eq!(
+        entries,
+        vec![
+            ("password_reset".into(), "system".into(), None, note.clone()),
+            ("sessions_revoked".into(), "system".into(), None, note),
+        ]
+    );
+
+    // And the way back in is the same page every other reset lands on.
+    auth::accept_reset(&pool, &token, "newpass12345", "Firefox")
+        .await
+        .unwrap();
+    assert!(
+        auth::authenticate(&pool, "rodrigo", "newpass12345")
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    // The account they got back is the one they left: same name, so the same
+    // slug, so the same receipt-vault folder — and still an admin.
+    let after = auth::member_by_name(&pool, "rodrigo")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (after.id, after.slug.as_str(), after.is_admin),
+        (admin, "rodrigo", true)
+    );
 }

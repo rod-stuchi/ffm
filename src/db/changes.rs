@@ -53,7 +53,10 @@ impl Actor {
         }
     }
 
-    fn member_id(self) -> Option<i64> {
+    /// The member behind this actor, if there is one. Public because it is
+    /// also what `member_invites.created_by` stores, and a console-issued
+    /// reset legitimately has nobody to name there.
+    pub fn member_id(self) -> Option<i64> {
         match self {
             Actor::User(id) => Some(id),
             Actor::Import(id) => id,

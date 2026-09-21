@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT i.id AS \"id!: i64\",\n                  i.member_id AS \"member_id: i64\",\n                  i.role AS \"role!: i64\",\n                  i.expires_at AS \"expires_at!: String\",\n                  i.accepted_at AS \"accepted_at: String\",\n                  i.revoked_at AS \"revoked_at: String\",\n                  a.name AS \"inviter?: String\"\n           FROM member_invites i\n           -- LEFT, because `ffm reset-link` on the console has no member to\n           -- name in created_by. An inner join here silently made a\n           -- console-issued link read as Unknown, which is the worst possible\n           -- answer: a valid token, on a page telling you to ask an admin —\n           -- when being unable to reach one is the whole reason you ran it.\n           LEFT JOIN members a ON a.id = i.created_by\n           WHERE i.token_hash = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "role!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "expires_at!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "accepted_at: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "revoked_at: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "inviter?: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "39aa6ddd56c0463c41e7260f1a67cbb159fd952cd3a75c05c4c0b4253910744b"
+}

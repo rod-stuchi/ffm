@@ -383,6 +383,27 @@ async fn insert_member_settings(
 /// inserts, and `members.name` is UNIQUE, so recovering through one would force
 /// a different name — which rewrites `slug`, which is that member's receipt
 /// vault folder. Recovering a password must never orphan somebody's filing.
+/// One member, by the name they sign in with. `members.name` is UNIQUE, so
+/// this is exact rather than a search — the console resets an account, and
+/// resolving "rod" to the closest match would be the wrong kind of helpful.
+pub async fn member_by_name(pool: &SqlitePool, name: &str) -> sqlx::Result<Option<Member>> {
+    let row = sqlx::query!(
+        r#"SELECT id AS "id!: i64", name, uuid, slug, role FROM members
+           WHERE name = ?1 AND deleted_at IS NULL"#,
+        name,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| Member {
+        id: r.id,
+        name: r.name,
+        uuid: r.uuid,
+        slug: r.slug,
+        is_admin: r.role == 0,
+    }))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Link {
     /// Create a member. Carries who issued it, for the page's copy.
@@ -413,16 +434,28 @@ fn token_hash(token: &str) -> String {
 
 /// Issues a link. `member_id = None` invites somebody new; `Some(id)` resets
 /// that member's password — which also **revokes every session they have** and
-/// writes it to the change log, because it hands the admin the ability to sign
-/// in as them. That is the one thing preview-as-non-admin was built not to
-/// allow, so it is made accountable rather than quietly permitted.
+/// writes it to the change log, because it hands the issuer the ability to
+/// sign in as them. That is the one thing preview-as-non-admin was built not
+/// to allow, so it is made accountable rather than quietly permitted.
+///
+/// `actor` is who is doing it, not an admin id, because a reset has a second
+/// issuer: `ffm reset-link` on the console, for the sole admin who is locked
+/// out of the one account nobody can reset for them. That run has no member
+/// behind it, so it stamps [`Actor::System`] and leaves `created_by` NULL.
+/// Naming an admin would be a lie in the one record built to catch exactly
+/// this action. An **invite** still requires a real member: deciding who joins
+/// the household is the admin's call, not the operator's.
 pub async fn issue_link(
     pool: &SqlitePool,
-    admin_id: i64,
+    actor: Actor,
     member_id: Option<i64>,
     label: Option<&str>,
     role: i64,
 ) -> anyhow::Result<String> {
+    debug_assert!(
+        actor.member_id().is_some() || member_id.is_some(),
+        "an invite needs a real member behind it; only a reset may come from the console"
+    );
     let token = random_token();
     let hash = token_hash(&token);
     let created = Utc::now();
@@ -430,6 +463,8 @@ pub async fn issue_link(
     let expires_s = (created + Duration::days(LINK_DAYS))
         .format("%Y-%m-%dT%H:%M:%SZ")
         .to_string();
+
+    let issuer = actor.member_id();
 
     let mut tx = pool.begin().await?;
 
@@ -454,7 +489,7 @@ pub async fn issue_link(
         member_id,
         label,
         role,
-        admin_id,
+        issuer,
         created_s,
         expires_s,
     )
@@ -463,12 +498,21 @@ pub async fn issue_link(
 
     if let Some(mid) = member_id {
         revoke_all_sessions(&mut tx, mid).await?;
-        Change::member(Actor::User(admin_id), MemberAction::PasswordReset, mid)
-            .write(&mut tx)
-            .await?;
-        Change::member(Actor::User(admin_id), MemberAction::SessionsRevoked, mid)
-            .write(&mut tx)
-            .await?;
+        // A console run says so on both entries. The log already carries
+        // `source = 'system'` with no member id, but that alone reads as the
+        // app acting on its own — the note is what tells a household reading
+        // this back that a person with the database file in their hands did
+        // it, which is a different fact worth being able to see.
+        let note = issuer
+            .is_none()
+            .then_some("reset link issued from the console");
+        for action in [MemberAction::PasswordReset, MemberAction::SessionsRevoked] {
+            let entry = Change::member(actor, action, mid);
+            match note {
+                Some(n) => entry.note(n).write(&mut tx).await?,
+                None => entry.write(&mut tx).await?,
+            };
+        }
     }
 
     tx.commit().await?;
@@ -487,9 +531,14 @@ pub async fn read_link(pool: &SqlitePool, token: &str) -> sqlx::Result<Link> {
                   i.expires_at AS "expires_at!: String",
                   i.accepted_at AS "accepted_at: String",
                   i.revoked_at AS "revoked_at: String",
-                  a.name AS "inviter!: String"
+                  a.name AS "inviter?: String"
            FROM member_invites i
-           JOIN members a ON a.id = i.created_by
+           -- LEFT, because `ffm reset-link` on the console has no member to
+           -- name in created_by. An inner join here silently made a
+           -- console-issued link read as Unknown, which is the worst possible
+           -- answer: a valid token, on a page telling you to ask an admin —
+           -- when being unable to reach one is the whole reason you ran it.
+           LEFT JOIN members a ON a.id = i.created_by
            WHERE i.token_hash = ?1"#,
         hash
     )
@@ -515,7 +564,11 @@ pub async fn read_link(pool: &SqlitePool, token: &str) -> sqlx::Result<Link> {
     Ok(match r.member_id {
         None => Link::Invite {
             id: r.id,
-            inviter: r.inviter,
+            // An invite always has a real issuer: deciding who joins the
+            // household is the admin's call, not the operator's, and the
+            // schema CHECKs it. A NULL can only be a console reset, which is
+            // the arm below.
+            inviter: r.inviter.unwrap_or_default(),
             expires: r.expires_at,
             role: r.role,
         },

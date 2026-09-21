@@ -922,6 +922,21 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   admin the ability to write to the ledger as somebody else — the one thing
   preview-as-non-admin was carefully built *not* to allow. There is no
   self-service reset: no mail sender, nowhere to send a token.
+- **The sole admin's own account is reachable from the console, not by hand-
+  editing the database — an amendment to "recovery is editing the database by
+  hand".** `ffm reset-link <name>` issues the *same* link `:members` issues.
+  It deliberately does not set a password: there stays exactly one code path
+  that writes `password_hash` (the accept form), the member still picks their
+  own, and the reset keeps everything the web path pays — every session
+  revoked, two entries in the append-only log. A `--set-password` flag was
+  rejected on both counts, plus the obvious one: a password on `argv` lands in
+  shell history and in `ps`. The console has no member behind it, so
+  `member_invites.created_by` is nullable (NULL = the console) and the log
+  stamps `source = 'system'` with a note rather than naming an admin who
+  wasn't there — this is the one place the app grants the ability to act as
+  somebody else, so it must not be able to do it anonymously. Issuing an
+  **invite** from the console is deliberately not offered: deciding who joins
+  the household is the admin's call, and a `CHECK` says so.
 - **Mutations follow one optimistic flow.** Submit → insert an animated skeleton
   row immediately → the server's fragment replaces it with either the real row or
   an error row carrying a **Try Again** that resubmits the original action.

@@ -162,7 +162,9 @@ async fn the_bucket_cloud_is_the_members_own_and_spans_rules_and_rows() {
 
     // And scoped per member: a kid's school-cafeteria labels have no business
     // appearing in a parent's utility dropdown.
-    let token = auth::issue_link(&pool, me, None, None, 1).await.unwrap();
+    let token = auth::issue_link(&pool, Actor::User(me), None, None, 1)
+        .await
+        .unwrap();
     let sid = auth::accept_invite(&pool, &token, "ana", "hunter2hunter2", "en", "ffm", 1, "x")
         .await
         .unwrap();

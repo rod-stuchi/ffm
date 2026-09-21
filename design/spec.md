@@ -641,8 +641,11 @@ does most of the real work, so the auth layer stays simple on purpose.
   admin issuing a reset link is the recovery path — see Forgotten passwords,
   below. The admin's own password is the one with nobody above it, which is why
   `/setup` asks for it twice; with a second admin, either can reset the other,
-  and with only one, recovery is editing the database by hand. The spec says so
-  rather than pretending otherwise.
+  and with only one, the recovery path is the console — see The console,
+  below. **That replaces "recovery is editing the database by hand"**, which
+  was never really available: `password_hash` is Argon2, so there is no hash a
+  person can type into `sqlite3`, and getting back into your own ledger meant
+  writing a program.
 - **Focused member ≠ logged-in member.** `H`/`L`/`gt` pick which pane is
   focused, which decides who a *new transaction* is attributed to — that stays
   visual/Alpine-adjacent per the existing rule. Login (the session) decides whose
@@ -872,6 +875,54 @@ holds it rather than known only to whoever remembers a command.
 
 Like every other admin-only control, it **disappears** under
 preview-as-non-admin rather than sitting there disabled.
+
+### The console — `ffm reset-link <name>`
+
+The one account nobody else can reset is the sole admin's. `ffm reset-link
+<name>` is the way back into it, run on the machine the process runs on:
+
+```
+$ ffm reset-link rodrigo
+
+✓ reset link for rodrigo · expires 28/09/2026
+
+  http://192.168.0.12:3000/invite/nQ7…
+```
+
+- **It issues the same link `:members` issues**, and accepting it lands on the
+  same page. It does **not** set a password, which is the whole shape of it:
+  there stays exactly one code path that writes `password_hash`, so a change
+  to how passwords are stored cannot reach one and miss the other; the member
+  still picks their own, as they would have; and a password passed on `argv`
+  would sit in the shell's history file and in `ps` output for every user on
+  the machine.
+- **It costs what the web path costs** — every session revoked, a
+  `password_reset` and a `sessions_revoked` entry in the append-only log.
+  Skipping either would be the same power, unrecorded.
+- **The log says the console did it, not an admin.** There is no member behind
+  the command, so `member_invites.created_by` is nullable and the entries
+  stamp `source = 'system'` with the note *"reset link issued from the
+  console"*. Naming an admin who wasn't there would be a lie in the one record
+  built to catch exactly this action. (`read_link`'s join to the issuer is a
+  `LEFT JOIN` for this reason — an inner one made a console link read as
+  `Unknown`, which is the worst possible answer: a valid token, on a page
+  telling you to ask an admin, when being unable to reach one is why you ran
+  the command.)
+- **Only a reset, never an invite.** Deciding who joins the household is the
+  admin's call, not the operator's, and a `CHECK` enforces it: a row with no
+  `created_by` must name a `member_id`.
+- **Access to the binary and the database file is the authority here**, and it
+  grants nothing that reading `ffm.db` directly did not already. It is not a
+  privilege escalation, it is the same privilege made usable.
+- **The name is exact**, matched against `members.name` — the identifier
+  people sign in with. Resolving `rod` to the nearest match would be the wrong
+  kind of helpful when the thing being reset is an account; an unknown name
+  lists the household's members instead.
+- **Argument parsing is hand-rolled**, no argument-parser dependency: there
+  are two commands and one argument between them, and `ffm --help` is a
+  `const &str`.
+
+---
 
 ### Signing in — `/login`
 

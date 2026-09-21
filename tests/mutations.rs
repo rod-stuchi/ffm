@@ -210,7 +210,9 @@ async fn undo_walks_back_through_history_instead_of_toggling_one_change() {
 async fn undo_is_scoped_to_the_member_who_asks() {
     let pool = pool().await;
     let me = household(&pool).await;
-    let token = auth::issue_link(&pool, me, None, None, 1).await.unwrap();
+    let token = auth::issue_link(&pool, Actor::User(me), None, None, 1)
+        .await
+        .unwrap();
     let sid = auth::accept_invite(&pool, &token, "ana", "hunter2hunter2", "en", "ffm", 1, "x")
         .await
         .unwrap();
