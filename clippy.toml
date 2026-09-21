@@ -5,18 +5,19 @@
 #   * money format  — from household_settings.locale_currency.
 #   * language      — from member_settings.language. The words, and only the words.
 #
-# chrono is already built without "unstable-locales" so most of this is
-# structurally impossible, but `format_localized*` is the API that would bring
-# it back the moment someone enables the feature to "fix" a date.
+# There is deliberately no `disallowed-methods` entry for chrono's
+# `format_localized*` here. It was tried, and clippy correctly reported that the
+# path "does not refer to a reachable function" — because Cargo.toml builds
+# chrono WITHOUT `unstable-locales`, so the method does not exist at all. A lint
+# guarding an unreachable path is a warning on every build that protects nothing.
 #
-# Everything the app renders goes through ui::fmt, whose signatures encode the
-# rule: fmt::money takes a Currency and never a Lang; fmt::date takes neither.
-disallowed-methods = [
-    { path = "chrono::NaiveDate::format_localized", reason = "dates are fixed dd/mm/yyyy — use ui::fmt::date" },
-    { path = "chrono::NaiveDateTime::format_localized", reason = "dates are fixed dd/mm/yyyy — use ui::fmt::date" },
-    { path = "chrono::DateTime::format_localized", reason = "dates are fixed dd/mm/yyyy — use ui::fmt::date" },
-]
-
-# Money is i64 minor units end to end. A float anywhere near an amount is the
-# one bug this codebase cannot tolerate quietly.
-disallowed-types = []
+# The enforcement is therefore structural rather than advisory, in three places:
+#
+#   1. chrono has no `unstable-locales` feature (Cargo.toml says why).
+#   2. `ui::fmt::date` takes no language parameter and never will.
+#   3. build.rs rejects any `.ftl` message value containing a date pattern or a
+#      currency glyph, so the catalog cannot smuggle one in either.
+#
+# If anyone ever enables `unstable-locales`, re-add the entry — at that point the
+# path becomes reachable and the lint starts doing real work.
+disallowed-methods = []
