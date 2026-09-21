@@ -1,0 +1,16 @@
+{#- A pane's numbers and the household's, as out-of-band swaps.
+
+    Every mutation returns these alongside the row. A row that lands without
+    its totals moving is a ledger disagreeing with itself on screen — and since
+    privacy is applied inside the same query that produced the row, the two
+    cannot drift apart. -#}
+<span class="ptotals" id="ptot-{{ pt.id }}" hx-swap-oob="true">
+  <i>in</i> <b class="pos">{{ pt.ins }}</b>
+  <i>out</i> <b class="neg">{{ pt.outs }}</b>
+  <i>bal</i> <b class="{% if pt.negative %}neg{% else %}pos{% endif %}">{% if pt.negative %}−{% endif %}{{ pt.balance }}</b>
+</span>
+<span class="htot" id="htot" hx-swap-oob="true">
+  <span><i>IN</i> <b class="pos">{{ house.ins }}</b></span>
+  <span><i>OUT</i> <b class="neg">{{ house.outs }}</b></span>
+  <span><i>NET</i> <b class="{% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
+</span>

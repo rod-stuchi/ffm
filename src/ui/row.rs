@@ -149,7 +149,15 @@ pub struct Amount {
 pub enum Gutter {
     Relative(i32),
     Absolute(u32),
+    /// `nonu` — the member turned line numbers off household-wide for
+    /// themselves. The cell stays in the grid and only its track narrows.
     Hidden,
+    /// No number to show, but the row must keep the ledger's geometry — a
+    /// deleted row re-rendered on its own, which no longer has a position in
+    /// the pane query. Narrowing its track instead would make the row jump
+    /// sideways the instant it is deleted, which is the same family of bug as
+    /// `display: none` on a grid child.
+    Blank,
 }
 
 impl Gutter {
@@ -158,7 +166,7 @@ impl Gutter {
             Gutter::Relative(0) => "0".into(),
             Gutter::Relative(n) => n.abs().to_string(),
             Gutter::Absolute(n) => n.to_string(),
-            Gutter::Hidden => String::new(),
+            Gutter::Hidden | Gutter::Blank => String::new(),
         }
     }
 }
@@ -612,6 +620,9 @@ impl LedgerRow {
 /// here keeps that literally true, and leaves `row.html` with almost no
 /// decisions left to make.
 pub struct RowView {
+    /// The transaction's id, so a fragment can be addressed for an
+    /// out-of-band swap without the template knowing where the row sits.
+    pub id: i64,
     pub classes: String,
     pub gutter: String,
     pub title: String,
@@ -695,6 +706,7 @@ impl LedgerRow {
         };
 
         RowView {
+            id: self.id,
             classes: self.classes().join(" "),
             gutter: self.gutter.text(),
             title: self.title.clone(),
@@ -1179,6 +1191,7 @@ mod tests {
     fn the_gutter_cell_survives_nonu() {
         // Hidden means an empty cell, never a removed track.
         assert_eq!(Gutter::Hidden.text(), "");
+        assert_eq!(Gutter::Blank.text(), "");
         assert_eq!(Gutter::Relative(0).text(), "0");
         assert_eq!(Gutter::Relative(-3).text(), "3");
         assert_eq!(Gutter::Absolute(12).text(), "12");
@@ -1186,6 +1199,10 @@ mod tests {
         let mut r = base();
         r.gutter = Gutter::Hidden;
         assert!(r.classes().contains(&"is-nogut"));
+
+        // Blank keeps the track: a deleted row must not jump sideways.
+        r.gutter = Gutter::Blank;
+        assert!(!r.classes().contains(&"is-nogut"));
     }
 
     // -- unresolved ------------------------------------------------------

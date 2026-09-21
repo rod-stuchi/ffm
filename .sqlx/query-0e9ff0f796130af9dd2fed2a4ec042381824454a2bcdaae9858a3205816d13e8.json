@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT max(sort_key) AS \"k: String\" FROM transactions\n               WHERE member_id = ?1 AND period = ?2 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "k: String",
+        "ordinal": 0,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0e9ff0f796130af9dd2fed2a4ec042381824454a2bcdaae9858a3205816d13e8"
+}

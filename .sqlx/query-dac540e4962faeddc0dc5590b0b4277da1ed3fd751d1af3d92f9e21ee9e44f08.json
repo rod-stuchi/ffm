@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT c.id AS \"id!: i64\", c.entity_id AS \"entity_id!: i64\",\n                  c.action AS \"action!: String\"\n           FROM change c\n           WHERE c.member_id = ?1\n             AND c.entity = 'transaction'\n             AND c.action IN ('create', 'delete', 'restore')\n             AND c.undo_of IS NULL\n             -- Already undone: its reversal points back at it. Without this,\n             -- `u` twice in a row would toggle the same change forever instead\n             -- of walking back through history.\n             AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id)\n           ORDER BY c.id DESC\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "entity_id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "action!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "dac540e4962faeddc0dc5590b0b4277da1ed3fd751d1af3d92f9e21ee9e44f08"
+}

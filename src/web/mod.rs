@@ -5,6 +5,7 @@ pub mod csrf;
 pub mod ledger;
 pub mod session;
 pub mod template;
+pub mod tx;
 
 #[cfg(debug_assertions)]
 pub mod sandbox;
@@ -34,6 +35,11 @@ pub fn router(state: AppState) -> Router {
     let guarded = Router::new()
         .route("/logout", post(auth::logout))
         .route("/preview", post(auth::toggle_preview))
+        // Every mutation in the app goes through one response shape: a row
+        // fragment, or an error row carrying Try Again. See web::tx.
+        .route("/tx", post(tx::add))
+        .route("/tx/{id}/delete", post(tx::delete))
+        .route("/undo", post(tx::undo))
         .layer(axum::middleware::from_fn(csrf::guard));
 
     let app = Router::new()

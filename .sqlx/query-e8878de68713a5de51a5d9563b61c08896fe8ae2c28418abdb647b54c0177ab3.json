@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT member_id AS \"member_id!: i64\", visibility AS \"visibility!: String\"\n           FROM transactions WHERE id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "member_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e8878de68713a5de51a5d9563b61c08896fe8ae2c28418abdb647b54c0177ab3"
+}

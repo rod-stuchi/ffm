@@ -925,6 +925,20 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 - **Mutations follow one optimistic flow.** Submit → insert an animated skeleton
   row immediately → the server's fragment replaces it with either the real row or
   an error row carrying a **Try Again** that resubmits the original action.
+  - **The skeleton is real markup already in the DOM**, revealed by HTMX's own
+    `htmx-request` class via `hx-indicator`, with the new row swapped in
+    `beforebegin` of it. No JavaScript builds a placeholder, and its geometry
+    therefore cannot drift from a real row's.
+  - **A mutation returns the totals it moved**, out of band, alongside the row.
+    A row that lands while the pane's balance stays put is the ledger
+    disagreeing with itself on screen. They are computed by the same
+    `ledger::pane` call a page load uses, so privacy filtering and the numbers
+    cannot come apart.
+  - **The statusline travels in a response header** (`HX-Trigger`), not in the
+    body — a swap should not have to include chrome in order to say something.
+  - **An error row is HTTP 200.** HTMX swaps a successful response by default,
+    and the error row *is* the answer; signalling failure in the status code
+    means the person sees nothing at all.
 - **Every soft delete, restore, reorder and re-attribution is undoable.** `u`
   must restore the exact prior state, including both ledgers for a
   re-attribution.
@@ -1031,6 +1045,16 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   same **SHA-384 over the migration file** that SQLx computes, so the two agree.
   Change a migration and the checksums disagree on purpose — that is SQLx saying
   `just db-reset`, which is safe only while no household database exists.
+- **An `HX-Trigger` header carrying UTF-8 arrives mangled.** HTTP header values
+  are bytes and browsers read them as latin-1, so a statusline message built
+  from a household's own bill name comes back as `added "Padaria Â· Manhã"`.
+  The fix is not to strip the character: JSON already has `\uXXXX`, so escape
+  every non-ASCII char when building the header and `JSON.parse` puts it back.
+  Any header this app ever builds from household content needs the same.
+- **Askama compiles templates into the binary.** Editing a `.html` and
+  reloading proves nothing until `cargo build` has run — `just dev` watches for
+  it, but a hand-started `cargo run` does not. Half an hour went into "the
+  keymap stopped working" that was an old template still in a running process.
 - **A quote-blind TOML comment stripper eats hex colours.** `line.replace(/#.*$/, '')`
   cuts `accent = "#c4a7e7"` in half at the colour's own `#`. The real `toml` crate
   handles this — which is a reason not to hand-roll a config reader.

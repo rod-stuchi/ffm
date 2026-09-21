@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 static N: AtomicU32 = AtomicU32::new(0);
 
+#[allow(dead_code)] // each test binary uses one or the other
 pub async fn pool() -> SqlitePool {
     let dir = std::env::temp_dir().join(format!("ffm-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -28,6 +29,7 @@ pub async fn pool() -> SqlitePool {
     db::connect(&cfg).await.expect("migrate")
 }
 
+#[allow(dead_code)]
 pub async fn seeded() -> SqlitePool {
     let pool = pool().await;
     // The same file `just seed` applies, so a fixture cannot drift from what a

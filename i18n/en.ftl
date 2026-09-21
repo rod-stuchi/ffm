@@ -170,3 +170,20 @@ name-taken-body = Pick another — names are how everyone signs in, so they have
 
 sign-out = Sign out
 signed-out = Signed out.
+
+## Mutations — the one optimistic flow
+
+row-title = Description
+row-amount = Amount
+row-add-spend = Add a spend
+row-add-income = Add an income
+row-save = Save
+row-cancel = Cancel
+row-added = added "{ $title }"
+row-deleted-say = deleted · u to undo
+row-delete-confirm = Delete this row?
+row-delete-body = It stays in the database and `u` puts it back. Press y to confirm.
+row-delete-yes = Delete
+nothing-to-undo = nothing to undo
+undone = undone
+error-not-written = That didn't go through — nothing was written.

@@ -50,6 +50,57 @@ impl Cents {
     }
 }
 
+impl Cents {
+    /// Parses what a person typed into an amount field.
+    ///
+    /// Tolerant on input, exact on output: `1.234,56`, `1234.56`, `R$ 12,34`
+    /// and `1234` all mean what they look like. The rule for telling the two
+    /// separator conventions apart is positional rather than configured — the
+    /// **last** separator with two digits after it is the decimal point, which
+    /// is true in both conventions and needs no knowledge of the household's
+    /// currency.
+    ///
+    /// This is the fallback path. The real field is a live mask that tracks the
+    /// integer directly, so display and stored value cannot disagree; this
+    /// exists for a paste, an autofill, and anything posted without JS.
+    pub fn parse(s: &str) -> Option<Cents> {
+        let digits_and_seps: String = s
+            .chars()
+            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == ',' || *c == '-')
+            .collect();
+        let negative = digits_and_seps.starts_with('-');
+        let body = digits_and_seps.trim_start_matches('-');
+        if body.is_empty() {
+            return None;
+        }
+
+        let last_sep = body.rfind([',', '.']);
+        let (whole, frac) = match last_sep {
+            // Exactly two digits after the final separator: that separator is
+            // the decimal point. Three would make it a thousands group.
+            Some(i) if body.len() - i - 1 == 2 => (&body[..i], &body[i + 1..]),
+            _ => (body, ""),
+        };
+
+        let whole: String = whole.chars().filter(char::is_ascii_digit).collect();
+        if whole.is_empty() && frac.is_empty() {
+            return None;
+        }
+        let major: i64 = if whole.is_empty() {
+            0
+        } else {
+            whole.parse().ok()?
+        };
+        let minor: i64 = if frac.is_empty() {
+            0
+        } else {
+            frac.parse().ok()?
+        };
+        let total = major.checked_mul(100)?.checked_add(minor)?;
+        Some(Cents(if negative { -total } else { total }))
+    }
+}
+
 impl Add for Cents {
     type Output = Cents;
     fn add(self, rhs: Cents) -> Cents {
@@ -207,6 +258,25 @@ mod tests {
         assert_eq!(Cents(100).delta_pct(Cents(100)), Some(0));
         // No previous amount to compare against is not a 0% change.
         assert_eq!(Cents(100).delta_pct(Cents::ZERO), None);
+    }
+
+    #[test]
+    fn parses_what_a_person_actually_types() {
+        // Both conventions, told apart by position rather than by config: the
+        // last separator with two digits after it is the decimal point.
+        assert_eq!(Cents::parse("1.234,56"), Some(Cents(123456)));
+        assert_eq!(Cents::parse("1,234.56"), Some(Cents(123456)));
+        assert_eq!(Cents::parse("R$ 12,34"), Some(Cents(1234)));
+        assert_eq!(Cents::parse("$1,234.56"), Some(Cents(123456)));
+        // No separator at all is whole units, not cents — somebody typing
+        // "50" for a R$ 50 grocery run means fifty.
+        assert_eq!(Cents::parse("50"), Some(Cents(5000)));
+        // Three digits after the separator is a thousands group, not a
+        // fraction: 1.234 is one thousand two hundred and thirty-four.
+        assert_eq!(Cents::parse("1.234"), Some(Cents(123400)));
+        assert_eq!(Cents::parse(""), None);
+        assert_eq!(Cents::parse("abc"), None);
+        assert_eq!(Cents::parse("-12,50"), Some(Cents(-1250)));
     }
 
     #[test]

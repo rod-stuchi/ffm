@@ -150,14 +150,47 @@ survives, a reset renames nobody and is logged, a second reset click replaces th
 first, and — the two that matter most — a private row is absent from the list
 *and* the totals, and an admin sees everyone until they preview.
 
-## Phase 5 ★ — mutations and the optimistic-UI flow
+## Phase 5 ★ — mutations and the optimistic-UI flow ✅
 
-A **response-shape contract**, not a feature: submit → skeleton row → the
-server's fragment replaces it with the real row or an error row carrying
-**Try Again**. Fix the handler convention once and every later phase inherits it.
+A **response-shape contract**, fixed once so every later phase inherits it
+rather than inventing its own.
 
-Swap boundaries matter here: the `x-data` holding parked drafts must sit on a
-container *outside* every `hx-target`, or the draft dies with the swap.
+- **`domain::sortkey`** — fractional indexing, so a move writes *one* row
+  instead of renumbering everything after it. The invariant it rests on is
+  written down and asserted: a key never ends in the lowest character, because
+  such a key has nothing below it inside its own prefix. Tested by inserting
+  into the same gap a thousand times.
+- **`db::tx`** — add, soft delete, restore, undo. Every one opens a transaction
+  and writes the row *and* its change entry inside it. A spend appends; income
+  goes to the top of its pane, which is a starting position rather than a pin.
+- **`u` walks back through history** rather than toggling one change: a
+  reversal points at what it reversed, and an already-reversed change is spent.
+  Scoped to the asking member — `u` means "undo what *I* just did".
+- **`web::tx`** — one fragment for every mutation: the row, the totals it moved
+  (out of band), and the statusline message in an `HX-Trigger` header. An error
+  row says what happened *and that nothing was written*, at HTTP 200 so HTMX
+  actually swaps it.
+- **The skeleton is real markup already in the DOM**, revealed by HTMX's own
+  request class. No JavaScript builds a placeholder, so its geometry cannot
+  drift from a real row's.
+- **HTMX and Alpine are vendored** in `static/js/`, like the fonts: a household
+  on a LAN should not need the open internet to open its own ledger.
+- **The Alpine boundary is cut correctly on the first try**, which
+  `CLAUDE.md` warns about: `x-data` sits on the shell, outside every
+  `hx-target`, so a swap cannot destroy the state parked inside it.
+- **A first slice of the keymap**, because a mutation you cannot reach is not
+  finished: `j`/`k`/`G`, `H`/`L`, `a`/`i`, `dd` → confirm → `y`, `u`, `Esc`.
+  Verified by driving a real browser, not only by unit test.
+
+`tests/mutations.rs` — 7 tests: a spend appends while income goes to the top
+with no key renumbered, an add records what it created, one `dd` plus one `u`
+leaves exactly one row, `u` walks back rather than toggling, undo is scoped to
+its member, a second `dd` on the same row writes no second entry, and a failed
+insert leaves *nothing* in the log.
+
+Two bugs the browser found that no test would have: a UTF-8 `HX-Trigger` header
+read as latin-1 (`Padaria Â· Manhã`), and totals that sat still while a row
+landed. Both are now part of the contract, and both are in `CLAUDE.md`.
 
 ## Phase 6 — recurring rules and the materializer
 

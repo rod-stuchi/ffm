@@ -140,3 +140,20 @@ name-taken-body = Escolha outro — o nome é como cada um entra, então precisa
 
 sign-out = Sair
 signed-out = Sessão encerrada.
+
+## Alterações
+
+row-title = Descrição
+row-amount = Valor
+row-add-spend = Adicionar gasto
+row-add-income = Adicionar entrada
+row-save = Salvar
+row-cancel = Cancelar
+row-added = adicionado "{ $title }"
+row-deleted-say = excluído · u para desfazer
+row-delete-confirm = Excluir esta linha?
+row-delete-body = Ela continua no banco e `u` traz de volta. Aperte y para confirmar.
+row-delete-yes = Excluir
+nothing-to-undo = nada para desfazer
+undone = desfeito
+error-not-written = Não deu certo — nada foi salvo.

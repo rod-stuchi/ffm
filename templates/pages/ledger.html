@@ -1,9 +1,15 @@
-{#- The ledger, read-only.
+{#- The ledger.
 
-    Deliberately not the full app shell: no command bar, no tab bar, no month
-    picker. Those arrive with the keymap they belong to. What is here is the
-    part that had to become true first — real rows, from the database, through
-    the same row partial the sandbox renders from fixtures. -#}
+    Two boundaries here are load-bearing and were decided before the first
+    template rather than discovered later:
+
+    * **`x-data` sits on the shell, outside every `hx-target`.** An HTMX swap
+      destroys the Alpine state inside it, and drafts live in Alpine. A fragment
+      that both holds state and is its own swap target cannot work.
+    * **The skeleton row is real markup, already in the DOM.** It is revealed by
+      HTMX's own `htmx-request` class and a new row is inserted *before* it, so
+      the optimistic step needs no JavaScript at all and its geometry cannot
+      drift from a real row's. -#}
 <!doctype html>
 <html lang="{{ t.lang.code() }}"{% if let Some(a) = attr %} data-theme="{{ a }}"{% endif %}>
 <head>
@@ -11,12 +17,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ household }} · {{ period }}</title>
 <link rel="stylesheet" href="/static/css/build.css">
-{#- The only source of colour in the page: the full light/dark triple, rendered
-    server-side because `theme = system` means we cannot know the device's mode. -#}
 <style id="ffm-theme">{{ theme_css|safe }}</style>
+{#- Self-hosted, like the fonts. A household on a LAN should not need the
+    open internet to open its own ledger. -#}
+<script src="/static/js/htmx.min.js"></script>
+<script defer src="/static/js/alpine.min.js"></script>
 </head>
 <body>
-<div class="ledger-shell">
+<div class="ledger-shell" x-data="ledger()" @keydown.window="key($event)">
   <header class="ledger-bar">
     <b>{{ household }}</b>
     <nav class="mnav">
@@ -26,18 +34,16 @@
     </nav>
     <div class="htotals">
       <span class="who">{{ me }}</span>
-      {#- ADMIN ↔ PREVIEW. Clicking it switches this session's own admin powers
-          off, which is not impersonation: same member, same pane, own private
-          rows still fully visible. Reversible any time, nothing destructive,
-          so no confirmation. -#}
       {%- if admin || previewing %}
       <form method="post" action="/preview" class="signout">
         <button class="btn badge{% if previewing %} is-preview{% endif %}" type="submit">{% if previewing %}PREVIEW{% else %}ADMIN{% endif %}</button>
       </form>
       {%- endif %}
-      <span><i>IN</i> <b class="pos">{{ ins }}</b></span>
-      <span><i>OUT</i> <b class="neg">{{ outs }}</b></span>
-      <span><i>NET</i> <b class="{% if net_negative %}neg{% else %}pos{% endif %}">{% if net_negative %}−{% endif %}{{ net }}</b></span>
+      <span class="htot" id="htot">
+        <span><i>IN</i> <b class="pos">{{ house.ins }}</b></span>
+        <span><i>OUT</i> <b class="neg">{{ house.outs }}</b></span>
+        <span><i>NET</i> <b class="{% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
+      </span>
     </div>
     <form method="post" action="/logout" class="signout">
       <button class="btn" type="submit">{{ t.sign_out() }}</button>
@@ -47,31 +53,195 @@
   {%- if empty %}
   <div class="ledger-empty">
     <p><b>No household yet.</b></p>
-    <p>Run <code>just seed</code> to put one in the database, or wait for
-       <code>/setup</code> — the page that creates a real one.</p>
+    <p>Run <code>just seed</code> to put one in the database.</p>
   </div>
   {%- else %}
   <main class="stage">
     {%- for p in panes %}
-    <section class="pane">
+    <section class="pane" :class="{ 'is-focus': pane === {{ loop.index0 }} }" @click="pane = {{ loop.index0 }}">
       <header class="pane-head">
         <b>{{ p.name }}</b>
-        <span class="ptotals">
-          <i>in</i> <b class="pos">{{ p.ins }}</b>
-          <i>out</i> <b class="neg">{{ p.outs }}</b>
-          <i>bal</i> <b class="{% if p.negative %}neg{% else %}pos{% endif %}">{% if p.negative %}−{% endif %}{{ p.balance }}</b>
+        <span class="ptotals" id="ptot-{{ p.id }}">
+          <i>in</i> <b class="pos">{{ p.totals.ins }}</b>
+          <i>out</i> <b class="neg">{{ p.totals.outs }}</b>
+          <i>bal</i> <b class="{% if p.totals.negative %}neg{% else %}pos{% endif %}">{% if p.totals.negative %}−{% endif %}{{ p.totals.balance }}</b>
         </span>
       </header>
-      <div class="rows">
-        {%- for v in p.rows %}{% include "partials/row.html" %}{% endfor %}
-        {%- if p.rows.is_empty() %}
-        <p class="pane-empty">Nothing in this month.</p>
-        {%- endif %}
+
+      <div class="rows" id="rows-{{ p.id }}">
+        {%- for v in p.rows %}
+        <div id="row-{{ v.id }}">{% include "partials/row.html" %}</div>
+        {%- endfor %}
+
+        {#- In flight. Identical geometry to a real row, so nothing shifts when
+            the server's fragment lands beside it. -#}
+        <div class="row is-skeleton sk-row" id="sk-{{ p.id }}">
+          <div class="gut"></div>
+          <div class="entry">
+            <div class="mark"><div class="sk-disc"></div></div>
+            <div class="name">
+              <div class="sk-bar" style="width:56%"></div>
+              <div class="sk-bar" style="width:32%;height:7px;margin-top:6px"></div>
+            </div>
+            <div></div>
+            <div class="amt"><div class="sk-bar" style="width:74px"></div></div>
+          </div>
+        </div>
       </div>
+
+      {#- The add form lives in the ledger, not in a modal: a dialog hides the
+          very thing you are adding to. -#}
+      <form class="addrow" x-show="adding === {{ loop.index0 }}" x-cloak
+            hx-post="/tx"
+            hx-target="#sk-{{ p.id }}" hx-swap="beforebegin"
+            hx-indicator="#sk-{{ p.id }}"
+            hx-disabled-elt="find button"
+            @htmx:after-request="if ($event.detail.successful) { $el.reset(); $refs.title{{ p.id }}.focus() }">
+        <input type="hidden" name="member_id" value="{{ p.id }}">
+        <input type="hidden" name="period" value="{{ period_key }}">
+        <input type="hidden" name="kind" :value="kind">
+        <input class="i" name="title" x-ref="title{{ p.id }}" placeholder="{{ t.row_title() }}" autocomplete="off">
+        {#- The amount comes first in the edit form, but here the description
+            is what you are always typing; the amount is often filled in later. -#}
+        <input class="i amt-in" name="amount" placeholder="{{ t.row_amount() }}" inputmode="decimal" autocomplete="off">
+        <button class="btn pri" type="submit">{{ t.row_save() }}</button>
+        <button class="btn" type="button" @click="adding = null">{{ t.row_cancel() }}</button>
+      </form>
     </section>
     {%- endfor %}
   </main>
   {%- endif %}
+
+  {#- `dd` confirms, because deletion READS as destructive even though it is a
+      soft delete. Enter deliberately does nothing here: the only yes is an
+      explicit `y`, so Enter can never become an accidental way to confirm. -#}
+  <div class="modal" x-show="confirming" x-cloak @click.self="confirming = null">
+    <div class="card" style="max-width:min(460px,100%)">
+      <div class="ch"><h1>{{ t.row_delete_confirm() }}</h1></div>
+      <div class="cb">
+        <p class="hint" style="margin-top:0">{{ t.row_delete_body() }}</p>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="confirming = null">{{ t.row_cancel() }} <kbd>esc</kbd></button>
+          <button class="btn" type="button" @click="doDelete()">{{ t.row_delete_yes() }} <kbd>y</kbd></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {#- The same message channel the pre-auth pages use, so there is one way the
+      app talks to you on both sides of the login. -#}
+  <div class="status">
+    <div class="st">{{ household }}</div>
+    <div class="st grow msg" :class="{ bad: msgBad }" x-text="msg"></div>
+    <div class="st right">{{ period }} · {{ t.lang.code() }}</div>
+  </div>
 </div>
+
+<script>
+function ledger() {
+  return {
+    pane: 0,
+    row: 0,
+    adding: null,
+    kind: 'out',
+    confirming: null,
+    msg: '',
+    msgBad: false,
+    pending: '',
+
+    rows() {
+      const panes = document.querySelectorAll('.pane');
+      if (!panes[this.pane]) return [];
+      return Array.from(panes[this.pane].querySelectorAll('.rows > div[id^="row-"] .row'));
+    },
+
+    paint() {
+      document.querySelectorAll('.row.is-focus').forEach(r => r.classList.remove('is-focus'));
+      const rows = this.rows();
+      if (!rows.length) return;
+      this.row = Math.max(0, Math.min(this.row, rows.length - 1));
+      rows[this.row].classList.add('is-focus');
+      rows[this.row].scrollIntoView({ block: 'nearest' });
+    },
+
+    focusedId() {
+      const rows = this.rows();
+      const el = rows[this.row];
+      return el ? el.closest('div[id^="row-"]').id.slice(4) : null;
+    },
+
+    say(message, bad) { this.msg = message; this.msgBad = !!bad; },
+
+    key(e) {
+      // A form takes literal text, so motions stop being motions inside one.
+      // This is the same rule the pre-auth pages follow, not an exception.
+      //
+      // `target` is not always an element — a key dispatched at the window has
+      // the window as its target, and `window.matches` does not exist. Guard
+      // it, or the whole keymap dies silently on the first such event.
+      const el = e.target instanceof Element ? e.target : null;
+      const typing = !!el && el.matches('input, textarea, select');
+      if (this.confirming) {
+        if (e.key === 'y') { e.preventDefault(); this.doDelete(); }
+        if (e.key === 'Escape') { e.preventDefault(); this.confirming = null; }
+        return;
+      }
+      if (typing) {
+        if (e.key === 'Escape') { this.adding = null; el.blur(); }
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const k = e.key;
+      const buffer = this.pending;
+      this.pending = '';
+
+      if (k === 'j') { this.row++; this.paint(); }
+      else if (k === 'k') { this.row--; this.paint(); }
+      else if (k === 'g') { this.pending = 'g'; }
+      else if (k === 'G') { this.row = this.rows().length - 1; this.paint(); }
+      else if (k === 'H') { this.pane = Math.max(0, this.pane - 1); this.row = 0; this.paint(); }
+      else if (k === 'L') { this.pane = Math.min(document.querySelectorAll('.pane').length - 1, this.pane + 1); this.row = 0; this.paint(); }
+      else if (k === 'a' || k === 'i') { this.open(k === 'a' ? 'out' : 'in'); }
+      else if (k === 'd') { if (buffer === 'd') { this.askDelete(); } else { this.pending = 'd'; } }
+      else if (k === 'u') { this.undo(); }
+      else if (k === 'Escape') { this.adding = null; this.say(''); }
+      else return;
+      e.preventDefault();
+    },
+
+    open(kind) {
+      this.kind = kind;
+      this.adding = this.pane;
+      this.$nextTick(() => {
+        const pane = document.querySelectorAll('.pane')[this.pane];
+        pane.querySelector('.addrow input[name="title"]').focus();
+      });
+    },
+
+    askDelete() {
+      const id = this.focusedId();
+      if (!id) return;
+      this.confirming = id;
+    },
+
+    doDelete() {
+      const id = this.confirming;
+      this.confirming = null;
+      htmx.ajax('POST', '/tx/' + id + '/delete', { target: '#row-' + id, swap: 'outerHTML' });
+    },
+
+    undo() { htmx.ajax('POST', '/undo', { target: 'body', swap: 'none' }); },
+
+    init() {
+      this.$nextTick(() => this.paint());
+      // The statusline is fed by a response header, so a swap never has to
+      // include chrome in order to say something.
+      document.body.addEventListener('ffm:say', e => this.say(e.detail.message, e.detail.bad));
+      document.body.addEventListener('htmx:afterSwap', () => this.paint());
+    },
+  };
+}
+</script>
 </body>
 </html>

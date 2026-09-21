@@ -4,6 +4,7 @@ pub mod auth;
 pub mod changes;
 pub mod ledger;
 pub mod settings;
+pub mod tx;
 
 use crate::config::Config;
 use sqlx::SqlitePool;

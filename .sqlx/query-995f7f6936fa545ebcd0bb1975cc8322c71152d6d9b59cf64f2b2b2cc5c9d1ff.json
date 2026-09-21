@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO transactions\n               (member_id, rule_id, period, kind, title, amount_cents, date,\n                manual_paid, visibility, bucket, sort_key, created_at, created_by)\n           VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8, ?9, ?10, ?11)\n           RETURNING id AS \"id!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "995f7f6936fa545ebcd0bb1975cc8322c71152d6d9b59cf64f2b2b2cc5c9d1ff"
+}

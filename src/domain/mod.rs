@@ -7,5 +7,6 @@
 pub mod money;
 pub mod period;
 pub mod slug;
+pub mod sortkey;
 pub mod status;
 pub mod viewer;

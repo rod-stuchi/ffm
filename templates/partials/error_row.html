@@ -1,0 +1,20 @@
+{#- The server said no and wrote nothing.
+
+    Same geometry as a real row, so the ledger does not jump. The copy says
+    what happened AND that nothing was written — no apologies. Try Again
+    resubmits the original action rather than reloading, so a failed save does
+    not cost what was typed. -#}
+<div class="row is-error">
+  <div class="gut"></div>
+  <div class="entry">
+    <div class="mark"><div class="disc tone-neg">!</div></div>
+    <div class="name">
+      <span class="errtxt">{{ message }}</span>
+      <span class="errsub">{{ t.error_not_written() }}</span>
+    </div>
+    <div></div>
+    <div class="amt">
+      <button class="retry" type="button" onclick="this.closest('.row').remove()">{{ t.row_try_again() }}</button>
+    </div>
+  </div>
+</div>

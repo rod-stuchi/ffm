@@ -65,43 +65,46 @@ VALUES
 --
 -- sort_key is a fractional index, not a position: moving a row between two
 -- neighbours writes ONE row (the midpoint), so two people reordering at once
--- do not renumber each other's ledger.
+-- do not renumber each other's ledger. These are hand-written, so they follow
+-- the one invariant domain::sortkey rests on: a key never ends in '0', because
+-- such a key has nothing below it inside its own prefix and "insert above this
+-- row" would have nowhere to go.
 
 INSERT INTO transactions
     (member_id, rule_id, period, kind, title, amount_cents, date, due_date,
      manual_paid, visibility, bucket, bill_name, sort_key, created_at, created_by)
 VALUES
     -- August, Rodrigo
-    (1, 5, '2026-08', 'in',  'Salário',              980000, '2026-08-05', '2026-08-05', 1, 'household', 'Renda',   'Salário',  'a0', '2026-08-01T03:00:00Z', NULL),
-    (1, 1, '2026-08', 'out', 'Energia · Enel SP',     28140, '2026-08-11', '2026-08-11', 0, 'household', 'Consumo', 'Energia',  'b0', '2026-08-01T03:00:00Z', NULL),
-    (1, 2, '2026-08', 'out', 'Água · Sabesp',         11520, '2026-08-18', '2026-08-18', 0, 'household', 'Consumo', 'Água',     'c0', '2026-08-01T03:00:00Z', NULL),
-    (1, 3, '2026-08', 'out', 'Internet · Vivo Fibra', 12990, '2026-08-20', '2026-08-20', 1, 'household', 'Casa',    'Internet', 'd0', '2026-08-01T03:00:00Z', NULL),
-    (1, 4, '2026-08', 'out', 'Financiamento · Carro', 89700, '2026-08-05', '2026-08-05', 1, 'household', 'Dívidas', 'Carro',    'e0', '2026-08-01T03:00:00Z', NULL),
-    (1, NULL, '2026-08', 'out', 'Mercado · Pão de Açúcar', 70090, '2026-08-13', NULL, 0, 'household', 'Mercado', NULL, 'f0', '2026-08-13T22:10:00Z', 1),
+    (1, 5, '2026-08', 'in',  'Salário',              980000, '2026-08-05', '2026-08-05', 1, 'household', 'Renda',   'Salário',  'a', '2026-08-01T03:00:00Z', NULL),
+    (1, 1, '2026-08', 'out', 'Energia · Enel SP',     28140, '2026-08-11', '2026-08-11', 0, 'household', 'Consumo', 'Energia',  'b', '2026-08-01T03:00:00Z', NULL),
+    (1, 2, '2026-08', 'out', 'Água · Sabesp',         11520, '2026-08-18', '2026-08-18', 0, 'household', 'Consumo', 'Água',     'c', '2026-08-01T03:00:00Z', NULL),
+    (1, 3, '2026-08', 'out', 'Internet · Vivo Fibra', 12990, '2026-08-20', '2026-08-20', 1, 'household', 'Casa',    'Internet', 'd', '2026-08-01T03:00:00Z', NULL),
+    (1, 4, '2026-08', 'out', 'Financiamento · Carro', 89700, '2026-08-05', '2026-08-05', 1, 'household', 'Dívidas', 'Carro',    'e', '2026-08-01T03:00:00Z', NULL),
+    (1, NULL, '2026-08', 'out', 'Mercado · Pão de Açúcar', 70090, '2026-08-13', NULL, 0, 'household', 'Mercado', NULL, 'f', '2026-08-13T22:10:00Z', 1),
 
     -- September, Rodrigo. Energia is up on August, Mercado is down — both
     -- deltas fall out of the previous period rather than being stored.
-    (1, 5, '2026-09', 'in',  'Salário',              980000, '2026-09-05', '2026-09-05', 1, 'household', 'Renda',   'Salário',  'a0', '2026-09-01T03:00:00Z', NULL),
-    (1, 1, '2026-09', 'out', 'Energia · Enel SP',     34362, NULL,         '2026-09-11', 0, 'household', 'Consumo', 'Energia',  'b0', '2026-09-01T03:00:00Z', NULL),
-    (1, 2, '2026-09', 'out', 'Água · Sabesp',         10840, NULL,         '2026-09-18', 0, 'household', 'Consumo', 'Água',     'c0', '2026-09-01T03:00:00Z', NULL),
-    (1, 3, '2026-09', 'out', 'Internet · Vivo Fibra', 12990, '2026-09-20', '2026-09-20', 1, 'household', 'Casa',    'Internet', 'd0', '2026-09-01T03:00:00Z', NULL),
-    (1, 4, '2026-09', 'out', 'Financiamento · Carro', 89700, '2026-09-05', '2026-09-05', 1, 'household', 'Dívidas', 'Carro',    'e0', '2026-09-01T03:00:00Z', NULL),
-    (1, NULL, '2026-09', 'out', 'Mercado · Pão de Açúcar', 65890, '2026-09-13', NULL, 0, 'household', 'Mercado', NULL, 'f0', '2026-09-13T21:40:00Z', 1),
+    (1, 5, '2026-09', 'in',  'Salário',              980000, '2026-09-05', '2026-09-05', 1, 'household', 'Renda',   'Salário',  'a', '2026-09-01T03:00:00Z', NULL),
+    (1, 1, '2026-09', 'out', 'Energia · Enel SP',     34362, NULL,         '2026-09-11', 0, 'household', 'Consumo', 'Energia',  'b', '2026-09-01T03:00:00Z', NULL),
+    (1, 2, '2026-09', 'out', 'Água · Sabesp',         10840, NULL,         '2026-09-18', 0, 'household', 'Consumo', 'Água',     'c', '2026-09-01T03:00:00Z', NULL),
+    (1, 3, '2026-09', 'out', 'Internet · Vivo Fibra', 12990, '2026-09-20', '2026-09-20', 1, 'household', 'Casa',    'Internet', 'd', '2026-09-01T03:00:00Z', NULL),
+    (1, 4, '2026-09', 'out', 'Financiamento · Carro', 89700, '2026-09-05', '2026-09-05', 1, 'household', 'Dívidas', 'Carro',    'e', '2026-09-01T03:00:00Z', NULL),
+    (1, NULL, '2026-09', 'out', 'Mercado · Pão de Açúcar', 65890, '2026-09-13', NULL, 0, 'household', 'Mercado', NULL, 'f', '2026-09-13T21:40:00Z', 1),
     -- Opt-in per transaction, and hidden from everyone but its owner and the
     -- admin — who in this household happen to be the same person.
-    (1, NULL, '2026-09', 'out', 'Presente · aniversário', 24000, '2026-09-16', NULL, 0, 'private', 'Presentes', NULL, 'g0', '2026-09-16T12:05:00Z', 1),
+    (1, NULL, '2026-09', 'out', 'Presente · aniversário', 24000, '2026-09-16', NULL, 0, 'private', 'Presentes', NULL, 'g', '2026-09-16T12:05:00Z', 1),
 
     -- August, Natália
-    (2, 6, '2026-08', 'in',  'Consultoria',          380000, '2026-08-15', '2026-08-15', 1, 'household', 'Renda', 'Consultoria', 'a0', '2026-08-01T03:00:00Z', NULL),
-    (2, 7, '2026-08', 'out', 'Academia · Smart Fit',   9990, '2026-08-08', '2026-08-08', 1, 'household', 'Saúde', 'Academia',    'b0', '2026-08-01T03:00:00Z', NULL),
+    (2, 6, '2026-08', 'in',  'Consultoria',          380000, '2026-08-15', '2026-08-15', 1, 'household', 'Renda', 'Consultoria', 'a', '2026-08-01T03:00:00Z', NULL),
+    (2, 7, '2026-08', 'out', 'Academia · Smart Fit',   9990, '2026-08-08', '2026-08-08', 1, 'household', 'Saúde', 'Academia',    'b', '2026-08-01T03:00:00Z', NULL),
 
     -- September, Natália. The consultoria has not landed yet: `expected`, and
     -- once phase 8 lands it will show a projection rather than its baseline.
-    (2, 6, '2026-09', 'in',  'Consultoria',          420000, NULL,         '2026-09-15', 0, 'household', 'Renda', 'Consultoria', 'a0', '2026-09-01T03:00:00Z', NULL),
-    (2, 7, '2026-09', 'out', 'Academia · Smart Fit',   9990, '2026-09-08', '2026-09-08', 1, 'household', 'Saúde', 'Academia',    'b0', '2026-09-01T03:00:00Z', NULL),
-    (2, NULL, '2026-09', 'out', 'Farmácia · Drogasil', 8740, '2026-09-19', NULL, 0, 'household', 'Saúde', NULL, 'c0', '2026-09-19T18:00:00Z', 2),
+    (2, 6, '2026-09', 'in',  'Consultoria',          420000, NULL,         '2026-09-15', 0, 'household', 'Renda', 'Consultoria', 'a', '2026-09-01T03:00:00Z', NULL),
+    (2, 7, '2026-09', 'out', 'Academia · Smart Fit',   9990, '2026-09-08', '2026-09-08', 1, 'household', 'Saúde', 'Academia',    'b', '2026-09-01T03:00:00Z', NULL),
+    (2, NULL, '2026-09', 'out', 'Farmácia · Drogasil', 8740, '2026-09-19', NULL, 0, 'household', 'Saúde', NULL, 'c', '2026-09-19T18:00:00Z', 2),
 
     -- Miguel
-    (3, 8, '2026-08', 'in',  'Mesada', 15000, '2026-08-01', '2026-08-01', 1, 'household', 'Renda', 'Mesada', 'a0', '2026-08-01T03:00:00Z', NULL),
-    (3, 8, '2026-09', 'in',  'Mesada', 15000, '2026-09-01', '2026-09-01', 1, 'household', 'Renda', 'Mesada', 'a0', '2026-09-01T03:00:00Z', NULL),
-    (3, NULL, '2026-09', 'out', 'Cantina da escola', 4200, '2026-09-10', NULL, 0, 'household', 'Escola', NULL, 'b0', '2026-09-10T13:30:00Z', 3);
+    (3, 8, '2026-08', 'in',  'Mesada', 15000, '2026-08-01', '2026-08-01', 1, 'household', 'Renda', 'Mesada', 'a', '2026-08-01T03:00:00Z', NULL),
+    (3, 8, '2026-09', 'in',  'Mesada', 15000, '2026-09-01', '2026-09-01', 1, 'household', 'Renda', 'Mesada', 'a', '2026-09-01T03:00:00Z', NULL),
+    (3, NULL, '2026-09', 'out', 'Cantina da escola', 4200, '2026-09-10', NULL, 0, 'household', 'Escola', NULL, 'b', '2026-09-10T13:30:00Z', 3);

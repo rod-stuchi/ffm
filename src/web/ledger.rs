@@ -30,13 +30,79 @@ pub struct Params {
     period: Option<String>,
 }
 
-pub struct PaneView {
-    pub name: String,
-    pub rows: Vec<RowView>,
+/// A pane's three numbers, and the household's four, live in their own structs
+/// because a mutation has to send them back too: a row that lands without its
+/// totals moving is a ledger that disagrees with itself on screen.
+pub struct PaneTotals {
+    pub id: i64,
     pub ins: String,
     pub outs: String,
     pub balance: String,
     pub negative: bool,
+}
+
+pub struct HouseTotals {
+    pub ins: String,
+    pub outs: String,
+    pub net: String,
+    pub negative: bool,
+}
+
+/// Every pane's totals for one period, plus the household's — read through the
+/// same pane query a page load uses, so a fragment's numbers are computed by
+/// exactly the same path as the page's.
+pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTotals>, HouseTotals) {
+    let house = ledger::household(&st.pool).await.ok().flatten();
+    let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
+    let show_recurring = house.as_ref().is_none_or(|h| h.show_recurring);
+    let ctx = RowCtx {
+        today: Local::now().date_naive(),
+        currency,
+        show_recurring,
+        show_delta: true,
+        narrow: false,
+    };
+
+    let mut panes = Vec::new();
+    let mut ins = crate::domain::money::Cents::ZERO;
+    let mut outs = crate::domain::money::Cents::ZERO;
+
+    for m in ledger::members(&st.pool).await.unwrap_or_default() {
+        let Ok(pane) = ledger::pane(&st.pool, &m, period, ctx, auth.viewer).await else {
+            continue;
+        };
+        ins += pane.ins;
+        outs += pane.outs;
+        let balance = pane.balance();
+        panes.push(PaneTotals {
+            id: m.id,
+            ins: fmt::money(pane.ins, currency),
+            outs: fmt::money(pane.outs, currency),
+            balance: fmt::money(balance.abs(), currency),
+            negative: balance.is_negative(),
+        });
+    }
+
+    let net = ins - outs;
+    (
+        panes,
+        HouseTotals {
+            ins: fmt::money(ins, currency),
+            outs: fmt::money(outs, currency),
+            net: fmt::money(net.abs(), currency),
+            negative: net.is_negative(),
+        },
+    )
+}
+
+pub struct PaneView {
+    /// Sent with every add, because which pane is focused is data — a
+    /// server-side idea of "current member" drifts the moment the app is open
+    /// in two windows.
+    pub id: i64,
+    pub name: String,
+    pub rows: Vec<RowView>,
+    pub totals: PaneTotals,
 }
 
 #[derive(Template)]
@@ -53,10 +119,9 @@ struct LedgerPage {
     prev: String,
     next: String,
     panes: Vec<PaneView>,
-    ins: String,
-    outs: String,
-    net: String,
-    net_negative: bool,
+    /// `YYYY-MM`, for the forms. The label above is `fmt::period`.
+    period_key: String,
+    house: HouseTotals,
     empty: bool,
 }
 
@@ -122,14 +187,17 @@ pub async fn ledger(
         previewing: auth.session.preview,
         household: name,
         period: fmt::period(period),
+        period_key: period.to_string(),
         prev: period.pred().to_string(),
         next: period.succ().to_string(),
         empty: panes.is_empty(),
         panes,
-        ins: fmt::money(ins, currency),
-        outs: fmt::money(outs, currency),
-        net: fmt::money(net.abs(), currency),
-        net_negative: net.is_negative(),
+        house: HouseTotals {
+            ins: fmt::money(ins, currency),
+            outs: fmt::money(outs, currency),
+            net: fmt::money(net.abs(), currency),
+            negative: net.is_negative(),
+        },
         t,
     })
 }
@@ -137,11 +205,15 @@ pub async fn ledger(
 fn view(pane: Pane, t: &Catalog, currency: crate::domain::money::Currency) -> PaneView {
     let balance = pane.balance();
     PaneView {
+        id: pane.member.id,
         name: pane.member.name,
-        ins: fmt::money(pane.ins, currency),
-        outs: fmt::money(pane.outs, currency),
-        balance: fmt::money(balance.abs(), currency),
-        negative: balance.is_negative(),
+        totals: PaneTotals {
+            id: pane.member.id,
+            ins: fmt::money(pane.ins, currency),
+            outs: fmt::money(pane.outs, currency),
+            balance: fmt::money(balance.abs(), currency),
+            negative: balance.is_negative(),
+        },
         rows: pane.rows.into_iter().map(|r| r.view(t)).collect(),
     }
 }

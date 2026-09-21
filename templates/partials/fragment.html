@@ -1,0 +1,10 @@
+{#- One row, as a mutation's answer — plus the totals it moved.
+
+    The row is wrapped so it can carry an id (for an out-of-band swap from
+    anywhere) and the oob attribute itself when a row is being replaced rather
+    than added. The totals ride along out-of-band, because a row that lands
+    without them is a ledger disagreeing with itself on screen. -#}
+<div id="row-{{ v.id }}"{% if let Some(swap) = oob %} hx-swap-oob="{{ swap }}"{% endif %}>
+  {% include "partials/row.html" %}
+</div>
+{% if let Some(pt) = pane_totals %}{% let house = house_totals.as_ref().unwrap() %}{% include "partials/totals.html" %}{% endif %}
