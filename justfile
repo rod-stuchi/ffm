@@ -101,6 +101,12 @@ seed: db
     sqlite3 {{db_path}} < seeds/household.sql
     @echo "✓ seeded {{db_path}}"
 
+# Refresh .sqlx/ — the offline copy of every checked query's result shape, so a
+# clean checkout (and CI) can build with no database at all. Run this whenever a
+# query or the schema changes, and commit what it writes.
+prepare: db
+    cargo sqlx prepare
+
 # Apply the migration to a scratch file inside a transaction — which is how sqlx
 # runs it — and throw it away. Catches anything that cannot run in one, the way
 # `PRAGMA journal_mode = WAL` could not.
@@ -116,6 +122,11 @@ db-check:
 
 test:
     cargo test
+
+# Prove the crate still builds with no database in sight, which is what CI and
+# a fresh checkout actually do. Run `just prepare` first if a query changed.
+offline-check:
+    SQLX_OFFLINE=true cargo check --all-targets
 
 lint:
     cargo clippy --all-targets -- -D warnings
@@ -152,7 +163,7 @@ css-check:
     fi
     echo "✓ no hardcoded colours outside tokens.css"
 
-check: fmt-check lint test db-check css-check
+check: fmt-check lint test offline-check db-check css-check
 
 # --- docs --------------------------------------------------------------------
 

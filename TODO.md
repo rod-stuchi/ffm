@@ -48,18 +48,13 @@ The shortest path from *the row looks right* to *the row is true*. Done:
 - **`seeds/household.sql`** — Casa Stuchi, three members, two months.
 - **`tests/ledger.rs`** — the query against a real file and the real seed.
 
-**Outstanding, needs a tool this machine does not have yet:**
-
-```sh
-cargo install sqlx-cli --no-default-features --features sqlite,rustls
-cargo sqlx prepare        # writes .sqlx/, then commit it
-```
-
-Until that exists, a clean checkout must run `just db` before `cargo build`,
-because `sqlx::query!` checks against a real schema at compile time. Commit
-`.sqlx/` and set `SQLX_OFFLINE=true` in CI *before* this gets awkward —
-otherwise the fix under pressure is dropping to unchecked `sqlx::query`, which
-loses the invariant the whole stack was chosen for.
+**Offline query data is committed.** `.sqlx/` holds every checked query's
+result shape, so `SQLX_OFFLINE=true cargo check` builds with no database in
+sight — which is what CI and a clean checkout do, and it is in `just check` as
+`offline-check` so it cannot quietly rot. Change a query, run `just prepare`,
+commit what it writes. Without this the fix under pressure is dropping to
+unchecked `sqlx::query`, which loses the invariant the whole stack was chosen
+for.
 
 **Deliberately deferred inside the row, and marked in the code:** file presence
 (phase 7 — so a tracked row honestly reads `pending`) and the income estimate
