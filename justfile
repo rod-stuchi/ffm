@@ -17,6 +17,16 @@ default:
 dev: css-build
     cargo watch -x 'run --features dev-reload'
 
+# Same loop, reachable from the rest of the house. Binds every interface instead
+# of loopback, so a phone or a second laptop on the same LAN/Tailscale can open
+# it — the boot log prints the address to type. Deliberately a separate recipe:
+# `just dev` staying on 127.0.0.1 means nothing is exposed by forgetting a flag.
+#
+# There is no auth layer yet, so only run this on a network you trust — which is
+# the same deployment assumption the auth design makes (see design/spec.md).
+dev-lan: css-build
+    FFM_ADDR=0.0.0.0:3000 cargo watch -x 'run --features dev-reload'
+
 # Tailwind in watch mode. v4 is CSS-first — the tokens live in an @theme block
 # in static/css/app.css, so there is deliberately no tailwind.config.js.
 css:
