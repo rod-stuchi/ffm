@@ -34,6 +34,13 @@ understood:
 
 - **The due ring is elapsed time**, not a countdown — from period start to due
   date. Three-quarters amber reads as "still room, but not much" with no legend.
+- **"The same line" means `(member_id, title)` in the previous period.**
+  Unambiguous for a recurring row — it is the same rule — but a one-off has no
+  rule, and the mockup shows deltas on one-offs (`Mercado ▼ −6%`), so the
+  question is real. Exact string match, same member, previous period, first
+  hit. It is what a household means by "the same line", it needs no extra
+  column, and it degrades the right way: rename the line and the delta
+  disappears, which is arguably correct — it is not that line any more.
 - **The MoM delta is derived, not stored.** Compare each row to the same line in
   the previous month (a window function). Red ▲ up, green ▼ down, grey dash for
   unchanged.

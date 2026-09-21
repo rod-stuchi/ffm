@@ -14,7 +14,7 @@ default:
 # Rebuild + restart on save. Pair with `just css` in a second pane.
 # dev-reload is opt-in here rather than a default feature, so a release build
 # cannot pick it up by forgetting a flag.
-dev:
+dev: css-build
     cargo watch -x 'run --features dev-reload'
 
 # Tailwind in watch mode. v4 is CSS-first — the tokens live in an @theme block
@@ -85,7 +85,9 @@ css-check:
     set -euo pipefail
     found=0
     for f in static/css/*.css; do
-        case "$f" in */tokens.css) continue;; esac
+        # tokens.css is where colour is allowed to be literal; build.css and
+        # app.css are generated / Tailwind's own, not hand-written components.
+        case "$f" in */tokens.css|*/build.css|*/app.css) continue;; esac
         stripped=$(perl -0777 -pe 's{/\*.*?\*/}{}gs' "$f")
         if echo "$stripped" | grep -nE '#[0-9a-fA-F]{3,8}\b' >/dev/null; then
             echo "✗ $f:"

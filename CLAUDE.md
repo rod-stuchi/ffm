@@ -73,9 +73,40 @@ mock, never copy its render loop.
 
 ### Tokens
 
-The mock's `:root` custom properties are the design tokens. **Mirror them in
-`tailwind.config.js` under `theme.extend`** — do not hand-copy hex values into
-components.
+The mock's `:root` custom properties are the design tokens. **Never hand-copy a
+hex value into a component** — every component rule reads `var(--token)`, which
+is what lets a palette swap actually reach it. `just css-check` enforces this.
+
+**Where the tokens live, amended after the port.** The original instruction was
+"mirror them in `tailwind.config.js` under `theme.extend`", which turned out to
+be the wrong shape twice over:
+
+- **The values do not live in CSS at all.** They are served as a `<style>` block
+  rendered by `ui::theme::render()` — the full light/dark triple — because
+  `ffm.theme = system` means the server cannot know which mode the device will
+  use. A JS config would put the eleven values in a second place that the
+  rendered block cannot override, which is precisely the drift this rule exists
+  to prevent. `static/css/tokens.css` therefore carries scalars and fonts only:
+  no colour, deliberately, so there is exactly one source for those.
+- **Tailwind v4, with a CSS-first `@theme` block, and no `tailwind.config.js`.**
+  `@theme` maps utility names onto `var(--token)` rather than onto hex, so the
+  utilities follow the runtime swap like everything else.
+
+**And "no custom stylesheets to write" (the Styling row above) does not
+survive contact with the row.** `.row.is-focus .fbadge .flabel` is a descendant
+rule firing off state set on an ancestor; expressing that combinatorial state
+machine in utilities means re-deriving every combination as a template
+conditional. The split actually used:
+
+| layer | where | what |
+|---|---|---|
+| tokens | server `<style>` + `tokens.css` | the 11 values, the derivations, fonts, scalars |
+| components | `static/css/*.css` in `@layer components` | every named class, ported near-verbatim from the mocks |
+| utilities | inline in templates | one-off spacing and grid scaffolding in *new* markup |
+
+`@layer components` is what keeps the Styling row's real claim true: layered
+rules lose to utilities regardless of specificity, so `class="row is-focus mt-2"`
+works without `!important` and nothing collides.
 
 A theme is **11 values**, not 20:
 
@@ -424,6 +455,18 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   barcode specifically: `{month}_scheduled.{ext}` and `{month}.{ext}` stay
   genuinely per-period regardless — each installment is still scheduled and
   paid on its own, only the *bill document* is shared.
+  - **KNOWN HOLE: renewing a window silently rewrites history.** The page is
+    derived from the rule's *current* `window_start`, and a cyclic bill renews
+    by re-entering it — so the moment the 2027 window is set, January 2026's
+    row stops reading "page 1" and starts reading "page −11, outside this
+    file's 10 pages". The file rail and the `P` carousel would both begin
+    flagging history that was never wrong. The fix is a
+    `rule_barcode_window(rule_id, window_start, window_size, file_path,
+    uploaded_at, retired_at)` table, with an occurrence resolving against the
+    window that covered *its own* period. "Derived, never stored" still holds:
+    the page number is not stored, the **window** is. Deferred to the receipts
+    phase, but written down here so it stays a decision rather than becoming a
+    discovery.
   - **This applies whether the rule itself is finite or cyclic — the window
     doesn't have to span the rule's entire life.** A fixed-length loan gets
     exactly one window for its whole run (`window_size` = its
@@ -507,6 +550,17 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   else. A DB row still accompanies every upload (uploader, timestamp, kind,
   original filename) but only as metadata/audit for undo — it never decides
   paid/not-paid.
+- **`receipts` is also the extension index, and that is its real second job.**
+  The path ends in `.{ext}`, and the extension is whatever was uploaded, so the
+  path cannot be *constructed* without reading `receipts.ext`. That makes the
+  check two steps, not one:
+  1. read `receipts.ext`, build the one exact path, `exists()` it — so a file
+     deleted by hand correctly reads as unpaid;
+  2. when there is no `receipts` row, probe the four allowed extensions — so a
+     file *added* by hand is still found.
+  Four `stat` calls at worst, still not a traversal. Skip step 2 and
+  hand-filing into the vault silently stops working, which would quietly
+  remove the entire reason the filesystem is authoritative in the first place.
 - **Extensions are the closed, case-insensitive set**: `pdf`, `jpg`, `png`,
   `txt` — whatever the uploaded file actually was, not fixed per rule.
 - **Upload, view, delete are scoped to recurring-rule occurrences only** — a
@@ -687,6 +741,25 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 - **Never materialize past the current month.** Future months stay projections
   rendered on the fly and are never persisted — which is what the mock's
   "projected" label already implies.
+- **The materializer stamps `transactions.due_date`; the rule owns `due_day`.**
+  Both columns exist, which looks like one fact in two places — it is not, and
+  the split has a rule. The rule carries the day-of-month; materializing an
+  occurrence stamps a real date from it, **clamped to that month's length**, so
+  a rule due on the 31st means the 28th in February and the 30th in April
+  rather than failing. Downstream, the occurrence's stamped date is what the
+  ring, the overdue check and the unresolved badge all read.
+  - `e` never edits it for a recurring row — that is why the occurrence form's
+    Day field disappears there, so there are not two controls for one fact.
+  - Editing `due_day` on the rule changes **future materializations only**.
+    Past occurrences are left as they were recorded, exactly as the rule form's
+    own notebox already promises.
+- **"Today" is the process's local date, and the deployment must set `TZ`.**
+  The ring, `scheduled overdue`, the unresolved badge and `min(current_month,
+  end_date)` all depend on it, and `ffm.toml` is three keys, none of them a
+  timezone. Adding one would be wrong: one process serves one household in one
+  place. So read `chrono::Local` at startup and **log it at boot** —
+  `ffm · timezone America/Sao_Paulo · today 21/09/2026` — because a household
+  watching a bill go overdue at 21:00 otherwise has no way to find out why.
 
 ### Categorization & grouping
 
@@ -914,6 +987,24 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 
 These cost real debugging time in the prototype. Do not re-introduce them.
 
+- **An HTMX swap destroys the Alpine state inside it — and drafts live in
+  Alpine.** Three decided rules collide here: a draft is unsubmitted form values
+  so it never goes to the server; several can be parked at once; and the ledger
+  is replaced by HTMX fragments. Swap the container a draft lives in and the
+  draft is gone, with no error and nothing to recover.
+  **This dictates where the swap boundaries go, so get it right in the first
+  template rather than re-cutting every fragment later:** the `x-data` holding
+  parked drafts must sit on a container *outside* every `hx-target`, or the
+  swap must preserve it (`hx-preserve`, or a morph swap). A fragment that both
+  holds draft state and is its own swap target cannot work.
+- **A scan for forbidden content must read the content, not the prose about
+  it.** Bitten three times already, in three different tools: `build.rs`'s
+  currency-glyph gate (scan Fluent text elements, never raw bytes — a comment
+  legitimately says "formatted by fmt::money, e.g. R$ 1.234,56"); the sandbox's
+  seed-purity test (strip `#` comment lines — a comment names the sample data
+  in order to say it does not belong); and `just css-check` (strip `/* */`
+  first — a comment says "never `#fff`"). A rule that forbids a thing will
+  quote the thing. Strip commentary before matching.
 - **`display: none` on a grid child reflows its siblings.** Hiding the line-number
   gutter for `nonu` pulled the row's content into the 10px first track and crushed
   it. Keep the gutter cell in the grid and vary only its width and content. The

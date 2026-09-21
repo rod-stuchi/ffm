@@ -1,0 +1,48 @@
+/* The Tailwind entry point. `just css` builds this into build.css.
+ *
+ * v4, CSS-first: there is deliberately no tailwind.config.js. A JS config would
+ * define the token values in a second place that the server-rendered <style>
+ * block cannot override — exactly the drift CLAUDE.md's Tokens section exists
+ * to prevent. Here, @theme only maps utility NAMES onto the runtime variables,
+ * so a utility follows a palette swap like everything else.
+ */
+
+@import "tailwindcss";
+
+/* Fonts and scalars. No colour: every colour comes from the server-rendered
+ * theme block, which is the single source for the eleven values. */
+@import "./fonts.css";
+@import "./tokens.css";
+
+@theme inline {
+  /* Names only — the values are the runtime-swappable vars, never hex. */
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-info: var(--info);
+
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+
+  --radius-ffm: var(--r);
+  --shadow-ffm-sm: var(--shadow-sm);
+  --shadow-ffm-md: var(--shadow-md);
+}
+
+/* Components are ported near-verbatim from the mocks. Layered, so a utility can
+ * always win a one-off without !important — a plain stylesheet would let
+ * `.row.is-focus .fbadge` beat any utility and you would fight it within a week. */
+@layer components {
+  @import "./row.css";
+  @import "./sandbox.css";
+}

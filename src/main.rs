@@ -1,6 +1,4 @@
-mod domain;
-mod ui;
-mod web;
+use ffm::web;
 
 #[tokio::main]
 async fn main() {
