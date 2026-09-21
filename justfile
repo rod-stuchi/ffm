@@ -177,7 +177,37 @@ tpl-check:
     fi
     echo "✓ every |json is paired with |safe"
 
-check: fmt-check lint test offline-check db-check css-check tpl-check
+# Alpine merges a component's data and its methods into ONE object, so a
+# method named after a data property silently replaces it. `pane: 0` and
+# `pane(url)` cost an afternoon: `panes[this.pane]` started indexing an array
+# with a function and every row-based keystroke stopped working, with nothing
+# in the console. This finds a name declared twice at the top level of a
+# component object.
+js-check:
+    #!/usr/bin/env python3
+    import re, sys, pathlib
+    bad = False
+    for path in pathlib.Path("templates").rglob("*.html"):
+        text = path.read_text()
+        for fn in re.finditer(r"function (\w+)\(\) \{\s*return \{(.*?)\n  \};", text, re.S):
+            name, body = fn.group(1), fn.group(2)
+            seen = {}
+            for line in body.splitlines():
+                m = re.match(r"    (\w+)\s*[:(]", line)
+                if not m:
+                    continue
+                key = m.group(1)
+                if key in seen:
+                    print(f"\u2717 {path}: {name}() declares `{key}` twice — "
+                          f"Alpine merges data and methods into one object, so "
+                          f"the second silently replaces the first")
+                    bad = True
+                seen[key] = True
+    if bad:
+        sys.exit(1)
+    print("\u2713 no shadowed names in an Alpine component")
+
+check: fmt-check lint test offline-check db-check css-check tpl-check js-check
 
 # --- docs --------------------------------------------------------------------
 

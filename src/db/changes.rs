@@ -444,3 +444,148 @@ mod tests {
         assert_eq!(RuleAction::Create.code(), "rule_create");
     }
 }
+
+// ---------------------------------------------------------------------------
+// reading it back — `gl`
+// ---------------------------------------------------------------------------
+
+/// Which entries the pane is showing. The chips narrow; they never widen past
+/// what this row and its rule can account for.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum Filter {
+    /// This occurrence and its files — a file entry belongs to the row it is
+    /// attached to, it simply is not the transaction record itself.
+    #[default]
+    Row,
+    /// Only the rule behind it.
+    Rule,
+    /// Both, in date order, so the story reads chronologically.
+    All,
+}
+
+impl Filter {
+    pub fn code(self) -> &'static str {
+        match self {
+            Filter::Row => "row",
+            Filter::Rule => "rule",
+            Filter::All => "all",
+        }
+    }
+
+    pub fn parse(s: &str) -> Filter {
+        match s {
+            "rule" => Filter::Rule,
+            "all" => Filter::All,
+            _ => Filter::Row,
+        }
+    }
+}
+
+/// One field of one entry, still in storage form: the pane formats it by
+/// `kind` so a logged amount never depends on the household's *current*
+/// currency setting.
+#[derive(Clone, Debug)]
+pub struct FieldEntry {
+    pub field: String,
+    pub old: Option<String>,
+    pub new: Option<String>,
+    pub kind: String,
+}
+
+/// One save.
+#[derive(Clone, Debug)]
+pub struct Entry {
+    pub id: i64,
+    /// ISO-8601 UTC, as stored.
+    pub at: String,
+    /// The member who did it, or `None` for the materializer and the system —
+    /// nobody typed those, and the pane says so rather than inventing an actor.
+    pub actor: Option<String>,
+    pub source: String,
+    pub action: String,
+    pub entity: String,
+    /// True when this is the rule's own history rather than the row's, so the
+    /// two are never confused where they sit side by side.
+    pub is_rule: bool,
+    pub undo_of: Option<i64>,
+    pub note: Option<String>,
+    pub fields: Vec<FieldEntry>,
+}
+
+/// The history behind one row.
+///
+/// `rule_id` is stamped on transaction changes precisely so this is a single
+/// query — "this occurrence plus the rule behind it" rather than two reads and
+/// a merge. A file entry counts as the row's own history.
+pub async fn history(
+    pool: &sqlx::SqlitePool,
+    transaction_id: i64,
+    rule_id: Option<i64>,
+    filter: Filter,
+    receipt_ids: &[i64],
+) -> sqlx::Result<Vec<Entry>> {
+    let want_row = matches!(filter, Filter::Row | Filter::All);
+    let want_rule = matches!(filter, Filter::Rule | Filter::All);
+    let rule_id = rule_id.unwrap_or(-1);
+    // A file entry names a `receipts` row, not the transaction, so the caller
+    // passes the ids that belong to this occurrence. Encoded as a JSON array
+    // because SQLite has no array parameter and building SQL by hand is how
+    // an injection gets written.
+    let receipts = serde_json::to_string(receipt_ids).unwrap_or_else(|_| "[]".into());
+
+    let rows = sqlx::query!(
+        r#"SELECT c.id AS "id!: i64", c.at AS "at!: String",
+                  c.source AS "source!: String", c.action AS "action!: String",
+                  c.entity AS "entity!: String",
+                  c.undo_of AS "undo_of: i64", c.note AS "note: String",
+                  m.name AS "actor: String"
+           FROM change c
+           LEFT JOIN members m ON m.id = c.member_id
+           WHERE (?3 AND ((c.entity = 'transaction' AND c.entity_id = ?1)
+                          OR (c.entity = 'file'
+                              AND c.entity_id IN (SELECT value FROM json_each(?5)))))
+              OR (?4 AND c.entity = 'rule' AND c.entity_id = ?2)
+           ORDER BY c.at DESC, c.id DESC"#,
+        transaction_id,
+        rule_id,
+        want_row,
+        want_rule,
+        receipts,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut out = Vec::with_capacity(rows.len());
+    for r in rows {
+        let fields = sqlx::query!(
+            r#"SELECT field AS "field!: String", old_value AS "old: String",
+                      new_value AS "new: String", kind AS "kind!: String"
+               FROM change_field WHERE change_id = ?1 ORDER BY id"#,
+            r.id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        out.push(Entry {
+            id: r.id,
+            at: r.at,
+            actor: r.actor,
+            source: r.source,
+            is_rule: r.entity == "rule",
+            entity: r.entity,
+            action: r.action,
+            undo_of: r.undo_of,
+            note: r.note,
+            fields: fields
+                .into_iter()
+                .map(|f| FieldEntry {
+                    field: f.field,
+                    old: f.old,
+                    new: f.new,
+                    kind: f.kind,
+                })
+                .collect(),
+        });
+    }
+    Ok(out)
+}

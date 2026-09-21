@@ -316,3 +316,57 @@ members-no-sessions = not signed in anywhere
 
 command-placeholder = command
 members-self-note = This is you. Change a password you know in :profile; recover one you have lost with `ffm reset-link` at the console.
+
+## The change log — `gl`. Verbs are what HAPPENED, in the past tense.
+
+log-title = History
+log-empty = Nothing has been recorded for this row yet.
+log-today = today
+log-yesterday = yesterday
+log-filter-row = this row
+log-filter-rule = rule
+log-filter-all = all
+log-rule-tag = rule
+log-undo-of = undo of { $time }
+log-fields = { $n ->
+        [one] 1 field
+       *[other] { $n } fields
+    }
+log-system = system
+log-materializer = materializer
+log-import = import
+
+log-action-create = added
+log-action-edit = edited
+log-action-delete = deleted
+log-action-restore = restored
+log-action-reattribute = re-attributed
+log-action-reorder = moved
+log-action-privacy = changed privacy
+log-action-rule-create = rule created
+log-action-rule-edit = rule edited
+log-action-file-attach = file attached
+log-action-file-unlink = file unlinked
+log-action-file-upload = file added
+log-action-file-delete = file removed
+log-action-import = imported
+log-action-materialize = materialized
+log-action-password-reset = password reset
+log-action-sessions-revoked = signed out everywhere
+
+log-field-amount = amount
+log-field-title = description
+log-field-date = date
+log-field-due-day = due day
+log-field-bucket = bucket
+log-field-bill-name = bill name
+log-field-instance = instance
+log-field-cadence = cadence
+log-field-start-date = start date
+log-field-end-date = end date
+log-field-tracked = track receipt
+log-field-path = path
+log-field-kind = kind
+log-field-original-filename = original filename
+log-on = on
+log-off = off

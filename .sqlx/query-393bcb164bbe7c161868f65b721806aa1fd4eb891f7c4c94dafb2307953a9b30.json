@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.title AS \"title!: String\", t.period AS \"period!: String\",\n                  t.member_id AS \"member_id!: i64\", t.rule_id AS \"rule_id: i64\",\n                  t.visibility AS \"visibility!: String\"\n           FROM transactions t WHERE t.id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "title!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "393bcb164bbe7c161868f65b721806aa1fd4eb891f7c4c94dafb2307953a9b30"
+}

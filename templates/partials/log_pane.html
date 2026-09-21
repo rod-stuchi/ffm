@@ -1,0 +1,66 @@
+{#- `gl` — the row's history.
+
+    Read-only, and deliberately the same column the rule editor uses: nothing
+    new to learn to read it. Grouped by day, newest first; time · actor · verb
+    on the entry line, with a field count only where there is a diff to open. -#}
+<aside class="rulepane logpane" id="settingspane" x-data="{ open: null }">
+  <header class="rp-head">
+    <b>{{ t.log_title() }} · {{ title }} · {{ period }}</b>
+    <button class="btn rp-close" type="button" @click="$root.remove()">{{ t.pane_close() }}</button>
+  </header>
+
+  {#- The chips narrow; they never widen past what this row and its rule can
+      account for, which is why `rule` is absent on a row that has none. -#}
+  <div class="chips">
+    <a class="chip{% if filter == "row" %} is-on{% endif %}"
+       hx-get="/tx/{{ row_id }}/log?filter=row" hx-target="#settingspane" hx-swap="outerHTML"
+       href="#">{{ t.log_filter_row() }}</a>
+    {%- if has_rule %}
+    <a class="chip{% if filter == "rule" %} is-on{% endif %}"
+       hx-get="/tx/{{ row_id }}/log?filter=rule" hx-target="#settingspane" hx-swap="outerHTML"
+       href="#">{{ t.log_filter_rule() }}</a>
+    <a class="chip{% if filter == "all" %} is-on{% endif %}"
+       hx-get="/tx/{{ row_id }}/log?filter=all" hx-target="#settingspane" hx-swap="outerHTML"
+       href="#">{{ t.log_filter_all() }}</a>
+    {%- endif %}
+  </div>
+
+  <div class="rp-body logbody">
+    {%- if days.is_empty() %}
+    {#- An empty history is an ANSWER, not an error worth refusing on. -#}
+    <p class="hint">{{ t.log_empty() }}</p>
+    {%- endif %}
+
+    {%- for day in days %}
+    <div class="logday">{{ day.label }}</div>
+    {%- for e in day.entries %}
+    <div class="logentry{% if e.is_rule %} is-rule{% endif %}">
+      <div class="logline" @click="open = open === {{ e.id }} ? null : {{ e.id }}">
+        <span class="lt">{{ e.time }}</span>
+        <span class="la">{{ e.actor }}</span>
+        <span class="lv">{{ e.verb }}</span>
+        {%- if e.is_rule %}<span class="ltag">{{ t.log_rule_tag() }}</span>{% endif %}
+        {%- if let Some(c) = e.count %}<span class="lc">· {{ c }}</span>{% endif %}
+        {#- An undo is an entry pointing at what it reversed, never a rewrite:
+            the log reads "deleted", then "restored · undo of 18:39". -#}
+        {%- if let Some(u) = e.undo_of %}<span class="lu">{{ u }}</span>{% endif %}
+        {%- if let Some(n) = e.note %}<span class="lu">{{ n }}</span>{% endif %}
+        {%- if !e.fields.is_empty() %}<span class="lx" x-text="open === {{ e.id }} ? '−' : '+'">+</span>{% endif %}
+      </div>
+      {%- if !e.fields.is_empty() %}
+      <div class="logfields" x-show="open === {{ e.id }}" x-cloak>
+        {%- for f in e.fields %}
+        <div class="logfield">
+          <span class="lf">{{ f.label }}</span>
+          <span class="lo">{{ f.old }}</span>
+          <span class="lsep">→</span>
+          <span class="ln">{{ f.new }}</span>
+        </div>
+        {%- endfor %}
+      </div>
+      {%- endif %}
+    </div>
+    {%- endfor %}
+    {%- endfor %}
+  </div>
+</aside>

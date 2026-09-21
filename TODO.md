@@ -366,9 +366,45 @@ ledger" rather than a second thing to learn.
 the tri-state's third state being NULL, currency switching a whole number
 format rather than a glyph, and a revoked link reading as used.
 
-## Phase 10 — the change-log pane (`gl`)
+## Phase 10 — the change-log pane (`gl`) ✅
 
-A pure read of what phase 3 has been writing all along.
+A pure read of what phase 3 has been writing since before the first mutation
+existed — which is why there was anything to read.
+
+- **The same 420px column the rule editor uses**, with the arrow pointing at
+  the row, so nothing new has to be learned to read it. Read-only: no drafts,
+  no save, nothing here writes.
+- **Grouped by day, newest first**; time · actor · verb on the entry line, with
+  a field count only where there is a diff to open — delete and restore have
+  none, because it is the row's *existence* that changed.
+- **`kind` travels with the value**, so the pane formats `old → new` the way
+  the app does without inferring anything from the field's name: money renders
+  from minor units in the currency it is read under, a `day` stays a day rather
+  than becoming a date, and an em dash means "nothing was there".
+- **An unknown action, field or kind still renders** — falling through to its
+  raw text. The log is append-only and will outlive several versions of the
+  function that reads it.
+- **Rule entries sit inline in date order, tagged**, so the story reads
+  chronologically and the two are never confused. The chips narrow to
+  `this row` / `rule` / `all`, and `rule` is absent on a row that has none.
+- **An undo points at what it reversed** — "deleted", then "restored · undo of
+  18:39" — and the original is still there underneath it.
+- **The materializer has no actor**, and the pane names what did it rather than
+  inventing a person.
+- **It closes when the cursor leaves the row**, in the same render-loop check
+  that would park an open draft. A pane still showing the previous row's
+  history is worse than no pane.
+- **A row with nothing recorded still opens it**, saying so. An empty history
+  is an answer, not an error worth refusing on.
+
+`tests/log.rs` (6) and `ui::log`'s own unit tests (6).
+
+**A regression this phase caught, from phase 9:** Alpine merges a component's
+data and its methods into one object, so the `showPane(url)` helper — then
+called `pane(url)` — silently replaced the `pane: 0` index. Every row-based
+keystroke stopped working, with nothing in the console. `just js-check` now
+fails on a name declared twice in a component, and the guard was verified by
+reintroducing the bug.
 
 ## Phase 11 — sort, grouping/folds, `/`, `:grep`
 

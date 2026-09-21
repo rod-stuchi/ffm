@@ -4,6 +4,7 @@ pub mod auth;
 pub mod csrf;
 pub mod files;
 pub mod ledger;
+pub mod log;
 pub mod rules;
 pub mod session;
 pub mod settings;
@@ -48,6 +49,8 @@ pub fn router(state: AppState) -> Router {
         // effect on state.
         .route("/tx/{id}/file/{kind}", get(files::open).post(files::upload))
         .route("/tx/{id}/file/{kind}/delete", post(files::delete))
+        // `gl` — read-only, and the same column the rule editor uses.
+        .route("/tx/{id}/log", get(log::log))
         // The rule pane. A / I open it blank, E on a recurring row opens it
         // filled in; saving reconciles immediately so the periods the rule is
         // responsible for arrive in the same response.

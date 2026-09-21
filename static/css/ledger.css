@@ -537,3 +537,127 @@
   flex: 1;
   min-width: 0;
 }
+
+/* --- the change log pane ------------------------------------------------- */
+
+.chips {
+  display: flex;
+  gap: 6px;
+  padding: 9px 12px 0;
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  color: var(--ink-3);
+  text-decoration: none;
+}
+
+.chip.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.logbody {
+  gap: 0;
+}
+
+.logday {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 13px 0 5px;
+}
+
+.logday:first-child {
+  margin-top: 0;
+}
+
+.logline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.logline:hover {
+  background: var(--surface-2);
+}
+
+.logline .lt {
+  color: var(--ink-3);
+}
+
+.logline .la {
+  color: var(--ink-2);
+  min-width: 7ch;
+}
+
+.logline .lv {
+  color: var(--ink);
+}
+
+/* A rule's own entries sit inline in date order so the story reads
+ * chronologically — tagged, so the two are never confused. */
+.logline .ltag {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.logline .lc,
+.logline .lu {
+  color: var(--ink-3);
+}
+
+.logline .lx {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+
+.logfields {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px 7px 8px 22px;
+}
+
+.logfield {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) 1fr max-content 1fr;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  align-items: baseline;
+}
+
+.logfield .lf {
+  color: var(--ink-3);
+}
+
+.logfield .lo {
+  color: var(--ink-3);
+  text-align: right;
+}
+
+.logfield .lsep {
+  color: var(--ink-3);
+}
+
+.logfield .ln {
+  color: var(--ink);
+}

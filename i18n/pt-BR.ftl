@@ -284,3 +284,57 @@ members-no-sessions = não está conectado em lugar nenhum
 
 command-placeholder = comando
 members-self-note = Este é você. Troque uma senha que você sabe em :profile; recupere uma que esqueceu com `ffm reset-link` no console.
+
+## Histórico — `gl`
+
+log-title = Histórico
+log-empty = Nada foi registrado nesta linha ainda.
+log-today = hoje
+log-yesterday = ontem
+log-filter-row = esta linha
+log-filter-rule = regra
+log-filter-all = tudo
+log-rule-tag = regra
+log-undo-of = desfaz o de { $time }
+log-fields = { $n ->
+        [one] 1 campo
+       *[other] { $n } campos
+    }
+log-system = sistema
+log-materializer = gerador
+log-import = importação
+
+log-action-create = adicionou
+log-action-edit = editou
+log-action-delete = excluiu
+log-action-restore = restaurou
+log-action-reattribute = passou para outro
+log-action-reorder = moveu
+log-action-privacy = mudou a privacidade
+log-action-rule-create = criou a regra
+log-action-rule-edit = editou a regra
+log-action-file-attach = anexou o arquivo
+log-action-file-unlink = desanexou o arquivo
+log-action-file-upload = anexou o arquivo
+log-action-file-delete = removeu o arquivo
+log-action-import = importou
+log-action-materialize = gerou
+log-action-password-reset = redefiniu a senha
+log-action-sessions-revoked = desconectou de tudo
+
+log-field-amount = valor
+log-field-title = descrição
+log-field-date = data
+log-field-due-day = dia de vencimento
+log-field-bucket = categoria
+log-field-bill-name = nome da conta
+log-field-instance = identificação
+log-field-cadence = frequência
+log-field-start-date = início
+log-field-end-date = fim
+log-field-tracked = guardar comprovante
+log-field-path = caminho
+log-field-kind = tipo
+log-field-original-filename = nome original
+log-on = ligado
+log-off = desligado

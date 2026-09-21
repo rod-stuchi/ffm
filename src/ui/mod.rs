@@ -7,5 +7,6 @@
 pub mod fmt;
 pub mod i18n;
 pub mod icons;
+pub mod log;
 pub mod row;
 pub mod theme;

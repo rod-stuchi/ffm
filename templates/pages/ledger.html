@@ -175,6 +175,7 @@ function ledger() {
     confirming: null,
     attaching: null,
     commanding: false,
+    logFor: null,
     command: '',
     kind_: 'receipt',
     menuStyle: '',
@@ -202,6 +203,14 @@ function ledger() {
       this.row = Math.max(0, Math.min(this.row, rows.length - 1));
       rows[this.row].classList.add('is-focus');
       rows[this.row].scrollIntoView({ block: 'nearest' });
+      // The log pane closes when the cursor leaves the row it is about — one
+      // check in the render loop, the same one that parks an open draft. A
+      // pane still showing the previous row's history while the cursor has
+      // moved on is worse than no pane.
+      if (this.logFor && this.logFor !== this.focusedId()) {
+        this.logFor = null;
+        this.closePane();
+      }
     },
 
     focusedId() {
@@ -243,6 +252,9 @@ function ledger() {
       // already in use (gg, gt), with numbering fixed by KIND so g1 means the
       // bill on every row in the ledger.
       else if (buffer === 'g' && ['1', '2', '3'].includes(k)) { this.openFile(Number(k)); }
+      // `gl` — "go to log", a genuine extension of the g-prefix vocabulary
+      // already in use rather than a new pattern.
+      else if (buffer === 'g' && k === 'l') { this.openLog(); }
       else if (k === 'G') { this.row = this.rows().length - 1; this.paint(); }
       else if (k === 'H') { this.pane = Math.max(0, this.pane - 1); this.row = 0; this.paint(); }
       else if (k === 'L') { this.pane = Math.min(document.querySelectorAll('.pane').length - 1, this.pane + 1); this.row = 0; this.paint(); }
@@ -303,7 +315,12 @@ function ledger() {
 
     closePane() { document.querySelector('#settingspane')?.remove(); },
 
-    pane(url) {
+    // NOT `pane()`: that name is already the focused pane's INDEX, and a
+    // method by the same name shadows it — `panes[this.pane]` then indexes an
+    // array with a function and every row-based keystroke silently stops
+    // working. Alpine merges data and methods into one object, so the two
+    // namespaces are the same namespace.
+    showPane(url) {
       this.closePane();
       this.closeRule();
       htmx.ajax('GET', url, { target: '#rulemount', swap: 'innerHTML' });
@@ -321,11 +338,11 @@ function ledger() {
         // The settings surfaces. `:config` survives as an alias so muscle
         // memory and the keymap entry do not break; `:household` is the real
         // name, because nothing is called after a file any more.
-        case 'profile': case 'me':        return this.pane('/profile');
-        case 'household': case 'config':  return this.pane('/household');
-        case 'members':                   return this.pane('/members');
+        case 'profile': case 'me':        return this.showPane('/profile');
+        case 'household': case 'config':  return this.showPane('/household');
+        case 'members':                   return this.showPane('/members');
         case 'invite':
-          this.pane('/members');
+          this.showPane('/members');
           return;
         case 'logout':                    return this.post('/logout');
         case 'preview':                   return this.post('/preview');
@@ -399,6 +416,13 @@ function ledger() {
           this.paint();
         });
       input.value = '';
+    },
+
+    openLog() {
+      const id = this.focusedId();
+      if (!id) return;
+      this.logFor = id;
+      this.showPane('/tx/' + id + '/log');
     },
 
     openFile(n) {

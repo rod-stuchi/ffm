@@ -1071,6 +1071,12 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   reloading proves nothing until `cargo build` has run — `just dev` watches for
   it, but a hand-started `cargo run` does not. Half an hour went into "the
   keymap stopped working" that was an old template still in a running process.
+- **Alpine merges a component's data and its methods into one object**, so a
+  method named after a data property silently replaces it. `pane: 0` (the
+  focused pane's index) and a later `pane(url)` helper meant `panes[this.pane]`
+  started indexing an array with a *function*: `j`, `k`, `dd`, `gl` and every
+  other row-based keystroke stopped working at once, with nothing in the
+  console. `just js-check` now fails on a name declared twice in a component.
 - **Askama escapes the `json` filter's output too, which kills an inline
   `<script>`.** `{{ x|json }}` inside a script tag renders `&#34;` for every
   quote, the whole block fails to parse, and *everything* in it stops working —
