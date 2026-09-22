@@ -199,6 +199,16 @@ struct LedgerPage {
     /// `relative` | `absolute` | `none`. The shell needs it because relative
     /// numbers are measured from the cursor, and the cursor is Alpine's.
     nu: &'static str,
+    /// Shown in the statusline's two clickable cells, and the initial text
+    /// before Alpine takes over — so the bar is not blank for a frame.
+    nu_label: &'static str,
+    sort: &'static str,
+    sort_label: String,
+    /// The signed-in member, for the statusline's own cell. The SESSION's
+    /// member, never the focused pane's — focusing somebody else's pane does
+    /// not make you them.
+    me_name: String,
+    me_admin: bool,
     min_split: i64,
     max_width: i64,
     gap: i64,
@@ -321,6 +331,20 @@ pub async fn ledger(
             .unresolved_dot(unresolved.iter().map(|u| u.count).sum::<usize>() as i64),
         layout_panes: auth.settings.layout_panes.clone(),
         nu: LineNumbers::parse(&auth.settings.line_numbers).code(),
+        nu_label: match LineNumbers::parse(&auth.settings.line_numbers) {
+            LineNumbers::Relative => "rnu",
+            LineNumbers::Absolute => "nu",
+            LineNumbers::Off => "nonu",
+        },
+        sort: ledger::Sort::parse(&auth.settings.ledger_sort).code(),
+        sort_label: ledger::Sort::parse(&auth.settings.ledger_sort)
+            .code()
+            .to_string(),
+        me_name: auth.session.member.name.clone(),
+        // Whether admin powers are actually IN EFFECT, not what the row says
+        // — an admin previewing as a member should read as a member here, or
+        // the badge would contradict what the rest of the app is doing.
+        me_admin: auth.viewer.is_admin(),
         min_split: auth.settings.layout_min_split_width,
         max_width: auth.settings.layout_max_width,
         gap: auth.settings.layout_gap,

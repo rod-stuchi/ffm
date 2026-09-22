@@ -324,6 +324,43 @@ legend {
   font-family: var(--mono);
   font-size: 11.5px;
   min-height: 30px;
+  /* Never shrinks: it is the last row of the screen, and a bar that gives up
+   * height when the ledger is long is a bar that moves. */
+  flex: none;
+}
+
+/* The mode badge. Accent for NORMAL — "you are here", the same token the
+ * focus rail and the gutter's zero use — and `--info` while typing, which is
+ * the channel that already means "what I picked" rather than "where I am". */
+.st.mode {
+  background: var(--accent);
+  color: var(--paper);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.st.mode.cmd {
+  background: var(--info);
+  color: var(--paper);
+}
+
+/* The pending count and key buffer — a half-typed `3d` or `g`, visible
+ * rather than silently remembered. */
+.st.buf {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* A cell that writes a setting when clicked. It is a control, so it says so
+ * on hover; the keyboard reaches the same settings through `:set` and
+ * `:sort`, which write the identical row. */
+.st.is-click {
+  cursor: pointer;
+}
+
+.st.is-click:hover {
+  color: var(--ink);
+  background: var(--surface-3);
 }
 
 .st {

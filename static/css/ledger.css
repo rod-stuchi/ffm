@@ -6,7 +6,10 @@
  */
 
 .ledger-shell {
-  min-height: 100vh;
+  /* Exactly the viewport, not "at least" it: the two bars at the foot are in
+   * flow, so the shell has to have a bottom for them to sit against. With
+   * min-height the stage could grow past the screen and take them with it. */
+  height: 100vh;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
@@ -175,6 +178,14 @@
   padding: 16px;
   align-items: start;
   overflow-x: auto;
+  /* Takes the leftover height, which is what pins the command bar and the
+   * statusline to the bottom of the viewport. Before this the statusline just
+   * followed the content and floated wherever the panes happened to end,
+   * while the command bar was `position: fixed` 30px up — two bars, two
+   * different ideas of where the bottom was. */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .pane {
@@ -491,18 +502,35 @@
 
 /* `:` is how the settings surfaces are reached, and the caret takes the accent
  * because that is what "you are here" means everywhere else in this app. */
+/* In flow at the foot of the shell, directly above the statusline — the
+ * mock's order. Vim puts the command line last; this app does not, because
+ * the mode badge lives on the statusline and flips NORMAL -> COMMAND as you
+ * type, which only reads if that row is the one that stays put. */
 .cmdbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 30px;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 7px 12px;
   background: var(--surface);
-  border-top: 1px solid var(--line);
-  z-index: 40;
+  border-top: 1px solid var(--accent-line);
+  flex: none;
+}
+
+/* The command vocabulary, on the right of the bar. Identifiers a member types
+ * back, never translated — the same rule the sort-refusal message follows. */
+.cmdhint {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 700px) {
+  .cmdhint {
+    display: none;
+  }
 }
 
 .cmdbar .caret {

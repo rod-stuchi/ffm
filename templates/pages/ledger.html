@@ -257,28 +257,6 @@
   <input type="file" x-ref="picker" class="hidden-input"
          accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()">
 
-  {#- `/` — incremental, regex, and scoped to the month already on screen.
-      It filters rows that are ALREADY rendered, which is what makes it feel
-      instant; `:grep` is the different verb that reaches other months. -#}
-  <div class="cmdbar searchbar" x-show="searching" x-cloak>
-    <span class="caret">/</span>
-    <input class="cmdinput" x-ref="search" x-model="search" @input="runSearch()"
-           @keydown.enter.prevent="step(1); $el.blur()"
-           @keydown.escape.prevent="clearSearch()"
-           autocomplete="off" spellcheck="false">
-  </div>
-
-  {#- The command bar. `:` is how every setting surface is reached, and the
-      same write the panes make — a command, a form control and a statusline
-      cell are three gestures writing ONE row. -#}
-  <div class="cmdbar" x-show="commanding" x-cloak>
-    <span class="caret">:</span>
-    <input class="cmdinput" x-ref="cmd" x-model="command"
-           @keydown.enter.prevent="runCommand()"
-           @keydown.escape.prevent="commanding = false; command = ''"
-           placeholder="{{ t.command_placeholder() }}" autocomplete="off" spellcheck="false">
-  </div>
-
   {#- `gd`, and the hover tooltip: one panel over one set of facts, anchored
       to the focused row when there is no pointer to anchor to. Dismissed by
       the very next keypress, of any kind. -#}
@@ -379,12 +357,65 @@
     </div>
   </div>
 
-  {#- The same message channel the pre-auth pages use, so there is one way the
-      app talks to you on both sides of the login. -#}
+  {#- The two bars sit at the FOOT of the shell, in flow — not pinned with
+      `position: fixed`, which is what let them drift apart: the command bar
+      was fixed 30px off the bottom while the statusline floated wherever the
+      content happened to end.
+
+      `.stage` takes the leftover height instead, so both are at the bottom of
+      the viewport whatever the ledger contains. Order is the mock's: the
+      command bar ABOVE, the statusline last. (Vim puts the command line last;
+      this app does not, and the mode badge is why — it lives on the bottom
+      row and flips NORMAL → COMMAND as you type, which only reads if that row
+      is the one that stays put.) -#}
+
+  {#- `/` — incremental, regex, and scoped to the month already on screen.
+      It filters rows that are ALREADY rendered, which is what makes it feel
+      instant; `:grep` is the different verb that reaches other months. -#}
+  <div class="cmdbar searchbar" x-show="searching" x-cloak>
+    <span class="caret">/</span>
+    <input class="cmdinput" x-ref="search" x-model="search" @input="runSearch()"
+           @keydown.enter.prevent="step(1); $el.blur()"
+           @keydown.escape.prevent="clearSearch()"
+           autocomplete="off" spellcheck="false">
+  </div>
+
+  {#- The command bar. `:` is how every setting surface is reached, and the
+      same write the panes make — a command, a form control and a statusline
+      cell are three gestures writing ONE row.
+
+      The hint is the command vocabulary itself — identifiers a member types
+      back, not words — so it is a constant and never passes through the
+      catalog, the same rule the sort-refusal message follows. -#}
+  <div class="cmdbar" x-show="commanding" x-cloak>
+    <span class="caret">:</span>
+    <input class="cmdinput" x-ref="cmd" x-model="command"
+           @keydown.enter.prevent="runCommand()"
+           @keydown.escape.prevent="commanding = false; command = ''"
+           placeholder="{{ t.command_placeholder() }}" autocomplete="off" spellcheck="false">
+    <span class="cmdhint">add · in · move · sort · group · set · theme · lang · profile · household · undo</span>
+  </div>
+
+  {#- The statusline. The same message channel the pre-auth pages use, so
+      there is one way the app talks to you on both sides of the login —
+      with the cells the mock carries around it. -#}
   <div class="status">
-    <div class="st">{{ household }}</div>
+    <div class="st mode" :class="{ cmd: commanding || searching }"
+         x-text="commanding ? 'COMMAND' : (searching ? 'SEARCH' : 'NORMAL')">NORMAL</div>
+    <div class="st">{{ household }} · {{ period }}</div>
+    <div class="st stmember">{{ me_name }}{% if me_admin %} (admin){% endif %}</div>
     <div class="st grow msg" :class="{ bad: msgBad }" x-text="msg"></div>
-    <div class="st right">{{ period }} · {{ t.lang.code() }}</div>
+    {#- The pending count and key buffer, so a half-typed `3d` or `g` is
+        visible rather than something the app silently remembers. -#}
+    <div class="st buf" x-text="count + pending" x-show="count || pending" x-cloak></div>
+    <div class="st right" x-text="(row + 1) + '/' + Math.max(1, rows().length)">1/1</div>
+    {#- Clickable, and they write the member's own settings row — a command,
+        a form control and a statusline cell are three gestures writing ONE
+        row, which is the whole single-source rule. -#}
+    <div class="st right is-click" @click="cycleSort()" x-text="sortLabel"
+         title="{{ t.profile_sort() }}">{{ sort_label }}</div>
+    <div class="st right is-click" @click="cycleNu()" x-text="nuLabel"
+         title="{{ t.profile_line_numbers() }}">{{ nu_label }}</div>
   </div>
 </div>
 
@@ -406,6 +437,13 @@ function ledger() {
     attaching: null,
     dragging: false,
     nu: {{ nu|json|safe }},
+    sort: {{ sort|json|safe }},
+    // The two clickable cells show a SHORT label — `rnu` / `nu` / `nonu` are
+    // the words a member types back at `:set`, which is the same reason the
+    // sort-refusal message names `manual` and `date` rather than translating
+    // them.
+    get nuLabel() { return { relative: 'rnu', absolute: 'nu', none: 'nonu' }[this.nu] || this.nu; },
+    get sortLabel() { return this.sort; },
     commanding: false,
     logFor: null,
     // Fold state is PURE visual state — the server already rendered every row
@@ -690,6 +728,19 @@ function ledger() {
       const mount = el.closest('.rulemount');
       if (mount) mount.replaceChildren();
       else el.remove();
+    },
+
+    /// The statusline's two clickable cells. They write the member's own
+    /// settings row — the same row `:set`, `:sort` and the `:profile` radios
+    /// write, which is what keeps one setting to one source.
+    cycleSort() {
+      const next = { manual: 'date', date: 'amount', amount: 'manual' }[this.sort] || 'manual';
+      this.setting('/settings/member', 'ledger_sort', next);
+    },
+
+    cycleNu() {
+      const next = { relative: 'absolute', absolute: 'none', none: 'relative' }[this.nu] || 'relative';
+      this.setting('/settings/member', 'line_numbers', next);
     },
 
     /// Relative line numbers, measured from the cursor.

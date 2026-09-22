@@ -30,6 +30,46 @@ understood:
 | received | filled positive disc + received date | income that landed |
 | estimated | `~R$ …` in a quieter colour, no delta | a varying income's amount is projected from history until confirmed — the mark still carries arrival, the tilde carries "this number isn't a fact yet" |
 
+### The foot of the shell: the command bar, then the statusline
+
+Both are **in flow at the bottom of the shell**, not pinned with
+`position: fixed`. `.stage` takes the leftover height, so they sit against the
+bottom of the viewport whatever the ledger contains, and the stage scrolls
+inside itself when the rows outgrow it.
+
+This was wrong in both directions at once and the two halves disagreed: the
+statusline simply followed the content and floated wherever the panes ended,
+while the command bar was `position: fixed; bottom: 30px` — pinned above a
+30px statusline that was not there. Two bars, two different ideas of where
+the bottom was.
+
+**The command bar sits ABOVE the statusline**, which is the mock's order and
+not Vim's. Vim puts the command line on the last row; this app does not,
+because the mode badge lives on the statusline and flips `NORMAL` → `COMMAND`
+as you type — which only reads if that row is the one that stays put.
+
+The statusline carries, left to right:
+
+| cell | what it says |
+|---|---|
+| mode | `NORMAL` · `COMMAND` · `SEARCH`. Accent for normal — the "you are here" token — and `--info` while typing, which already means "what I picked" |
+| household · period | which ledger, which month |
+| member | the **session's** member and `(admin)` when admin powers are actually in effect, so it reads as a member under preview-as-non-admin |
+| message | the same channel the pre-auth pages use |
+| buffer | the pending count and key prefix, so a half-typed `3d` or `g` is visible rather than silently remembered |
+| position | `4/7` in the focused pane |
+| sort | `manual` · `date` · `amount` — **clickable, cycles** |
+| line numbers | `rnu` · `nu` · `nonu` — **clickable, cycles** |
+
+The last two are the single-source rule made visible: a command, a form
+control and a statusline cell are three gestures writing **one** row. Clicking
+them writes `member_settings` exactly as `:set` and `:sort` do, and the page
+re-renders because the gutter and the row order are decided server-side.
+
+The `:` bar carries the command vocabulary on its right. Those are
+identifiers a member types back, not prose, so they never pass through the
+catalog — the same rule the sort-refusal message follows.
+
 ### The gutter, and which half of it the server can decide
 
 `member_settings.line_numbers` is `relative` | `absolute` | `none`, and the
