@@ -414,7 +414,9 @@ fn money_format(currency: crate::domain::money::Currency) -> String {
 /// One name per command — `:me` and `:config` still work as aliases, but a
 /// hint listing both spellings of one thing is noise.
 fn command_hint(admin: bool, holds_admin_role: bool) -> String {
-    let mut names = vec!["profile", "sort", "group", "set", "theme", "lang", "grep"];
+    let mut names = vec![
+        "help", "profile", "sort", "group", "set", "theme", "lang", "grep",
+    ];
     if admin {
         names.extend(["household", "members", "invite", "currency"]);
     }

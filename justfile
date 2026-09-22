@@ -234,7 +234,23 @@ cmd-check:
         print("\u2717 the command bar offers what runCommand does not handle: "
               + ", ".join(missing))
         sys.exit(1)
-    print(f"\u2713 all {len(advertised)} advertised commands are handled")
+
+    # A command named in a MESSAGE counts as advertised too. `not-a-command`
+    # reads "not a command: { $name } (try help)" in both catalogs, and `help`
+    # was not a case for months \u2014 so the app answered "not a command: help
+    # (try help)". The hint check could not see that, because the name was in
+    # the copy rather than in the hint.
+    told = set()
+    for ftl in pathlib.Path("i18n").glob("*.ftl"):
+        told |= set(re.findall(r"\((?:try|tente) (\w+)\)", ftl.read_text()))
+    circular = sorted(told - handled)
+    if circular:
+        print("\u2717 a message tells people to type a command that does not "
+              "exist: " + ", ".join(circular))
+        sys.exit(1)
+
+    print(f"\u2713 all {len(advertised)} advertised commands are handled, "
+          f"and the {len(told)} named in messages exist")
 
 check: fmt-check lint test offline-check db-check css-check tpl-check js-check cmd-check
 

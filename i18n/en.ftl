@@ -492,3 +492,4 @@ edit-stale = { $who } changed this row while you were editing. Nothing was writt
 edit-stale-unknown = This row changed while you were editing. Nothing was written — your edit is still here, press e to pick it up.
 edit-gone = That row was deleted while you were editing. Nothing was written — press u to bring it back.
 edit-day-bad = A day of the month is 1 to 31.
+grep-needs-a-term = grep needs something to search for

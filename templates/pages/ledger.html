@@ -553,6 +553,7 @@ function ledger() {
     attaching: null,
     dragging: false,
     nu: {{ nu|json|safe }},
+    grepNeedsTerm: {{ t.grep_needs_a_term()|json|safe }},
     addSpend: {{ t.row_add_spend()|json|safe }},
     addIncome: {{ t.row_add_income()|json|safe }},
     // The household's number format, from the one value that owns it. Every
@@ -1310,8 +1311,20 @@ function ledger() {
         case 'household': case 'config':  return this.showPane('/household');
         case 'members':                   return this.showPane('/members');
         // Every month, as opposed to `/`, which filters what is on screen.
+        // `:help` opens the keymap — the same modal `?` does. It is not a
+        // nicety: `not-a-command` literally tells people to "try help", so
+        // without this the app answers "not a command: help (try help)".
+        // `:help` opens the keymap — the same modal `?` does. It is not a
+        // nicety: `not-a-command` literally tells people to "try help", so
+        // without this the app answers "not a command: help (try help)".
+        case 'help': case 'h':
+          this.keymap = true;
+          return;
         case 'grep':
-          if (!arg) return this.say(this.notACommand.replace('{cmd}', 'grep'), true);
+          // A bare `:grep` is a command MISSING ITS ARGUMENT, not an unknown
+          // one. Saying "not a command: grep" was the one thing that is not
+          // true about it, and it is why `:grep` read as unimplemented.
+          if (!arg) return this.say(this.grepNeedsTerm, true);
           return this.showPane('/grep?q=' + encodeURIComponent(arg));
         case 'invite':
           this.showPane('/members');

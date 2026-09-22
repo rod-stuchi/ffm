@@ -486,6 +486,7 @@ for this row"*.
 | `:invite ana` | admin only — create an invite link and open `:members` on it |
 | `:logout` | end this session |
 | `:preview` | admin only — toggle previewing the app as a non-admin member |
+| `:help` · `:h` | the keymap — the same modal `?` opens |
 | `?` | keymap |
 
 ### Edit fields

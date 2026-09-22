@@ -460,3 +460,4 @@ edit-stale = { $who } mudou esta linha enquanto você editava. Nada foi gravado 
 edit-stale-unknown = Esta linha mudou enquanto você editava. Nada foi gravado — sua edição continua aqui, aperte e para retomar.
 edit-gone = Esta linha foi excluída enquanto você editava. Nada foi gravado — aperte u para trazer de volta.
 edit-day-bad = Um dia do mês vai de 1 a 31.
+grep-needs-a-term = grep precisa de algo para buscar
