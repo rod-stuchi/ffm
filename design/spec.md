@@ -30,6 +30,31 @@ understood:
 | received | filled positive disc + received date | income that landed |
 | estimated | `~R$ …` in a quieter colour, no delta | a varying income's amount is projected from history until confirmed — the mark still carries arrival, the tilde carries "this number isn't a fact yet" |
 
+### The add form (`a` / `i`)
+
+It opens inside the pane, never in a modal, and **stays open after a save** —
+a household entering the week's spending types straight into the next one.
+
+- **It says which it is adding.** The same open form serves `a` and `i`, and
+  the only thing that changes between them is the kind, so a heading is the
+  only thing that can say so: *Add a spend* / *Add an income*, from the
+  catalog, switching with the form's own `kind`.
+- **It keeps the row's two columns.** The description starts where every
+  description starts and the amount ends where every amount ends, because the
+  form mirrors `.row`'s `34px 1fr` and `.entry`'s `26px 1fr auto` exactly. It
+  was a flex strip before, lining up with nothing above it.
+- **The frame is dashed**, which is what this ledger already means by "not a
+  row yet" — the same language the `A`/`I` placeholder row uses.
+- **Save and Cancel are their own row, at the right edge, a size down.** They
+  end the gesture rather than being part of the thing being typed, so they do
+  not sit in the field strip competing with it for width.
+- **The amount is the live mask**, per Edit fields below: only digits are
+  typed and the separators are inserted right-to-left into minor units. The
+  element carries the integer in `data-cents` and the text is always painted
+  from it, so the two cannot drift; what is submitted is the formatted string,
+  which `Cents::parse` reads back to exactly that integer. One parse on the
+  way in, rather than a second field to keep in step.
+
 ### The foot of the shell: the command bar, then the statusline
 
 Both are **in flow at the bottom of the shell**, not pinned with

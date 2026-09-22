@@ -219,6 +219,11 @@ struct LedgerPage {
     /// previewing as one — the same rule that removes the Household button
     /// rather than disabling it.
     command_hint: String,
+    /// The household's number format, for the amount mask — `{decimals,
+    /// decimal, group}` as JSON. From `household_settings.locale_currency`,
+    /// the one value every money display in this app reads, so a masked field
+    /// cannot disagree with the rows above it.
+    money_format: String,
     min_split: i64,
     max_width: i64,
     gap: i64,
@@ -356,6 +361,7 @@ pub async fn ledger(
         // the badge would contradict what the rest of the app is doing.
         me_admin: auth.viewer.is_admin(),
         command_hint: command_hint(auth.viewer.is_admin(), auth.session.role_admin),
+        money_format: money_format(currency),
         min_split: auth.settings.layout_min_split_width,
         max_width: auth.settings.layout_max_width,
         gap: auth.settings.layout_gap,
@@ -387,6 +393,20 @@ pub async fn ledger(
         },
         t,
     })
+}
+
+/// The number format the amount mask types into, as JSON.
+///
+/// Only the three facts a mask needs — how many minor digits, and the two
+/// separators. Not the symbol: the mask writes a bare number, and the symbol
+/// is the row's job. Built here rather than written into the template so it
+/// comes from `Currency::format` like every other money surface.
+fn money_format(currency: crate::domain::money::Currency) -> String {
+    let f = currency.format();
+    format!(
+        r#"{{"decimals":{},"decimal":"{}","group":"{}"}}"#,
+        f.decimals, f.decimal_sep, f.group_sep
+    )
 }
 
 /// What the `:` bar offers, in the order a household reaches for it.

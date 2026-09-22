@@ -236,22 +236,69 @@
 /* --- the add form, and the in-flight row --------------------------------- */
 
 /* The form lives in the ledger, never in a modal: a dialog hides the very
- * thing you are adding to. */
+ * thing you are adding to. It keeps the ROW's two columns, so the description
+ * starts where every description starts and the amount ends where every
+ * amount ends — it used to be a flex strip that lined up with nothing above
+ * it. */
 .addrow {
-  display: flex;
-  gap: 8px;
-  padding: 8px 10px 12px 13px;
+  padding: 2px 10px 10px 0;
+  /* The rail column a row reserves, so nothing shifts sideways. */
+  border-left: 3px solid transparent;
+}
+
+/* Which of the two is being added. The same open form serves `a` and `i` and
+ * stays open for the next one, so the only thing saying which is this. */
+.addhead {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 6px 0 5px 34px;
+}
+
+.addgrid {
+  display: grid;
+  grid-template-columns: 34px 1fr;
   align-items: center;
 }
 
-.addrow .i {
-  flex: 1;
+/* Mirrors `.entry` — same tracks, same gap, same padding — and dashed,
+ * because that is what this ledger already means by "not a row yet". */
+.addentry {
+  display: grid;
+  grid-template-columns: 26px 1fr 120px;
+  gap: 11px;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px dashed var(--accent-line);
+  border-radius: var(--r);
+  padding: 8px 12px;
   min-width: 0;
 }
 
-.addrow .amt-in {
-  flex: 0 0 120px;
+/* The status mark's column, empty: a row that does not exist has no state. */
+.addmark {
+  width: 26px;
+}
+
+.addentry .i {
+  min-width: 0;
+}
+
+.addentry .amt-in {
   text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Their own row, at the right edge: the end of the gesture, not part of the
+ * thing being typed. Indented past the gutter so they sit under the fields. */
+.addactions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 0 0 34px;
 }
 
 /* The skeleton is real markup, already in the DOM, revealed by HTMX's own

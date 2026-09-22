@@ -246,6 +246,14 @@ legend {
   color: var(--ink);
 }
 
+/* A size down, for buttons that end a gesture rather than being the point of
+ * it — the add form's Save and Cancel sit under the fields, not beside them. */
+.btn.sm {
+  font-size: 12px;
+  padding: 6px 11px;
+  border-radius: 6px;
+}
+
 .btn:hover {
   border-color: var(--accent-line);
 }

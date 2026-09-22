@@ -195,22 +195,52 @@
       </div>
 
       {#- The add form lives in the ledger, not in a modal: a dialog hides the
-          very thing you are adding to. -#}
+          very thing you are adding to. It stays open after a save, so a
+          household entering the week's spending types straight into the next
+          one — which is why the heading has to say WHICH it is adding: the
+          same open form serves `a` and `i`, and the only thing that changed
+          is the kind. -#}
       <form class="addrow" x-show="adding === {{ loop.index0 }}" x-cloak
             hx-post="/tx"
             hx-target="#sk-{{ p.id }}" hx-swap="beforebegin"
             hx-indicator="#sk-{{ p.id }}"
             hx-disabled-elt="find button"
-            @htmx:after-request="if ($event.detail.successful) { $el.reset(); $refs.title{{ p.id }}.focus() }">
+            @htmx:after-request="if ($event.detail.successful) { $el.reset(); resetAmount($el); $refs.title{{ p.id }}.focus() }">
         <input type="hidden" name="member_id" value="{{ p.id }}">
         <input type="hidden" name="period" value="{{ period_key }}">
         <input type="hidden" name="kind" :value="kind">
-        <input class="i" name="title" x-ref="title{{ p.id }}" placeholder="{{ t.row_title() }}" autocomplete="off">
-        {#- The amount comes first in the edit form, but here the description
-            is what you are always typing; the amount is often filled in later. -#}
-        <input class="i amt-in" name="amount" placeholder="{{ t.row_amount() }}" inputmode="decimal" autocomplete="off">
-        <button class="btn pri" type="submit">{{ t.row_save() }}</button>
-        <button class="btn" type="button" @click="adding = null">{{ t.row_cancel() }}</button>
+
+        <div class="addhead" x-text="kind === 'in' ? addIncome : addSpend">{{ t.row_add_spend() }}</div>
+
+        {#- The same two columns a row has, so the description starts where
+            every description starts and the amount ends where every amount
+            ends. It used to be a plain flex strip, which lined up with
+            nothing above it. -#}
+        <div class="addgrid">
+          <div class="gut"></div>
+          <div class="addentry">
+            <span class="addmark"></span>
+            <input class="i" name="title" x-ref="title{{ p.id }}"
+                   placeholder="{{ t.row_title() }}" autocomplete="off">
+            {#- The amount comes first in the edit form, but here the
+                description is what you are always typing; the amount is often
+                filled in later.
+
+                A live mask: only digits are ever typed, and the separators
+                are inserted right-to-left into minor units, the way a POS
+                terminal reads them. -#}
+            <input class="i amt-in" name="amount" placeholder="{{ t.row_amount() }}"
+                   inputmode="numeric" autocomplete="off"
+                   x-init="money($el)">
+          </div>
+        </div>
+
+        {#- Their own row, at the right edge, and a size down: they are the
+            end of the gesture, not part of the thing being typed. -#}
+        <div class="addactions">
+          <button class="btn sm" type="button" @click="adding = null">{{ t.row_cancel() }}</button>
+          <button class="btn pri sm" type="submit">{{ t.row_save() }}</button>
+        </div>
       </form>
     </section>
     {#- One mount per pane, and the pane it opens beside is the FOCUSED one —
@@ -437,6 +467,12 @@ function ledger() {
     attaching: null,
     dragging: false,
     nu: {{ nu|json|safe }},
+    addSpend: {{ t.row_add_spend()|json|safe }},
+    addIncome: {{ t.row_add_income()|json|safe }},
+    // The household's number format, from the one value that owns it. Every
+    // money display in the app reads the same setting, so the mask cannot
+    // disagree with the rows above it.
+    money_: {{ money_format|safe }},
     sort: {{ sort|json|safe }},
     // The two clickable cells show a SHORT label — `rnu` / `nu` / `nonu` are
     // the words a member types back at `:set`, which is the same reason the
@@ -741,6 +777,67 @@ function ledger() {
     cycleNu() {
       const next = { relative: 'absolute', absolute: 'none', none: 'relative' }[this.nu] || 'relative';
       this.setting('/settings/member', 'line_numbers', next);
+    },
+
+    /// The amount mask. Only digits are ever typed — the separators are
+    /// inserted for you, right-to-left into minor units, the way a POS
+    /// terminal reads them. `1234567` becomes `12.345,67` a keystroke at a
+    /// time (or `12,345.67` in a USD household; the format comes from the
+    /// household's currency, never from the language).
+    ///
+    /// The element carries the integer in `data-cents`, and the displayed
+    /// text is always painted FROM it — so the two cannot drift. What is
+    /// submitted is the formatted string, which `Cents::parse` reads back to
+    /// exactly this integer: the mask only ever produces the shapes that
+    /// parser is built for, and there is one parse on the way in rather than
+    /// a second field to keep in step.
+    money(el) {
+      const f = this.money_;
+      const paint = (units) => {
+        el.dataset.cents = String(units);
+        el.value = units ? this.formatMinor(units) : '';
+      };
+      paint(0);
+      el.addEventListener('beforeinput', (e) => {
+        if (!e.inputType.startsWith('insert')) return;
+        const txt = e.data != null ? e.data
+          : (e.dataTransfer ? e.dataTransfer.getData('text/plain') : '');
+        if (!txt) return;
+        // A letter is refused BEFORE it lands. Letting it through would mean
+        // typing over a selected "59,90" leaves no digits, and the mask would
+        // repaint the field empty. A paste is allowed as long as it carries
+        // digits: "R$ 12,34" is fine, and the mask keeps just the digits.
+        const bad = e.inputType === 'insertFromPaste'
+          ? !/[0-9]/.test(txt) : /[^0-9]/.test(txt);
+        if (bad) e.preventDefault();
+      });
+      el.addEventListener('input', () => {
+        const digits = el.value.replace(/[^0-9]/g, '');
+        paint(digits ? parseInt(digits, 10) : 0);
+        // The caret belongs at the end: digits are read right-to-left, so
+        // there is nowhere else meaningful for it to be.
+        el.setSelectionRange(el.value.length, el.value.length);
+      });
+      void f;
+    },
+
+    formatMinor(units) {
+      const f = this.money_;
+      const s = String(units).padStart(f.decimals + 1, '0');
+      const whole = s.slice(0, s.length - f.decimals);
+      const frac = s.slice(s.length - f.decimals);
+      const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, f.group);
+      return f.decimals ? grouped + f.decimal + frac : grouped;
+    },
+
+    /// `$el.reset()` puts the FORM back, which for a masked field means the
+    /// display without the integer behind it. Clearing both keeps them in
+    /// step after a save.
+    resetAmount(form) {
+      form.querySelectorAll('.amt-in').forEach((el) => {
+        el.dataset.cents = '0';
+        el.value = '';
+      });
     },
 
     /// Relative line numbers, measured from the cursor.
