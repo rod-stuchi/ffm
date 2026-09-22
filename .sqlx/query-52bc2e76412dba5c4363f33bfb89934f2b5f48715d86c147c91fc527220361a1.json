@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT field AS \"field!: String\", old_value AS \"old_value: String\",\n                  new_value AS \"new_value: String\"\n           FROM change_field WHERE change_id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "field!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "old_value: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "new_value: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "52bc2e76412dba5c4363f33bfb89934f2b5f48715d86c147c91fc527220361a1"
+}

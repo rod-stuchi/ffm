@@ -329,6 +329,30 @@ impl Change {
         self
     }
 
+    /// Record a field **even when it did not move**.
+    ///
+    /// The exception to the rule above, and it has exactly one caller: a
+    /// re-attribution's `sort_key`, which `u` needs verbatim to put the row
+    /// back where it was. Two members' keys are generated independently, so
+    /// the destination's appended key can happen to equal the source's — and
+    /// `diff` would then drop the one value the undo depends on, silently and
+    /// only sometimes. This field is filtered out of what the log pane reads,
+    /// so it stays plumbing rather than becoming something a reader sees.
+    pub fn always(mut self, field: &str, old: Value, new: Value) -> Change {
+        debug_assert_eq!(
+            old.kind(),
+            new.kind(),
+            "{field}: both sides of a diff must be the same kind"
+        );
+        self.fields.push(Field {
+            name: field.to_string(),
+            kind: new.kind(),
+            old: old.stored(),
+            new: new.stored(),
+        });
+        self
+    }
+
     /// True when nothing actually moved. A handler can use this to skip writing
     /// an entry for a save that changed nothing — a log full of empty edits is
     /// a log nobody reads.
@@ -560,7 +584,13 @@ pub async fn history(
         let fields = sqlx::query!(
             r#"SELECT field AS "field!: String", old_value AS "old: String",
                       new_value AS "new: String", kind AS "kind!: String"
-               FROM change_field WHERE change_id = ?1 ORDER BY id"#,
+               FROM change_field WHERE change_id = ?1
+                 -- `sort_key` is recorded so an undo can put a re-attributed
+                 -- row back where it was, not for a reader: a fractional key
+                 -- means nothing to anyone, and showing it would make every
+                 -- re-attribution read as a two-field change.
+                 AND field <> 'sort_key'
+               ORDER BY id"#,
             r.id
         )
         .fetch_all(pool)

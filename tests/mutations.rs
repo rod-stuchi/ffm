@@ -287,3 +287,246 @@ async fn a_failed_insert_leaves_no_trace_in_the_log() {
         .unwrap();
     assert_eq!(logged, 0);
 }
+
+// ---------------------------------------------------------------------------
+// edit, privacy, re-attribution — and undoing each of them
+// ---------------------------------------------------------------------------
+//
+// `u` must restore the exact prior state, which is a stronger claim than "it
+// runs the opposite verb". Every test below asserts the row afterwards, not
+// just that the call returned true.
+
+async fn second_member(pool: &SqlitePool, admin: i64) -> i64 {
+    let token = auth::issue_link(pool, Actor::User(admin), None, None, 1)
+        .await
+        .unwrap();
+    let sid = auth::accept_invite(
+        pool,
+        &token,
+        "natália",
+        "hunter2hunter2",
+        "pt-BR",
+        "ffm",
+        1,
+        "x",
+    )
+    .await
+    .unwrap();
+    auth::session(pool, &sid).await.unwrap().unwrap().member.id
+}
+
+async fn amount_of(pool: &SqlitePool, id: i64) -> Option<i64> {
+    sqlx::query_scalar("SELECT amount_cents FROM transactions WHERE id = ?1")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn undo_last(pool: &SqlitePool, me: i64) -> bool {
+    let u = tx::last_undoable(pool, me)
+        .await
+        .unwrap()
+        .expect("something to undo");
+    tx::undo(pool, Actor::User(me), &u).await.unwrap()
+}
+
+#[tokio::test]
+async fn an_edit_records_only_what_moved_and_undo_puts_it_back() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+
+    assert!(
+        tx::edit(
+            &pool,
+            Actor::User(me),
+            id,
+            tx::EditFields {
+                title: "Mercado",
+                amount: Some(Cents(61230)),
+                day: None,
+                bucket: None,
+                visibility: Visibility::Household,
+            },
+            None,
+        )
+        .await
+        .unwrap()
+    );
+
+    // Only the amount moved, so only the amount is in the log. An entry that
+    // listed every field of the form would bury the one fact it records.
+    let fields: Vec<String> = sqlx::query_scalar(
+        "SELECT field FROM change_field f JOIN change c ON c.id = f.change_id
+         WHERE c.action = 'edit'",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(fields, ["amount"]);
+    assert_eq!(amount_of(&pool, id).await, Some(61230));
+
+    assert!(undo_last(&pool, me).await);
+    assert_eq!(amount_of(&pool, id).await, Some(65890));
+}
+
+#[tokio::test]
+async fn privacy_is_its_own_verb_and_undo_toggles_it_back() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = add(&pool, me, TxKind::Out, "Presente", 24000).await;
+
+    assert_eq!(
+        tx::toggle_privacy(&pool, Actor::User(me), id, None)
+            .await
+            .unwrap(),
+        Some(true)
+    );
+    let v: String = sqlx::query_scalar("SELECT visibility FROM transactions WHERE id = ?1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(v, "private");
+
+    // Its own action, never folded into `edit`: who can see a row is a
+    // different kind of fact from what the row says.
+    let action: String = sqlx::query_scalar(
+        "SELECT action FROM change WHERE entity = 'transaction' ORDER BY id DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(action, "privacy");
+
+    assert!(undo_last(&pool, me).await);
+    let v: String = sqlx::query_scalar("SELECT visibility FROM transactions WHERE id = ?1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(v, "household");
+}
+
+#[tokio::test]
+async fn undoing_a_reattribution_restores_the_exact_prior_position() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let other = second_member(&pool, me).await;
+
+    let a = add(&pool, me, TxKind::Out, "Energia", 34362).await;
+    let b = add(&pool, me, TxKind::Out, "Água", 10840).await;
+    let c = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+    // The destination must already have rows, or "appended" and "where it
+    // was" are the same key and the test proves nothing.
+    add(&pool, other, TxKind::Out, "Academia", 9990).await;
+    assert_eq!(titles(&pool, me).await, ["Energia", "Água", "Mercado"]);
+
+    assert!(
+        tx::reattribute(&pool, Actor::User(me), b, other, None)
+            .await
+            .unwrap()
+    );
+    assert_eq!(titles(&pool, me).await, ["Energia", "Mercado"]);
+    assert_eq!(titles(&pool, other).await, ["Academia", "Água"]);
+
+    // Appending is the right placement for a move you chose and the wrong one
+    // for undoing it, so the old key is recorded — and put back.
+    assert!(undo_last(&pool, me).await);
+    assert_eq!(titles(&pool, me).await, ["Energia", "Água", "Mercado"]);
+    assert_eq!(titles(&pool, other).await, ["Academia"]);
+    let _ = (a, c);
+}
+
+#[tokio::test]
+async fn the_recorded_sort_key_stays_out_of_the_log_pane() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let other = second_member(&pool, me).await;
+    let id = add(&pool, me, TxKind::Out, "Energia", 34362).await;
+    add(&pool, other, TxKind::Out, "Academia", 9990).await;
+
+    tx::reattribute(&pool, Actor::User(me), id, other, None)
+        .await
+        .unwrap();
+
+    // It is in the table, because undo needs it...
+    let stored: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM change_field WHERE field = 'sort_key'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored, 1);
+
+    // ...and out of what the pane reads, because a fractional key means
+    // nothing to a reader and would make every move read as two changes.
+    let entries = ffm::db::changes::history(&pool, id, None, ffm::db::changes::Filter::All, &[])
+        .await
+        .unwrap();
+    let reattributed = entries
+        .iter()
+        .find(|e| e.action == "reattribute")
+        .expect("the move is in the log");
+    assert_eq!(
+        reattributed
+            .fields
+            .iter()
+            .map(|f| f.field.as_str())
+            .collect::<Vec<_>>(),
+        ["member"]
+    );
+}
+
+#[tokio::test]
+async fn undoing_a_reorder_puts_the_row_back_between_its_neighbours() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    add(&pool, me, TxKind::Out, "Energia", 34362).await;
+    add(&pool, me, TxKind::Out, "Água", 10840).await;
+    add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+    let first: i64 = sqlx::query_scalar("SELECT id FROM transactions ORDER BY sort_key LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert!(
+        tx::reorder(&pool, Actor::User(me), first, 2, None)
+            .await
+            .unwrap()
+    );
+    assert_eq!(titles(&pool, me).await, ["Água", "Mercado", "Energia"]);
+
+    assert!(undo_last(&pool, me).await);
+    assert_eq!(titles(&pool, me).await, ["Energia", "Água", "Mercado"]);
+}
+
+#[tokio::test]
+async fn an_undo_is_an_entry_never_a_rewrite() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+
+    tx::toggle_privacy(&pool, Actor::User(me), id, None)
+        .await
+        .unwrap();
+    let undone = tx::last_undoable(&pool, me).await.unwrap().unwrap();
+    undo_last(&pool, me).await;
+
+    // The reversal points back at what it reversed, and nothing was deleted:
+    // the log reads "made private", then "made household · undo of …".
+    let (count, undo_of): (i64, Option<i64>) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM change WHERE action = 'privacy'),
+                (SELECT undo_of FROM change WHERE action = 'privacy' ORDER BY id DESC LIMIT 1)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 2);
+    assert_eq!(undo_of, Some(undone.change_id));
+
+    // And `u` twice does not toggle the same change forever: the second press
+    // walks further back, to the row's own creation.
+    let next = tx::last_undoable(&pool, me).await.unwrap().unwrap();
+    assert_eq!(next.action, "create");
+}

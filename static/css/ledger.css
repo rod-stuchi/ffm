@@ -110,6 +110,61 @@
   color: var(--neg);
 }
 
+/* The member tab bar. It is in the DOM in every layout and hidden here;
+ * the page's own <style> block shows it with the SAME rule that collapses the
+ * panes, so the two can never disagree about which layout is in effect. */
+.tabbar {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  white-space: nowrap;
+  font: inherit;
+}
+
+.tab.is-focus {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+/* The balance stays in the tab at every width. Tabs mode's real cost is
+ * losing sight of the other pane in a shared ledger, and this is what buys
+ * most of that back — so it is the hint that goes on a narrow screen, never
+ * the number. */
+.tab .tbal {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabhint {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-3);
+}
+
+@media (max-width: 560px) {
+  .tabhint {
+    display: none;
+  }
+}
+
 /* Panes sit side by side and the rule pane joins them as another column,
  * pushing later panes right. The ledger scrolls SIDEWAYS rather than hiding a
  * pane: a household can have more than two members, and covering one to edit
@@ -880,4 +935,187 @@
 .mcell.is-current {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* --- `e`, in place ------------------------------------------------------- */
+
+/* The row opens up rather than being covered: the ledger stays where it was,
+ * which is the whole argument against a dialog here. */
+.editrow .editentry {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.editactions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* A changed draft left behind when the cursor moved on. The dashed accent
+ * border is already the row's `has-draft` state; this is the tag that says how
+ * to pick it back up. */
+.drafttag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  border: 1px dashed var(--accent-line);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+/* --- gd: the details popup ----------------------------------------------- */
+
+.tip {
+  position: fixed;
+  z-index: 46;
+  min-width: 260px;
+  max-width: min(460px, 90vw);
+  padding: 9px 11px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  box-shadow: var(--shadow-md);
+  font-size: 12.5px;
+}
+
+.tiprow {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) 1fr;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.tiprow b {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.tiprow .mono {
+  font-family: var(--mono);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+/* --- P: the file carousel ------------------------------------------------ */
+
+/* Full-viewport, and the one modal sized that way on purpose: the job is
+ * reading a boleto's barcode digits or holding a phone up to its QR code, and
+ * a 560px dialog cannot do either. */
+.carousel {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+  display: grid;
+  place-items: center;
+}
+
+.cstage {
+  position: relative;
+  width: min(1100px, 94vw);
+  height: min(760px, 88vh);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  display: grid;
+  grid-template-rows: 1fr max-content;
+  overflow: hidden;
+}
+
+/* In the stage's corner, the placement any image viewer's zoom control uses —
+ * chosen so it does not compete with the file-nav row for space. */
+.czoom {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+  z-index: 2;
+}
+
+.czoom .btn {
+  font-family: var(--mono);
+  padding: 4px 10px;
+}
+
+.cfile {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  transform-origin: center;
+  transition: transform 0.12s ease;
+}
+
+.cicon svg {
+  width: 96px;
+  height: 96px;
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cpath {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  max-width: 70vw;
+  word-break: break-all;
+  text-align: center;
+}
+
+.cpage {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.cpage.is-warn {
+  color: var(--neg);
+}
+
+.cnav {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+/* --- ?: the keymap ------------------------------------------------------- */
+
+.keymapcard {
+  max-width: min(680px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.keymapbody {
+  overflow-y: auto;
+}
+
+.kmap {
+  display: grid;
+  /* Sized to its own content: a fixed-width key column overflows onto its
+   * neighbour the moment a command is longer than it expected. */
+  grid-template-columns: minmax(64px, max-content) 1fr;
+  gap: 5px 14px;
+  align-items: baseline;
+  font-size: 12.5px;
+}
+
+.kmap kbd {
+  justify-self: start;
 }

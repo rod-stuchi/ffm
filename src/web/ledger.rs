@@ -201,6 +201,16 @@ struct LedgerPage {
     /// `E` on a row with no rule behind it says so in the statusline rather
     /// than doing nothing at all.
     not_a_rule: String,
+    unsaved_tag: String,
+    drafts_parked: String,
+    no_pane_that_way: String,
+    reattribute_title: String,
+    details_none: String,
+    no_files: String,
+    months_word: String,
+    /// The `?` modal, built from the same table `design/spec.md` documents —
+    /// so a key that exists and a key that is written down stay the same set.
+    keymap: Vec<(String, Vec<(&'static str, &'static str)>)>,
     /// The three "there is no such file" messages — `g1`/`g2`/`g3` on a row
     /// that has not got one. Three fields rather than a JSON blob, so each is
     /// escaped by the same filter as every other string handed to the page.
@@ -308,6 +318,16 @@ pub async fn ledger(
         max_width: auth.settings.layout_max_width,
         gap: auth.settings.layout_gap,
         not_a_rule: t.rule_none_on_row().to_string(),
+        unsaved_tag: t.row_unsaved().to_string(),
+        // The count is filled in by the pane, so the catalog keeps the plural
+        // and the template keeps the number.
+        drafts_parked: t.drafts_parked(2).replace('2', "{n}"),
+        no_pane_that_way: t.no_pane_that_way().to_string(),
+        reattribute_title: t.reattribute_private_title("{name}"),
+        details_none: t.details_none().to_string(),
+        no_files: t.file_no_files().to_string(),
+        months_word: t.details_months().to_string(),
+        keymap: keymap(&t),
         not_a_command: t.not_a_command("{cmd}"),
         no_bill: t.file_none_bill().to_string(),
         no_scheduled: t.file_none_scheduled().to_string(),
@@ -324,6 +344,84 @@ pub async fn ledger(
         },
         t,
     })
+}
+
+/// The keymap, as `?` shows it.
+///
+/// Lowercase acts on the **occurrence**, uppercase on the **rule or the
+/// window** — which is the rule the whole table follows, and the reason it can
+/// be read rather than memorised.
+fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
+    vec![
+        (
+            t.keymap_move().to_string(),
+            vec![
+                ("j / k", "row down / up"),
+                ("5j 7k", "counted motion"),
+                ("gg / G", "first / last row"),
+                ("H / L", "focus pane, left / right"),
+                ("gt / gT", "next / previous member tab"),
+                ("2gt", "jump straight to tab 2"),
+            ],
+        ),
+        (
+            t.keymap_act().to_string(),
+            vec![
+                ("a / i", "add a one-off spend / income"),
+                ("A / I", "create a recurring bill / income"),
+                ("e / E", "edit this row / its rule"),
+                ("J / K", "move the row down / up"),
+                ("Ctrl-H / Ctrl-L", "re-attribute to the pane left / right"),
+                ("x", "select, for a batch operation"),
+                ("p", "toggle private"),
+                ("gd", "due, cadence and receipt details"),
+                ("gl", "this row's history"),
+            ],
+        ),
+        (
+            t.keymap_find().to_string(),
+            vec![
+                ("/", "search this month — incremental, regex"),
+                ("n / N", "next / previous match"),
+                (":grep", "search every month"),
+            ],
+        ),
+        (
+            t.keymap_fold().to_string(),
+            vec![
+                ("za", "toggle the fold under the cursor"),
+                ("zo / zc", "open / close it"),
+                ("zR / zM", "open / close every fold"),
+            ],
+        ),
+        (
+            t.keymap_files().to_string(),
+            vec![
+                ("g1 / g2 / g3", "open the bill / scheduled / receipt"),
+                ("P", "preview this row's files"),
+                ("1 2 3 · h l", "inside P: jump to a file · step"),
+                ("+ - 0", "inside P: zoom in, out, reset"),
+            ],
+        ),
+        (
+            t.keymap_undo().to_string(),
+            vec![
+                ("dd", "delete — opens a confirmation"),
+                ("y", "confirm in a modal"),
+                ("u", "undo the last change"),
+                ("Esc", "clear count, buffer, selection and search"),
+            ],
+        ),
+        (
+            t.keymap_type().to_string(),
+            vec![
+                (":add 50 mercado", "a spend, in one line"),
+                (":profile · :household", "your settings · the household's"),
+                (":theme · :lang · :sort", "one setting, one row"),
+                ("?", "this"),
+            ],
+        ),
+    ]
 }
 
 /// The twelve cells of the current year, each carrying whatever is unresolved

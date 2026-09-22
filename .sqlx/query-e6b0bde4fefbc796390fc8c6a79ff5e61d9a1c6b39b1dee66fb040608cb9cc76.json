@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT c.id AS \"id!: i64\", c.entity_id AS \"entity_id!: i64\",\n                  c.entity AS \"entity!: String\", c.action AS \"action!: String\"\n           FROM change c\n           WHERE c.member_id = ?1\n             AND ((c.entity = 'transaction'\n                   AND c.action IN ('create', 'delete', 'restore', 'edit',\n                                    'privacy', 'reorder', 'reattribute'))\n                  OR (c.entity = 'file' AND c.action IN ('file_upload', 'file_delete')))\n             AND c.undo_of IS NULL\n             -- Already undone: its reversal points back at it. Without this,\n             -- `u` twice in a row would toggle the same change forever instead\n             -- of walking back through history.\n             AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id)\n           ORDER BY c.id DESC\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "entity_id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "entity!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "action!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e6b0bde4fefbc796390fc8c6a79ff5e61d9a1c6b39b1dee66fb040608cb9cc76"
+}

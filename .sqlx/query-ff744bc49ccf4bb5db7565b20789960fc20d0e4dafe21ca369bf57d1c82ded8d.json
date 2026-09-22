@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT title AS \"title!: String\", amount_cents AS \"amount_cents: i64\",\n                  date AS \"date: String\", due_date AS \"due_date: String\",\n                  bucket AS \"bucket: String\", visibility AS \"visibility!: String\",\n                  period AS \"period!: String\", rule_id AS \"rule_id: i64\"\n           FROM transactions WHERE id = ?1 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "title!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "date: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "due_date: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "bucket: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 7,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ff744bc49ccf4bb5db7565b20789960fc20d0e4dafe21ca369bf57d1c82ded8d"
+}

@@ -209,6 +209,7 @@ pub async fn pane_with_vault(
             r.window_start       AS "window_start?: String",
             r.amount_in_filename AS "amount_in_filename?: i64",
             r.varies             AS "varies?: i64",
+            r.cadence_months     AS "cadence_months?: i64",
             r.estimate_basis     AS "estimate_basis?: String",
             r.estimate_window    AS "estimate_window?: i64",
             r.amount_cents       AS "rule_amount_cents?: i64",
@@ -338,6 +339,7 @@ pub async fn pane_with_vault(
                 .and_then(Period::parse),
             amount_in_filename: r.amount_in_filename.unwrap_or(0) != 0,
             varies: r.varies.unwrap_or(0) != 0,
+            cadence_months: r.cadence_months,
 
             member_uuid: member.uuid.clone(),
             member_slug: member.slug.clone(),

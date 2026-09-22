@@ -231,6 +231,8 @@ pub struct LedgerRow {
     pub amount_in_filename: bool,
     /// Income whose amount is projected rather than carried forward.
     pub varies: bool,
+    /// Months between occurrences, for the details popup.
+    pub cadence_months: Option<i64>,
 
     // --- member facts needed to compute a path ----------------------------
     pub member_uuid: String,
@@ -524,6 +526,55 @@ impl LedgerRow {
         })
     }
 
+    /// The full sentence behind the mark, for `gd`.
+    pub fn status_sentence(&self, t: &Catalog) -> String {
+        match self.status() {
+            RowStatus::Paid => t.status_paid(),
+            RowStatus::Scheduled => t.status_scheduled(),
+            RowStatus::ScheduledOverdue => t.status_scheduled_overdue(),
+            RowStatus::Pending => t.status_pending(),
+            RowStatus::Plain => t.status_plain(),
+            RowStatus::ManualPaid => t.status_manual_paid(),
+            RowStatus::Expected => t.status_expected(),
+            RowStatus::Received => t.status_received(),
+        }
+        .to_string()
+    }
+
+    /// Only a recurring row has one, which is why this is an `Option` rather
+    /// than a default of "monthly".
+    fn cadence_label(&self, _t: &Catalog) -> Option<String> {
+        self.rule_id?;
+        Some(match self.cadence_months {
+            Some(1) | None => "1".to_string(),
+            Some(n) => n.to_string(),
+        })
+    }
+
+    /// Where this period's receipt would live, file or no file — "where would
+    /// it go" is exactly the question somebody asks when it is missing.
+    fn receipt_path_preview(&self) -> Option<String> {
+        let vault = format!("{}-{}", self.member_uuid, self.member_slug);
+        let tax = receipt_path::Taxonomy {
+            vault: &vault,
+            bucket: self.bucket.as_deref()?,
+            bill_name: self.bill_name.as_deref()?,
+            instance: self.instance.as_deref(),
+        };
+        self.tracked.then(|| {
+            receipt_path::file(
+                &tax,
+                self.period,
+                receipt_path::Kind::Receipt,
+                "pdf",
+                self.amount_in_filename
+                    .then_some(self.amount_cents)
+                    .flatten()
+                    .map(|c| (c, self.ctx.currency)),
+            )
+        })
+    }
+
     /// The rail: only the kinds that exist, in fixed order, with fixed numbers.
     ///
     /// Income has no slot 2 — money arriving is never "scheduled" — so `g2` on
@@ -627,6 +678,21 @@ impl LedgerRow {
 /// methods on the struct, not as logic in the template."* Computing the view
 /// here keeps that literally true, and leaves `row.html` with almost no
 /// decisions left to make.
+/// What `gd` and the hover tooltip show — the long version of a status the
+/// meta line only has room to hint at.
+///
+/// The row's own text stays short (`overdue since 18/07`) because it is
+/// scanned; the sentence belongs next to the Due/Cadence/Receipt fields it
+/// explains, rather than growing the meta line into a paragraph every row
+/// pays for.
+pub struct Details {
+    pub due: Option<String>,
+    pub cadence: Option<String>,
+    pub receipt: Option<String>,
+    pub status: String,
+    pub recurring: bool,
+}
+
 pub struct RowView {
     /// The transaction's id, so a fragment can be addressed for an
     /// out-of-band swap without the template knowing where the row sits.
@@ -669,6 +735,7 @@ pub struct RowView {
 
     pub error: Option<String>,
     pub is_skeleton: bool,
+    pub details: Details,
 }
 
 pub struct FlagView {
@@ -827,6 +894,17 @@ impl LedgerRow {
                 },
             }),
 
+            details: Details {
+                due: self.due_date.map(fmt::date),
+                cadence: self.cadence_label(t),
+                // The computed path, whether or not the file is there yet:
+                // "where would it go" is exactly what somebody asks when it
+                // is missing.
+                receipt: self.receipt_path_preview(),
+                status: self.status_sentence(t),
+                recurring: self.rule_id.is_some(),
+            },
+
             error: match &self.state {
                 RowState::Error { message } => Some(message.clone()),
                 _ => None,
@@ -889,6 +967,7 @@ mod tests {
             manual_paid: false,
             tracked: true,
             instance: None,
+            cadence_months: Some(1),
             total_installments: None,
             spans_period: false,
             window_size: None,

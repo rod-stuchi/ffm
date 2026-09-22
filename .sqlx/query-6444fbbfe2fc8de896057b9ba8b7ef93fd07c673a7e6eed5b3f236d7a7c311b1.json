@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE transactions SET member_id = ?2, sort_key = ?3 WHERE id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6444fbbfe2fc8de896057b9ba8b7ef93fd07c673a7e6eed5b3f236d7a7c311b1"
+}

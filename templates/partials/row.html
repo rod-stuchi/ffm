@@ -4,7 +4,14 @@
 
     The gutter cell is always present. `is-nogut` narrows its track and empties
     it; display:none on a grid child reflows its siblings and crushes the row. -#}
-<div class="row {{ v.classes }}"{% if let Some(r) = v.rule_id %} data-rule-id="{{ r }}"{% endif %}>
+{#- The details travel WITH the row, so `gd` and hover are the same panel
+    over the same facts and cannot drift apart — and neither costs a round
+    trip for something the server already rendered. -#}
+<div class="row {{ v.classes }}"{% if let Some(r) = v.rule_id %} data-rule-id="{{ r }}"{% endif %}
+     data-status="{{ v.details.status }}"
+     {%- if let Some(d) = v.details.due %} data-due="{{ d }}"{% endif %}
+     {%- if let Some(c) = v.details.cadence %} data-cadence="{{ c }}"{% endif %}
+     {%- if let Some(p) = v.details.receipt %} data-receipt="{{ p }}"{% endif %}>
   <div class="gut">{{ v.gutter }}</div>
 
   {%- if v.is_skeleton -%}

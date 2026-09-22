@@ -408,3 +408,48 @@ unresolved-dot = { $n ->
        *[other] { $n } bills overdue with no receipt
     }
 unresolved-here = overdue here
+
+## `e` — editing an occurrence in place
+
+edit-day = Day
+edit-private = Hidden from other members
+edit-saved = saved
+row-reattributed = moved to { $name }
+row-now-private = hidden from the others
+row-now-shared = shared with the household
+reattribute-private-title = Move a hidden row to { $name }?
+reattribute-private-body = They become its owner, so you stop seeing it. Press y to confirm.
+no-pane-that-way = no pane that way
+drafts-parked = { $n ->
+        [one] 1 unsaved draft
+       *[other] { $n } unsaved drafts
+    }
+
+## `gd` — the details popup, and the `P` carousel
+
+details-due = Due
+details-cadence = Cadence
+details-receipt = Receipt
+details-status = Status
+details-none = nothing recurring behind this row
+status-paid = receipt on file
+status-scheduled = scheduled, due date not passed yet
+status-scheduled-overdue = scheduled, due date passed, no receipt yet
+status-pending = nothing scheduled and nothing paid yet
+status-plain = untracked, so there is no filesystem proof either way
+status-manual-paid = ticked by hand — untracked, so there is nothing to prove it
+status-expected = not arrived yet
+status-received = arrived
+
+carousel-open-tab = Open in new tab
+carousel-zoom-reset = Reset zoom
+keymap-title = Keymap
+keymap-close = Close
+details-months = month(s)
+keymap-move = Move
+keymap-act = Act
+keymap-find = Find
+keymap-fold = Fold
+keymap-files = Files
+keymap-undo = Undo
+keymap-type = Type

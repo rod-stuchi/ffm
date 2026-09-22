@@ -1,0 +1,67 @@
+{#- `e` — the focused row opens into its own form, in place.
+
+    Not a modal: the forms outgrew a centred dialog, and a dialog hides the
+    very ledger you are editing. Cancel (Esc) and Save (Enter) sit at the foot
+    of the row, and the rest of the ledger stays exactly where it was. -#}
+<div id="row-{{ id }}">
+  <form class="row is-editing editrow"
+        hx-post="/tx/{{ id }}" hx-target="#row-{{ id }}" hx-swap="outerHTML"
+        {#- A save ends the edit, so the shell has to hear about it: nothing
+            else clears `editing`, and a stale id there means every later
+            cursor move calls parkDraft on a form that is no longer in the
+            DOM. The draft goes too — it was just written. -#}
+        @htmx:after-request="if ($event.detail.successful) {
+            editing = null; delete drafts[{{ id }}]; markDrafts(); }"
+        @keydown.escape.prevent="cancelEdit({{ id }})">
+    <div class="gut"></div>
+    <div class="entry editentry">
+      <div class="fgrid">
+        <label class="f">
+          {#- First, focused and pre-selected: it is the field most edits
+              actually touch, so it should be typed over without a click. -#}
+          <span class="k">{{ t.row_amount() }}</span>
+          <input class="i" name="amount" value="{{ amount }}" inputmode="decimal"
+                 autocomplete="off" x-init="$el.focus(); $el.select()">
+        </label>
+        <label class="f">
+          <span class="k">{{ t.row_title() }}</span>
+          <input class="i" name="title" value="{{ title }}" autocomplete="off" required>
+        </label>
+      </div>
+
+      <div class="fgrid">
+        <label class="f">
+          <span class="k">{{ t.rule_bucket() }}</span>
+          <input class="i" name="bucket" list="buckets-{{ id }}" value="{{ bucket }}"
+                 autocomplete="off">
+          <datalist id="buckets-{{ id }}">
+            {%- for b in buckets %}<option value="{{ b }}">{% endfor %}
+          </datalist>
+        </label>
+        {%- if recurring %}
+        {#- No Day field here at all. A recurring row's due day lives on the
+            rule, so offering a second control for it would leave no rule for
+            which one a future materialized period follows. -#}
+        <div class="f"></div>
+        {%- else %}
+        <label class="f">
+          <span class="k">{{ t.edit_day() }}</span>
+          <input class="i" name="day" value="{{ day }}" inputmode="numeric" maxlength="2">
+        </label>
+        {%- endif %}
+      </div>
+
+      <label class="tog">
+        <input type="checkbox" name="private"{% if private %} checked{% endif %}>
+        <span>{{ t.edit_private() }}</span>
+      </label>
+
+      <div class="editactions">
+        <button class="btn pri" type="submit">{{ t.row_save() }}<kbd>&#9166;</kbd></button>
+        <button class="btn" type="button" @click="cancelEdit({{ id }})">
+          {{ t.row_cancel() }}<kbd>esc</kbd>
+        </button>
+      </div>
+    </div>
+  </form>
+</div>

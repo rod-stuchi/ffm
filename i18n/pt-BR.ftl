@@ -376,3 +376,48 @@ unresolved-dot = { $n ->
        *[other] { $n } contas vencidas sem comprovante
     }
 unresolved-here = vencidas aqui
+
+## `e` — editar a linha
+
+edit-day = Dia
+edit-private = Escondido dos outros membros
+edit-saved = salvo
+row-reattributed = passou para { $name }
+row-now-private = escondido dos outros
+row-now-shared = compartilhado com a casa
+reattribute-private-title = Passar uma linha escondida para { $name }?
+reattribute-private-body = A linha passa a ser dela, então você deixa de vê-la. Aperte y para confirmar.
+no-pane-that-way = não há painel desse lado
+drafts-parked = { $n ->
+        [one] 1 rascunho não salvo
+       *[other] { $n } rascunhos não salvos
+    }
+
+## `gd` e o carrossel `P`
+
+details-due = Vence
+details-cadence = Frequência
+details-receipt = Comprovante
+details-status = Situação
+details-none = nada recorrente por trás desta linha
+status-paid = comprovante arquivado
+status-scheduled = agendado, ainda não venceu
+status-scheduled-overdue = agendado, já venceu e sem comprovante
+status-pending = nada agendado e nada pago ainda
+status-plain = sem acompanhamento, então não há prova nem de um lado nem do outro
+status-manual-paid = marcado à mão — sem acompanhamento, nada comprova
+status-expected = ainda não chegou
+status-received = chegou
+
+carousel-open-tab = Abrir em nova aba
+carousel-zoom-reset = Zerar o zoom
+keymap-title = Atalhos
+keymap-close = Fechar
+details-months = mês(es)
+keymap-move = Mover
+keymap-act = Agir
+keymap-find = Buscar
+keymap-fold = Dobrar
+keymap-files = Arquivos
+keymap-undo = Desfazer
+keymap-type = Digitar

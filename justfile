@@ -97,8 +97,13 @@ db-reset:
 # A household to look at. Content is Brazilian-household Portuguese on purpose
 # — it is what a household typed into its own ledger, not app copy, so it never
 # passes through the translation catalog.
-seed: db
-    sqlite3 {{db_path}} < seeds/household.sql
+#
+# It depends on db-reset, not db: the seed file opens by deleting every table,
+# and `change`/`change_field` carry BEFORE DELETE triggers that RAISE(ABORT) —
+# the log is append-only, on purpose. Starting from an empty database is the
+# same intent with no trigger to fight and no second copy of that DDL to drift.
+seed: db-reset
+    sqlite3 -bail {{db_path}} < seeds/household.sql
     @echo "✓ seeded {{db_path}}"
 
 # Refresh .sqlx/ — the offline copy of every checked query's result shape, so a

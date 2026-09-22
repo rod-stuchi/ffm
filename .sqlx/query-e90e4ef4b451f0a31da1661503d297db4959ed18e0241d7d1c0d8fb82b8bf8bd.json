@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT field AS \"field!: String\", old_value AS \"old: String\",\n                      new_value AS \"new: String\", kind AS \"kind!: String\"\n               FROM change_field WHERE change_id = ?1\n                 -- `sort_key` is recorded so an undo can put a re-attributed\n                 -- row back where it was, not for a reader: a fractional key\n                 -- means nothing to anyone, and showing it would make every\n                 -- re-attribution read as a two-field change.\n                 AND field <> 'sort_key'\n               ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "name": "field!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "old: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "new: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "e90e4ef4b451f0a31da1661503d297db4959ed18e0241d7d1c0d8fb82b8bf8bd"
+}

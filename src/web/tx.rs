@@ -291,6 +291,7 @@ async fn deleted_row(
         window_start: None,
         amount_in_filename: false,
         varies: false,
+        cadence_months: None,
         member_uuid: row.uuid,
         member_slug: row.slug,
         prev_amount_cents: None,
@@ -463,7 +464,15 @@ pub async fn move_row(
         return say_only(t.error_not_written(), true);
     }
 
-    match tx::reorder(&st.pool, Actor::User(auth.viewer.member_id), id, form.delta).await {
+    match tx::reorder(
+        &st.pool,
+        Actor::User(auth.viewer.member_id),
+        id,
+        form.delta,
+        None,
+    )
+    .await
+    {
         Ok(true) => match tx::one(&st.pool, id).await {
             Ok(Some((member_id, period, _))) => {
                 let moved = t.rows_moved(
@@ -520,6 +529,30 @@ pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
             Some(u.entity_id),
         )
     };
+
+    // Undoing a re-attribution moves the row between two panes, and a single
+    // row fragment could only ever tell half of that — the same reason the
+    // re-attribution itself answers with a refresh rather than a row.
+    if ok && u.action == "reattribute" {
+        let mut res = say(
+            (StatusCode::OK, HeaderMap::new(), String::new()).into_response(),
+            t.undone(),
+            false,
+        );
+        res.headers_mut()
+            .insert("HX-Refresh", axum::http::HeaderValue::from_static("true"));
+        return res;
+    }
+
+    // Undoing a reorder changes where a row sits among its neighbours, which
+    // no single-row fragment can express — the whole pane comes back, exactly
+    // as `J`/`K` themselves answer.
+    if ok
+        && u.action == "reorder"
+        && let Ok(Some((member_id, period, _))) = tx::one(&st.pool, u.entity_id).await
+    {
+        return pane_fragment(&st, &auth, member_id, period, t.undone()).await;
+    }
 
     match (ok, row_id) {
         (true, Some(id)) => match render_row(&st, &auth, id, true).await {
@@ -629,5 +662,229 @@ async fn may_touch(st: &AppState, auth: &Auth, id: i64) -> bool {
     match row {
         Ok(Some(r)) => r.visibility != "private" || auth.viewer.sees_private_of(r.member_id),
         _ => false,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// `e` — editing an occurrence in place
+// ---------------------------------------------------------------------------
+
+#[derive(Template)]
+#[template(path = "partials/edit_row.html")]
+struct EditRow {
+    t: Catalog,
+    id: i64,
+    title: String,
+    amount: String,
+    day: String,
+    bucket: String,
+    buckets: Vec<String>,
+    private: bool,
+    /// A recurring row gets no Day field: its due day lives on the rule.
+    recurring: bool,
+}
+
+/// Opens the row into its own form. The row is replaced rather than covered —
+/// the rest of the ledger does not move.
+pub async fn edit_form(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
+    let t = auth.catalog();
+    if !may_touch(&st, &auth, id).await {
+        return say_only(t.error_not_written(), true);
+    }
+
+    let row = sqlx::query!(
+        r#"SELECT title AS "title!: String", amount_cents AS "amount_cents: i64",
+                  date AS "date: String", bucket AS "bucket: String",
+                  visibility AS "visibility!: String", rule_id AS "rule_id: i64"
+           FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
+        id
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .ok()
+    .flatten();
+
+    let Some(row) = row else {
+        return say_only(t.error_not_written(), true);
+    };
+
+    Html(EditRow {
+        id,
+        // Shown the way the amount field expects it back, not the way the
+        // ledger displays it: the field takes digits and a separator, and
+        // round-tripping a rendered "R$ 343,62" through it is how a currency
+        // symbol ends up in a number.
+        amount: row
+            .amount_cents
+            .map(|c| format!("{},{:02}", c / 100, (c % 100).abs()))
+            .unwrap_or_default(),
+        title: row.title,
+        day: row
+            .date
+            .as_deref()
+            .and_then(|d| d.get(8..10))
+            .unwrap_or("")
+            .trim_start_matches('0')
+            .to_string(),
+        bucket: row.bucket.unwrap_or_default(),
+        buckets: crate::db::rules::buckets(&st.pool, auth.viewer.member_id)
+            .await
+            .unwrap_or_default(),
+        private: row.visibility == "private",
+        recurring: row.rule_id.is_some(),
+        t,
+    })
+    .into_response()
+}
+
+#[derive(Deserialize)]
+pub struct EditForm {
+    title: String,
+    #[serde(default)]
+    amount: String,
+    #[serde(default)]
+    day: String,
+    #[serde(default)]
+    bucket: String,
+    #[serde(default)]
+    private: Option<String>,
+}
+
+pub async fn save_edit(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path(id): Path<i64>,
+    Form(form): Form<EditForm>,
+) -> Response {
+    let t = auth.catalog();
+    if !may_touch(&st, &auth, id).await {
+        return say_only(t.error_not_written(), true);
+    }
+    let title = form.title.trim();
+    if title.is_empty() {
+        return say_only(&t.field_required(t.row_title()), true);
+    }
+    let bucket = form.bucket.trim();
+
+    let ok = tx::edit(
+        &st.pool,
+        Actor::User(auth.viewer.member_id),
+        id,
+        tx::EditFields {
+            title,
+            amount: Cents::parse(&form.amount),
+            day: form
+                .day
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .filter(|d| (1..=31).contains(d)),
+            bucket: (!bucket.is_empty()).then_some(bucket),
+            visibility: if form.private.is_some() {
+                Visibility::Private
+            } else {
+                Visibility::Household
+            },
+        },
+        None,
+    )
+    .await;
+
+    match ok {
+        Ok(true) => match tx::one(&st.pool, id).await {
+            Ok(Some((member_id, period, _))) => {
+                row_fragment(&st, &auth, id, member_id, period, t.edit_saved()).await
+            }
+            _ => say_only(t.error_not_written(), true),
+        },
+        _ => say_only(t.error_not_written(), true),
+    }
+}
+
+/// One row, read-only — what Cancel swaps back in.
+pub async fn one_row(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
+    match render_row(&st, &auth, id, false).await {
+        Ok(f) => Html(f).into_response(),
+        Err(e) => say_only(e, true),
+    }
+}
+
+/// `p` — toggle private.
+pub async fn privacy(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
+    let t = auth.catalog();
+    if !may_touch(&st, &auth, id).await {
+        return say_only(t.error_not_written(), true);
+    }
+    match tx::toggle_privacy(&st.pool, Actor::User(auth.viewer.member_id), id, None).await {
+        Ok(Some(now_private)) => {
+            let msg = if now_private {
+                t.row_now_private()
+            } else {
+                t.row_now_shared()
+            };
+            match tx::one(&st.pool, id).await {
+                Ok(Some((member_id, period, _))) => {
+                    row_fragment(&st, &auth, id, member_id, period, msg).await
+                }
+                _ => say_only(t.error_not_written(), true),
+            }
+        }
+        _ => say_only(t.error_not_written(), true),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct MoveMemberForm {
+    to: i64,
+}
+
+/// `Ctrl-H` / `Ctrl-L` — re-attribute to another member's pane.
+///
+/// Fully undoable, and the statusline says where it went — which is why an
+/// ordinary row does not confirm. A **private** row does: handing a hidden
+/// transaction to somebody makes *them* its owner, so the person who hid it
+/// stops seeing it, and that is invisible in the gesture.
+pub async fn reattribute(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path(id): Path<i64>,
+    Form(form): Form<MoveMemberForm>,
+) -> Response {
+    let t = auth.catalog();
+    if !may_touch(&st, &auth, id).await {
+        return say_only(t.error_not_written(), true);
+    }
+
+    let to_name = ledger::members(&st.pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .find(|m| m.id == form.to)
+        .map(|m| m.name)
+        .unwrap_or_default();
+
+    match tx::reattribute(
+        &st.pool,
+        Actor::User(auth.viewer.member_id),
+        id,
+        form.to,
+        None,
+    )
+    .await
+    {
+        Ok(true) => match tx::one(&st.pool, id).await {
+            Ok(Some((_, period, _))) => {
+                // Both panes changed, so the whole month comes back rather
+                // than one row: the row left one pane and joined another, and
+                // a single fragment could only tell half of that.
+                let msg = t.row_reattributed(&to_name);
+                let mut res = pane_fragment(&st, &auth, form.to, period, &msg).await;
+                res.headers_mut()
+                    .insert("HX-Refresh", axum::http::HeaderValue::from_static("true"));
+                res
+            }
+            _ => say_only(t.error_not_written(), true),
+        },
+        _ => say_only(t.error_not_written(), true),
     }
 }

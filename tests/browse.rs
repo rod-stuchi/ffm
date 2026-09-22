@@ -194,7 +194,11 @@ async fn a_move_writes_one_row_and_records_where_it_went() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert!(tx::reorder(&pool, Actor::User(me), first, 2).await.unwrap());
+    assert!(
+        tx::reorder(&pool, Actor::User(me), first, 2, None)
+            .await
+            .unwrap()
+    );
 
     assert_eq!(
         titles(&pool, me, Sort::Manual).await,
@@ -240,11 +244,15 @@ async fn moving_past_either_end_is_a_quiet_no_op() {
 
     // `K` on the top row should do nothing, quietly — not fail.
     assert!(
-        !tx::reorder(&pool, Actor::User(me), first, -1)
+        !tx::reorder(&pool, Actor::User(me), first, -1, None)
             .await
             .unwrap()
     );
-    assert!(!tx::reorder(&pool, Actor::User(me), first, 0).await.unwrap());
+    assert!(
+        !tx::reorder(&pool, Actor::User(me), first, 0, None)
+            .await
+            .unwrap()
+    );
     assert_eq!(titles(&pool, me, Sort::Manual).await[0], "Energia");
 
     let reorders: i64 = sqlx::query_scalar("SELECT count(*) FROM change WHERE action = 'reorder'")

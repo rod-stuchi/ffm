@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT visibility AS \"visibility!: String\", period AS \"period!: String\",\n                  rule_id AS \"rule_id: i64\"\n           FROM transactions WHERE id = ?1 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "visibility!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "27d6e7e49f6cb77063d9b5a047aef1b4855cd78b89bdb4bfaea4529fa2ca4c7b"
+}

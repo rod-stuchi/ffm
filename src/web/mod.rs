@@ -46,6 +46,11 @@ pub fn router(state: AppState) -> Router {
         .route("/tx/{id}/delete", post(tx::delete))
         .route("/undo", post(tx::undo))
         .route("/tx/{id}/move", post(tx::move_row))
+        // `e` — the row opens into its own form, in place.
+        .route("/tx/{id}", get(tx::one_row).post(tx::save_edit))
+        .route("/tx/{id}/edit", get(tx::edit_form))
+        .route("/tx/{id}/privacy", post(tx::privacy))
+        .route("/tx/{id}/member", post(tx::reattribute))
         // Files. Three distinct actions rather than one upload plus a
         // question: each kind has its own fixed name on disk and its own
         // effect on state.

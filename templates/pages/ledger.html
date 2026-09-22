@@ -34,13 +34,16 @@
   {%- endif %}
   {%- if layout_panes == "tabs" %}
   .pane:not(.is-focus) { display: none; }
+  .tabbar { display: flex; }
   {%- else if layout_panes == "auto" %}
   @media (max-width: {{ min_split }}px) {
     /* Below this width there is no room for two panes side by side, so the
        unfocused ones step aside entirely — the same thing `tabs` does, decided
-       by the viewport rather than by a setting. */
+       by the viewport rather than by a setting. The tab bar appears from the
+       same rule, so the two can never disagree about which layout is on. */
     .pane:not(.is-focus) { display: none; }
     .pane { max-width: none; }
+    .tabbar { display: flex; }
   }
   {%- endif %}
 </style>
@@ -100,6 +103,26 @@
     <p>Run <code>just seed</code> to put one in the database.</p>
   </div>
   {%- else %}
+  {#- The tab bar exists in every layout and is *shown* by the same rule that
+      collapses the panes — never by a second decision. `auto` resolves in CSS
+      (see the media query above), so anything that had to agree with it in JS
+      would be wrong on first paint and on every resize.
+
+      The balance is in the tab on purpose: tabs mode's real cost is losing
+      sight of the other pane in a shared ledger, and the balance buys most of
+      that back. It stays at mobile width even when the `gt · gT` hint goes. -#}
+  <nav class="tabbar">
+    {%- for p in panes %}
+    <button class="tab" type="button"
+            :class="{ 'is-focus': pane === {{ loop.index0 }} }"
+            @click="pane = {{ loop.index0 }}; row = 0; paint()">
+      <b>{{ p.name }}</b>
+      <span class="tbal {% if p.totals.negative %}neg{% else %}pos{% endif %}"
+            id="tbal-{{ p.id }}">{% if p.totals.negative %}−{% endif %}{{ p.totals.balance }}</span>
+    </button>
+    {%- endfor %}
+    <span class="tabhint"><kbd>gt</kbd> · <kbd>gT</kbd></span>
+  </nav>
   <main class="stage">
     {%- for p in panes %}
     <section class="pane" :class="{ 'is-focus': pane === {{ loop.index0 }} }" @click="pane = {{ loop.index0 }}">
@@ -238,6 +261,106 @@
            placeholder="{{ t.command_placeholder() }}" autocomplete="off" spellcheck="false">
   </div>
 
+  {#- `gd`, and the hover tooltip: one panel over one set of facts, anchored
+      to the focused row when there is no pointer to anchor to. Dismissed by
+      the very next keypress, of any kind. -#}
+  <div class="tip" x-show="tip" x-cloak :style="tipStyle">
+    <template x-if="tip">
+      <div>
+        <div class="tiprow"><b>{{ t.details_status() }}</b><span x-text="tip.status"></span></div>
+        <template x-if="tip.due">
+          <div class="tiprow"><b>{{ t.details_due() }}</b><span x-text="tip.due"></span></div>
+        </template>
+        <template x-if="tip.cadence">
+          <div class="tiprow"><b>{{ t.details_cadence() }}</b>
+            <span x-text="tip.cadence + ' ' + monthsWord"></span></div>
+        </template>
+        <template x-if="tip.receipt">
+          <div class="tiprow"><b>{{ t.details_receipt() }}</b>
+            <span class="mono" x-text="tip.receipt"></span></div>
+        </template>
+      </div>
+    </template>
+  </div>
+
+  {#- `P` — full-viewport on purpose, and the ONE modal sized that way. The
+      job is reading a boleto's barcode digits or holding a phone up to its QR
+      code, and a 560px dialog cannot do either. -#}
+  <div class="carousel" x-show="carousel" x-cloak @click.self="carousel = null">
+    <template x-if="carousel">
+      <div class="cstage">
+        <div class="czoom">
+          <button class="btn" type="button" @click="zoom = Math.max(0.5, zoom - 0.25)">−</button>
+          <button class="btn" type="button" @click="zoom = 1" title="{{ t.carousel_zoom_reset() }}">0</button>
+          <button class="btn" type="button" @click="zoom = Math.min(4, zoom + 0.25)">+</button>
+        </div>
+        <div class="cfile" :style="'transform: scale(' + zoom + ')'">
+          <div class="cicon" x-html="carousel.current.svg"></div>
+          <b x-text="carousel.current.label"></b>
+          <span class="mono cpath" x-text="carousel.current.path"></span>
+          <template x-if="carousel.current.page">
+            <span class="cpage" :class="{ 'is-warn': carousel.current.warn }"
+                  x-text="carousel.current.page"></span>
+          </template>
+        </div>
+        <div class="cnav">
+          <button class="btn" type="button" :disabled="carousel.at === 0"
+                  @click="stepFile(-1)">‹</button>
+          <template x-for="(f, i) in carousel.files" :key="f.kind">
+            <button class="btn" type="button" :class="{ pri: i === carousel.at }"
+                    @click="carousel.at = i; zoom = 1">
+              <span x-text="f.number"></span>
+            </button>
+          </template>
+          <button class="btn" type="button" :disabled="carousel.at === carousel.files.length - 1"
+                  @click="stepFile(1)">›</button>
+          <a class="btn pri" :href="carousel.current.href" target="_blank" rel="noopener">
+            {{ t.carousel_open_tab() }}
+          </a>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  {#- `?` opens the keymap, not reverse search. `N` already walks a `/` search
+      backwards, and `?`-as-help is the one key a non-Vim user will try — half
+      this app's household does not use Vim. -#}
+  <div class="modal" x-show="keymap" x-cloak @click.self="keymap = false">
+    <div class="card keymapcard">
+      <div class="ch"><h1>{{ t.keymap_title() }}</h1></div>
+      <div class="cb keymapbody">
+        {%- for section in keymap %}
+        <div class="sect">{{ section.0 }}</div>
+        <div class="kmap">
+          {%- for row in section.1 %}
+          <kbd>{{ row.0 }}</kbd><span>{{ row.1 }}</span>
+          {%- endfor %}
+        </div>
+        {%- endfor %}
+      </div>
+      <div class="cf">
+        <button class="btn" type="button" @click="keymap = false">{{ t.keymap_close() }} <kbd>esc</kbd></button>
+      </div>
+    </div>
+  </div>
+
+  {#- Re-attributing an ordinary row does NOT confirm: it is fully undoable
+      and the statusline says where it went. A PRIVATE row does, because
+      handing it over makes somebody else its owner and the person who hid it
+      stops seeing it — invisible in the gesture, which is exactly the test. -#}
+  <div class="modal" x-show="movingPrivate" x-cloak @click.self="movingPrivate = null">
+    <div class="card" style="max-width:min(460px,100%)">
+      <div class="ch"><h1 x-text="reattributeTitle()"></h1></div>
+      <div class="cb">
+        <p class="hint" style="margin-top:0">{{ t.reattribute_private_body() }}</p>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="movingPrivate = null">{{ t.row_cancel() }} <kbd>esc</kbd></button>
+          <button class="btn" type="button" @click="doReattribute()">{{ t.members_role_member() }} <kbd>y</kbd></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   {#- The same message channel the pre-auth pages use, so there is one way the
       app talks to you on both sides of the login. -#}
   <div class="status">
@@ -255,6 +378,13 @@ function ledger() {
     adding: null,
     kind: 'out',
     confirming: null,
+    movingPrivate: null,
+    tip: null,
+    tipStyle: '',
+    carousel: null,
+    zoom: 1,
+    keymap: false,
+    monthsWord: {{ months_word|json|safe }},
     attaching: null,
     commanding: false,
     logFor: null,
@@ -262,6 +392,15 @@ function ledger() {
     // and its subtotal, so folding shows or hides what is in the DOM. That is
     // exactly the division of responsibility this app draws.
     folds: {},
+    // Parked drafts, keyed by row id. They live HERE — on the shell, outside
+    // every hx-target — because an HTMX swap destroys the Alpine state inside
+    // it, and a draft that vanished with the row it belonged to would leave
+    // nothing to recover. Several can be parked at once, which is why this is
+    // a map rather than one slot.
+    drafts: {},
+    editing: null,
+    selected: {},
+    count: '',
     search: '',
     searching: false,
     matches: [],
@@ -274,6 +413,12 @@ function ledger() {
     pending: '',
     notARule: {{ not_a_rule|json|safe }},
     notACommand: {{ not_a_command|json|safe }},
+    unsavedTag: {{ unsaved_tag|json|safe }},
+    draftsParked: {{ drafts_parked|json|safe }},
+    noPaneThatWay: {{ no_pane_that_way|json|safe }},
+    reattributeTitleTemplate: {{ reattribute_title|json|safe }},
+    detailsNone: {{ details_none|json|safe }},
+    noFiles: {{ no_files|json|safe }},
     noFile: {
       barcode: {{ no_bill|json|safe }},
       scheduled: {{ no_scheduled|json|safe }},
@@ -294,20 +439,28 @@ function ledger() {
     },
 
     paint() {
+      // The cursor-left-the-row checks come FIRST, before the empty-pane
+      // return below: moving to a pane with no rows in it is exactly when a
+      // draft would otherwise be stranded, and it is not a rare case in a
+      // household where one person has nothing this month.
+      const focused = this.focusedId();
+      if (this.editing && this.editing !== focused) {
+        this.parkDraft(this.editing);
+      }
+      // The log pane closes when the cursor leaves the row it is about — one
+      // check in the render loop, the same one that parks a draft. A pane
+      // still showing the previous row's history is worse than no pane.
+      if (this.logFor && this.logFor !== focused) {
+        this.logFor = null;
+        this.closePane();
+      }
+
       document.querySelectorAll('.row.is-focus').forEach(r => r.classList.remove('is-focus'));
       const rows = this.rows();
       if (!rows.length) return;
       this.row = Math.max(0, Math.min(this.row, rows.length - 1));
       rows[this.row].classList.add('is-focus');
       rows[this.row].scrollIntoView({ block: 'nearest' });
-      // The log pane closes when the cursor leaves the row it is about — one
-      // check in the render loop, the same one that parks an open draft. A
-      // pane still showing the previous row's history while the cursor has
-      // moved on is worse than no pane.
-      if (this.logFor && this.logFor !== this.focusedId()) {
-        this.logFor = null;
-        this.closePane();
-      }
     },
 
     focusedId() {
@@ -327,13 +480,39 @@ function ledger() {
       // it, or the whole keymap dies silently on the first such event.
       const el = e.target instanceof Element ? e.target : null;
       const typing = !!el && el.matches('input, textarea, select');
+      // Any keypress dismisses a details popup — the same way any hover
+      // artifact goes away — before that key does whatever else it does.
+      if (this.tip) { this.tip = null; }
+
+      if (this.carousel) { e.preventDefault(); this.carouselKey(e.key); return; }
+      if (this.keymap) {
+        if (e.key === 'Escape' || e.key === '?') { e.preventDefault(); this.keymap = false; }
+        return;
+      }
       if (this.confirming) {
+        // The only "yes" is an explicit `y`. Enter is deliberately unbound in
+        // here so it can never become an accidental way to confirm.
         if (e.key === 'y') { e.preventDefault(); this.doDelete(); }
         if (e.key === 'Escape') { e.preventDefault(); this.confirming = null; }
         return;
       }
+      if (this.movingPrivate) {
+        if (e.key === 'y') { e.preventDefault(); this.doReattribute(); }
+        if (e.key === 'Escape') { e.preventDefault(); this.movingPrivate = null; }
+        return;
+      }
       if (typing) {
         if (e.key === 'Escape') { this.adding = null; el.blur(); }
+        return;
+      }
+      // Ctrl-H / Ctrl-L re-attribute. They are deliberately NOT J/K: reorder
+      // is cosmetic and affects nobody's totals, while re-attribution moves
+      // money between two people's INs and OUTs and changes who owns the row.
+      // Same-shaped gesture, very different blast radius — they must not share
+      // a keystroke you can overshoot into.
+      if (e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'h' || e.key === 'l')) {
+        e.preventDefault();
+        this.reattribute(e.key === 'l' ? 1 : -1);
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -342,9 +521,31 @@ function ledger() {
       const buffer = this.pending;
       this.pending = '';
 
-      if (k === 'j') { this.row++; this.paint(); }
-      else if (k === 'k') { this.row--; this.paint(); }
-      else if (k === 'g') { this.pending = 'g'; }
+      // A count prefixes a motion: `5j`, `3J`. Typed digits accumulate until
+      // something uses them, and a leading 0 is not a count — it is `0`, which
+      // this app does not bind, so it simply does nothing.
+      //
+      // NOT while the `g` prefix is armed: there the digit is the whole
+      // binding (`g1` is the bill, not "one g"), so a count branch that ran
+      // first would swallow it and g1/g2/g3 could never fire.
+      if (buffer !== 'g' && (/^[1-9]$/.test(k) || (this.count && k === '0'))) {
+        this.count += k;
+        e.preventDefault();
+        return;
+      }
+      // Arming the prefix must NOT consume a pending count, or `2gt` loses its
+      // 2 on the way to the `t` that wanted it.
+      if (k === 'g' && buffer !== 'g') {
+        this.pending = 'g';
+        e.preventDefault();
+        return;
+      }
+      const n = parseInt(this.count || '1', 10);
+      this.count = '';
+
+      if (k === 'j') { this.row += n; this.paint(); }
+      else if (k === 'k') { this.row -= n; this.paint(); }
+      else if (buffer === 'g' && k === 'g') { this.row = 0; this.paint(); }
       // g1 / g2 / g3 — a genuine extension of the g-prefix "goto" vocabulary
       // already in use (gg, gt), with numbering fixed by KIND so g1 means the
       // bill on every row in the ledger.
@@ -352,7 +553,15 @@ function ledger() {
       // `gl` — "go to log", a genuine extension of the g-prefix vocabulary
       // already in use rather than a new pattern.
       else if (buffer === 'g' && k === 'l') { this.openLog(); }
+      else if (buffer === 'g' && k === 'd') { this.showDetails(); }
+      else if (k === 'P') { this.openCarousel(); }
+      else if (k === '?') { this.keymap = true; }
       else if (k === 'G') { this.row = this.rows().length - 1; this.paint(); }
+      // `gt` / `gT` cycle the member tabs, wrapping — and a count jumps
+      // straight to that tab (`2gt`), which is why the count is read here
+      // rather than treated as a repeat. H/L keep working unchanged, so
+      // nothing is relearned when the layout flips underneath you.
+      else if (buffer === 'g' && (k === 't' || k === 'T')) { this.gotoTab(k === 't' ? 1 : -1, n); }
       else if (k === 'H') { this.pane = Math.max(0, this.pane - 1); this.row = 0; this.paint(); }
       else if (k === 'L') { this.pane = Math.min(document.querySelectorAll('.pane').length - 1, this.pane + 1); this.row = 0; this.paint(); }
       else if (k === 'a' || k === 'i') { this.open(k === 'a' ? 'out' : 'in'); }
@@ -361,6 +570,9 @@ function ledger() {
       // E edits the rule behind it.
       else if (k === 'A' || k === 'I') { this.newRule(k === 'A' ? 'out' : 'in'); }
       else if (k === 'E') { this.editRule(); }
+      else if (k === 'e') { this.editRow(); }
+      else if (k === 'p') { this.togglePrivate(); }
+      else if (k === 'x') { this.toggleSelected(); }
       else if (k === 'd') { if (buffer === 'd') { this.askDelete(); } else { this.pending = 'd'; } }
       else if (k === 'u') { this.undo(); }
       else if (k === ':') { this.openCommand(); }
@@ -371,10 +583,12 @@ function ledger() {
       else if (buffer === 'z' && ['a', 'o', 'c'].includes(k)) { this.fold(k); }
       else if (buffer === 'z' && k === 'R') { this.allFolds(false); }
       else if (buffer === 'z' && k === 'M') { this.allFolds(true); }
-      else if (k === 'J') { this.move(1); }
-      else if (k === 'K') { this.move(-1); }
+      else if (k === 'J') { this.move(n); }
+      else if (k === 'K') { this.move(-n); }
       else if (k === 'Escape') {
         this.adding = null; this.closeRule(); this.closePane(); this.clearSearch();
+        // Esc clears the count, the buffer and the selection too.
+        this.count = ''; this.pending = ''; this.selected = {}; this.paintSelection();
       }
       else return;
       e.preventDefault();
@@ -413,6 +627,233 @@ function ledger() {
     },
 
     closeRule() { document.querySelector('#rulepane')?.remove(); },
+
+    // --- gd, P, ? ---------------------------------------------------------
+
+    /// `gd` is the hover tooltip with no mouse involved: the same panel over
+    /// the same facts, anchored to the focused row because there is no pointer
+    /// position to anchor to.
+    showDetails() {
+      const row = this.rows()[this.row];
+      if (!row) return;
+      if (!row.dataset.cadence && !row.dataset.receipt && !row.dataset.due) {
+        this.say(this.detailsNone, true);
+        return;
+      }
+      const r = row.getBoundingClientRect();
+      this.tip = {
+        status: row.dataset.status,
+        due: row.dataset.due,
+        cadence: row.dataset.cadence,
+        receipt: row.dataset.receipt,
+      };
+      this.tipStyle = 'top:' + (r.bottom + 6) + 'px; left:' + (r.left + 40) + 'px';
+      // Dismissed by the very next keypress of ANY kind — the same way any
+      // hover artifact goes away.
+      this.tipSticky = true;
+    },
+
+    /// `P`. A row with zero files refuses outright rather than opening an
+    /// empty carousel with nothing to look at.
+    openCarousel() {
+      const row = this.rows()[this.row];
+      if (!row) return;
+      const files = Array.from(row.querySelectorAll('.fbadge[href]')).map(a => ({
+        kind: a.getAttribute('href').split('/').pop(),
+        number: a.querySelector('kbd')?.textContent || '',
+        label: a.querySelector('.flabel')?.textContent || '',
+        path: a.getAttribute('title') || '',
+        href: a.getAttribute('href'),
+        svg: a.querySelector('.ficon')?.innerHTML || '',
+        page: a.querySelector('.flabel')?.textContent.includes('p.')
+          ? a.querySelector('.flabel').textContent : '',
+        warn: a.classList.contains('is-warn'),
+      }));
+      if (!files.length) { this.say(this.noFiles, true); return; }
+      this.zoom = 1;
+      this.carousel = {
+        files,
+        at: 0,
+        get current() { return this.files[this.at]; },
+      };
+    },
+
+    /// Clamped at either end rather than wrapping: the first file's previous
+    /// and the last file's next are both visibly disabled.
+    ///
+    /// NOT `step`: that is already the search's next-match, and Alpine merges
+    /// data and methods into one object — the second would silently replace
+    /// the first, and `n` would start moving through files.
+    stepFile(dir) {
+      if (!this.carousel) return;
+      const next = this.carousel.at + dir;
+      if (next < 0 || next >= this.carousel.files.length) return;
+      this.carousel.at = next;
+      // Each file starts back at 100%: carrying a zoom level over to an
+      // unrelated file is a surprise, not a convenience.
+      this.zoom = 1;
+    },
+
+    carouselKey(k) {
+      if (['1', '2', '3'].includes(k)) {
+        const i = this.carousel.files.findIndex(f => f.number === k);
+        // Pressing a number for a kind that is not on this row is the same
+        // no-op-with-a-message g1/g2/g3 already give.
+        if (i < 0) { this.say(this.noFile[{1:'barcode',2:'scheduled',3:'receipt'}[k]], true); return; }
+        this.carousel.at = i;
+        this.zoom = 1;
+      } else if (k === 'h') this.stepFile(-1);
+      else if (k === 'l') this.stepFile(1);
+      else if (k === '+' || k === '=') this.zoom = Math.min(4, this.zoom + 0.25);
+      else if (k === '-') this.zoom = Math.max(0.5, this.zoom - 0.25);
+      else if (k === '0') this.zoom = 1;
+      else if (k === 'Escape') this.carousel = null;
+    },
+
+    /// `gt` / `gT`. With no count it is the next/previous tab, wrapping; with
+    /// one it is that tab by number, which is what `2gt` means in Vim.
+    gotoTab(dir, n) {
+      const panes = document.querySelectorAll('.pane').length;
+      if (!panes) return;
+      this.pane = n > 1
+        ? Math.min(panes, n) - 1
+        : (this.pane + dir + panes) % panes;
+      this.row = 0;
+      this.paint();
+    },
+
+    // --- editing a row in place -------------------------------------------
+
+    /// `e`. A row with a parked draft resumes it exactly as it was left.
+    editRow() {
+      const id = this.focusedId();
+      if (!id) return;
+      this.editing = id;
+      htmx.ajax('GET', '/tx/' + id + '/edit', {
+        target: '#row-' + id, swap: 'outerHTML',
+      }).then(() => this.restoreDraft(id));
+    },
+
+    /// Leaving a row mid-edit collapses it back to read-only. An UNCHANGED
+    /// draft just goes away; a changed one stays marked on the row until it is
+    /// saved or discarded, and the statusline counts them.
+    parkDraft(id) {
+      const form = document.querySelector('#row-' + id + ' form');
+      // No form left to read means the edit already ended some other way —
+      // a save swapped it out. Clear the id rather than leaving it stuck,
+      // or every later cursor move re-enters this no-op.
+      if (!form) { this.editing = null; return; }
+      const values = {};
+      let changed = false;
+      form.querySelectorAll('[name]').forEach(el => {
+        values[el.name] = el.type === 'checkbox' ? el.checked : el.value;
+        if (el.type === 'checkbox' ? el.checked !== el.defaultChecked
+                                   : el.value !== el.defaultValue) changed = true;
+      });
+      if (changed) this.drafts[id] = values; else delete this.drafts[id];
+      this.editing = null;
+      htmx.ajax('GET', '/tx/' + id, { target: '#row-' + id, swap: 'outerHTML' })
+        .then(() => { this.markDrafts(); this.paint(); });
+    },
+
+    restoreDraft(id) {
+      const values = this.drafts[id];
+      if (!values) return;
+      const form = document.querySelector('#row-' + id + ' form');
+      if (!form) return;
+      Object.entries(values).forEach(([name, value]) => {
+        const el = form.querySelector('[name="' + name + '"]');
+        if (!el) return;
+        if (el.type === 'checkbox') el.checked = value; else el.value = value;
+      });
+    },
+
+    /// The mark itself: a dashed border and a tag saying how to pick it back
+    /// up. Applied after every swap, because a swap is exactly when the mark
+    /// would otherwise be lost.
+    markDrafts() {
+      document.querySelectorAll('.row.has-draft').forEach(r => {
+        r.classList.remove('has-draft');
+        r.querySelector('.drafttag')?.remove();
+      });
+      Object.keys(this.drafts).forEach(id => {
+        const row = document.querySelector('#row-' + id + ' .row');
+        if (!row) return;
+        row.classList.add('has-draft');
+        const meta = row.querySelector('.meta');
+        if (meta && !meta.querySelector('.drafttag')) {
+          const tag = document.createElement('span');
+          tag.className = 'drafttag';
+          tag.textContent = this.unsavedTag;
+          meta.appendChild(tag);
+        }
+      });
+      const n = Object.keys(this.drafts).length;
+      if (n) this.say(this.draftsParked.replace('{n}', n), false);
+    },
+
+    cancelEdit(id) {
+      // Esc discards: nothing was written, and nothing is kept.
+      delete this.drafts[id];
+      this.editing = null;
+      htmx.ajax('GET', '/tx/' + id, { target: '#row-' + id, swap: 'outerHTML' })
+        .then(() => { this.markDrafts(); this.paint(); });
+    },
+
+    togglePrivate() {
+      const id = this.focusedId();
+      if (!id) return;
+      htmx.ajax('POST', '/tx/' + id + '/privacy', {
+        target: '#row-' + id, swap: 'outerHTML',
+      });
+    },
+
+    /// `x` — a marker for a batch operation, never a delete.
+    toggleSelected() {
+      const id = this.focusedId();
+      if (!id) return;
+      if (this.selected[id]) delete this.selected[id]; else this.selected[id] = true;
+      this.paintSelection();
+    },
+
+    paintSelection() {
+      document.querySelectorAll('.row.is-selected').forEach(r => r.classList.remove('is-selected'));
+      Object.keys(this.selected).forEach(id => {
+        document.querySelector('#row-' + id + ' .row')?.classList.add('is-selected');
+      });
+    },
+
+    /// Ctrl-H / Ctrl-L. A private row confirms first: handing a hidden
+    /// transaction to somebody makes THEM its owner, so the person who hid it
+    /// stops seeing it — and that is invisible in the gesture.
+    reattribute(dir) {
+      const id = this.focusedId();
+      if (!id) return;
+      const panes = document.querySelectorAll('.pane');
+      const target = panes[this.pane + dir];
+      if (!target) { this.say(this.noPaneThatWay, true); return; }
+      const to = target.querySelector('.rows').id.slice(5);
+      const row = this.rows()[this.row];
+      const isPrivate = !!row?.querySelector('.mflag.flag-private.is-on');
+
+      if (isPrivate) {
+        this.movingPrivate = { id, to, name: target.querySelector('b').textContent };
+        return;
+      }
+      this.doMove(id, to);
+    },
+
+    doReattribute() {
+      const m = this.movingPrivate;
+      this.movingPrivate = null;
+      if (m) this.doMove(m.id, m.to);
+    },
+
+    doMove(id, to) {
+      htmx.ajax('POST', '/tx/' + id + '/member', {
+        target: 'body', swap: 'none', values: { to },
+      });
+    },
 
     // --- folds -----------------------------------------------------------
 
@@ -661,12 +1102,22 @@ function ledger() {
 
     undo() { htmx.ajax('POST', '/undo', { target: 'body', swap: 'none' }); },
 
+    reattributeTitle() {
+      return this.movingPrivate
+        ? this.reattributeTitleTemplate.replace('{name}', this.movingPrivate.name)
+        : '';
+    },
+
     init() {
       this.$nextTick(() => this.paint());
       // The statusline is fed by a response header, so a swap never has to
       // include chrome in order to say something.
       document.body.addEventListener('ffm:say', e => this.say(e.detail.message, e.detail.bad));
-      document.body.addEventListener('htmx:afterSwap', () => this.paint());
+      document.body.addEventListener('htmx:afterSwap', () => {
+        this.markDrafts();
+        this.paintSelection();
+        this.paint();
+      });
     },
   };
 }

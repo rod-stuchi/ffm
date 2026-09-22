@@ -560,6 +560,50 @@ Every phase in this file is done. What remains is below: decisions that were
 deliberately deferred, and the open questions that were never scheduled because
 they need evidence rather than effort.
 
+## Finishing the keymap ✅
+
+The phases built the surfaces; this pass bound the keys that had none and
+drove every one of them in a real browser. Six bugs that no test would have
+caught, because all six live in the untyped layer:
+
+- **`gg` could never fire.** The bare `g` that arms the prefix was checked
+  before `buffer === 'g' && k === 'g'`, so the second `g` just re-armed the
+  buffer. Dispatch order, one line.
+- **`g1`/`g2`/`g3` could never fire either**, for the mirror reason: the
+  count branch (`/^[1-9]/`) ran first and swallowed the digit. Digits now
+  only start a count when the `g` prefix is **not** armed.
+- **`2gt` lost its count**, because arming the prefix consumed it. Arming no
+  longer reads the count at all.
+- **Saving an edit never cleared `editing`.** Nothing else does, so every
+  later cursor move re-entered `parkDraft` on a form that had been swapped
+  out. Fixed at both ends: the form tells the shell on `htmx:after-request`,
+  and `parkDraft` clears the id when there is no form left to read.
+- **`u` only knew three verbs.** `CLAUDE.md` promises that every soft
+  delete, restore, reorder and re-attribution is undoable; `last_undoable`
+  listed `create`/`delete`/`restore` and stopped. It now covers `edit`,
+  `privacy`, `reorder` and `reattribute`, each reversed by reading its own
+  `change_field.old_value` back out and applying it through the same public
+  mutation that wrote it — never a second implementation of the verb.
+- **Undoing a re-attribution could not restore the position**, because
+  `reattribute` appends in the destination and the old key is gone the moment
+  it lands. The key is now recorded on the change — and recorded with
+  `Change::always`, not `diff`, because two members' sort keys are generated
+  independently and the appended key can *happen* to equal the source's, at
+  which point `diff` would drop the one value the undo depends on. Silently,
+  and only sometimes. It is filtered out of what the log pane reads.
+
+Also built: the **member tab bar** (name + balance per tab, shown by the very
+same CSS rule that collapses the panes, so the two can never disagree about
+which layout is on) and `gt` / `gT` / `2gt`. The tab balance is swapped
+out-of-band from the same fragment as the pane totals, for the same reason
+the pane totals exist at all.
+
+One repo-level fix fell out of it: **`just seed` now depends on `db-reset`**.
+The seed file opens by deleting every table, and `change`/`change_field`
+carry `BEFORE DELETE` triggers that `RAISE(ABORT)` — the log is append-only,
+on purpose. Starting from an empty database is the same intent with no
+trigger to fight and no second copy of that DDL to drift.
+
 ## Still open, not scheduled
 
 These are decisions, not tasks — they get scheduled when there is evidence.
@@ -567,10 +611,99 @@ These are decisions, not tasks — they get scheduled when there is evidence.
 1. **Concurrency.** Ana deletes a row while Rodrigo has it open in an edit form
    or parked as a draft. (The materialization half is handled:
    `UNIQUE(rule_id, period)` makes a double-insert impossible.)
+
+   **Recommendation — a row version, checked on write, and nothing else.**
+   Written down rather than built, because it needs a second person actually
+   using the app to know whether it is worth the column.
+
+   - **The failure to prevent is a *lost update*, not a conflict UI.** Two
+     people editing the same row in the same minute is rare in a household;
+     one of them silently overwriting the other is what makes the ledger
+     untrustworthy when it does happen. So: `transactions.version INTEGER NOT
+     NULL DEFAULT 0`, bumped by every write, rendered into the edit form as a
+     hidden field, and `UPDATE … WHERE id = ?1 AND version = ?2`. Zero rows
+     affected means somebody got there first.
+   - **The answer is the error row that already exists.** Phase 5 fixed the
+     response contract precisely so a refused write has somewhere to land:
+     red ground, a message, and **Try Again** carrying the original action.
+     The copy is the only new thing — *"Ana changed this row while you were
+     editing. Nothing was written. Open it again to see hers."* No merge UI,
+     no three-way diff; this is a household ledger, and the change log
+     already records what she did.
+   - **A deleted row is the same shape.** Saving into a soft-deleted row is a
+     write whose `WHERE … deleted_at IS NULL` matches nothing, which is
+     already how `edit` behaves — it returns `false` and the handler says
+     nothing was written. What it needs is *its own* message (*"Ana deleted
+     this row"*) rather than the generic one, because `u` is the next move
+     and the copy should say so.
+   - **Drafts need nothing.** A parked draft is unsubmitted form values in
+     Alpine; the version check happens when it is finally saved, which is
+     exactly when it matters. Polling to invalidate a draft would put a
+     server round trip behind a gesture whose whole point is that it does
+     not touch the server.
+   - **Explicitly not doing:** row locking (a household member who walks away
+     mid-edit would lock a bill until a timeout nobody can see), SSE
+     invalidation of open forms (a live channel for an event that happens
+     monthly), or last-write-wins with a "changed by Ana" note after the
+     fact (that is the lost update, with a receipt).
+
 2. **Seasonal / cyclic rules.** A `months`-of-year allow-list on top of
    start/end dates. Distinct from `total_installments`, which ends permanently.
+
+   **Recommendation — one nullable `months` column, read only by the
+   materializer.**
+
+   - **Shape:** `recurring_rules.months TEXT NULL`, a sorted comma list of
+     month numbers (`'1,2,3,4,5,6,7,8,9,10'` for a Jan–Oct tax), `NULL`
+     meaning every month. A `CHECK` with a `GLOB` keeps it well formed, the
+     same posture `period` already takes. Not a child table: it is at most
+     twelve small integers that are always read and written as a whole, and
+     a join would buy nothing.
+   - **Exactly one read site.** The reconciler's gap query skips a period
+     whose month is not in the list. Everything downstream — the ring, the
+     unresolved badge, `:grep`, the MoM delta — reads occurrences, and an
+     occurrence that was never materialized is simply not there. That is
+     what keeps this a small change rather than a cross-cutting one.
+   - **Editing it affects future materializations only**, exactly like
+     `due_day`, and for the identical reason: past occurrences are what was
+     recorded. Narrowing the list does **not** delete occurrences already in
+     months that just left it — deleting them would be a silent bulk delete
+     driven by a form field, which this app does nowhere else.
+   - **The form control is twelve toggles, not a text field.** It is a
+     bounded set with a natural layout, and it is the one place the row of
+     month names reads faster than anything typed.
+   - **It composes with `spans_period` and needs no coordination with it.**
+     The barcode window asks "which page is this period", the allow-list asks
+     "does this period exist at all"; neither asks the other anything. A
+     ten-page IPTU file and a Jan–Oct allow-list describe the same bill from
+     two directions and are set in two independent fields.
+
 3. **Split mode assumes exactly two panes.** Revisit when a household bigger
    than two is an actual case rather than a hypothetical.
+
+   **Recommendation — it already generalised, and the seed household proves
+   it.** `just seed` creates three members, and the stage is a horizontally
+   scrolling flex row of panes: `H`/`L` step, the focused pane is the one
+   with `.is-focus`, and the rule pane joins as another column. Nothing in
+   the implementation is binary. What is left is narrower than the original
+   question:
+
+   - **Which panes to show when they do not all fit.** The layout resolves in
+     CSS from `layout_min_split_width`, and below it every unfocused pane
+     steps aside — which is tabs mode, and is now reachable by name (`gt` /
+     `gT` / `2gt`) with a real tab bar carrying each member's balance. So the
+     degenerate case is answered; what is not is the middle, where three of
+     six panes fit. Today the stage scrolls sideways. The alternative — pick
+     one other member to compare against — is a new concept (a "comparison
+     pane") and should not be invented before somebody wants it.
+   - **`Ctrl-H`/`Ctrl-L` re-attribute to the *adjacent* pane**, which in a
+     six-member household means reaching a distant member is five
+     keystrokes. `:move <name>` already exists and is the right answer at
+     that size; the keys stay as the fast path for the common case.
+   - **Nothing here is blocking.** The only real recommendation is to stop
+     describing the design as two-person: it is not, and the assumption is
+     gone from the code. Update the prose when `CLAUDE.md`'s Open items are
+     next revised.
 
 4. **A form's error belongs next to the field it is about, not at the top of
    the card.** Today every pre-auth failure renders one `.warnbox` above the

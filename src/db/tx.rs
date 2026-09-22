@@ -14,7 +14,7 @@ use crate::domain::money::Cents;
 use crate::domain::period::Period;
 use crate::domain::sortkey;
 use crate::domain::status::{TxKind, Visibility};
-use chrono::{NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate, Utc};
 use sqlx::SqlitePool;
 
 fn now() -> String {
@@ -231,7 +231,9 @@ pub async fn last_undoable(pool: &SqlitePool, member_id: i64) -> sqlx::Result<Op
                   c.entity AS "entity!: String", c.action AS "action!: String"
            FROM change c
            WHERE c.member_id = ?1
-             AND ((c.entity = 'transaction' AND c.action IN ('create', 'delete', 'restore'))
+             AND ((c.entity = 'transaction'
+                   AND c.action IN ('create', 'delete', 'restore', 'edit',
+                                    'privacy', 'reorder', 'reattribute'))
                   OR (c.entity = 'file' AND c.action IN ('file_upload', 'file_delete')))
              AND c.undo_of IS NULL
              -- Already undone: its reversal points back at it. Without this,
@@ -291,9 +293,158 @@ pub async fn undo(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Result
         "delete" => restore(pool, actor, u.entity_id, Some(u.change_id))
             .await?
             .is_some(),
+        // The rest all reverse by reading the change's own `old_value` back
+        // out of `change_field` and applying it through the same public
+        // mutation that wrote it. Re-deriving the reversal from the row's
+        // current state instead would be a second implementation of every
+        // verb, free to disagree with the first.
+        "privacy" => toggle_privacy(pool, actor, u.entity_id, Some(u.change_id))
+            .await?
+            .is_some(),
+        "reorder" => {
+            let f = fields_of(pool, u.change_id).await?;
+            let Some((old_pos, new_pos)) = f
+                .iter()
+                .find(|(name, _, _)| name == "position")
+                .and_then(|(_, o, n)| Some((o.as_deref()?, n.as_deref()?)))
+            else {
+                return Ok(false);
+            };
+            let (Ok(old_pos), Ok(new_pos)) = (old_pos.parse::<i64>(), new_pos.parse::<i64>())
+            else {
+                return Ok(false);
+            };
+            reorder(
+                pool,
+                actor,
+                u.entity_id,
+                old_pos - new_pos,
+                Some(u.change_id),
+            )
+            .await?
+        }
+        "reattribute" => {
+            let f = fields_of(pool, u.change_id).await?;
+            // The diff stores member *names* — that is what the log pane
+            // reads — so undoing one means resolving a name back to an id.
+            let Some(from_name) = f
+                .iter()
+                .find(|(name, _, _)| name == "member")
+                .and_then(|(_, o, _)| o.clone())
+            else {
+                return Ok(false);
+            };
+            let to: Option<i64> = sqlx::query_scalar!(
+                r#"SELECT id AS "id!: i64" FROM members WHERE name = ?1"#,
+                from_name
+            )
+            .fetch_optional(pool)
+            .await?;
+            let Some(to) = to else { return Ok(false) };
+            let done = reattribute(pool, actor, u.entity_id, to, Some(u.change_id)).await?;
+            if done
+                && let Some(Some(key)) = f
+                    .iter()
+                    .find(|(name, _, _)| name == "sort_key")
+                    .map(|(_, o, _)| o.clone())
+            {
+                sqlx::query!(
+                    "UPDATE transactions SET sort_key = ?2 WHERE id = ?1",
+                    u.entity_id,
+                    key
+                )
+                .execute(pool)
+                .await?;
+            }
+            done
+        }
+        "edit" => undo_edit(pool, actor, u).await?,
         _ => false,
     };
     Ok(done)
+}
+
+/// The fields a change touched, as `(field, old_value, new_value)`.
+async fn fields_of(
+    pool: &SqlitePool,
+    change_id: i64,
+) -> sqlx::Result<Vec<(String, Option<String>, Option<String>)>> {
+    let rows = sqlx::query!(
+        r#"SELECT field AS "field!: String", old_value AS "old_value: String",
+                  new_value AS "new_value: String"
+           FROM change_field WHERE change_id = ?1"#,
+        change_id
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.field, r.old_value, r.new_value))
+        .collect())
+}
+
+/// Undoing an edit puts each recorded field back to its `old_value` and leaves
+/// every other field of the row exactly as it is now — an edit that touched
+/// only the amount must not also roll back a title somebody changed since.
+async fn undo_edit(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Result<bool> {
+    let cur = sqlx::query!(
+        r#"SELECT title AS "title!: String", amount_cents AS "amount_cents: i64",
+                  date AS "date: String", bucket AS "bucket: String",
+                  visibility AS "visibility!: String", rule_id AS "rule_id: i64"
+           FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
+        u.entity_id
+    )
+    .fetch_optional(pool)
+    .await?;
+    let Some(cur) = cur else { return Ok(false) };
+
+    let f = fields_of(pool, u.change_id).await?;
+    let at = |name: &str| {
+        f.iter()
+            .find(|(n, _, _)| n == name)
+            .map(|(_, o, _)| o.clone())
+    };
+
+    let title = match at("title") {
+        Some(Some(v)) => v,
+        Some(None) => String::new(),
+        None => cur.title.clone(),
+    };
+    let amount = match at("amount") {
+        Some(v) => v.and_then(|s| s.parse::<i64>().ok()).map(Cents),
+        None => cur.amount_cents.map(Cents),
+    };
+    let bucket = match at("bucket") {
+        Some(v) => v,
+        None => cur.bucket.clone(),
+    };
+    // The Day field only exists on a row with no rule behind it, and `edit`
+    // ignores it for one that has — so reading a day out of the old date is
+    // only ever meaningful here.
+    let date = match at("date") {
+        Some(v) => v,
+        None => cur.date.clone(),
+    };
+    let day = date
+        .as_deref()
+        .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+        .map(|d| d.day());
+    let visibility = Visibility::parse(&cur.visibility).unwrap_or(Visibility::Household);
+
+    edit(
+        pool,
+        actor,
+        u.entity_id,
+        EditFields {
+            title: &title,
+            amount,
+            day: if cur.rule_id.is_none() { day } else { None },
+            bucket: bucket.as_deref(),
+            visibility,
+        },
+        Some(u.change_id),
+    )
+    .await
 }
 
 /// One row, as the pane renders it — for the fragment a mutation returns.
@@ -325,7 +476,13 @@ pub async fn one(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<(i64, Period
 /// Returns `false` when the row is already at the end it is being moved
 /// toward, which is a no-op rather than an error: `J` on the last row should
 /// do nothing quietly.
-pub async fn reorder(pool: &SqlitePool, actor: Actor, id: i64, delta: i64) -> sqlx::Result<bool> {
+pub async fn reorder(
+    pool: &SqlitePool,
+    actor: Actor,
+    id: i64,
+    delta: i64,
+    undo_of: Option<i64>,
+) -> sqlx::Result<bool> {
     let mut tx = pool.begin().await?;
 
     let row = sqlx::query!(
@@ -391,6 +548,9 @@ pub async fn reorder(pool: &SqlitePool, actor: Actor, id: i64, delta: i64) -> sq
     if let Some(p) = Period::parse(&row.period) {
         entry = entry.in_period(p);
     }
+    if let Some(of) = undo_of {
+        entry = entry.undoing(of);
+    }
     entry
         .diff(
             "position",
@@ -402,4 +562,274 @@ pub async fn reorder(pool: &SqlitePool, actor: Actor, id: i64, delta: i64) -> sq
 
     tx.commit().await?;
     Ok(true)
+}
+
+/// What `e` can change about one occurrence.
+///
+/// **No `due_date`.** Once a row is recurring its due day lives on the rule
+/// and nowhere else, so there are never two controls for one fact with no rule
+/// for which wins at the next materialization. A non-recurring row has no rule
+/// to hold one, which is exactly why `day` is here at all.
+pub struct EditFields<'a> {
+    pub title: &'a str,
+    pub amount: Option<Cents>,
+    /// Day of the month, for a row with no rule behind it.
+    pub day: Option<u32>,
+    pub bucket: Option<&'a str>,
+    pub visibility: Visibility,
+}
+
+/// Saves an edit, recording only the fields that actually moved.
+pub async fn edit(
+    pool: &SqlitePool,
+    actor: Actor,
+    id: i64,
+    fields: EditFields<'_>,
+    undo_of: Option<i64>,
+) -> sqlx::Result<bool> {
+    let mut tx = pool.begin().await?;
+
+    let old = sqlx::query!(
+        r#"SELECT title AS "title!: String", amount_cents AS "amount_cents: i64",
+                  date AS "date: String", due_date AS "due_date: String",
+                  bucket AS "bucket: String", visibility AS "visibility!: String",
+                  period AS "period!: String", rule_id AS "rule_id: i64"
+           FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
+        id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(old) = old else { return Ok(false) };
+    let Some(period) = Period::parse(&old.period) else {
+        return Ok(false);
+    };
+
+    // The day is stamped onto the occurrence's own date. A recurring row never
+    // reaches here with one, so this cannot fight the materializer.
+    let new_date = match (old.rule_id, fields.day) {
+        (None, Some(day)) => period
+            .due_date(day)
+            .map(|d| d.format("%Y-%m-%d").to_string()),
+        _ => old.date.clone(),
+    };
+
+    let amount = fields.amount.map(|c| c.get());
+    let visibility = fields.visibility.code();
+
+    sqlx::query!(
+        r#"UPDATE transactions SET title = ?2, amount_cents = ?3, date = ?4,
+                                   bucket = ?5, visibility = ?6
+           WHERE id = ?1"#,
+        id,
+        fields.title,
+        amount,
+        new_date,
+        fields.bucket,
+        visibility,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let old_date = old
+        .date
+        .as_deref()
+        .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+    let new_date_parsed = new_date
+        .as_deref()
+        .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+
+    let mut entry = Change::transaction(actor, TxAction::Edit, id)
+        .from_rule(old.rule_id)
+        .in_period(period);
+    if let Some(of) = undo_of {
+        entry = entry.undoing(of);
+    }
+    let entry = entry
+        .diff("title", Value::text(&old.title), Value::text(fields.title))
+        .diff(
+            "amount",
+            Value::Money(old.amount_cents.map(Cents)),
+            Value::Money(fields.amount),
+        )
+        .diff("date", Value::Date(old_date), Value::Date(new_date_parsed))
+        .diff(
+            "bucket",
+            Value::Text(old.bucket.clone()),
+            Value::Text(fields.bucket.map(str::to_string)),
+        );
+
+    // Privacy is its own verb, not a field of an edit: handing a hidden row to
+    // the household is a different thing from changing its amount, and the log
+    // should read that way.
+    let privacy_changed = old.visibility != visibility;
+
+    if !entry.is_empty() {
+        entry.write(&mut tx).await?;
+    }
+    if privacy_changed {
+        let mut p = Change::transaction(actor, TxAction::Privacy, id)
+            .from_rule(old.rule_id)
+            .in_period(period);
+        if let Some(of) = undo_of {
+            p = p.undoing(of);
+        }
+        p.diff(
+            "visibility",
+            Value::text(&old.visibility),
+            Value::text(visibility),
+        )
+        .write(&mut tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// `p` — toggle whether this row is hidden from the other members.
+///
+/// Its own verb in the log, for the same reason it is its own key: who can see
+/// a row is a different kind of fact from what it says.
+pub async fn toggle_privacy(
+    pool: &SqlitePool,
+    actor: Actor,
+    id: i64,
+    undo_of: Option<i64>,
+) -> sqlx::Result<Option<bool>> {
+    let mut tx = pool.begin().await?;
+    let row = sqlx::query!(
+        r#"SELECT visibility AS "visibility!: String", period AS "period!: String",
+                  rule_id AS "rule_id: i64"
+           FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
+        id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(row) = row else { return Ok(None) };
+    let now_private = row.visibility == "household";
+    let next = if now_private { "private" } else { "household" };
+
+    sqlx::query!(
+        "UPDATE transactions SET visibility = ?2 WHERE id = ?1",
+        id,
+        next
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let mut entry = Change::transaction(actor, TxAction::Privacy, id).from_rule(row.rule_id);
+    if let Some(p) = Period::parse(&row.period) {
+        entry = entry.in_period(p);
+    }
+    if let Some(of) = undo_of {
+        entry = entry.undoing(of);
+    }
+    entry
+        .diff(
+            "visibility",
+            Value::text(&row.visibility),
+            Value::text(next),
+        )
+        .write(&mut tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(Some(now_private))
+}
+
+/// `Ctrl-H` / `Ctrl-L` — move the row to another member's pane.
+///
+/// **A fresh sort key in the destination**, appended: the key is global, so
+/// carrying the old one over would drop the row into an arbitrary position in
+/// somebody else's ordering. Appending is the one placement that means
+/// anything when you did not choose it.
+pub async fn reattribute(
+    pool: &SqlitePool,
+    actor: Actor,
+    id: i64,
+    to_member: i64,
+    undo_of: Option<i64>,
+) -> sqlx::Result<bool> {
+    let mut tx = pool.begin().await?;
+
+    let row = sqlx::query!(
+        r#"SELECT member_id AS "member_id!: i64", period AS "period!: String",
+                  rule_id AS "rule_id: i64", sort_key AS "sort_key!: String"
+           FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
+        id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(row) = row else { return Ok(false) };
+    if row.member_id == to_member {
+        return Ok(false);
+    }
+
+    let last: Option<String> = sqlx::query_scalar!(
+        r#"SELECT max(sort_key) AS "k: String" FROM transactions
+           WHERE member_id = ?1 AND period = ?2 AND deleted_at IS NULL"#,
+        to_member,
+        row.period,
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let sort_key = match last.as_deref() {
+        Some(k) => sortkey::after(k),
+        None => sortkey::between(None, None),
+    };
+
+    let (from_name, to_name) = (
+        member_name(&mut tx, row.member_id).await?,
+        member_name(&mut tx, to_member).await?,
+    );
+
+    sqlx::query!(
+        "UPDATE transactions SET member_id = ?2, sort_key = ?3 WHERE id = ?1",
+        id,
+        to_member,
+        sort_key,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let mut entry = Change::transaction(actor, TxAction::Reattribute, id).from_rule(row.rule_id);
+    if let Some(p) = Period::parse(&row.period) {
+        entry = entry.in_period(p);
+    }
+    if let Some(of) = undo_of {
+        entry = entry.undoing(of);
+    }
+    entry
+        .diff("member", Value::text(&from_name), Value::text(&to_name))
+        // Appending in the destination is the right placement for a move you
+        // chose; it is the wrong one for undoing it, and the old key is gone
+        // the moment this UPDATE lands. So it is recorded here — the only
+        // way `u` can put the row back exactly where it was.
+        .always(
+            "sort_key",
+            Value::text(&row.sort_key),
+            Value::text(&sort_key),
+        )
+        .write(&mut tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(true)
+}
+
+async fn member_name(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: i64,
+) -> sqlx::Result<String> {
+    sqlx::query_scalar!(
+        r#"SELECT name AS "n!: String" FROM members WHERE id = ?1"#,
+        id
+    )
+    .fetch_optional(&mut **tx)
+    .await
+    .map(|n| n.unwrap_or_default())
 }
