@@ -70,6 +70,20 @@ The `:` bar carries the command vocabulary on its right. Those are
 identifiers a member types back, not prose, so they never pass through the
 catalog — the same rule the sort-refusal message follows.
 
+**The hint lists exactly what the dispatcher handles**, and `just cmd-check`
+fails the build when it does not. Its first version was copied from the mock
+and advertised `add`, `in`, `move`, `undo` and `help`, none of which exist —
+a hint that offers commands the app then refuses is worse than no hint. (The
+first three are in the Type table above and genuinely unbuilt; see
+`TODO_2.md`.)
+
+**Admin-only commands are absent for a non-admin**, and for an admin
+previewing as one — the same rule that removes the Household button rather
+than disabling it. `preview` is the exception and follows the *role* rather
+than whether its powers are in effect: it is the toggle itself, the same
+category as the badge, and dropping it while previewing would say there is no
+way back.
+
 ### The gutter, and which half of it the server can decide
 
 `member_settings.line_numbers` is `relative` | `absolute` | `none`, and the

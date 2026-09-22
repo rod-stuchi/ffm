@@ -212,7 +212,31 @@ js-check:
         sys.exit(1)
     print("\u2713 no shadowed names in an Alpine component")
 
-check: fmt-check lint test offline-check db-check css-check tpl-check js-check
+# Every command the `:` bar advertises must actually be handled.
+#
+# The hint is built in Rust and the dispatcher is JavaScript in a template, so
+# nothing else can hold the two together. The first version of the hint was
+# copied from the mock and offered `add`, `in`, `move`, `undo` and `help` —
+# none of which exist. A hint that lists commands the app refuses is worse
+# than no hint at all.
+cmd-check:
+    #!/usr/bin/env python3
+    import re, sys, pathlib
+    rs = pathlib.Path("src/web/ledger.rs").read_text()
+    m = re.search(r"fn command_hint\(.*?\n\}", rs, re.S)
+    if not m:
+        print("\u2717 command_hint() not found in src/web/ledger.rs"); sys.exit(1)
+    advertised = set(re.findall(r'"(\w+)"', m.group(0)))
+    html = pathlib.Path("templates/pages/ledger.html").read_text()
+    handled = set(re.findall(r"case '(\w+)':", html))
+    missing = sorted(advertised - handled)
+    if missing:
+        print("\u2717 the command bar offers what runCommand does not handle: "
+              + ", ".join(missing))
+        sys.exit(1)
+    print(f"\u2713 all {len(advertised)} advertised commands are handled")
+
+check: fmt-check lint test offline-check db-check css-check tpl-check js-check cmd-check
 
 # --- docs --------------------------------------------------------------------
 

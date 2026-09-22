@@ -393,7 +393,7 @@
            @keydown.enter.prevent="runCommand()"
            @keydown.escape.prevent="commanding = false; command = ''"
            placeholder="{{ t.command_placeholder() }}" autocomplete="off" spellcheck="false">
-    <span class="cmdhint">add · in · move · sort · group · set · theme · lang · profile · household · undo</span>
+    <span class="cmdhint">{{ command_hint }}</span>
   </div>
 
   {#- The statusline. The same message channel the pre-auth pages use, so

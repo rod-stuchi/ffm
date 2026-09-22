@@ -66,3 +66,34 @@ connection dropped, or the browser never opened one, the save is still refused
 and the draft is still parked — the guarantee does not depend on the
 notification arriving. This is an improvement to *when you find out*, never to
 *whether you are protected*.
+
+---
+
+## 2. Three commands the keymap documents and `runCommand` does not handle
+
+Found 22/09/2026, by writing a command-bar hint from the mock instead of from
+the code, and then checking. `design/spec.md`'s Type table lists all three:
+
+| documented | what it should do |
+|---|---|
+| `:add 50 mercado publix` | a spend, in one line |
+| `:in 2400 freelance` | an incoming |
+| `:move ana` | re-attribute the focused row to another member |
+
+None of them reach a `case` in the dispatcher, so all three answer
+*"not a command"*. The gestures they duplicate all work — `a`, `i` and
+`Ctrl-H`/`Ctrl-L` — so nothing is unreachable; what is missing is the
+one-line typed form.
+
+`:invite ana` has a smaller version of the same problem: it opens `:members`
+but throws its label argument away, so the invite is created without the
+*for whom* label the pane's own form offers.
+
+**Not done here on purpose.** `:add 50 mercado publix` is a parser — an
+amount, then a title, with the amount's position and the currency mask's
+rules to agree on — and `:move ana` has to resolve a name to a member and
+then go through the private-row confirmation that `Ctrl-L` already opens.
+Both are real work with real decisions, not the tidy-up this commit was.
+
+Until then the command bar advertises only what it handles, and
+`just cmd-check` fails the build if that stops being true.

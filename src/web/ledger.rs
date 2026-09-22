@@ -209,6 +209,16 @@ struct LedgerPage {
     /// not make you them.
     me_name: String,
     me_admin: bool,
+    /// The `:` bar's hint — **exactly** what `runCommand` handles, built here
+    /// rather than written out in the template so the two cannot drift. The
+    /// first version was copied from the mock and advertised `add`, `in`,
+    /// `move`, `undo` and `help`, none of which exist: a hint that lists
+    /// commands the app refuses is worse than no hint.
+    ///
+    /// Admin-only commands are absent for a non-admin, and for an admin
+    /// previewing as one — the same rule that removes the Household button
+    /// rather than disabling it.
+    command_hint: String,
     min_split: i64,
     max_width: i64,
     gap: i64,
@@ -345,6 +355,7 @@ pub async fn ledger(
         // — an admin previewing as a member should read as a member here, or
         // the badge would contradict what the rest of the app is doing.
         me_admin: auth.viewer.is_admin(),
+        command_hint: command_hint(auth.viewer.is_admin(), auth.session.role_admin),
         min_split: auth.settings.layout_min_split_width,
         max_width: auth.settings.layout_max_width,
         gap: auth.settings.layout_gap,
@@ -376,6 +387,27 @@ pub async fn ledger(
         },
         t,
     })
+}
+
+/// What the `:` bar offers, in the order a household reaches for it.
+///
+/// One name per command — `:me` and `:config` still work as aliases, but a
+/// hint listing both spellings of one thing is noise.
+fn command_hint(admin: bool, holds_admin_role: bool) -> String {
+    let mut names = vec!["profile", "sort", "group", "set", "theme", "lang", "grep"];
+    if admin {
+        names.extend(["household", "members", "invite", "currency"]);
+    }
+    // `preview` follows the ROLE, not whether its powers are in effect — it
+    // is the toggle itself, the same category as the badge, which stays
+    // visible so preview is reversible any time. Dropping it while previewing
+    // would tell an admin there is no way back. A member who never held the
+    // role never sees it, and the route refuses them anyway.
+    if holds_admin_role {
+        names.push("preview");
+    }
+    names.push("logout");
+    names.join(" · ")
 }
 
 /// The keymap, as `?` shows it.
