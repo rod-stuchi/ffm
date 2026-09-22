@@ -53,7 +53,18 @@
 <script defer src="/static/js/alpine.min.js"></script>
 </head>
 <body>
-<div class="ledger-shell" data-period="{{ period_key }}" x-data="ledger()" @keydown.window="key($event)">
+<div class="ledger-shell" data-period="{{ period_key }}" x-data="ledger()"
+     :class="{ 'is-dragging': dragging }"
+     @keydown.window="key($event)"
+     @htmx:before-swap.window="savedSwap($event)"
+     {#- A file dragged anywhere over the ledger reveals every attachable
+         row's three drop targets. `dragover` rather than `dragenter` because
+         it fires continuously: moving between rows raises leave/enter pairs
+         that would otherwise flicker the targets away under the pointer. -#}
+     @dragover.prevent="if (hasFile($event)) dragging = true"
+     @dragleave="if (!$event.relatedTarget) dragging = false"
+     @drop="dragging = false"
+     @dragend.window="dragging = false">
   <header class="ledger-bar">
     <b>{{ household }}</b>
     <nav class="mnav" x-data="{ picking: false }" @click.outside="picking = false">
@@ -386,6 +397,7 @@ function ledger() {
     keymap: false,
     monthsWord: {{ months_word|json|safe }},
     attaching: null,
+    dragging: false,
     commanding: false,
     logFor: null,
     // Fold state is PURE visual state — the server already rendered every row
@@ -419,6 +431,7 @@ function ledger() {
     reattributeTitleTemplate: {{ reattribute_title|json|safe }},
     detailsNone: {{ details_none|json|safe }},
     noFiles: {{ no_files|json|safe }},
+    fileNotTracked: {{ file_not_tracked|json|safe }},
     noFile: {
       barcode: {{ no_bill|json|safe }},
       scheduled: {{ no_scheduled|json|safe }},
@@ -525,17 +538,19 @@ function ledger() {
       // something uses them, and a leading 0 is not a count — it is `0`, which
       // this app does not bind, so it simply does nothing.
       //
-      // NOT while the `g` prefix is armed: there the digit is the whole
-      // binding (`g1` is the bill, not "one g"), so a count branch that ran
-      // first would swallow it and g1/g2/g3 could never fire.
-      if (buffer !== 'g' && (/^[1-9]$/.test(k) || (this.count && k === '0'))) {
+      // NOT while ANY prefix is armed: there the digit is the whole binding
+      // (`g1` is the bill, not "one g"), so a count branch that ran first
+      // would swallow it. Tested against the buffer being empty rather than
+      // against 'g' specifically — checking for one prefix by name is how
+      // `gu1` silently stopped working the day `gu` was added.
+      if (!buffer && (/^[1-9]$/.test(k) || (this.count && k === '0'))) {
         this.count += k;
         e.preventDefault();
         return;
       }
       // Arming the prefix must NOT consume a pending count, or `2gt` loses its
       // 2 on the way to the `t` that wanted it.
-      if (k === 'g' && buffer !== 'g') {
+      if (k === 'g' && !buffer) {
         this.pending = 'g';
         e.preventDefault();
         return;
@@ -550,6 +565,11 @@ function ledger() {
       // already in use (gg, gt), with numbering fixed by KIND so g1 means the
       // bill on every row in the ledger.
       else if (buffer === 'g' && ['1', '2', '3'].includes(k)) { this.openFile(Number(k)); }
+      // `gu` — "goto upload". A second step of the g-prefix rather than a new
+      // pattern, and it reuses g1/g2/g3's fixed numbering so one set of
+      // numbers means one thing whether you are opening a file or adding one.
+      else if (buffer === 'g' && k === 'u') { this.pending = 'gu'; }
+      else if (buffer === 'gu' && ['1', '2', '3'].includes(k)) { this.attachKey(Number(k)); }
       // `gl` — "go to log", a genuine extension of the g-prefix vocabulary
       // already in use rather than a new pattern.
       else if (buffer === 'g' && k === 'l') { this.openLog(); }
@@ -754,6 +774,52 @@ function ledger() {
       this.editing = null;
       htmx.ajax('GET', '/tx/' + id, { target: '#row-' + id, swap: 'outerHTML' })
         .then(() => { this.markDrafts(); this.paint(); });
+    },
+
+    /// What becomes of an open edit when its row is swapped out from under
+    /// it — a save that worked, or one the server refused.
+    ///
+    /// It lives on the SHELL rather than on the form because
+    /// `htmx:beforeSwap` fires on the swap *target*, which is the row wrapper
+    /// the form sits inside; a listener on the form never hears it. And it
+    /// has to be before-swap rather than after-request, because reading a
+    /// form's values requires the form to still be in the DOM.
+    savedSwap(e) {
+      const target = e.detail && e.detail.target;
+      if (!target || !target.id || !target.id.startsWith('row-')) return;
+      const form = target.querySelector('form.editrow');
+      if (!form) return;
+      const id = target.id.slice(4);
+      // FFM-Reopen: the server is handing the FORM back, not a row — a
+      // rejected save with the messages in it. The edit has not ended, so
+      // nothing here should act as though it has.
+      if (e.detail.xhr && e.detail.xhr.getResponseHeader('FFM-Reopen')) return;
+      this.editing = null;
+      // FFM-Stale means the save was REFUSED — somebody changed the row while
+      // this form was open. The response is still a 200 carrying a row, which
+      // is this app's error convention, so the header is what tells the two
+      // apart. Nothing typed is thrown away in that case.
+      if (e.detail.xhr && e.detail.xhr.getResponseHeader('FFM-Stale')) {
+        this.stashDraft(id, form);
+      } else {
+        delete this.drafts[id];
+      }
+      this.$nextTick(() => { this.markDrafts(); this.paint(); });
+    },
+
+    /// Keeps a draft that could not be saved. Unlike parkDraft this does NOT
+    /// ask whether anything changed: the save was refused, so every value in
+    /// the form is something somebody meant, including the ones that happen
+    /// to match what is on the row.
+    stashDraft(id, form) {
+      const values = {};
+      form.querySelectorAll('[name]').forEach(el => {
+        values[el.name] = el.type === 'checkbox' ? el.checked : el.value;
+      });
+      // The version travelled with the form and is now stale by definition.
+      // Keeping it would make the retry refuse for the same reason, forever.
+      delete values.version;
+      this.drafts[id] = values;
     },
 
     restoreDraft(id) {
@@ -1043,17 +1109,67 @@ function ledger() {
       this.$refs.picker.click();
     },
 
+    /// `gu1` / `gu2` / `gu3` — straight to that slot, no menu. The numbering
+    /// is `g1`/`g2`/`g3`'s, unchanged: 1 states the amount, 2 is the promise,
+    /// 3 is proof the money moved. One set of numbers for opening a file and
+    /// for attaching one.
+    attachKey(n) {
+      const id = this.focusedId();
+      if (!id) return;
+      const row = document.querySelector('#row-' + id + ' .row');
+      // Only a tracked recurring occurrence has a taxonomy to file under, and
+      // the rail's `+` is exactly the marker for that.
+      if (!row || !row.querySelector('.fadd')) {
+        this.say(this.fileNotTracked, true);
+        return;
+      }
+      const kind = { 1: 'barcode', 2: 'scheduled', 3: 'receipt' }[n];
+      if (kind === 'scheduled' && !row.querySelector('.fdrop[data-kind="scheduled"]')) {
+        // An income row has no slot 2 — you do not schedule money arriving.
+        this.say(this.noFile.scheduled, true);
+        return;
+      }
+      this.attaching = id;
+      this.pick(kind);
+    },
+
+    /// True when what is being dragged is a file rather than, say, selected
+    /// text from another part of the page.
+    hasFile(e) {
+      const dt = e.dataTransfer;
+      return !!dt && Array.from(dt.types || []).includes('Files');
+    },
+
+    /// A drop on one of a row's three targets. The row came from where you
+    /// let go and the kind from which target you hit, so nothing here has to
+    /// be guessed from the file itself — which is the whole reason a panel
+    /// drop was downgraded to a notifier and a row drop was not.
+    drop(e, id, kind) {
+      this.dragging = false;
+      document.querySelectorAll('.fdrop.is-over')
+        .forEach(el => el.classList.remove('is-over'));
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      this.upload(id, kind, file);
+    },
+
     send() {
       const input = this.$refs.picker;
       if (!input.files.length || !this.attaching) return;
-      const body = new FormData();
-      body.append('file', input.files[0]);
       const id = this.attaching;
       this.attaching = null;
+      this.upload(id, this.kind_, input.files[0]);
+      input.value = '';
+    },
+
+    /// The one upload path, whichever gesture asked for it.
+    upload(id, kind, file) {
+      const body = new FormData();
+      body.append('file', file);
       // htmx.ajax cannot carry a FormData body, so this one request is a plain
       // fetch and the response is swapped by hand. It still speaks the same
       // contract: a row fragment back, and the statusline in HX-Trigger.
-      fetch('/tx/' + id + '/file/' + this.kind_, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
+      fetch('/tx/' + id + '/file/' + kind, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
         .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
         .then(({ html, trigger }) => {
           if (html.trim()) {
@@ -1066,7 +1182,6 @@ function ledger() {
           }
           this.paint();
         });
-      input.value = '';
     },
 
     openLog() {

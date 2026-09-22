@@ -23,6 +23,7 @@
 
 use crate::db::changes::{Actor, Change, TxAction};
 use crate::domain::money::Cents;
+use crate::domain::months::Months;
 use crate::domain::period::Period;
 use crate::domain::sortkey;
 use chrono::{Datelike, NaiveDate, Utc};
@@ -58,6 +59,7 @@ pub async fn reconcile(pool: &SqlitePool, today: NaiveDate) -> sqlx::Result<Repo
                   total_installments AS "total_installments: i64",
                   carry_forward_amount AS "carry_forward_amount!: i64",
                   bucket AS "bucket: String", bill_name AS "bill_name: String",
+                  months AS "months: String",
                   visibility AS "visibility!: String"
            FROM recurring_rules WHERE deleted_at IS NULL"#
     )
@@ -86,6 +88,16 @@ pub async fn reconcile(pool: &SqlitePool, today: NaiveDate) -> sqlx::Result<Repo
             _ => current,
         };
 
+        // The seasonal allow-list, and the ONLY place it is read. Everything
+        // downstream reads occurrences, and an occurrence that was never
+        // materialized is simply not there — which is what keeps a rule that
+        // skips November a small change rather than a cross-cutting one.
+        //
+        // A value that no longer parses degrades to "every month" rather than
+        // silently materializing nothing: a rule that quietly stops producing
+        // rows is the worst failure this loop has.
+        let months = r.months.as_deref().and_then(Months::from_storage);
+
         let cadence = r.cadence_months.max(1) as u32;
         let mut period = Period::of(start);
         let mut n = 0i64;
@@ -98,6 +110,24 @@ pub async fn reconcile(pool: &SqlitePool, today: NaiveDate) -> sqlx::Result<Repo
                 && n >= total
             {
                 break;
+            }
+
+            // A skipped month is not an occurrence that failed to appear —
+            // it is a month this rule does not run in. It still advances the
+            // cadence and the installment count, because it is a period the
+            // rule passed through.
+            if let Some(m) = &months
+                && !m.contains(period.month())
+            {
+                // It does NOT advance the installment count. `n` counts
+                // payments, and a month the rule does not run in is not one.
+                // (A rule with both a months list and a fixed installment
+                // count is an odd shape — the form's end-date sync still
+                // computes in whole months and does not know about skips —
+                // but if somebody builds one, "12 installments" has to mean
+                // twelve actual rows.)
+                period = period.succ_n(cadence);
+                continue;
             }
 
             let period_s = period.to_string();

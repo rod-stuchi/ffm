@@ -12,18 +12,18 @@
     <p>{{ t.setup_subtitle() }}</p>
   </div>
   <div class="cb">
-    {%- if let Some(err) = error %}
-    <div class="warnbox">
-      <span class="g" aria-hidden="true">&#9888;</span>
-      <span><b>{{ err }}</b></span>
-    </div>
-    {%- endif %}
+    {% include "partials/form_errors.html" %}
 
     <div class="sect">{{ t.setup_household_section() }}</div>
     <div class="stack">
-      <label class="f">
+      <label class="f{% if errors.has("household") %} is-bad{% endif %}">
         <span class="k">{{ t.setup_household_name() }}</span>
-        <input class="i" name="household" value="{{ household_name }}" autofocus>
+        {#- Autofocus is conditional everywhere on this form: a clean load
+            starts at the top, a rejected one starts on the field that was
+            rejected. Exactly one input can carry it. -#}
+        <input class="i" name="household" value="{{ household_name }}"
+               {% if errors.none() || errors.focus("household") %}autofocus{% endif %}>
+        {%- if let Some(m) = errors.get("household") %}<span class="ferr">{{ m }}</span>{% endif %}
         <span class="hint">{{ t.setup_household_hint() }}</span>
       </label>
       <div class="fgrid">
@@ -54,23 +54,32 @@
 
     <div class="sect">{{ t.setup_you_section() }}</div>
     <div class="stack">
-      <label class="f">
+      <label class="f{% if errors.has("name") %} is-bad{% endif %}">
         <span class="k">
           <span>{{ t.login_name() }}</span>
           <span class="aside">{{ t.setup_aside_signin() }}</span>
         </span>
-        <input class="i" name="name" value="{{ admin_name }}" autocomplete="username">
+        <input class="i" name="name" value="{{ admin_name }}" autocomplete="username"
+               {% if errors.focus("name") %}autofocus{% endif %}>
+        {%- if let Some(m) = errors.get("name") %}<span class="ferr">{{ m }}</span>{% endif %}
       </label>
       <div class="fgrid">
-        <label class="f">
+        <label class="f{% if errors.has("password") %} is-bad{% endif %}">
           <span class="k">{{ t.login_password() }}</span>
-          <input class="i" type="password" name="password" autocomplete="new-password">
+          <input class="i" type="password" name="password" autocomplete="new-password"
+                 {% if errors.focus("password") %}autofocus{% endif %}>
+          {%- if let Some(m) = errors.get("password") %}<span class="ferr">{{ m }}</span>{% endif %}
         </label>
-        <label class="f">
+        <label class="f{% if errors.has("confirm") %} is-bad{% endif %}">
           {#- Asked twice on purpose: this is the one password with no admin
-              above it to reset it, and there is no self-service reset. -#}
+              above it to reset it, and there is no self-service reset.
+
+              A mismatch is reported HERE, not on the password box: the two
+              are a pair, and the one you would retype is the second. -#}
           <span class="k">{{ t.setup_password_confirm() }}</span>
-          <input class="i" type="password" name="confirm" autocomplete="new-password">
+          <input class="i" type="password" name="confirm" autocomplete="new-password"
+                 {% if errors.focus("confirm") %}autofocus{% endif %}>
+          {%- if let Some(m) = errors.get("confirm") %}<span class="ferr">{{ m }}</span>{% endif %}
         </label>
       </div>
       <fieldset class="f">

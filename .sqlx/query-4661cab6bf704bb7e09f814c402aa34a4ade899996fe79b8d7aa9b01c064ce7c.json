@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", member_id AS \"member_id!: i64\",\n                  kind AS \"kind!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\",\n                  cadence_months AS \"cadence_months!: i64\",\n                  due_day AS \"due_day: i64\",\n                  start_date AS \"start_date!: String\",\n                  end_date AS \"end_date: String\",\n                  total_installments AS \"total_installments: i64\",\n                  carry_forward_amount AS \"carry_forward_amount!: i64\",\n                  tracked AS \"tracked!: i64\",\n                  bucket AS \"bucket: String\", bill_name AS \"bill_name: String\",\n                  instance AS \"instance: String\",\n                  no_barcode AS \"no_barcode!: i64\", varies AS \"varies!: i64\",\n                  client_code AS \"client_code: String\",\n                  spans_period AS \"spans_period!: i64\",\n                  window_size AS \"window_size: i64\",\n                  window_start AS \"window_start: String\",\n                  estimate_basis AS \"estimate_basis!: String\",\n                  estimate_window AS \"estimate_window!: i64\",\n                  amount_in_filename AS \"amount_in_filename!: i64\",\n                  visibility AS \"visibility!: String\"\n           FROM recurring_rules WHERE id = ?1 AND deleted_at IS NULL",
+  "query": "SELECT id AS \"id!: i64\", member_id AS \"member_id!: i64\",\n                  kind AS \"kind!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\",\n                  cadence_months AS \"cadence_months!: i64\",\n                  due_day AS \"due_day: i64\",\n                  start_date AS \"start_date!: String\",\n                  end_date AS \"end_date: String\",\n                  total_installments AS \"total_installments: i64\",\n                  carry_forward_amount AS \"carry_forward_amount!: i64\",\n                  tracked AS \"tracked!: i64\",\n                  bucket AS \"bucket: String\", bill_name AS \"bill_name: String\",\n                  instance AS \"instance: String\",\n                  no_barcode AS \"no_barcode!: i64\", varies AS \"varies!: i64\",\n                  client_code AS \"client_code: String\",\n                  spans_period AS \"spans_period!: i64\",\n                  window_size AS \"window_size: i64\",\n                  window_start AS \"window_start: String\",\n                  estimate_basis AS \"estimate_basis!: String\",\n                  estimate_window AS \"estimate_window!: i64\",\n                  amount_in_filename AS \"amount_in_filename!: i64\",\n                  months AS \"months: String\",\n                  visibility AS \"visibility!: String\"\n           FROM recurring_rules WHERE id = ?1 AND deleted_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -124,8 +124,13 @@
         "type_info": "Integer"
       },
       {
-        "name": "visibility!: String",
+        "name": "months: String",
         "ordinal": 24,
+        "type_info": "Text"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 25,
         "type_info": "Text"
       }
     ],
@@ -157,8 +162,9 @@
       false,
       false,
       false,
+      true,
       false
     ]
   },
-  "hash": "b9196f0de9add438b3d8921f20259fb65749e8c3bf421fecedc8b6e65dd977e5"
+  "hash": "4661cab6bf704bb7e09f814c402aa34a4ade899996fe79b8d7aa9b01c064ce7c"
 }

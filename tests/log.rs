@@ -64,6 +64,7 @@ fn form(member_id: i64) -> RuleForm {
         estimate_basis: "lowest".into(),
         estimate_window: 3,
         amount_in_filename: false,
+        months: None,
         visibility: Visibility::Household,
     }
 }

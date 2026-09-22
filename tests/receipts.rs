@@ -79,6 +79,7 @@ async fn tracked_occurrence(pool: &SqlitePool, me: i64) -> (i64, Slot) {
             estimate_basis: "lowest".into(),
             estimate_window: 3,
             amount_in_filename: false,
+            months: None,
             visibility: Visibility::Household,
         },
     )
@@ -465,6 +466,7 @@ async fn cyclic_rule(pool: &SqlitePool, me: i64, window_start: &str, size: i64) 
         estimate_basis: "lowest".into(),
         estimate_window: 3,
         amount_in_filename: false,
+        months: None,
         visibility: Visibility::Household,
     };
     rules::create(pool, Actor::User(me), &form).await.unwrap()
@@ -548,6 +550,7 @@ async fn renewing_a_window_does_not_rewrite_last_years_pages() {
         estimate_basis: next.estimate_basis.clone(),
         estimate_window: next.estimate_window,
         amount_in_filename: next.amount_in_filename,
+        months: None,
         visibility: next.visibility,
     };
     rules::edit(&pool, Actor::User(me), rule, &form)
@@ -622,6 +625,7 @@ async fn an_ordinary_save_does_not_pile_up_windows() {
         estimate_basis: r.estimate_basis.clone(),
         estimate_window: r.estimate_window,
         amount_in_filename: r.amount_in_filename,
+        months: None,
         visibility: r.visibility,
     };
     rules::edit(&pool, Actor::User(me), rule, &form)

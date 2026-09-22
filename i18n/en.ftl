@@ -453,3 +453,42 @@ keymap-fold = Fold
 keymap-files = Files
 keymap-undo = Undo
 keymap-type = Type
+
+## Seasonal months — which months of the year a rule actually runs.
+## The expression itself is digits in every language; only these words move.
+months-seasonal = Only some months
+months-seasonal-hint = a bill that runs part of the year, every year
+months-label = Months
+months-placeholder = 1-10
+months-help = 1-10 a range · 1,3,5 a list · ^11,^12 all except
+months-every = every month
+months-count-skipped = { $n ->
+    [one] one month a year
+   *[other] { $n } months a year
+  } · { $skipped } skipped
+months-err-empty = that is not a month yet
+months-err-not-a-number = not a month number: { $token }
+months-err-out-of-range = month { $n } — months are 1 to 12
+months-err-backwards = { $range } runs backwards
+months-err-nothing-left = that leaves no months at all
+month-short = { $n ->
+    [1] Jan
+    [2] Feb
+    [3] Mar
+    [4] Apr
+    [5] May
+    [6] Jun
+    [7] Jul
+    [8] Aug
+    [9] Sep
+   [10] Oct
+   [11] Nov
+   *[12] Dec
+  }
+
+## A save refused because the row moved underneath the form. Nothing was
+## written, and what was typed is still parked on the row.
+edit-stale = { $who } changed this row while you were editing. Nothing was written — your edit is still here, press e to pick it up.
+edit-stale-unknown = This row changed while you were editing. Nothing was written — your edit is still here, press e to pick it up.
+edit-gone = That row was deleted while you were editing. Nothing was written — press u to bring it back.
+edit-day-bad = A day of the month is 1 to 31.

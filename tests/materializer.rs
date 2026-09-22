@@ -14,6 +14,7 @@ use ffm::db::changes::Actor;
 use ffm::db::rules::{self, RuleForm};
 use ffm::db::tx;
 use ffm::domain::money::Cents;
+use ffm::domain::months::Months;
 use ffm::domain::status::{TxKind, Visibility};
 use ffm::services::materializer;
 use sqlx::SqlitePool;
@@ -65,6 +66,7 @@ fn form(member_id: i64, title: &str, start: NaiveDate) -> RuleForm {
         estimate_basis: "lowest".into(),
         estimate_window: 3,
         amount_in_filename: false,
+        months: None,
         visibility: Visibility::Household,
     }
 }
@@ -362,4 +364,148 @@ async fn every_materialized_row_says_nobody_typed_it() {
         "attributing this to a person would be a lie"
     );
     assert_eq!(entries[0].3.as_deref(), Some("2026-09"));
+}
+
+// ---------------------------------------------------------------------------
+// seasonal months — the allow-list, and the ONE place it is read
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_seasonal_rule_never_materializes_the_months_it_skips() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    // IPTU: ten instalments, January to October, then nothing until the next
+    // January. The mock demonstrated this in seed data; this is the rule.
+    let mut f = form(me, "IPTU", d(2025, 1, 1));
+    f.months = Some(Months::parse("1-10").unwrap());
+    rules::create(&pool, Actor::User(me), &f).await.unwrap();
+
+    materializer::reconcile(&pool, d(2026, 3, 15))
+        .await
+        .unwrap();
+
+    let got = periods(&pool).await;
+    // Twelve months of 2025 minus November and December, plus Jan-Mar 2026.
+    assert!(
+        !got.contains(&"2025-11".to_string()),
+        "November was skipped"
+    );
+    assert!(
+        !got.contains(&"2025-12".to_string()),
+        "December was skipped"
+    );
+    assert!(got.contains(&"2025-10".to_string()));
+    assert!(got.contains(&"2026-01".to_string()));
+    assert_eq!(got.len(), 13);
+}
+
+#[tokio::test]
+async fn a_skipped_month_is_not_a_gap_to_be_filled_on_the_next_tick() {
+    // The reconciler has no watermark: it looks for periods with no row. A
+    // skipped month IS a period with no row, so without the check it would be
+    // materialized on every single tick, forever.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let mut f = form(me, "IPTU", d(2026, 1, 1));
+    f.months = Some(Months::parse("1-10").unwrap());
+    rules::create(&pool, Actor::User(me), &f).await.unwrap();
+
+    let first = materializer::reconcile(&pool, d(2026, 12, 20))
+        .await
+        .unwrap();
+    assert_eq!(first.created, 10);
+    let again = materializer::reconcile(&pool, d(2026, 12, 20))
+        .await
+        .unwrap();
+    assert_eq!(again.created, 0, "a skipped month must not be re-created");
+}
+
+#[tokio::test]
+async fn narrowing_the_months_leaves_what_was_already_recorded() {
+    // The same rule `due_day` follows: editing a rule changes FUTURE
+    // materializations only. A form field must never trigger a silent bulk
+    // delete across the ledger.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let mut f = form(me, "IPTU", d(2026, 1, 1));
+    f.months = Some(Months::parse("1-10").unwrap());
+    let id = rules::create(&pool, Actor::User(me), &f).await.unwrap();
+    materializer::reconcile(&pool, d(2026, 10, 20))
+        .await
+        .unwrap();
+    assert_eq!(periods(&pool).await.len(), 10);
+
+    f.months = Some(Months::parse("1-8").unwrap());
+    rules::edit(&pool, Actor::User(me), id, &f).await.unwrap();
+    materializer::reconcile(&pool, d(2026, 10, 20))
+        .await
+        .unwrap();
+
+    let got = periods(&pool).await;
+    assert_eq!(got.len(), 10, "September and October stay as recorded");
+    assert!(got.contains(&"2026-09".to_string()));
+    assert!(got.contains(&"2026-10".to_string()));
+}
+
+#[tokio::test]
+async fn a_skipped_month_does_not_consume_an_installment() {
+    // `total_installments` counts PAYMENTS. A month the rule does not run in
+    // is not one, so "12 instalments" has to mean twelve actual rows.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let mut f = form(me, "Parcelado", d(2026, 1, 1));
+    f.months = Some(Months::parse("^7,^8").unwrap());
+    f.total_installments = Some(4);
+    rules::create(&pool, Actor::User(me), &f).await.unwrap();
+
+    materializer::reconcile(&pool, d(2026, 12, 20))
+        .await
+        .unwrap();
+    assert_eq!(
+        periods(&pool).await,
+        ["2026-01", "2026-02", "2026-03", "2026-04"]
+    );
+}
+
+#[tokio::test]
+async fn months_survive_a_save_and_come_back_as_a_canonical_expression() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let mut f = form(me, "IPTU", d(2026, 1, 1));
+    // Typed as an exclusion; stored as the list; read back as a range.
+    f.months = Some(Months::parse("^11,^12").unwrap());
+    let id = rules::create(&pool, Actor::User(me), &f).await.unwrap();
+
+    let stored: String = sqlx::query_scalar("SELECT months FROM recurring_rules WHERE id = ?1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored, "1,2,3,4,5,6,7,8,9,10");
+
+    let back = rules::get(&pool, id).await.unwrap().unwrap();
+    assert_eq!(back.months.unwrap().to_expression(), "1-10");
+}
+
+#[tokio::test]
+async fn a_rule_with_no_months_runs_every_month() {
+    // NULL is "no opinion", which is a different fact from a list of all
+    // twelve — and is why the column is nullable rather than defaulted.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = rules::create(&pool, Actor::User(me), &form(me, "Energia", d(2026, 1, 1)))
+        .await
+        .unwrap();
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT months FROM recurring_rules WHERE id = ?1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored, None);
+
+    materializer::reconcile(&pool, d(2026, 12, 20))
+        .await
+        .unwrap();
+    assert_eq!(periods(&pool).await.len(), 12);
 }

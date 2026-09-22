@@ -9,6 +9,7 @@
 
 use crate::db::changes::{Actor, Change, RuleAction, Value};
 use crate::domain::money::Cents;
+use crate::domain::months::Months;
 use crate::domain::period::Period;
 use crate::domain::status::{TxKind, Visibility};
 use chrono::{NaiveDate, Utc};
@@ -63,6 +64,10 @@ pub struct RuleForm {
     pub estimate_basis: String,
     pub estimate_window: i64,
     pub amount_in_filename: bool,
+    /// Which months of the year the rule actually runs. `None` = every month,
+    /// which is why the column is nullable rather than holding all twelve:
+    /// "seasonal" and "ordinary" stay distinguishable in the value itself.
+    pub months: Option<Months>,
     pub visibility: Visibility,
 }
 
@@ -98,6 +103,8 @@ pub struct Rule {
     pub estimate_basis: String,
     pub estimate_window: i64,
     pub amount_in_filename: bool,
+    /// `None` = runs every month.
+    pub months: Option<Months>,
     pub visibility: Visibility,
 }
 
@@ -143,6 +150,7 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
     let in_filename = i64::from(form.amount_in_filename);
     let spans = i64::from(form.spans_period);
     let window_start = form.window_start.map(|p| p.to_string());
+    let months = form.months.as_ref().map(|m| m.to_storage());
 
     let id = sqlx::query_scalar!(
         r#"INSERT INTO recurring_rules
@@ -150,9 +158,10 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
                 start_date, end_date, total_installments, carry_forward_amount,
                 tracked, bucket, bill_name, instance, no_barcode, varies,
                 estimate_basis, estimate_window, amount_in_filename,
-                visibility, created_at, spans_period, window_size, window_start)
+                visibility, created_at, spans_period, window_size, window_start,
+                months)
            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-                   ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
+                   ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
            RETURNING id AS "id!: i64""#,
         form.member_id,
         form.title,
@@ -178,6 +187,7 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
         spans,
         form.window_size,
         window_start,
+        months,
     )
     .fetch_one(&mut *tx)
     .await?;
@@ -223,6 +233,7 @@ pub async fn edit(pool: &SqlitePool, actor: Actor, id: i64, form: &RuleForm) -> 
     let in_filename = i64::from(form.amount_in_filename);
     let spans = i64::from(form.spans_period);
     let window_start = form.window_start.map(|p| p.to_string());
+    let months = form.months.as_ref().map(|m| m.to_storage());
 
     sqlx::query!(
         r#"UPDATE recurring_rules SET
@@ -232,7 +243,8 @@ pub async fn edit(pool: &SqlitePool, actor: Actor, id: i64, form: &RuleForm) -> 
                tracked = ?11, bucket = ?12, bill_name = ?13, instance = ?14,
                no_barcode = ?15, varies = ?16, estimate_basis = ?17,
                estimate_window = ?18, amount_in_filename = ?19, visibility = ?20,
-               spans_period = ?21, window_size = ?22, window_start = ?23
+               spans_period = ?21, window_size = ?22, window_start = ?23,
+               months = ?24
            WHERE id = ?1"#,
         id,
         form.title,
@@ -257,6 +269,7 @@ pub async fn edit(pool: &SqlitePool, actor: Actor, id: i64, form: &RuleForm) -> 
         spans,
         form.window_size,
         window_start,
+        months,
     )
     .execute(&mut *tx)
     .await?;
@@ -425,6 +438,7 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
                   estimate_basis AS "estimate_basis!: String",
                   estimate_window AS "estimate_window!: i64",
                   amount_in_filename AS "amount_in_filename!: i64",
+                  months AS "months: String",
                   visibility AS "visibility!: String"
            FROM recurring_rules WHERE id = ?1 AND deleted_at IS NULL"#,
         id
@@ -460,6 +474,7 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
             estimate_basis: r.estimate_basis,
             estimate_window: r.estimate_window,
             amount_in_filename: r.amount_in_filename != 0,
+            months: r.months.as_deref().and_then(Months::from_storage),
             visibility: Visibility::parse(&r.visibility)?,
         })
     }))

@@ -10,22 +10,34 @@
             else clears `editing`, and a stale id there means every later
             cursor move calls parkDraft on a form that is no longer in the
             DOM. The draft goes too — it was just written. -#}
-        @htmx:after-request="if ($event.detail.successful) {
-            editing = null; delete drafts[{{ id }}]; markDrafts(); }"
+        {#- What happens to `editing` and the draft when this form is swapped
+            away is handled by the SHELL, in `savedSwap` — not here.
+
+            `htmx:beforeSwap` fires on the swap TARGET, which is the row
+            wrapper this form sits inside, so a listener on the form itself
+            never hears it. That mattered: the stash-on-refusal silently did
+            not run, and the statusline said "your edit is still here" about
+            a draft that had just been thrown away. -#}
         @keydown.escape.prevent="cancelEdit({{ id }})">
+    <input type="hidden" name="version" value="{{ version }}">
     <div class="gut"></div>
     <div class="entry editentry">
       <div class="fgrid">
         <label class="f">
           {#- First, focused and pre-selected: it is the field most edits
-              actually touch, so it should be typed over without a click. -#}
+              actually touch, so it should be typed over without a click.
+              A REJECTED save starts on the field that was rejected instead,
+              so this only takes the cursor when nothing failed. -#}
           <span class="k">{{ t.row_amount() }}</span>
           <input class="i" name="amount" value="{{ amount }}" inputmode="decimal"
-                 autocomplete="off" x-init="$el.focus(); $el.select()">
+                 autocomplete="off"
+                 {% if errors.none() %}x-init="$el.focus(); $el.select()"{% endif %}>
         </label>
-        <label class="f">
+        <label class="f{% if errors.has("title") %} is-bad{% endif %}">
           <span class="k">{{ t.row_title() }}</span>
-          <input class="i" name="title" value="{{ title }}" autocomplete="off" required>
+          <input class="i" name="title" value="{{ title }}" autocomplete="off" required
+                 {% if errors.focus("title") %}x-init="$el.focus(); $el.select()"{% endif %}>
+          {%- if let Some(m) = errors.get("title") %}<span class="ferr">{{ m }}</span>{% endif %}
         </label>
       </div>
 
@@ -44,9 +56,11 @@
             which one a future materialized period follows. -#}
         <div class="f"></div>
         {%- else %}
-        <label class="f">
+        <label class="f{% if errors.has("day") %} is-bad{% endif %}">
           <span class="k">{{ t.edit_day() }}</span>
-          <input class="i" name="day" value="{{ day }}" inputmode="numeric" maxlength="2">
+          <input class="i" name="day" value="{{ day }}" inputmode="numeric" maxlength="2"
+                 {% if errors.focus("day") %}x-init="$el.focus(); $el.select()"{% endif %}>
+          {%- if let Some(m) = errors.get("day") %}<span class="ferr">{{ m }}</span>{% endif %}
         </label>
         {%- endif %}
       </div>

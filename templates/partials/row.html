@@ -105,6 +105,33 @@
               @click.stop="attach({{ v.id }}, $event)" title="{{ t.file_add_receipt() }}">
         <kbd>+</kbd>
       </button>
+      {#- Dropping a file on a ROW infers nothing: the row is identified by
+          where you let go. What a drop cannot say by itself is WHICH of the
+          three kinds it is, and guessing from the filename is exactly what
+          this repo already refused for panel drops — so the rail splits into
+          three aimed targets the moment a file is over the ledger, and the
+          drop carries the answer with it.
+
+          Rendered always and revealed by CSS, because a target that appears
+          only once Alpine notices the drag would flicker in under the
+          pointer that is already moving toward it. -#}
+      <span class="fdrops">
+        <span class="fdrop" data-kind="barcode"
+              @dragover.prevent @drop.prevent.stop="drop($event, {{ v.id }}, 'barcode')"
+              @dragenter="$el.classList.add('is-over')"
+              @dragleave="$el.classList.remove('is-over')"><kbd>1</kbd></span>
+        {#- Slot 2 is spend-only: you do not schedule money arriving. -#}
+        {%- if !v.amount_income %}
+        <span class="fdrop" data-kind="scheduled"
+              @dragover.prevent @drop.prevent.stop="drop($event, {{ v.id }}, 'scheduled')"
+              @dragenter="$el.classList.add('is-over')"
+              @dragleave="$el.classList.remove('is-over')"><kbd>2</kbd></span>
+        {%- endif %}
+        <span class="fdrop" data-kind="receipt"
+              @dragover.prevent @drop.prevent.stop="drop($event, {{ v.id }}, 'receipt')"
+              @dragenter="$el.classList.add('is-over')"
+              @dragleave="$el.classList.remove('is-over')"><kbd>3</kbd></span>
+      </span>
       {%- endif -%}
     </div>
     {%- endif -%}

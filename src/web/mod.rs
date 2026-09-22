@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod csrf;
 pub mod files;
+pub mod form;
 pub mod import;
 pub mod ledger;
 pub mod log;
@@ -64,6 +65,9 @@ pub fn router(state: AppState) -> Router {
         // filled in; saving reconciles immediately so the periods the rule is
         // responsible for arrive in the same response.
         .route("/rules/new", get(rules::new_rule))
+        // The months read-back. A pure GET: twelve numbers of arithmetic,
+        // rendered by the same parser that stores the value.
+        .route("/rules/months", get(rules::months_preview))
         .route("/rules", post(rules::create))
         .route("/rules/{id}/edit", get(rules::edit_rule))
         .route("/rules/{id}", post(rules::save))

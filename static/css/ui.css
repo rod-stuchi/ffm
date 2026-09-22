@@ -359,3 +359,63 @@ legend {
     display: none;
   }
 }
+
+/* --- per-field validation ------------------------------------------------
+ *
+ * A message belongs next to the field it is about. The card-level warnbox
+ * stays as the summary — what a screen reader announces on submit — but the
+ * field itself is marked and carries its own line, because "which box do I
+ * retype" is half of fixing a rejected form.
+ */
+.f.is-bad > .i,
+.f.is-bad input.i,
+.f.is-bad select.i {
+  border-color: var(--neg);
+}
+
+.ferr {
+  display: block;
+  font-size: 11.5px;
+  color: var(--neg);
+  margin-top: 3px;
+}
+
+/* --- the seasonal months read-back --------------------------------------
+ *
+ * Server-rendered on every keystroke, so it cannot disagree with the parser
+ * that stores the value. Shares the notebox's frame: it is a computed
+ * restatement of a field, exactly like the receipt path and the income
+ * estimate above it.
+ */
+.monthsbox .mrow {
+  display: flex;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+
+.monthsbox .mmark {
+  width: 15px;
+  text-align: center;
+  border-radius: 3px;
+  color: var(--ink-3);
+  opacity: 0.4;
+}
+
+.monthsbox .mmark.is-on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  opacity: 1;
+  font-weight: 600;
+}
+
+.monthsbox.is-bad .p2 {
+  color: var(--neg);
+}
+
+/* The months expression is read character by character, like every other
+ * mono thing in this app: a regex, a path, an invite URL. */
+input.i.mono {
+  font-family: var(--mono);
+}

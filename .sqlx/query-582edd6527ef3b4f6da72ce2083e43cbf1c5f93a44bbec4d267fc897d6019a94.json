@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", member_id AS \"member_id!: i64\",\n                  kind AS \"kind!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\",\n                  cadence_months AS \"cadence_months!: i64\",\n                  due_day AS \"due_day: i64\",\n                  start_date AS \"start_date!: String\",\n                  end_date AS \"end_date: String\",\n                  total_installments AS \"total_installments: i64\",\n                  carry_forward_amount AS \"carry_forward_amount!: i64\",\n                  bucket AS \"bucket: String\", bill_name AS \"bill_name: String\",\n                  visibility AS \"visibility!: String\"\n           FROM recurring_rules WHERE deleted_at IS NULL",
+  "query": "SELECT id AS \"id!: i64\", member_id AS \"member_id!: i64\",\n                  kind AS \"kind!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\",\n                  cadence_months AS \"cadence_months!: i64\",\n                  due_day AS \"due_day: i64\",\n                  start_date AS \"start_date!: String\",\n                  end_date AS \"end_date: String\",\n                  total_installments AS \"total_installments: i64\",\n                  carry_forward_amount AS \"carry_forward_amount!: i64\",\n                  bucket AS \"bucket: String\", bill_name AS \"bill_name: String\",\n                  months AS \"months: String\",\n                  visibility AS \"visibility!: String\"\n           FROM recurring_rules WHERE deleted_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -69,8 +69,13 @@
         "type_info": "Text"
       },
       {
-        "name": "visibility!: String",
+        "name": "months: String",
         "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 14,
         "type_info": "Text"
       }
     ],
@@ -91,8 +96,9 @@
       false,
       true,
       true,
+      true,
       false
     ]
   },
-  "hash": "2e08d31ba8ae6c2bff1a68a283c4b01ed16ce5a1baadc7b1e33a36ed881c86f1"
+  "hash": "582edd6527ef3b4f6da72ce2083e43cbf1c5f93a44bbec4d267fc897d6019a94"
 }

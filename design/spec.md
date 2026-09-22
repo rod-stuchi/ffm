@@ -305,11 +305,19 @@ Nothing destructive fires from a single keystroke.
 | `g1` | open the bill for the focused row, new tab *(proposal, not in the original spec)* |
 | `g2` | open the scheduled-payment file *(proposal, not in the original spec)* |
 | `g3` | open the receipt *(proposal, not in the original spec)* |
+| `gu1` / `gu2` / `gu3` | **attach** a bill / scheduled / receipt to the focused row |
 | `P` | preview the row's files in a carousel, without leaving the ledger *(proposal, not in the original spec)* |
 | `1` / `2` / `3` | inside the carousel — jump straight to that file |
 | `h` / `l` | inside the carousel — previous / next file |
 | `+` / `-` | inside the carousel — zoom in / out |
 | `0` | inside the carousel — reset zoom to 100% |
+
+`gu` is "goto upload", a second step of the same `g`-prefix vocabulary rather
+than a new pattern — and it deliberately reuses `g1`/`g2`/`g3`'s numbering, so
+one set of numbers means one thing whether you are opening a file or adding
+one. On a row with nothing to file under it is the same no-op-with-a-message
+treatment as everything else in this family, and `gu2` on an income row is
+refused for the same reason `g2` is: you do not schedule money arriving.
 
 Not stock Vim — a genuine FFM extension of the `g`-prefix "goto" vocabulary
 already in use (`gg`, `gt`), not a new pattern. Pressing a number for a file
@@ -442,6 +450,42 @@ editing. So:
 - **Cadence offers monthly, bimonthly, every 3 / 4 / 6 months and yearly.**
   Only the list is real so far: End date ↔ Installments still computes in
   whole months, so anything other than monthly is a label today.
+- **Seasonal months are an expression, not twelve toggles.** A rule that only
+  runs part of the year, every year (IPTU Jan–Oct; school fees Feb–Dec) gets
+  a "only some months" switch, and with it on, one mono field:
+
+  | typed | means |
+  |---|---|
+  | `1-10` | January to October |
+  | `1,2,3,5,6` | Jan, Feb, Mar, May, Jun |
+  | `^11,^12` | every month except November and December |
+  | `1-10,^5` | January to October, except May |
+  | `^6-8` | every month except June, July, August |
+
+  **`-` is always a range and `^` is always an exclusion.** A leading `-` for
+  "except" parses just as well, since the range separator is always infix —
+  it was rejected because it gives one idea two spellings, and an error
+  message can then say plainly what `^` does. **Exclusions alone imply every
+  month**, so `^11,^12` needs no `1-12,` in front of it; requiring an
+  explicit base would make the shortest useful expression the longest one.
+  An expression that excludes everything is an error, not an empty rule: a
+  rule that runs in no month would materialize nothing forever, with nothing
+  on screen to tell it apart from one that has not reached its start date.
+
+  Toggles were the alternative and are a mouse gesture in a keyboard-first
+  app. The field is mono, like every other thing in this app read character by
+  character — a regex, a path, an invite URL.
+
+- **The months read-back is rendered by the server, on every keystroke.** A
+  notebox under the field lights the months it resolved to and says so in
+  words (`10 months a year · Nov, Dec skipped`), or shows the parse error
+  with no months lit. It is an `hx-get`, not JavaScript, for the reason the
+  theme picker already gives: a preview computed in the browser is a second
+  implementation of the parser, free to disagree with the one that actually
+  stores the value — and this one decides which months a bill exists in at
+  all. It sits with the computed receipt path and the income estimate box,
+  which are the same idea.
+
 - **The rule form's End date and Total installments stay in sync**, per
   CLAUDE.md's Recurring rules section — typing one recomputes the other
   (assuming monthly cadence; that's the only cadence actually wired today).
@@ -576,6 +620,42 @@ editing. So:
   between two people's INs/OUTs and changes who owns the row. Same-shaped
   gesture, very different blast radius; they must not share a keystroke you can
   overshoot into.
+
+### A rejected form says which box
+
+**A message belongs next to the field it is about.** Every form in this app —
+`/setup`, `/invite`, the inline edit row, the rule pane — renders **both**:
+the message under its own field with the field marked, and a summary in the
+card's `.warnbox`.
+
+Two places for one message is a real cost, paid on purpose: the field message
+locates the problem, and the summary is what a screen reader announces on
+submit (`role="alert"`) and what makes a long form scannable. They are
+generated from one `FieldErrors`, so the duplication is in the rendering and
+never in the source.
+
+- **Every field is checked, not just the first that fails.** A form that
+  rejects one box per round trip makes somebody submit four times to find out
+  four things. The checks run in the order the fields sit on the page, so the
+  summary reads top to bottom.
+- **Focus moves to the first bad field**, rendered server-side as `autofocus`
+  on exactly one input — no JavaScript. A clean load keeps whatever autofocus
+  it normally has, which is why every one of those is conditional rather than
+  two elements competing for one cursor. (The rule pane and the edit row
+  place the cursor themselves, because `autofocus` is not honoured reliably
+  on a fragment the browser inserts, and both arrive as fragments.)
+- **A cross-field rule is reported on the field you would retype.** "The two
+  passwords do not match" lands on Confirm, not on Password — and only once
+  the password is long enough, or a short password says two things about
+  itself at once.
+- **`/login` is the deliberate exception.** It gives one message for both a
+  wrong name and a wrong password, which is a decision with a reason (see
+  Signing in, below): the two lead to the same next action, and naming the
+  field would say which half was right. It already does the other half of
+  this rule — focus comes back to the password.
+- **The settings panes are not forms in this sense.** They write on `change`
+  and have no submit, so there is no rejected-submission moment; a bad value
+  keeps the field's previous value and the pane's footer says what was wrong.
 
 ### Confirmation rule
 
@@ -1318,6 +1398,35 @@ stored file's extension mirrors whatever was actually uploaded.
   change log records the move (`old_path`, `deleted_at`, `deleted_by`,
   `reason`) so `u` restores it exactly — the same one audit mechanism every
   other change goes through, not a second one for files.
+
+### Attaching a file — three gestures, one upload path
+
+Phase 7 built the server side — three endpoints, one per kind, with the
+supersede and the soft delete. What was left open was the gesture. There are
+three, and they all end in the same request:
+
+- **The `+` control on the focused row's file rail.** The rail still shows
+  only files that *exist* — no ghost placeholders — so attaching lives behind
+  one control rather than three empty slots pretending to be files. Clicking
+  it opens a menu of the three kinds, anchored to the control itself because
+  the ledger scrolls sideways and a centred menu would point at nothing.
+- **Dropping a file on the row.** A row drop infers nothing: the row is
+  identified by where you let go. What a drop cannot say by itself is *which
+  of the three kinds* it is, and guessing that from the filename is exactly
+  what a panel drop was downgraded to a notifier for — so while a file is
+  over the ledger, every attachable row's rail splits into three aimed
+  targets (`1` `2` `3`, the same numbers), and the drop carries the answer.
+  The targets are rendered always and revealed by CSS off a class on the
+  shell; built on demand they would flicker into place under a pointer
+  already moving toward them.
+- **`gu1` / `gu2` / `gu3`** — straight to that slot, no menu.
+
+**Three distinct actions, never one upload plus a question**, in all three
+gestures: each kind has its own fixed name on disk and its own effect on
+state, so asking afterwards would be asking about something already decided.
+
+**An income row has no slot 2** in any of them — no menu entry, no drop
+target, and `gu2` refuses with the message `g2` already gives.
 
 ### Bill import — attached inside the rule's own form
 

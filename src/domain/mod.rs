@@ -6,6 +6,7 @@
 
 pub mod estimate;
 pub mod money;
+pub mod months;
 pub mod period;
 pub mod receipt_path;
 pub mod slug;

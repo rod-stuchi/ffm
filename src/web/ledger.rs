@@ -217,6 +217,7 @@ struct LedgerPage {
     /// `not a command: {cmd}` — with the placeholder left in, so the pane can
     /// fill it without the catalog having to know about JavaScript.
     not_a_command: String,
+    file_not_tracked: String,
     no_bill: String,
     no_scheduled: String,
     no_receipt: String,
@@ -329,6 +330,7 @@ pub async fn ledger(
         months_word: t.details_months().to_string(),
         keymap: keymap(&t),
         not_a_command: t.not_a_command("{cmd}"),
+        file_not_tracked: t.file_not_tracked().to_string(),
         no_bill: t.file_none_bill().to_string(),
         no_scheduled: t.file_none_scheduled().to_string(),
         no_receipt: t.file_none_receipt().to_string(),
@@ -398,6 +400,7 @@ fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
             t.keymap_files().to_string(),
             vec![
                 ("g1 / g2 / g3", "open the bill / scheduled / receipt"),
+                ("gu1 / gu2 / gu3", "attach a bill / scheduled / receipt"),
                 ("P", "preview this row's files"),
                 ("1 2 3 · h l", "inside P: jump to a file · step"),
                 ("+ - 0", "inside P: zoom in, out, reset"),

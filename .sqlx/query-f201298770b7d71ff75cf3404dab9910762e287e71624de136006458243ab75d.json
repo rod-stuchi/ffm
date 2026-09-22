@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE transactions SET title = ?2, amount_cents = ?3, date = ?4,\n                                   bucket = ?5, visibility = ?6,\n                                   version = version + 1\n           WHERE id = ?1 AND version = ?7",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "f201298770b7d71ff75cf3404dab9910762e287e71624de136006458243ab75d"
+}

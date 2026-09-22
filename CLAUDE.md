@@ -851,31 +851,92 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 - **Searching every month is a different verb.** `:grep` returning a result list,
   hitting a SQLite FTS5 index over HTMX. Do not overload `/` with it.
 
-### Open — not yet decided
+### The three that were open, and what they were decided to be
 
-1. **Concurrency.** Everything about the optimistic-UI flow is single-user in the
-   mock. The interesting cases only exist with a server: Ana deletes a row while
-   Rodrigo has it open in an edit form (or parked as a draft); both add in the same second. (The
-   materialization half of this is already handled — see Materialization
-   above: `UNIQUE(rule_id, period)` makes a double-insert impossible.)
-2. **Seasonal / cyclic recurring rules.** Some bills only apply part of the
-   year, every year (e.g. a tax tracked January–October, then again the next
-   January) — a `months`-of-year allow-list on top of the rule's existing
-   start/end dates is not yet designed. Distinct from `total_installments`
-   (decided, above): that's a one-time, finite run that ends permanently; this
-   is a recurring annual pattern. Nice-to-have, not blocking. The multi-period
-   barcode window (Recurring rules, above) is decided and doesn't wait on
-   this — it just needs a start period and a page count from whatever
-   mechanism eventually decides which months are active.
-3. **Split mode assumes exactly two panes.** "The unfocused pane," `H`/`L`
-   moving focus left/right — the whole layout is binary by construction, which
-   was fine when this was framed as a two-person app. It doesn't obviously
-   generalize to a household of four or six: a scrollable row of panes? pick
-   which one other member to compare against? fall back to tabs above some
-   member count? Not designed yet — revisit when a household bigger than two
-   is an actual case, not a hypothetical.
+These carried "not yet decided" through the whole phase map. All three are
+settled now; the reasoning is kept because each one closes off an alternative
+that will otherwise be re-proposed.
 
----
+1. **Concurrency — a row version, checked on the edit form's save, and
+   nothing else.** `transactions.version` is bumped by every write and
+   rendered into the edit form as a hidden field, so the save is
+   `UPDATE … WHERE id = ?1 AND version = ?2` and zero rows affected means
+   somebody got there first.
+   - **The failure being prevented is a lost update**, not a conflict to
+     resolve. Two people editing one row in one minute is rare in a
+     household; one of them silently overwriting the other is what makes the
+     ledger untrustworthy when it happens.
+   - **Only `e`'s save is guarded**, because a lost update needs a form held
+     open across somebody else's change and `e` is the only gesture that
+     does that. `p`, `dd`, `J`/`K` and `Ctrl-L` are instantaneous and fully
+     undoable, and a stale-version refusal there would fire because a
+     background materializer touched the row.
+   - **A refused save keeps the draft.** The row collapses to read-only
+     showing the other person's version and keeps its `unsaved · e to
+     resume` mark, so nothing typed is lost and `e` reopens it. Discarding
+     into the generic error row would throw away an edit somebody just
+     typed.
+   - **Rejected:** row locking (somebody walks away mid-edit and a bill is
+     locked until a timeout nobody can see), SSE/websocket invalidation of
+     open forms *as the guarantee* (see below), and last-write-wins with a
+     "changed by Ana" note after the fact — which is the lost update, with a
+     receipt.
+   - **A live notification is a separate, additive requirement**, written up
+     in `TODO_2.md`: a websocket telling you *while you type* that the row
+     moved, with the diff against your draft and Save becoming Update. The
+     version check is the floor and does not depend on it — if the socket is
+     down the save is still refused and the draft is still parked.
+
+2. **Seasonal / cyclic rules — one nullable `months` column, read only by
+   the materializer.** `recurring_rules.months` holds a sorted comma list of
+   month numbers, `NULL` meaning every month. The mock already demonstrated
+   the behaviour in seed data (`design/ffm-prototype.html:974`, IPTU running
+   Jan–Oct; `:983`, school fees running Feb–Dec) and filtered on it in one
+   line; what was missing was a control, because no mockup ever drew one.
+   - **Exactly one read site**: the reconciler skips a period whose month is
+     not in the list. Everything downstream reads occurrences, and an
+     occurrence that was never materialized is simply not there — which is
+     what keeps this a small change rather than a cross-cutting one.
+   - **Editing it affects future materializations only**, exactly like
+     `due_day`. Narrowing Jan–Oct to Jan–Aug does **not** delete the
+     September and October rows already recorded: a form field must not
+     trigger a silent bulk delete, and past occurrences are what happened.
+   - **It is an expression field, not twelve toggles** — see
+     `design/spec.md`'s Edit fields for the grammar. Toggles are a mouse
+     gesture in a keyboard-first app; `1-10` is one thing to type. A live
+     read-back underneath shows which months it resolved to, the same
+     pattern the computed receipt path and the income estimate box already
+     use.
+   - **It applies to income rules too.** Income runs on the same rule
+     machinery pointed the other way, and seasonal income is real — a 13th
+     salary in December, teaching income only during term. One column, one
+     control, no parallel concept. (Unlike the barcode apparatus, which is
+     spend-only because money arriving has no boleto.)
+   - **Still independent of the multi-period barcode window**: that asks
+     *which page of the shared file is this month's*, this asks *does this
+     month exist for this rule at all*. IPTU has both, which is why it is
+     the demo row for each.
+
+3. **Split mode does not assume two panes, and has not for a while.** The
+   stage is a horizontally scrolling flex row of panes; `H`/`L` step through
+   however many there are, and the rule pane joins as another column.
+   `just seed` builds a three-member household, which is what proves it.
+   - **The degenerate case is answered**: below `layout_min_split_width`
+     every unfocused pane steps aside, which is tabs mode — now reachable by
+     name with `gt` / `gT` / `2gt` and a real tab bar carrying each member's
+     balance.
+   - **The middle case — three of six panes fit — keeps scrolling
+     sideways.** Every pane stays reachable and nothing new is invented. A
+     "pin the focused pane, tabs for the rest" mode is the more usable
+     answer at six members and is a whole new layout to design, style and
+     translate; it is not worth inventing before a household that size
+     exists. Falling back to tabs above a member *count* was also rejected:
+     it puts a second rule in charge of a layout that a width setting
+     already decides.
+   - **`Ctrl-H`/`Ctrl-L` re-attribute to the adjacent pane**, so reaching a
+     distant member in a six-person household is five keystrokes.
+     `:move <name>` is the right answer at that size and already exists; the
+     keys stay the fast path for the common case.
 
 ## Server-side rules
 
@@ -1032,6 +1093,22 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 
 These cost real debugging time in the prototype. Do not re-introduce them.
 
+- **A keymap's count branch will eat a prefix's digit, twice.** `g1`/`g2`/`g3`
+  and `gu1`/`gu2`/`gu3` are bindings whose last key is a *digit*, and the
+  count that makes `5j` work matches digits first. Guard it on the buffer
+  being **empty**, never on a named prefix: the first fix tested
+  `buffer !== 'g'`, which was right until `gu` existed and then silently
+  broke `gu1` the same way. The sibling bug is the prefix key itself
+  consuming a pending count — `2gt` must still mean tab 2 — so arming a
+  prefix reads no count at all.
+- **`htmx:beforeSwap` fires on the swap TARGET, not on the element that
+  triggered the request.** A listener on a form inside the target never hears
+  it. This cost a silent bug: the "keep the draft when a save is refused"
+  handler sat on the form, never ran, and the statusline said *"your edit is
+  still here"* about a draft that had just been thrown away. Anything that
+  has to read a form's own values before it is swapped away belongs on a
+  container outside the target — which, for drafts, is the same shell they
+  already live on.
 - **An HTMX swap destroys the Alpine state inside it — and drafts live in
   Alpine.** Three decided rules collide here: a draft is unsubmitted form values
   so it never goes to the server; several can be parked at once; and the ledger

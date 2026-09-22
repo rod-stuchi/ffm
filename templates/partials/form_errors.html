@@ -1,0 +1,20 @@
+{#- The card-level summary of a rejected form.
+
+    The second of the two places a message appears — the first is under the
+    field itself. Both are generated from one `FieldErrors`, so they cannot
+    say different things; the duplication is in the rendering, never in the
+    source.
+
+    It exists for what a per-field message cannot do: a screen reader
+    announces this on submit, and a long form is scannable from it. `role`
+    and `aria-live` are what make that true rather than merely intended. -#}
+{%- if errors.is_bad() %}
+<div class="warnbox" role="alert" aria-live="assertive">
+  <span class="g" aria-hidden="true">&#9888;</span>
+  <span>
+    {%- for m in errors.messages() %}
+    <b>{{ m }}</b>{% if !loop.last %}<br>{% endif %}
+    {%- endfor %}
+  </span>
+</div>
+{%- endif %}

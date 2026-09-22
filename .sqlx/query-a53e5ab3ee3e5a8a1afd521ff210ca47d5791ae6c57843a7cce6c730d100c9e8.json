@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE transactions SET visibility = ?2, version = version + 1 WHERE id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a53e5ab3ee3e5a8a1afd521ff210ca47d5791ae6c57843a7cce6c730d100c9e8"
+}

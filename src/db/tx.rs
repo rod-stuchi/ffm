@@ -145,7 +145,8 @@ pub async fn soft_delete(pool: &SqlitePool, actor: Actor, id: i64) -> sqlx::Resu
     let at = now();
     let by = actor_id(actor);
     sqlx::query!(
-        "UPDATE transactions SET deleted_at = ?2, deleted_by = ?3 WHERE id = ?1",
+        "UPDATE transactions SET deleted_at = ?2, deleted_by = ?3, version = version + 1
+         WHERE id = ?1",
         id,
         at,
         by
@@ -191,7 +192,8 @@ pub async fn restore(
     }
 
     sqlx::query!(
-        "UPDATE transactions SET deleted_at = NULL, deleted_by = NULL WHERE id = ?1",
+        "UPDATE transactions SET deleted_at = NULL, deleted_by = NULL, version = version + 1
+         WHERE id = ?1",
         id
     )
     .execute(&mut *tx)
@@ -271,7 +273,8 @@ pub async fn undo(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Result
             let at = now();
             let by = actor_id(actor);
             let n = sqlx::query!(
-                r#"UPDATE transactions SET deleted_at = ?2, deleted_by = ?3
+                r#"UPDATE transactions SET deleted_at = ?2, deleted_by = ?3,
+                                          version = version + 1
                    WHERE id = ?1 AND deleted_at IS NULL"#,
                 u.entity_id,
                 at,
@@ -349,7 +352,7 @@ pub async fn undo(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Result
                     .map(|(_, o, _)| o.clone())
             {
                 sqlx::query!(
-                    "UPDATE transactions SET sort_key = ?2 WHERE id = ?1",
+                    "UPDATE transactions SET sort_key = ?2, version = version + 1 WHERE id = ?1",
                     u.entity_id,
                     key
                 )
@@ -443,8 +446,14 @@ async fn undo_edit(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Resul
             visibility,
         },
         Some(u.change_id),
+        // An undo writes regardless of the version. It is reversing a change
+        // that is already in the log, not competing with one — and refusing
+        // it because the materializer touched the row would make `u`
+        // unreliable for the one thing it exists to do.
+        None,
     )
     .await
+    .map(|s| s == Saved::Ok)
 }
 
 /// One row, as the pane renders it — for the fragment a mutation returns.
@@ -537,7 +546,7 @@ pub async fn reorder(
     let new_key = sortkey::between(before, after);
 
     sqlx::query!(
-        "UPDATE transactions SET sort_key = ?2 WHERE id = ?1",
+        "UPDATE transactions SET sort_key = ?2, version = version + 1 WHERE id = ?1",
         id,
         new_key
     )
@@ -570,6 +579,20 @@ pub async fn reorder(
 /// and nowhere else, so there are never two controls for one fact with no rule
 /// for which wins at the next materialization. A non-recurring row has no rule
 /// to hold one, which is exactly why `day` is here at all.
+/// What a save did, which is three answers rather than a boolean.
+///
+/// `Stale` is the whole reason this type exists: "nothing was written" and
+/// "somebody else got there first" need different copy, because only one of
+/// them is worth reopening the row to look at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Saved {
+    Ok,
+    /// The row moved under the form. Nothing was written.
+    Stale,
+    /// No live row with that id.
+    Gone,
+}
+
 pub struct EditFields<'a> {
     pub title: &'a str,
     pub amount: Option<Cents>,
@@ -580,29 +603,44 @@ pub struct EditFields<'a> {
 }
 
 /// Saves an edit, recording only the fields that actually moved.
+/// Saves an edit, recording only the fields that actually moved.
+///
+/// `expect_version` is the optimistic-concurrency check, and the **only**
+/// place in this app that has one. Pass the version the form was rendered
+/// with and the UPDATE matches on it, so a row somebody else has saved since
+/// refuses rather than silently overwriting their work. Pass `None` — as undo
+/// does — to write regardless: an undo is reversing a change that is already
+/// in the log, not competing with one.
 pub async fn edit(
     pool: &SqlitePool,
     actor: Actor,
     id: i64,
     fields: EditFields<'_>,
     undo_of: Option<i64>,
-) -> sqlx::Result<bool> {
+    expect_version: Option<i64>,
+) -> sqlx::Result<Saved> {
     let mut tx = pool.begin().await?;
 
     let old = sqlx::query!(
         r#"SELECT title AS "title!: String", amount_cents AS "amount_cents: i64",
                   date AS "date: String", due_date AS "due_date: String",
                   bucket AS "bucket: String", visibility AS "visibility!: String",
-                  period AS "period!: String", rule_id AS "rule_id: i64"
+                  period AS "period!: String", rule_id AS "rule_id: i64",
+                  version AS "version!: i64"
            FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
         id
     )
     .fetch_optional(&mut *tx)
     .await?;
 
-    let Some(old) = old else { return Ok(false) };
+    // A deleted row and a missing one answer the same way on purpose: from
+    // the form's side they are one fact, "this is not there any more", and
+    // `u` is the next move for either.
+    let Some(old) = old else {
+        return Ok(Saved::Gone);
+    };
     let Some(period) = Period::parse(&old.period) else {
-        return Ok(false);
+        return Ok(Saved::Gone);
     };
 
     // The day is stamped onto the occurrence's own date. A recurring row never
@@ -617,19 +655,34 @@ pub async fn edit(
     let amount = fields.amount.map(|c| c.get());
     let visibility = fields.visibility.code();
 
-    sqlx::query!(
+    // The check itself. `version` is compared in the WHERE rather than
+    // against the row read above, so the test and the write are one
+    // statement — reading, comparing in Rust and then writing would leave a
+    // window between them, which is the bug this is here to prevent.
+    let expected = expect_version.unwrap_or(old.version);
+    let wrote = sqlx::query!(
         r#"UPDATE transactions SET title = ?2, amount_cents = ?3, date = ?4,
-                                   bucket = ?5, visibility = ?6
-           WHERE id = ?1"#,
+                                   bucket = ?5, visibility = ?6,
+                                   version = version + 1
+           WHERE id = ?1 AND version = ?7"#,
         id,
         fields.title,
         amount,
         new_date,
         fields.bucket,
         visibility,
+        expected,
     )
     .execute(&mut *tx)
-    .await?;
+    .await?
+    .rows_affected();
+
+    if wrote == 0 {
+        // Nothing written, and nothing logged: the change entry and the row
+        // it describes commit together or not at all, which is the rule the
+        // whole change log rests on.
+        return Ok(Saved::Stale);
+    }
 
     let old_date = old
         .date
@@ -684,7 +737,7 @@ pub async fn edit(
     }
 
     tx.commit().await?;
-    Ok(true)
+    Ok(Saved::Ok)
 }
 
 /// `p` — toggle whether this row is hidden from the other members.
@@ -712,7 +765,7 @@ pub async fn toggle_privacy(
     let next = if now_private { "private" } else { "household" };
 
     sqlx::query!(
-        "UPDATE transactions SET visibility = ?2 WHERE id = ?1",
+        "UPDATE transactions SET visibility = ?2, version = version + 1 WHERE id = ?1",
         id,
         next
     )
@@ -788,7 +841,8 @@ pub async fn reattribute(
     );
 
     sqlx::query!(
-        "UPDATE transactions SET member_id = ?2, sort_key = ?3 WHERE id = ?1",
+        "UPDATE transactions SET member_id = ?2, sort_key = ?3, version = version + 1
+         WHERE id = ?1",
         id,
         to_member,
         sort_key,

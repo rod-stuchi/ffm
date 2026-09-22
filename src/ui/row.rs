@@ -119,9 +119,11 @@ impl FileKind {
 pub struct FileControl {
     pub kind: FileKind,
     pub number: u8,
-    /// `Bill`/`Invoice`, `Scheduled`, `Receipt`/`Payslip` — the label changes
-    /// by direction, the number never does.
-    pub label: &'static str,
+    /// No label here. `Bill`/`Invoice`, `Scheduled`, `Receipt`/`Payslip`
+    /// changes by direction AND by language, and this struct has no Catalog
+    /// — which is exactly how those words ended up hardcoded in English on a
+    /// pt-BR ledger. The word is chosen in `view`, where `t` is in scope; the
+    /// number, which never changes, stays here.
     pub path: String,
     /// `Bill · p.4` when the rule's barcode spans several periods.
     pub page: Option<BarcodePage>,
@@ -589,13 +591,6 @@ impl LedgerRow {
                 Some(FileControl {
                     kind,
                     number: kind.number(),
-                    label: match (kind, income) {
-                        (FileKind::Bill, false) => "Bill",
-                        (FileKind::Bill, true) => "Invoice",
-                        (FileKind::Scheduled, _) => "Scheduled",
-                        (FileKind::Receipt, false) => "Receipt",
-                        (FileKind::Receipt, true) => "Payslip",
-                    },
                     page: (kind == FileKind::Bill)
                         .then(|| self.barcode_page())
                         .flatten(),
@@ -854,7 +849,19 @@ impl LedgerRow {
                         FileKind::Receipt => "receipt",
                     }),
                     number: c.number,
-                    label: c.label,
+                    // From the catalog, not a literal. The rail is one of the
+                    // few places a word is chosen by BOTH the file's kind and
+                    // which way the money goes — a spend's Bill is an
+                    // income's Invoice — and doing that match where there is
+                    // no Catalog in scope is how it ended up in English on a
+                    // pt-BR ledger.
+                    label: match (c.kind, self.kind.is_income()) {
+                        (FileKind::Bill, false) => t.file_bill(),
+                        (FileKind::Bill, true) => t.file_invoice(),
+                        (FileKind::Scheduled, _) => t.file_scheduled(),
+                        (FileKind::Receipt, false) => t.file_receipt(),
+                        (FileKind::Receipt, true) => t.file_payslip(),
+                    },
                     page: c.page.map(|p| format!("p.{}", p.page)),
                     warn: c.page.is_some_and(|p| !p.in_window),
                     href: format!("/tx/{}/file/{}", self.id, c.kind.storage().code()),
@@ -934,6 +941,7 @@ impl LedgerRow {
 mod tests {
     use super::*;
     use crate::domain::status::EditKind;
+    use crate::ui::i18n::Lang;
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, day).unwrap()
@@ -1240,9 +1248,21 @@ mod tests {
 
         let rail = r.file_rail();
         assert_eq!(rail.len(), 2);
-        assert_eq!(rail[0].label, "Invoice");
-        assert_eq!(rail[1].label, "Payslip");
         assert!(!rail.iter().any(|c| c.kind == FileKind::Scheduled));
+        // The numbers are fixed by kind and never renumbered by what exists:
+        // an income row's rail is slots 1 and 3, with nothing where 2 would
+        // be — which is what makes `g1` and `g3` mean one thing everywhere.
+        assert_eq!(rail[0].number, 1);
+        assert_eq!(rail[1].number, 3);
+
+        // And the words come from the catalog, in whichever language is
+        // asking — the reason they are no longer on FileControl at all.
+        let en = r.clone().view(&Catalog::new(Lang::En));
+        assert_eq!(en.files[0].label, "Invoice");
+        assert_eq!(en.files[1].label, "Payslip");
+        let pt = r.view(&Catalog::new(Lang::PtBr));
+        assert_eq!(pt.files[0].label, "Fatura");
+        assert_eq!(pt.files[1].label, "Holerite");
     }
 
     #[test]

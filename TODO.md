@@ -604,149 +604,87 @@ carry `BEFORE DELETE` triggers that `RAISE(ABORT)` — the log is append-only,
 on purpose. Starting from an empty database is the same intent with no
 trigger to fight and no second copy of that DDL to drift.
 
+## All five closed — 22/09/2026
+
+The three deferred decisions and the two undesigned features are done. What
+each turned out to be, and what it cost:
+
+### 1. Concurrency ✅ — a row version, on the edit form's save alone
+
+`transactions.version`, bumped by every write, rendered into the edit form as
+a hidden field, matched in the UPDATE's own WHERE so the test and the write
+are one statement. Zero rows affected means somebody got there first.
+
+- **Only `e`'s save is guarded.** A lost update needs a form held open across
+  somebody else's change; `p`, `dd`, `J`/`K` and `Ctrl-L` are instantaneous
+  and undoable, and a refusal there would fire because the materializer
+  touched the row. They all still *bump* it.
+- **A refusal keeps the draft.** The row comes back read-only showing the
+  other person's version, marked `unsaved · e to resume`, and `e` picks the
+  draft straight back up — with the stale version dropped from it, or the
+  retry would refuse for the same reason forever.
+- **The copy names who.** The change log already records exactly that.
+- **Rejected:** locking, live invalidation as the guarantee, and
+  last-write-wins with a note after the fact (the lost update, with a
+  receipt). The live *notification* is a separate additive requirement —
+  `TODO_2.md`.
+
+### 2. Seasonal / cyclic rules ✅ — `months`, read in one place
+
+A nullable comma list, NULL meaning every month, read only by the
+reconciler's gap query. A skipped month does not consume an installment.
+Narrowing the list leaves what was already recorded, the same rule `due_day`
+follows.
+
+**The control is an expression, not twelve toggles** — `1-10`, `1,2,3,5,6`,
+`^11,^12`, `1-10,^5`. `-` is always a range, `^` is always an exclusion, and
+exclusions alone imply every month. The read-back under it is rendered by the
+server on every keystroke, so the preview and the parser cannot disagree.
+It applies to income rules too.
+
+### 3. Split mode beyond two panes ✅ — it already generalised
+
+Closed in prose rather than built. The stage is an N-pane scrolling flex row,
+`just seed` builds three members, tabs mode is reachable by name. The middle
+case (three of six fit) keeps scrolling sideways; "pin the focused pane, tabs
+for the rest" is the better answer at six members and is a whole new layout
+mode, not worth inventing before a household that size exists.
+
+### 4. Form errors beside their field ✅ — and a summary, on every form
+
+`web::form::FieldErrors`. Every field checked rather than the first that
+fails, in the order they sit on the page; the message under its own field
+with the field marked, plus the card-level `.warnbox` summary for the screen
+reader and for scanning. Focus moves to the first bad field, server-rendered
+as `autofocus` on exactly one input. A cross-field rule lands on the box you
+would retype — the mismatch is on Confirm, not on Password.
+
+`/login` stays the one exception, with its reason: one message for both a
+wrong name and a wrong password.
+
+Two swap-shaped bugs fell out and are now gotchas in CLAUDE.md: `hx-swap`
+on the rule pane is `delete`, so a rejection has to retarget itself; and
+`htmx:beforeSwap` fires on the target, not the form.
+
+### 5. The file-attach gesture ✅ — three of them, one upload path
+
+The `+` control's three-kind menu (which already existed, recorded as
+provisional) is now the decided answer, joined by **dropping a file on the
+row** — the rail splits into three aimed targets while a file is over the
+ledger, so the drop carries the kind and nothing is inferred from the
+filename — and **`gu1`/`gu2`/`gu3`**, reusing `g1`/`g2`/`g3`'s numbering so
+one set of numbers means one thing.
+
+An i18n bug surfaced while checking it: the file rail's labels
+(`Bill`/`Invoice`, `Receipt`/`Payslip`) were hardcoded English literals on a
+struct with no `Catalog` in scope, so a pt-BR ledger read "Receipt". They
+come from the catalog now, asserted in both languages.
+
+---
+
 ## Still open, not scheduled
+
 
 These are decisions, not tasks — they get scheduled when there is evidence.
 
-1. **Concurrency.** Ana deletes a row while Rodrigo has it open in an edit form
-   or parked as a draft. (The materialization half is handled:
-   `UNIQUE(rule_id, period)` makes a double-insert impossible.)
-
-   **Recommendation — a row version, checked on write, and nothing else.**
-   Written down rather than built, because it needs a second person actually
-   using the app to know whether it is worth the column.
-
-   - **The failure to prevent is a *lost update*, not a conflict UI.** Two
-     people editing the same row in the same minute is rare in a household;
-     one of them silently overwriting the other is what makes the ledger
-     untrustworthy when it does happen. So: `transactions.version INTEGER NOT
-     NULL DEFAULT 0`, bumped by every write, rendered into the edit form as a
-     hidden field, and `UPDATE … WHERE id = ?1 AND version = ?2`. Zero rows
-     affected means somebody got there first.
-   - **The answer is the error row that already exists.** Phase 5 fixed the
-     response contract precisely so a refused write has somewhere to land:
-     red ground, a message, and **Try Again** carrying the original action.
-     The copy is the only new thing — *"Ana changed this row while you were
-     editing. Nothing was written. Open it again to see hers."* No merge UI,
-     no three-way diff; this is a household ledger, and the change log
-     already records what she did.
-   - **A deleted row is the same shape.** Saving into a soft-deleted row is a
-     write whose `WHERE … deleted_at IS NULL` matches nothing, which is
-     already how `edit` behaves — it returns `false` and the handler says
-     nothing was written. What it needs is *its own* message (*"Ana deleted
-     this row"*) rather than the generic one, because `u` is the next move
-     and the copy should say so.
-   - **Drafts need nothing.** A parked draft is unsubmitted form values in
-     Alpine; the version check happens when it is finally saved, which is
-     exactly when it matters. Polling to invalidate a draft would put a
-     server round trip behind a gesture whose whole point is that it does
-     not touch the server.
-   - **Explicitly not doing:** row locking (a household member who walks away
-     mid-edit would lock a bill until a timeout nobody can see), SSE
-     invalidation of open forms (a live channel for an event that happens
-     monthly), or last-write-wins with a "changed by Ana" note after the
-     fact (that is the lost update, with a receipt).
-
-2. **Seasonal / cyclic rules.** A `months`-of-year allow-list on top of
-   start/end dates. Distinct from `total_installments`, which ends permanently.
-
-   **Recommendation — one nullable `months` column, read only by the
-   materializer.**
-
-   - **Shape:** `recurring_rules.months TEXT NULL`, a sorted comma list of
-     month numbers (`'1,2,3,4,5,6,7,8,9,10'` for a Jan–Oct tax), `NULL`
-     meaning every month. A `CHECK` with a `GLOB` keeps it well formed, the
-     same posture `period` already takes. Not a child table: it is at most
-     twelve small integers that are always read and written as a whole, and
-     a join would buy nothing.
-   - **Exactly one read site.** The reconciler's gap query skips a period
-     whose month is not in the list. Everything downstream — the ring, the
-     unresolved badge, `:grep`, the MoM delta — reads occurrences, and an
-     occurrence that was never materialized is simply not there. That is
-     what keeps this a small change rather than a cross-cutting one.
-   - **Editing it affects future materializations only**, exactly like
-     `due_day`, and for the identical reason: past occurrences are what was
-     recorded. Narrowing the list does **not** delete occurrences already in
-     months that just left it — deleting them would be a silent bulk delete
-     driven by a form field, which this app does nowhere else.
-   - **The form control is twelve toggles, not a text field.** It is a
-     bounded set with a natural layout, and it is the one place the row of
-     month names reads faster than anything typed.
-   - **It composes with `spans_period` and needs no coordination with it.**
-     The barcode window asks "which page is this period", the allow-list asks
-     "does this period exist at all"; neither asks the other anything. A
-     ten-page IPTU file and a Jan–Oct allow-list describe the same bill from
-     two directions and are set in two independent fields.
-
-3. **Split mode assumes exactly two panes.** Revisit when a household bigger
-   than two is an actual case rather than a hypothetical.
-
-   **Recommendation — it already generalised, and the seed household proves
-   it.** `just seed` creates three members, and the stage is a horizontally
-   scrolling flex row of panes: `H`/`L` step, the focused pane is the one
-   with `.is-focus`, and the rule pane joins as another column. Nothing in
-   the implementation is binary. What is left is narrower than the original
-   question:
-
-   - **Which panes to show when they do not all fit.** The layout resolves in
-     CSS from `layout_min_split_width`, and below it every unfocused pane
-     steps aside — which is tabs mode, and is now reachable by name (`gt` /
-     `gT` / `2gt`) with a real tab bar carrying each member's balance. So the
-     degenerate case is answered; what is not is the middle, where three of
-     six panes fit. Today the stage scrolls sideways. The alternative — pick
-     one other member to compare against — is a new concept (a "comparison
-     pane") and should not be invented before somebody wants it.
-   - **`Ctrl-H`/`Ctrl-L` re-attribute to the *adjacent* pane**, which in a
-     six-member household means reaching a distant member is five
-     keystrokes. `:move <name>` already exists and is the right answer at
-     that size; the keys stay as the fast path for the common case.
-   - **Nothing here is blocking.** The only real recommendation is to stop
-     describing the design as two-person: it is not, and the assumption is
-     gone from the code. Update the prose when `CLAUDE.md`'s Open items are
-     next revised.
-
-4. **A form's error belongs next to the field it is about, not at the top of
-   the card.** Today every pre-auth failure renders one `.warnbox` above the
-   whole form: *"Use at least 8 characters."* sits at the top of `/setup` with
-   nothing connecting it to Password, three sections further down and possibly
-   off screen. The copy rule says an error explains what went wrong **and how to
-   fix it**, and "which box do I retype" is half of that.
-
-   What needs deciding, rather than just implementing:
-   - **Per-field, card-level, or both?** A field-level message is the one that
-     locates the problem; a card-level summary is what a screen reader announces
-     on submit. Both is the accessible answer and two places to keep in step.
-   - **Which field owns a cross-field rule.** "The two passwords do not match"
-     is about a *pair* — Confirm is the likelier fix, but that is a guess.
-   - **Focus.** `/login` already moves focus to the password on failure. Whether
-     a rejected `/setup` should focus its first bad field is the same question
-     asked once per form, and it is worth answering once.
-   - **What it looks like.** The mockups only ever draw the card-level
-     `.warnbox`; a per-field state (red rail on `input.i`, message under it)
-     does not exist in the visual system yet and would be a new component.
-   - **Where it is enforced.** Validation lives in the handler today. A field
-     error means the handler has to say *which* field, so `Result<_, Vec<(field,
-     message)>>` rather than `Result<_, String>` — worth settling before the
-     mutation handlers in phase 5 copy the current shape everywhere.
-
-   Raised from a real `/setup` submission (21/09/2026): password too short,
-   warning at the top, both password boxes visually full because the browser's
-   password manager had refilled them — so the message and the fields it
-   described disagreed on screen.
-
-5. **How a file actually gets attached is not designed.** Phase 7 built the
-   whole server side — three endpoints, one per kind, with the supersede and
-   the soft delete — but the spec explicitly leaves the gesture open, and the
-   `+` control on the focused row is a placeholder rather than a decision.
-
-   What needs settling:
-   - **Where it lives.** A control on the row, a drop target on the row, the
-     `gd` details popup, or the `P` carousel — which currently refuses on a row
-     with no files, so it cannot be the only home.
-   - **Drag and drop onto a *row*.** A panel drop was deliberately downgraded
-     to a notifier because inferring which rule a file belongs to is fragile.
-     A row drop infers nothing — the row is identified by where you dropped it
-     — which is the same reasoning that makes the rule editor's dropzone fine.
-   - **A keystroke, or none.** Every other action on a row has one; upload has
-     no obvious letter left, and inventing `gu` for it may be worse than
-     reaching for the mouse on something done a few times a month.
+Nothing. See `TODO_2.md` for requirements raised after this map closed.

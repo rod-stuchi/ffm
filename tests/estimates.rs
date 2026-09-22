@@ -85,6 +85,7 @@ async fn commission(pool: &SqlitePool, me: i64, basis: &str) -> i64 {
             estimate_basis: basis.into(),
             estimate_window: 3,
             amount_in_filename: false,
+            months: None,
             visibility: Visibility::Household,
         },
     )
@@ -315,6 +316,7 @@ async fn a_fixed_income_is_not_projected_at_all() {
             estimate_basis: "lowest".into(),
             estimate_window: 3,
             amount_in_filename: false,
+            months: None,
             visibility: Visibility::Household,
         },
     )

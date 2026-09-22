@@ -23,6 +23,7 @@ use crate::domain::status::{RowFlags, RowState, TxKind, Visibility};
 use crate::state::AppState;
 use crate::ui::i18n::Catalog;
 use crate::ui::row::{FilePresence, Gutter, LedgerRow, RowCtx, RowView};
+use crate::web::form::FieldErrors;
 use crate::web::ledger::{HouseTotals, PaneTotals};
 use crate::web::session::Auth;
 use crate::web::template::Html;
@@ -682,6 +683,11 @@ struct EditRow {
     private: bool,
     /// A recurring row gets no Day field: its due day lives on the rule.
     recurring: bool,
+    /// What the row said when this form was rendered. Goes back with the save
+    /// as a hidden field, and the UPDATE matches on it — so a row somebody
+    /// else has changed since refuses instead of silently overwriting them.
+    version: i64,
+    errors: FieldErrors,
 }
 
 /// Opens the row into its own form. The row is replaced rather than covered —
@@ -695,7 +701,8 @@ pub async fn edit_form(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
     let row = sqlx::query!(
         r#"SELECT title AS "title!: String", amount_cents AS "amount_cents: i64",
                   date AS "date: String", bucket AS "bucket: String",
-                  visibility AS "visibility!: String", rule_id AS "rule_id: i64"
+                  visibility AS "visibility!: String", rule_id AS "rule_id: i64",
+                  version AS "version!: i64"
            FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
         id
     )
@@ -732,6 +739,8 @@ pub async fn edit_form(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
             .unwrap_or_default(),
         private: row.visibility == "private",
         recurring: row.rule_id.is_some(),
+        version: row.version,
+        errors: FieldErrors::new(),
         t,
     })
     .into_response()
@@ -748,6 +757,12 @@ pub struct EditForm {
     bucket: String,
     #[serde(default)]
     private: Option<String>,
+    /// The version the form was rendered with. Absent or unparseable means
+    /// "do not check" rather than "check against zero" — a form that lost its
+    /// hidden field should behave like the old unguarded save, not refuse
+    /// every row whose version has ever moved.
+    #[serde(default)]
+    version: String,
 }
 
 pub async fn save_edit(
@@ -761,10 +776,24 @@ pub async fn save_edit(
         return say_only(t.error_not_written(), true);
     }
     let title = form.title.trim();
-    if title.is_empty() {
-        return say_only(&t.field_required(t.row_title()), true);
-    }
     let bucket = form.bucket.trim();
+
+    let mut errors = FieldErrors::new();
+    if title.is_empty() {
+        errors.add("title", t.field_required(t.row_title()));
+    }
+    if !form.day.trim().is_empty()
+        && !form
+            .day
+            .trim()
+            .parse::<u32>()
+            .is_ok_and(|d| (1..=31).contains(&d))
+    {
+        errors.add("day", t.edit_day_bad());
+    }
+    if errors.is_bad() {
+        return reopen(&st, &auth, id, &form, errors).await;
+    }
 
     let ok = tx::edit(
         &st.pool,
@@ -787,18 +816,120 @@ pub async fn save_edit(
             },
         },
         None,
+        form.version.trim().parse::<i64>().ok(),
     )
     .await;
 
     match ok {
-        Ok(true) => match tx::one(&st.pool, id).await {
+        Ok(tx::Saved::Ok) => match tx::one(&st.pool, id).await {
             Ok(Some((member_id, period, _))) => {
                 row_fragment(&st, &auth, id, member_id, period, t.edit_saved()).await
             }
             _ => say_only(t.error_not_written(), true),
         },
+        // Somebody saved this row while the form was open. Nothing was
+        // written; the row comes back read-only showing THEIR version, and
+        // the draft stays parked so nothing typed is lost. The marker header
+        // is what tells the form which of those two it is — a 200 with a row
+        // in it looks identical from the client's side otherwise.
+        Ok(tx::Saved::Stale) => {
+            let who = last_editor(&st, id).await;
+            stale(
+                &st,
+                &auth,
+                id,
+                match who {
+                    Some(name) => t.edit_stale(&name),
+                    None => t.edit_stale_unknown().to_string(),
+                },
+            )
+            .await
+        }
+        Ok(tx::Saved::Gone) => stale(&st, &auth, id, t.edit_gone().to_string()).await,
         _ => say_only(t.error_not_written(), true),
     }
+}
+
+/// Who last changed a row, for the copy. The change log is already the record
+/// of exactly this, so there is nothing to add — just the most recent entry's
+/// actor, skipping the system ones (the materializer is not somebody who got
+/// there first).
+async fn last_editor(st: &AppState, id: i64) -> Option<String> {
+    sqlx::query_scalar!(
+        r#"SELECT m.name AS "name!: String"
+           FROM change c JOIN members m ON m.id = c.member_id
+           WHERE c.entity = 'transaction' AND c.entity_id = ?1 AND c.source = 'user'
+           ORDER BY c.id DESC LIMIT 1"#,
+        id
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .ok()
+    .flatten()
+}
+
+/// A refused save: the row as it actually stands now, plus a header saying
+/// this was a refusal rather than a success, so the form keeps the draft
+/// instead of clearing it.
+async fn stale(st: &AppState, auth: &Auth, id: i64, message: String) -> Response {
+    let mut res = match render_row(st, auth, id, false).await {
+        Ok(f) => say(Html(f).into_response(), &message, true),
+        Err(e) => return say(error_row(&auth.catalog(), e), e, true),
+    };
+    res.headers_mut()
+        .insert("FFM-Stale", axum::http::HeaderValue::from_static("1"));
+    res
+}
+
+/// A rejected edit comes back as **the form again**, with what was typed
+/// still in it and the message beside its field.
+///
+/// The marker header matters: the shell's swap handler clears `editing` and
+/// the draft whenever a row that held a form is swapped, which is right for a
+/// save that worked and wrong for one that was refused and is handing the
+/// form straight back.
+async fn reopen(
+    st: &AppState,
+    auth: &Auth,
+    id: i64,
+    form: &EditForm,
+    errors: FieldErrors,
+) -> Response {
+    let t = auth.catalog();
+    let version = sqlx::query_scalar!(
+        r#"SELECT version AS "v!: i64" FROM transactions WHERE id = ?1"#,
+        id
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
+
+    let message = errors.messages().first().unwrap_or(&"").to_string();
+    let mut res = say(
+        Html(EditRow {
+            id,
+            title: form.title.clone(),
+            amount: form.amount.clone(),
+            day: form.day.clone(),
+            bucket: form.bucket.clone(),
+            buckets: crate::db::rules::buckets(&st.pool, auth.viewer.member_id)
+                .await
+                .unwrap_or_default(),
+            private: form.private.is_some(),
+            recurring: form.day.trim().is_empty(),
+            version,
+            errors,
+            t,
+        })
+        .into_response(),
+        &message,
+        true,
+    );
+    res.headers_mut()
+        .insert("FFM-Reopen", axum::http::HeaderValue::from_static("1"));
+    res
 }
 
 /// One row, read-only — what Cancel swaps back in.

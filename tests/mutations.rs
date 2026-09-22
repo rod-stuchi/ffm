@@ -337,7 +337,7 @@ async fn an_edit_records_only_what_moved_and_undo_puts_it_back() {
     let me = household(&pool).await;
     let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
 
-    assert!(
+    assert_eq!(
         tx::edit(
             &pool,
             Actor::User(me),
@@ -350,9 +350,11 @@ async fn an_edit_records_only_what_moved_and_undo_puts_it_back() {
                 visibility: Visibility::Household,
             },
             None,
+            None,
         )
         .await
-        .unwrap()
+        .unwrap(),
+        tx::Saved::Ok
     );
 
     // Only the amount moved, so only the amount is in the log. An entry that
@@ -529,4 +531,196 @@ async fn an_undo_is_an_entry_never_a_rewrite() {
     // walks further back, to the row's own creation.
     let next = tx::last_undoable(&pool, me).await.unwrap().unwrap();
     assert_eq!(next.action, "create");
+}
+
+// ---------------------------------------------------------------------------
+// concurrency — the version check
+// ---------------------------------------------------------------------------
+//
+// The failure being prevented is a LOST UPDATE: a form held open across
+// somebody else's save, then saved over the top of it. Nothing here is about
+// resolving a conflict; it is about refusing to lose one.
+
+async fn edit_at(
+    pool: &SqlitePool,
+    me: i64,
+    id: i64,
+    title: &str,
+    version: Option<i64>,
+) -> tx::Saved {
+    tx::edit(
+        pool,
+        Actor::User(me),
+        id,
+        tx::EditFields {
+            title,
+            amount: Some(Cents(100)),
+            day: None,
+            bucket: None,
+            visibility: Visibility::Household,
+        },
+        None,
+        version,
+    )
+    .await
+    .unwrap()
+}
+
+async fn version_of(pool: &SqlitePool, id: i64) -> i64 {
+    sqlx::query_scalar("SELECT version FROM transactions WHERE id = ?1")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_save_against_a_stale_version_is_refused_and_writes_nothing() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+    let opened_at = version_of(&pool, id).await;
+
+    // Somebody else saves first.
+    assert_eq!(
+        edit_at(&pool, me, id, "Mercado · Ana", None).await,
+        tx::Saved::Ok
+    );
+
+    // The form that was open still holds the old version.
+    assert_eq!(
+        edit_at(&pool, me, id, "Mercado · Rodrigo", Some(opened_at)).await,
+        tx::Saved::Stale
+    );
+
+    let title: String = sqlx::query_scalar("SELECT title FROM transactions WHERE id = ?1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(title, "Mercado · Ana", "the first save must survive");
+}
+
+#[tokio::test]
+async fn a_refused_save_leaves_nothing_in_the_log_either() {
+    // The entry and the row it describes commit together or not at all. A
+    // change log that records an edit nobody made is worse than no log.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+    let opened_at = version_of(&pool, id).await;
+    edit_at(&pool, me, id, "Ana", None).await;
+
+    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM change")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        edit_at(&pool, me, id, "Rodrigo", Some(opened_at)).await,
+        tx::Saved::Stale
+    );
+    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM change")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
+}
+
+#[tokio::test]
+async fn every_write_to_a_row_moves_its_version() {
+    // The check is only on the edit form's save, but a form held open across
+    // ANY of these is the case being caught — so they all have to move it.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let other = second_member(&pool, me).await;
+    let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+    add(&pool, me, TxKind::Out, "Farmácia", 8740).await;
+
+    let mut seen = version_of(&pool, id).await;
+    let mut moved = |v: i64, what: &str| {
+        assert!(v > seen, "{what} did not move the version");
+        seen = v;
+    };
+
+    tx::toggle_privacy(&pool, Actor::User(me), id, None)
+        .await
+        .unwrap();
+    moved(version_of(&pool, id).await, "privacy");
+
+    tx::reorder(&pool, Actor::User(me), id, 1, None)
+        .await
+        .unwrap();
+    moved(version_of(&pool, id).await, "reorder");
+
+    tx::reattribute(&pool, Actor::User(me), id, other, None)
+        .await
+        .unwrap();
+    moved(version_of(&pool, id).await, "reattribute");
+
+    tx::soft_delete(&pool, Actor::User(me), id).await.unwrap();
+    moved(version_of(&pool, id).await, "delete");
+
+    tx::restore(&pool, Actor::User(me), id, None).await.unwrap();
+    moved(version_of(&pool, id).await, "restore");
+}
+
+#[tokio::test]
+async fn a_save_with_no_version_still_writes() {
+    // A form that lost its hidden field must behave like the old unguarded
+    // save, not refuse every row whose version has ever moved.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+    tx::toggle_privacy(&pool, Actor::User(me), id, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        edit_at(&pool, me, id, "Mercado · 2", None).await,
+        tx::Saved::Ok
+    );
+}
+
+#[tokio::test]
+async fn saving_into_a_deleted_row_says_it_is_gone_not_that_it_is_stale() {
+    // Different copy, because the next move is different: `u` brings a
+    // deleted row back, and reopening it does nothing for one.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+    let opened_at = version_of(&pool, id).await;
+    tx::soft_delete(&pool, Actor::User(me), id).await.unwrap();
+
+    assert_eq!(
+        edit_at(&pool, me, id, "Mercado · 2", Some(opened_at)).await,
+        tx::Saved::Gone
+    );
+}
+
+#[tokio::test]
+async fn undo_writes_regardless_of_the_version() {
+    // An undo reverses a change that is already in the log; it is not
+    // competing with one. Refusing it because the materializer touched the
+    // row would make `u` unreliable for the one thing it exists to do.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+    edit_at(&pool, me, id, "Mercado · editado", None).await;
+    // Something else moves the row after the edit that will be undone.
+    tx::toggle_privacy(&pool, Actor::User(me), id, None)
+        .await
+        .unwrap();
+
+    let u = tx::last_undoable(&pool, me).await.unwrap().unwrap();
+    assert_eq!(u.action, "privacy");
+    tx::undo(&pool, Actor::User(me), &u).await.unwrap();
+    let u = tx::last_undoable(&pool, me).await.unwrap().unwrap();
+    assert_eq!(u.action, "edit");
+    assert!(tx::undo(&pool, Actor::User(me), &u).await.unwrap());
+
+    let title: String = sqlx::query_scalar("SELECT title FROM transactions WHERE id = ?1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(title, "Mercado");
 }

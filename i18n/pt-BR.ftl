@@ -421,3 +421,42 @@ keymap-fold = Dobrar
 keymap-files = Arquivos
 keymap-undo = Desfazer
 keymap-type = Digitar
+
+## Meses sazonais — em que meses do ano uma regra realmente acontece.
+## A expressão em si é numérica em qualquer idioma; só estas palavras mudam.
+months-seasonal = Só alguns meses
+months-seasonal-hint = uma conta que vale parte do ano, todo ano
+months-label = Meses
+months-placeholder = 1-10
+months-help = 1-10 intervalo · 1,3,5 lista · ^11,^12 todos exceto
+months-every = todo mês
+months-count-skipped = { $n ->
+    [one] um mês por ano
+   *[other] { $n } meses por ano
+  } · { $skipped } de fora
+months-err-empty = isso ainda não é um mês
+months-err-not-a-number = não é número de mês: { $token }
+months-err-out-of-range = mês { $n } — os meses vão de 1 a 12
+months-err-backwards = { $range } está invertido
+months-err-nothing-left = assim não sobra nenhum mês
+month-short = { $n ->
+    [1] jan
+    [2] fev
+    [3] mar
+    [4] abr
+    [5] mai
+    [6] jun
+    [7] jul
+    [8] ago
+    [9] set
+   [10] out
+   [11] nov
+   *[12] dez
+  }
+
+## Um salvamento recusado porque a linha mudou embaixo do formulário. Nada foi
+## gravado, e o que foi digitado continua guardado na linha.
+edit-stale = { $who } mudou esta linha enquanto você editava. Nada foi gravado — sua edição continua aqui, aperte e para retomar.
+edit-stale-unknown = Esta linha mudou enquanto você editava. Nada foi gravado — sua edição continua aqui, aperte e para retomar.
+edit-gone = Esta linha foi excluída enquanto você editava. Nada foi gravado — aperte u para trazer de volta.
+edit-day-bad = Um dia do mês vai de 1 a 31.

@@ -17,6 +17,7 @@ use crate::state::AppState;
 use crate::ui::i18n::{Catalog, Lang};
 use crate::ui::theme::{self, ModePref, ThemeName};
 use crate::ui::{fmt, theme::Overrides};
+use crate::web::form::FieldErrors;
 use crate::web::session::{self, Auth};
 use crate::web::template::Html;
 use askama::Template;
@@ -187,6 +188,13 @@ fn swatches(selected: ThemeName) -> Vec<Swatch> {
 
 #[derive(Template)]
 #[template(path = "auth/login.html")]
+/// The one form in this app that deliberately does **not** report per field.
+///
+/// `/login` gives one message for both a wrong name and a wrong password, and
+/// that is a decision with a reason (see design/spec.md): the two lead to the
+/// same next action, and naming the field would say which half was right. It
+/// already does the other half of the per-field rule — focus comes back to
+/// the password, which is where the correction almost always is.
 struct LoginPage {
     chrome: Chrome,
     t: Catalog,
@@ -302,7 +310,9 @@ struct SetupPage {
     db_path: String,
     receipts_root: String,
     backup_dir: String,
-    error: Option<String>,
+    /// Per-field, plus the card-level summary the template builds from the
+    /// same value. One `FieldErrors` rather than a message written twice.
+    errors: FieldErrors,
 }
 
 #[derive(Template)]
@@ -330,7 +340,7 @@ pub async fn setup_page(State(st): State<AppState>, jar: CookieJar, parts: Parts
         .into_response();
     }
     let (chrome, t) = chrome(&st, &jar, &parts, "first run", "/setup").await;
-    Html(setup_form(&st, chrome, t, None, None, None)).into_response()
+    Html(setup_form(&st, chrome, t, None, None, FieldErrors::new())).into_response()
 }
 
 fn setup_form(
@@ -339,7 +349,7 @@ fn setup_form(
     t: Catalog,
     household_name: Option<String>,
     admin_name: Option<String>,
-    error: Option<String>,
+    errors: FieldErrors,
 ) -> SetupPage {
     let lang = Lang::parse(chrome.lang_code).unwrap_or(Lang::En);
     SetupPage {
@@ -355,7 +365,7 @@ fn setup_form(
         db_path: st.cfg.db_path.display().to_string(),
         receipts_root: st.cfg.receipts_root.display().to_string(),
         backup_dir: st.cfg.backup_dir.display().to_string(),
-        error,
+        errors,
         chrome,
         t,
     }
@@ -383,25 +393,34 @@ pub async fn setup(
 
     let household = form.household.trim();
     let name = form.name.trim();
-    let problem = if household.is_empty() {
-        Some(t.field_required(t.setup_household_name()))
-    } else if name.is_empty() {
-        Some(t.field_required(t.login_name()))
-    } else if form.password.chars().count() < MIN_PASSWORD {
-        Some(t.password_too_short(MIN_PASSWORD as i64))
+
+    // Every field is checked, not just the first that fails: a form that
+    // rejects one box per round trip makes somebody submit four times to find
+    // out four things. The order is the order they sit on the page, so the
+    // summary reads top to bottom and the cursor lands on the first one.
+    let mut errors = FieldErrors::new();
+    if household.is_empty() {
+        errors.add("household", t.field_required(t.setup_household_name()));
+    }
+    if name.is_empty() {
+        errors.add("name", t.field_required(t.login_name()));
+    }
+    if form.password.chars().count() < MIN_PASSWORD {
+        errors.add("password", t.password_too_short(MIN_PASSWORD as i64));
     } else if form.password != form.confirm {
-        Some(t.password_mismatch().to_string())
-    } else {
-        None
-    };
-    if let Some(err) = problem {
+        // On CONFIRM, not on password: the two are a pair, and the box you
+        // would retype is the second one. Only checked once the password is
+        // long enough, or a short password says two things about itself.
+        errors.add("confirm", t.password_mismatch());
+    }
+    if errors.is_bad() {
         return Html(setup_form(
             &st,
             chrome,
             t,
             Some(household.to_string()),
             Some(name.to_string()),
-            Some(err),
+            errors,
         ))
         .into_response();
     }
@@ -434,13 +453,16 @@ pub async fn setup(
                 .add(session::pref_cookie(session::LANG, lang.code().to_string()));
             (jar, Redirect::to("/")).into_response()
         }
+        // A failure from the database has no field to point at — it is about
+        // the submission as a whole — so it goes in the summary alone, under
+        // a name no input carries.
         Err(e) => Html(setup_form(
             &st,
             chrome,
             t,
             Some(household.to_string()),
             Some(name.to_string()),
-            Some(e.to_string()),
+            FieldErrors::new().with("", e.to_string()),
         ))
         .into_response(),
     }
@@ -462,7 +484,10 @@ struct InvitePage {
     name: String,
     languages: Vec<Choice>,
     themes: Vec<Swatch>,
-    error: Option<(String, String)>,
+    /// The one failure with a second line of its own: name-taken needs to
+    /// explain *why* names are unique, which does not fit under a field.
+    note: Option<String>,
+    errors: FieldErrors,
 }
 
 pub async fn invite_page(
@@ -475,7 +500,15 @@ pub async fn invite_page(
     let link = auth::read_link(&st.pool, &token)
         .await
         .unwrap_or(Link::Unknown);
-    render_link(chrome, t, &token, link, None, String::new())
+    render_link(
+        chrome,
+        t,
+        &token,
+        link,
+        FieldErrors::new(),
+        None,
+        String::new(),
+    )
 }
 
 fn render_link(
@@ -483,7 +516,8 @@ fn render_link(
     t: Catalog,
     token: &str,
     link: Link,
-    error: Option<(String, String)>,
+    errors: FieldErrors,
+    note: Option<String>,
     name: String,
 ) -> Response {
     let lang = Lang::parse(chrome.lang_code).unwrap_or(Lang::En);
@@ -498,7 +532,8 @@ fn render_link(
             name,
             languages: languages(lang),
             themes: swatches(ThemeName::default()),
-            error,
+            note,
+            errors,
             chrome,
             t,
         })
@@ -511,7 +546,8 @@ fn render_link(
             name,
             languages: languages(lang),
             themes: Vec::new(),
-            error,
+            note,
+            errors,
             chrome,
             t,
         })
@@ -581,17 +617,19 @@ pub async fn accept(
     let is_reset = matches!(link, Link::Reset { .. });
     let name = form.name.trim().to_string();
 
-    let problem = if !is_reset && name.is_empty() {
-        Some((t.field_required(t.login_name()), String::new()))
-    } else if form.password.chars().count() < MIN_PASSWORD {
-        Some((t.password_too_short(MIN_PASSWORD as i64), String::new()))
+    let mut errors = FieldErrors::new();
+    // A reset asks for password and confirm only — no name, because renaming
+    // is a vault move once files exist and this person is not new.
+    if !is_reset && name.is_empty() {
+        errors.add("name", t.field_required(t.login_name()));
+    }
+    if form.password.chars().count() < MIN_PASSWORD {
+        errors.add("password", t.password_too_short(MIN_PASSWORD as i64));
     } else if form.password != form.confirm {
-        Some((t.password_mismatch().to_string(), String::new()))
-    } else {
-        None
-    };
-    if let Some(err) = problem {
-        return render_link(chrome, t, &token, link, Some(err), name);
+        errors.add("confirm", t.password_mismatch());
+    }
+    if errors.is_bad() {
+        return render_link(chrome, t, &token, link, errors, None, name);
     }
 
     let device = auth::device_label(session::user_agent(&parts));
@@ -633,7 +671,8 @@ pub async fn accept(
             t,
             &token,
             link,
-            Some((t.name_taken().to_string(), t.name_taken_body().to_string())),
+            FieldErrors::new().with("name", t.name_taken()),
+            Some(t.name_taken_body().to_string()),
             name,
         ),
         Err(_) => {

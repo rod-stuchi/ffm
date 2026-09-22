@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE transactions SET deleted_at = ?2, deleted_by = ?3,\n                                          version = version + 1\n                   WHERE id = ?1 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "c6386ce8620890408103f97d01a80a316f0ad222d2aa3a0639e2758e64e04da7"
+}

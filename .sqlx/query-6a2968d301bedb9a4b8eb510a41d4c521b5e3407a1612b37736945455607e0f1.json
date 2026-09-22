@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT m.name AS \"name!: String\"\n           FROM change c JOIN members m ON m.id = c.member_id\n           WHERE c.entity = 'transaction' AND c.entity_id = ?1 AND c.source = 'user'\n           ORDER BY c.id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "name!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6a2968d301bedb9a4b8eb510a41d4c521b5e3407a1612b37736945455607e0f1"
+}

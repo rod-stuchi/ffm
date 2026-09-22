@@ -8,7 +8,13 @@
 
     Field order is deliberate: what NAMES the bill first (Amount, Bill name),
     then how it is filed (Bucket, Cadence), then the dates. -#}
-<aside class="rulepane" id="rulepane" x-data="rulePane()">
+{#- `autofocus` is honoured on a full page load but not reliably on a
+    fragment the browser inserts, and a rejected save arrives as a
+    fragment — so the pane places the cursor itself. Which field is
+    focused is visual state, which is Alpine's to hold; WHICH field
+    deserves it was decided server-side, by FieldErrors::focus. -#}
+<aside class="rulepane" id="rulepane" x-data="rulePane()"
+       x-init="$nextTick(() => $el.querySelector('[autofocus]')?.focus())">
   <header class="rp-head">
     <b>{% if id.is_some() %}{{ t.rule_edit() }}{% else %}{% if income %}{{ t.rule_new_income() }}{% else %}{{ t.rule_new_spend() }}{% endif %}{% endif %}</b>
     <button class="btn rp-close" type="button" @click="$root.remove()">esc</button>
@@ -24,7 +30,12 @@
     <div class="fgrid">
       <label class="f">
         <span class="k">{{ t.row_amount() }}</span>
-        <input class="i" name="amount" value="{{ amount }}" inputmode="decimal" autocomplete="off" autofocus>
+        {#- Amount is where a fresh open starts — it is the field most edits
+            touch. A REJECTED save starts on the field that was rejected
+            instead, so `autofocus` is conditional rather than two elements
+            competing for one cursor. -#}
+        <input class="i" name="amount" value="{{ amount }}" inputmode="decimal" autocomplete="off"
+               {% if errors.none() %}autofocus{% endif %}>
       </label>
       <label class="f">
         {#- What the ROW says. `bill_name` below is a different column doing a
@@ -92,6 +103,29 @@
         <input type="checkbox" name="carry_forward"{% if carry_forward %} checked{% endif %}>
         <span>{{ t.rule_carry_forward() }}</span>
       </label>
+
+      {#- Seasonal months. An expression, not twelve toggles: toggles are a
+          mouse gesture in a keyboard-first app, and `1-10` is one thing to
+          type. The read-back underneath is rendered BY THE SERVER on every
+          keystroke — see partials/months_readback.html for why it is not
+          computed here. -#}
+      <label class="tog">
+        <input type="checkbox" name="seasonal"{% if seasonal %} checked{% endif %} x-model="seasonal">
+        <span>{{ t.months_seasonal() }}<span class="d">{{ t.months_seasonal_hint() }}</span></span>
+      </label>
+      <div class="f" x-show="seasonal" x-cloak>
+        <span class="k">{{ t.months_label() }}</span>
+        <input class="i mono" name="months" value="{{ months }}"
+               placeholder="{{ t.months_placeholder() }}" autocomplete="off"
+               {% if errors.focus("months") %}autofocus{% endif %}
+               hx-get="/rules/months" hx-target="#monthsback" hx-swap="outerHTML"
+               hx-trigger="input changed delay:150ms">
+        <span class="hint mono">{{ t.months_help() }}</span>
+        {%- if let Some(m) = errors.get("months") %}
+        <span class="ferr">{{ m }}</span>
+        {%- endif %}
+        {{ months_readback|safe }}
+      </div>
 
       {%- if income %}
       <label class="tog">
@@ -249,6 +283,7 @@ function rulePane() {
     billName: {{ bill_name|json|safe }},
     instance: {{ instance|json|safe }},
     tracked: {{ tracked }},
+    seasonal: {{ seasonal }},
     noBarcode: {{ no_barcode }},
     noHistory: {{ no_history|json|safe }},
     spans: {{ spans_period }},
