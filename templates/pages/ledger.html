@@ -213,10 +213,17 @@
         <button class="btn" type="button" @click="adding = null">{{ t.row_cancel() }}</button>
       </form>
     </section>
+    {#- One mount per pane, and the pane it opens beside is the FOCUSED one —
+        "right after the member pane being edited, pushing later panes right".
+        A single mount at the end of the stage looked the same with two
+        members and was wrong with three: editing Rodrigo's rule put the
+        editor past Miguel, at the far edge, pointing at nothing.
+
+        Empty divs in a flex row cost nothing, and picking a target by id
+        keeps the placement a fact about the DOM rather than something JS has
+        to reorder after the swap. -#}
+    <div class="rulemount" id="rulemount-{{ p.id }}"></div>
     {%- endfor %}
-    {#- `A` / `I` / `E` drop the rule pane in here: a column of the same grid,
-        pushing later panes right rather than covering one. -#}
-    <div id="rulemount"></div>
   </main>
   {%- endif %}
 
@@ -474,6 +481,10 @@ function ledger() {
       this.row = Math.max(0, Math.min(this.row, rows.length - 1));
       rows[this.row].classList.add('is-focus');
       rows[this.row].scrollIntoView({ block: 'nearest' });
+      // The arrow follows the row it points at — including when a swap
+      // re-renders the pane under it, which is when it would otherwise be
+      // left aiming at wherever the old row used to be.
+      this.aimArrow();
     },
 
     focusedId() {
@@ -628,11 +639,27 @@ function ledger() {
       return pane ? pane.querySelector('.rows').id.slice(5) : null;
     },
 
+    /// Where a side pane goes: immediately after the focused member's pane.
+    /// One rule for the rule editor, the change log and the settings panes
+    /// alike — `H`/`L` already means "move between panes", so the pane you
+    /// are in is the one a new column belongs beside.
+    mount() {
+      const id = this.paneMemberId();
+      return id ? '#rulemount-' + id : '.rulemount';
+    },
+
     newRule(kind) {
       const member = this.paneMemberId();
       if (!member) return;
+      // One side pane at a time, the same rule showPane follows. Without
+      // this, opening a rule editor while `:profile` was up left both
+      // standing — in different columns, since each mounts beside the pane
+      // that was focused when it opened.
+      this.closePane();
+      this.closeRule();
       htmx.ajax('GET', '/rules/new?member_id=' + member + '&kind=' + kind,
-                { target: '#rulemount', swap: 'innerHTML' });
+                { target: this.mount(), swap: 'innerHTML' })
+           .then(() => this.aimArrow());
     },
 
     editRule() {
@@ -642,11 +669,49 @@ function ledger() {
       // A no-op with a statusline message on a plain row — the same treatment
       // `gd` gets there, rather than a different error path to learn.
       if (!ruleId) { this.say(this.notARule, true); return; }
+      this.closePane();
+      this.closeRule();
       htmx.ajax('GET', '/rules/' + ruleId + '/edit',
-                { target: '#rulemount', swap: 'innerHTML' });
+                { target: this.mount(), swap: 'innerHTML' })
+           .then(() => this.aimArrow());
     },
 
-    closeRule() { document.querySelector('#rulepane')?.remove(); },
+    closeRule() { this.clearMount('#rulepane'); },
+
+    /// Empties the mount a side pane is sitting in, rather than removing the
+    /// pane element alone. A swapped-in pane brings its own <script> beside
+    /// it; removing just the <aside> left that behind, one orphan per mount
+    /// per open, in whichever column the pane last appeared.
+    clearMount(selector) {
+      const el = document.querySelector(selector);
+      if (!el) return;
+      const mount = el.closest('.rulemount');
+      if (mount) mount.replaceChildren();
+      else el.remove();
+    },
+
+    /// Points the rule pane's arrow at the row it belongs to.
+    ///
+    /// Pure visual state — a measurement of where a row happens to sit, which
+    /// only the browser can make — so it is Alpine's, written into a custom
+    /// property the stylesheet reads. A settings pane has no row behind it
+    /// and is left alone, which is why the CSS keeps a fallback rather than
+    /// requiring the variable.
+    aimArrow() {
+      const pane = document.querySelector('#rulepane');
+      if (!pane) return;
+      const row = document.querySelector('.row.is-focus, .row.is-placeholder');
+      if (!row) return;
+      const r = row.getBoundingClientRect();
+      const p = pane.getBoundingClientRect();
+      // Clamped to the pane: a row scrolled out of sight must not drag the
+      // arrow off the top of the card, pointing at nothing again.
+      const top = Math.min(
+        Math.max(12, r.top + r.height / 2 - p.top - 6),
+        Math.max(12, p.height - 24),
+      );
+      pane.style.setProperty('--arrow-top', top + 'px');
+    },
 
     // --- gd, P, ? ---------------------------------------------------------
 
@@ -1026,7 +1091,7 @@ function ledger() {
       this.$nextTick(() => this.$refs.cmd.focus());
     },
 
-    closePane() { document.querySelector('#settingspane')?.remove(); },
+    closePane() { this.clearMount('#settingspane'); },
 
     // NOT `pane()`: that name is already the focused pane's INDEX, and a
     // method by the same name shadows it — `panes[this.pane]` then indexes an
@@ -1036,7 +1101,7 @@ function ledger() {
     showPane(url) {
       this.closePane();
       this.closeRule();
-      htmx.ajax('GET', url, { target: '#rulemount', swap: 'innerHTML' });
+      htmx.ajax('GET', url, { target: this.mount(), swap: 'innerHTML' });
     },
 
     runCommand() {

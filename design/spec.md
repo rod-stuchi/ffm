@@ -395,7 +395,12 @@ editing. So:
   row — and the rest of the ledger stays where it was.
 - **`A` / `I` / `E` open the rule pane** — a column of its own in the ledger's
   grid, right after the member pane being edited, pushing any later panes
-  further right. The ledger scrolls sideways when they don't all fit rather
+  further right. *Right after the pane being edited* is load-bearing and was
+  got wrong once: a single mount at the end of the stage looks identical with
+  two members and is plainly wrong with three, putting Rodrigo's rule editor
+  past Miguel at the far edge. Every pane carries its own mount and the
+  focused one is the target — which is also where `gl` and the settings
+  vsplits go, since `H`/`L` already means "move between panes". The ledger scrolls sideways when they don't all fit rather
   than hiding a pane: a household can have more than two members. A small
   arrow on the pane's left edge sits level with the row being edited (and
   follows it as the ledger scrolls); the row itself keeps an accent outline
