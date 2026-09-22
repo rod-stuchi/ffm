@@ -172,6 +172,21 @@
  * pushing later panes right. The ledger scrolls SIDEWAYS rather than hiding a
  * pane: a household can have more than two members, and covering one to edit
  * another is the modal this design keeps refusing. */
+/* The stage and the bottom split share a positioning context, so the split
+ * covers the bottom of the LEDGER AREA and never the command bar or the
+ * statusline below it. */
+.stagewrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  --split-h: 52vh;
+}
+
+.stagewrap.is-zoom {
+  --split-h: 88vh;
+}
+
 .stage {
   display: flex;
   gap: 16px;
@@ -188,6 +203,126 @@
   overflow-y: auto;
 }
 
+/* The column the rule editor and the change log open into. It must NOT
+ * shrink: as a bare flex item it had `flex-shrink: 1`, so three member panes
+ * at their own min-width squeezed a 420px editor down to 247px instead of
+ * letting the stage scroll sideways — which is exactly what the stage's
+ * `overflow-x: auto` is there for. */
+.rulemount {
+  flex: none;
+}
+
+/* The width lives here, not on `.rulepane`: the same element is full-width in
+ * the bottom split, and `.rulemount` is a plain block, so a `flex-basis` on
+ * the aside inside it does nothing at all. */
+.rulemount > .rulepane {
+  width: 420px;
+}
+
+/* --- the bottom split ----------------------------------------------------
+ *
+ * `:household`, `:profile`, `:members` and `:grep` land here. They are not
+ * about one member and not about one row, which is why a 420px column
+ * between two member panes was the wrong shape for a form and worse for a
+ * result list.
+ *
+ * It floats OVER the bottom of the ledger rather than pushing it up, and the
+ * shadow is what says so. The ledger behind it is deliberately NOT dimmed:
+ * watching a setting take effect is the whole argument for this not being a
+ * modal, and dimming the half you are meant to be watching would defeat it.
+ */
+.hsplitmount {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: var(--split-h);
+  display: flex;
+  /* Above the stage, below the modals — those are `position: fixed` and
+   * already higher. */
+  z-index: 30;
+}
+
+/* Open and closed are read off the DOM, never off a flag: `:members`
+ * re-renders itself through its own `hx-swap="outerHTML"` without going
+ * through the shell, so a boolean would drift out of step with the screen. */
+.hsplitmount:empty {
+  display: none;
+}
+
+/* The overlay's one real cost, paid: rows behind the split are hidden, so
+ * the stage keeps room underneath for `scrollIntoView` to bring the focused
+ * row clear of it. */
+.stagewrap:has(.hsplitmount:not(:empty)) .stage {
+  padding-bottom: var(--split-h);
+}
+
+/* Full width here — `.rulepane` is `flex: 0 0 420px` because it is a stage
+ * column, and these are not. */
+.hsplitmount > .rulepane {
+  flex: 1;
+  min-width: 0;
+  /* A column, so the header stays put and the body is the part that
+   * scrolls. `.rulepane` is a plain block elsewhere, where the whole stage
+   * column scrolls instead. */
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  box-shadow: var(--shadow-md);
+}
+
+/* Nothing to point at from below. */
+.hsplitmount > .rulepane::before {
+  display: none;
+}
+
+.hsplitmount .rp-body {
+  /* Overrides the column-height clamp further down, which is calibrated to
+   * a full-height stage column. */
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* The groups flow RIGHT when there is room and stack when there is not —
+ * one declaration, no media queries. A 1400px-wide form with one 400px
+ * column of fields and a lot of emptiness is not an improvement on a 420px
+ * column. */
+/* The groups flow RIGHT when there is room and wrap when there is not. A
+ * 1400px-wide form with one 400px column of fields and a lot of emptiness is
+ * not an improvement on a 420px column.
+ *
+ * A wrapping grid rather than CSS multi-column, for two reasons: multicol in
+ * a fixed-height box overflows SIDEWAYS instead of scrolling, and it flows
+ * one stream down-then-right, so independent setting groups would be read in
+ * column order. A grid places each group left-to-right and wraps, which is
+ * the order they are written in. */
+.hsplitmount .settingspane .rp-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  /* Groups keep their own height instead of stretching to match the tallest
+   * one in the row. */
+  align-items: start;
+  align-content: start;
+}
+
+/* A section heading spans the row, so each one starts a band and its controls
+ * flow underneath it. As an ordinary grid item it landed in column one while
+ * the things it names sat in columns two and three. */
+.hsplitmount .settingspane .rp-body > .sect {
+  grid-column: 1 / -1;
+}
+
+.hsplitmount .settingspane .rp-body > * {
+  break-inside: avoid;
+}
+
+/* `:grep` and the log are deliberately NOT columned: they are lists, and
+ * multi-column would make the reading order zigzag. Full width is what stops
+ * their rows truncating. */
 .pane {
   flex: 1 1 380px;
   min-width: 340px;

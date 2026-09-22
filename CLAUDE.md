@@ -54,9 +54,20 @@ explanation of *why* it looks that way. Read this when a state's meaning is uncl
 `/invite/:token`) and their error states. The only surface that lives **outside**
 the `.app` shell.
 
-`design/ffm-settings-mockup.html` — `:household`, `:profile` and `:members` as
-vsplit panes, shown inside the app shell because watching the ledger while a
-setting takes effect is the entire argument for a vsplit.
+`design/ffm-settings-mockup.html` — `:household`, `:profile` and `:members`
+shown inside the app shell, because watching the ledger while a setting takes
+effect is the entire argument for a split rather than a full-screen buffer.
+
+**The mockup puts them in a left vsplit; the app puts them in a full-width
+split at the foot of the ledger, and that is deliberate.** A 420px column is
+the wrong shape for a settings form and worse for a result list, and these
+surfaces are about the *household* — not about one member and not about one
+row, so they do not belong in the member panes' row. The two constraints the
+vsplit was chosen for still hold: the split takes half, so the ledger stays
+visible and live behind it, and it is still not a dialog with a pending copy
+of the truth. See `design/spec.md`'s Configuration §Surface. A pane that IS
+about one row — the rule editor and the change log — still opens as a column
+beside that row.
 
 ### Port, don't import
 

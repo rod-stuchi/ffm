@@ -17,7 +17,12 @@
        x-init="$nextTick(() => $el.querySelector('[autofocus]')?.focus())">
   <header class="rp-head">
     <b>{% if id.is_some() %}{{ t.rule_edit() }}{% else %}{% if income %}{{ t.rule_new_income() }}{% else %}{{ t.rule_new_spend() }}{% endif %}{% endif %}</b>
-    <button class="btn rp-close" type="button" @click="$root.remove()">esc</button>
+    {#- Closes through the shell, not `$root.remove()`. Three of these panes
+    have no `x-data` of their own, so `$root` resolved to `.ledger-shell`
+    and the button removed the whole application. Going through the shell
+    also clears the mount, so the `<script>` a fragment ships beside
+    itself is not orphaned. -#}
+    <button class="btn rp-close" type="button" @click="closeRule()">esc</button>
   </header>
 
   <form class="rp-body"

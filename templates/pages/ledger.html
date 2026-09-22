@@ -134,6 +134,10 @@
     {%- endfor %}
     <span class="tabhint"><kbd>gt</kbd> · <kbd>gT</kbd></span>
   </nav>
+  {#- The stage and the bottom split share a positioning context, so the
+      split covers the bottom of the LEDGER AREA and never the command bar or
+      the statusline below it. -#}
+  <div class="stagewrap" :class="{ 'is-zoom': splitZoom }">
   <main class="stage">
     {%- for p in panes %}
     <section class="pane" :class="{ 'is-focus': pane === {{ loop.index0 }} }" @click="pane = {{ loop.index0 }}">
@@ -264,6 +268,21 @@
     <div class="rulemount" id="rulemount-{{ p.id }}"></div>
     {%- endfor %}
   </main>
+
+  {#- `:household`, `:profile`, `:members` and `:grep` land here: full width,
+      over the bottom of the ledger, fzf-shaped. They are not about one
+      member and not about one row, which is exactly why a 420px column
+      between two member panes was the wrong shape for them.
+
+      The rule editor (`A`/`I`/`E`) and the change log (`gl`) do NOT come
+      here — both point at a row, and `gl` closes when the cursor leaves it.
+
+      Empty when closed, and the CSS keys off `:empty` rather than a flag:
+      `:members` re-renders itself through its own `hx-swap="outerHTML"`
+      without going through the shell, so a boolean would drift out of step
+      with what is actually on screen. -#}
+  <div class="hsplitmount" id="hsplitmount"></div>
+  </div>
   {%- endif %}
 
   {#- `dd` confirms, because deletion READS as destructive even though it is a
@@ -552,6 +571,7 @@ function ledger() {
     monthsWord: {{ months_word|json|safe }},
     attaching: null,
     dragging: false,
+    splitZoom: false,
     nu: {{ nu|json|safe }},
     grepNeedsTerm: {{ t.grep_needs_a_term()|json|safe }},
     addSpend: {{ t.row_add_spend()|json|safe }},
@@ -632,8 +652,7 @@ function ledger() {
       // check in the render loop, the same one that parks a draft. A pane
       // still showing the previous row's history is worse than no pane.
       if (this.logFor && this.logFor !== focused) {
-        this.logFor = null;
-        this.closePane();
+        this.closeLog();
       }
 
       document.querySelectorAll('.row.is-focus').forEach(r => r.classList.remove('is-focus'));
@@ -688,7 +707,41 @@ function ledger() {
         return;
       }
       if (typing) {
-        if (e.key === 'Escape') { this.adding = null; el.blur(); }
+        // Ctrl-k leaves the split from inside one of its fields — the way
+        // back up, and the mirror of the rule pane's Ctrl-h past its left
+        // edge, rotated onto the axis the split sits on.
+        if (e.ctrlKey && e.key === 'k' && el.closest('#hsplitmount')) {
+          e.preventDefault();
+          el.blur();
+          return;
+        }
+        if (e.key === 'Escape') {
+          // Esc inside the SPLIT closes it, in one press. Everywhere else it
+          // keeps meaning "cancel this edit", which is why this is a case
+          // rather than a new rule: the add row and the inline edit row are
+          // unchanged.
+          if (el.closest('#hsplitmount')) {
+            e.preventDefault();
+            el.blur();
+            this.closeSplit();
+            return;
+          }
+          this.adding = null;
+          el.blur();
+        }
+        return;
+      }
+      // Ctrl-j drops into the bottom split, Ctrl-k comes back out. Unbound
+      // before this; Ctrl-h / Ctrl-l stay re-attribution.
+      if (e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'j' || e.key === 'k')) {
+        e.preventDefault();
+        if (e.key === 'j') this.focusSplit();
+        // Ctrl-k from anything focusable inside the split, not just a text
+        // field: the close button is focusable too, and it is what `Ctrl-j`
+        // lands on when a pane has no fields.
+        else if (document.activeElement.closest('#hsplitmount')) {
+          document.activeElement.blur();
+        }
         return;
       }
       // Ctrl-H / Ctrl-L re-attribute. They are deliberately NOT J/K: reorder
@@ -721,10 +774,19 @@ function ledger() {
         e.preventDefault();
         return;
       }
-      // Arming the prefix must NOT consume a pending count, or `2gt` loses its
-      // 2 on the way to the `t` that wanted it.
-      if (k === 'g' && !buffer) {
-        this.pending = 'g';
+      // EVERY prefix is armed here, in one place, before the dispatch chain
+      // below — never as an `else if` inside it.
+      //
+      // This is the third time the same bug was written: an arming arm placed
+      // above its own consuming arm swallows the second keystroke, so `gg`,
+      // then `gu1`, then `zz` could each never fire. Interleaving the two
+      // kinds of arm makes that a matter of line order, which is not a thing
+      // to keep getting right by hand.
+      //
+      // Arming must also NOT consume a pending count, or `2gt` loses its 2 on
+      // the way to the `t` that wanted it.
+      if (['g', 'z'].includes(k) && !buffer) {
+        this.pending = k;
         e.preventDefault();
         return;
       }
@@ -772,14 +834,19 @@ function ledger() {
       else if (k === '/') { this.openSearch(); }
       else if (k === 'n') { this.step(1); }
       else if (k === 'N') { this.step(-1); }
-      else if (k === 'z') { this.pending = 'z'; }
       else if (buffer === 'z' && ['a', 'o', 'c'].includes(k)) { this.fold(k); }
       else if (buffer === 'z' && k === 'R') { this.allFolds(false); }
       else if (buffer === 'z' && k === 'M') { this.allFolds(true); }
+      // `zz` zooms the bottom split between half the ledger and nearly all of
+      // it — worth it for `:grep` with forty hits. It borrows the `z` prefix
+      // the folds use without muddying that family: `zz` is not a fold
+      // command in Vim either.
+      else if (buffer === 'z' && k === 'z') { this.splitZoom = !this.splitZoom; }
       else if (k === 'J') { this.move(n); }
       else if (k === 'K') { this.move(-n); }
       else if (k === 'Escape') {
-        this.adding = null; this.closeRule(); this.closePane(); this.clearSearch();
+        this.adding = null; this.closeRule(); this.closeLog();
+        this.closeSplit(); this.clearSearch();
         // Esc clears the count, the buffer and the selection too.
         this.count = ''; this.pending = ''; this.selected = {}; this.paintSelection();
       }
@@ -813,11 +880,12 @@ function ledger() {
     newRule(kind) {
       const member = this.paneMemberId();
       if (!member) return;
-      // One side pane at a time, the same rule showPane follows. Without
+      // One side pane at a time, the same rule showSplit follows. Without
       // this, opening a rule editor while `:profile` was up left both
       // standing — in different columns, since each mounts beside the pane
       // that was focused when it opened.
-      this.closePane();
+      this.closeSplit();
+      this.closeLog();
       this.closeRule();
       htmx.ajax('GET', '/rules/new?member_id=' + member + '&kind=' + kind,
                 { target: this.mount(), swap: 'innerHTML' })
@@ -831,7 +899,8 @@ function ledger() {
       // A no-op with a statusline message on a plain row — the same treatment
       // `gd` gets there, rather than a different error path to learn.
       if (!ruleId) { this.say(this.notARule, true); return; }
-      this.closePane();
+      this.closeSplit();
+      this.closeLog();
       this.closeRule();
       htmx.ajax('GET', '/rules/' + ruleId + '/edit',
                 { target: this.mount(), swap: 'innerHTML' })
@@ -847,7 +916,7 @@ function ledger() {
     clearMount(selector) {
       const el = document.querySelector(selector);
       if (!el) return;
-      const mount = el.closest('.rulemount');
+      const mount = el.closest('.rulemount, .hsplitmount');
       if (mount) mount.replaceChildren();
       else el.remove();
     },
@@ -1282,18 +1351,64 @@ function ledger() {
       this.$nextTick(() => this.$refs.cmd.focus());
     },
 
-    closePane() { this.clearMount('#settingspane'); },
 
     // NOT `pane()`: that name is already the focused pane's INDEX, and a
     // method by the same name shadows it — `panes[this.pane]` then indexes an
     // array with a function and every row-based keystroke silently stops
     // working. Alpine merges data and methods into one object, so the two
     // namespaces are the same namespace.
-    showPane(url) {
-      this.closePane();
+    /// A surface about the HOUSEHOLD, not about one member or one row:
+    /// `:household`, `:profile`, `:members`, `:grep`. Full width, at the foot
+    /// of the ledger — a 420px column between two member panes was the wrong
+    /// shape for a form and worse for a result list.
+    showSplit(url) {
+      this.closeSplit();
+      this.closeLog();
+      this.closeRule();
+      htmx.ajax('GET', url, { target: '#hsplitmount', swap: 'innerHTML' });
+    },
+
+    /// A surface about ONE ROW — the change log. It keeps the rule editor's
+    /// shape: a column beside the member pane it belongs to, closed when the
+    /// cursor leaves the row.
+    showRowPane(url) {
+      this.closeSplit();
+      this.closeLog();
       this.closeRule();
       htmx.ajax('GET', url, { target: this.mount(), swap: 'innerHTML' });
     },
+
+    closeSplit() {
+      this.splitZoom = false;
+      this.clearMount('#hsplitmount > *');
+    },
+
+    /// `Ctrl-j` — into the split. Its first field if it has one, otherwise
+    /// the pane itself, so the keyboard always lands somewhere.
+    focusSplit() {
+      const pane = document.querySelector('#hsplitmount > *');
+      if (!pane) return;
+      // A real, VISIBLE control. `input` alone picked the pane's first
+      // hidden field, which cannot take focus, so Ctrl-j quietly landed on
+      // nothing. The close button is deliberately last: it is first in the
+      // markup, and arriving on "esc" is not arriving anywhere.
+      const visible = (el) => el && el.offsetParent !== null;
+      const pick = (sel) => [...pane.querySelectorAll(sel)].find(visible);
+      const field = pick('input:not([type=hidden]), select, textarea')
+        || pick('a, button:not(.rp-close)')
+        || pick('button');
+      if (field) field.focus();
+      else {
+        // Nothing focusable: give the pane itself the cursor so the keyboard
+        // has somewhere to be, and Ctrl-k something to leave from.
+        pane.setAttribute('tabindex', '-1');
+        pane.focus();
+      }
+    },
+
+    /// The log owns `logFor`, so closing it clears that too — otherwise
+    /// `paint` keeps trying to close a pane that is already gone.
+    closeLog() { this.logFor = null; this.clearMount('#logpane'); },
 
     runCommand() {
       const raw = this.command.trim();
@@ -1307,9 +1422,9 @@ function ledger() {
         // The settings surfaces. `:config` survives as an alias so muscle
         // memory and the keymap entry do not break; `:household` is the real
         // name, because nothing is called after a file any more.
-        case 'profile': case 'me':        return this.showPane('/profile');
-        case 'household': case 'config':  return this.showPane('/household');
-        case 'members':                   return this.showPane('/members');
+        case 'profile': case 'me':        return this.showSplit('/profile');
+        case 'household': case 'config':  return this.showSplit('/household');
+        case 'members':                   return this.showSplit('/members');
         // Every month, as opposed to `/`, which filters what is on screen.
         // `:help` opens the keymap — the same modal `?` does. It is not a
         // nicety: `not-a-command` literally tells people to "try help", so
@@ -1325,9 +1440,9 @@ function ledger() {
           // one. Saying "not a command: grep" was the one thing that is not
           // true about it, and it is why `:grep` read as unimplemented.
           if (!arg) return this.say(this.grepNeedsTerm, true);
-          return this.showPane('/grep?q=' + encodeURIComponent(arg));
+          return this.showSplit('/grep?q=' + encodeURIComponent(arg));
         case 'invite':
-          this.showPane('/members');
+          this.showSplit('/members');
           return;
         case 'logout':                    return this.post('/logout');
         case 'preview':                   return this.post('/preview');
@@ -1455,8 +1570,12 @@ function ledger() {
     openLog() {
       const id = this.focusedId();
       if (!id) return;
+      // AFTER the swap, not before: `showRowPane` closes whatever was open
+      // first, and closing the log is what clears `logFor`. Setting it first
+      // meant it was wiped a line later, and the log then never closed when
+      // the cursor left its row.
+      this.showRowPane('/tx/' + id + '/log');
       this.logFor = id;
-      this.showPane('/tx/' + id + '/log');
     },
 
     openFile(n) {

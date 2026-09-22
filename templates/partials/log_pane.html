@@ -3,24 +3,32 @@
     Read-only, and deliberately the same column the rule editor uses: nothing
     new to learn to read it. Grouped by day, newest first; time · actor · verb
     on the entry line, with a field count only where there is a diff to open. -#}
-<aside class="rulepane logpane" id="settingspane" x-data="{ open: null }">
+{#- Its OWN id, not the settings panes'. They shared one, and the
+    cursor-left-the-row check closes "the pane" — so walking the
+    cursor after a `gl` tore down an open `:grep` as well. -#}
+<aside class="rulepane logpane" id="logpane" x-data="{ open: null }">
   <header class="rp-head">
     <b>{{ t.log_title() }} · {{ title }} · {{ period }}</b>
-    <button class="btn rp-close" type="button" @click="$root.remove()">{{ t.pane_close() }}</button>
+    {#- Closes through the shell, not `$root.remove()`. Three of these panes
+    have no `x-data` of their own, so `$root` resolved to `.ledger-shell`
+    and the button removed the whole application. Going through the shell
+    also clears the mount, so the `<script>` a fragment ships beside
+    itself is not orphaned. -#}
+    <button class="btn rp-close" type="button" @click="closeLog()">{{ t.pane_close() }}</button>
   </header>
 
   {#- The chips narrow; they never widen past what this row and its rule can
       account for, which is why `rule` is absent on a row that has none. -#}
   <div class="chips">
     <a class="chip{% if filter == "row" %} is-on{% endif %}"
-       hx-get="/tx/{{ row_id }}/log?filter=row" hx-target="#settingspane" hx-swap="outerHTML"
+       hx-get="/tx/{{ row_id }}/log?filter=row" hx-target="#logpane" hx-swap="outerHTML"
        href="#">{{ t.log_filter_row() }}</a>
     {%- if has_rule %}
     <a class="chip{% if filter == "rule" %} is-on{% endif %}"
-       hx-get="/tx/{{ row_id }}/log?filter=rule" hx-target="#settingspane" hx-swap="outerHTML"
+       hx-get="/tx/{{ row_id }}/log?filter=rule" hx-target="#logpane" hx-swap="outerHTML"
        href="#">{{ t.log_filter_rule() }}</a>
     <a class="chip{% if filter == "all" %} is-on{% endif %}"
-       hx-get="/tx/{{ row_id }}/log?filter=all" hx-target="#settingspane" hx-swap="outerHTML"
+       hx-get="/tx/{{ row_id }}/log?filter=all" hx-target="#logpane" hx-swap="outerHTML"
        href="#">{{ t.log_filter_all() }}</a>
     {%- endif %}
   </div>

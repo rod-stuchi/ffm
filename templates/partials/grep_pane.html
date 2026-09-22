@@ -7,7 +7,12 @@
 <aside class="rulepane logpane" id="settingspane">
   <header class="rp-head">
     <b>{{ t.grep_title(term.as_str()) }}</b>
-    <button class="btn rp-close" type="button" @click="$root.remove()">{{ t.pane_close() }}</button>
+    {#- Closes through the shell, not `$root.remove()`. Three of these panes
+    have no `x-data` of their own, so `$root` resolved to `.ledger-shell`
+    and the button removed the whole application. Going through the shell
+    also clears the mount, so the `<script>` a fragment ships beside
+    itself is not orphaned. -#}
+    <button class="btn rp-close" type="button" @click="closeSplit()">{{ t.pane_close() }}</button>
   </header>
 
   <div class="rp-body logbody">

@@ -493,6 +493,8 @@ for this row"*.
 | Key | Action |
 |---|---|
 | `Ctrl-H` / `Ctrl-J` / `Ctrl-K` / `Ctrl-L` | move focus between a form's fields, left / down / up / right — past the form's edge, back to the ledger, keeping the draft |
+| `Ctrl-j` / `Ctrl-k` | into the bottom split / back out of it |
+| `zz` | zoom the bottom split, half ↔ nearly full |
 | `Enter` | save — the form's primary action |
 | `Esc` | cancel: discard the draft, nothing written |
 
@@ -1788,8 +1790,8 @@ source of truth for it"*. The prohibited thing is **duplication**, not a form:
 
 ### Surface
 
-All three tiers are read in a **vertical split** beside the ledger — not a modal,
-not a full-screen buffer:
+All three tiers are read in a **full-width split at the foot of the ledger**
+— not a modal, not a full-screen buffer, and no longer a vertical split:
 
 - `:household` (admin only) — the household row as a form, with the operator's
   three paths read-only beneath it.
@@ -1800,14 +1802,50 @@ not a full-screen buffer:
   `?` keymap entry don't break. `:household` is the real name; nothing is called
   after a file any more.
 
-Reasons a vsplit at all, so this is not relitigated:
+**It was a vertical split, and the reasons given for that were three.** Two
+were load-bearing and survive unchanged; the third was a convenience, and in
+practice it cost more than it saved:
 
-- A full-screen buffer hides the ledger, and `layout.panes` is precisely the
-  setting you need to *watch* take effect.
-- A modal needs a backdrop, scroll-lock and a focus trap, and it implies a
-  settings dialog with an OK button — a second, pending copy of the truth.
-- A vsplit is just a second pane. `H`/`L` already means "move between panes". In
-  HTMX it is one swap changing the grid from `1fr` to `360px 1fr`.
+| the recorded reason | now |
+|---|---|
+| A full-screen buffer hides the ledger, and `layout.panes` is precisely the setting you need to *watch* take effect | **survives** — the split takes half the ledger area, so the top half stays visible and live. This is why it is half and not full, and why the ledger behind it is **not** dimmed |
+| A modal needs a backdrop, scroll-lock and a focus trap, and it implies a settings dialog with an OK button — a second, pending copy of the truth | **survives** — no backdrop, no scroll-lock, no focus trap, still no Save button; every control writes on `change` |
+| A vsplit is just a second pane; `H`/`L` already means "move between panes" | **does not** — it put a settings form in the member panes' row, wedged between two people's ledgers, at a width that fits neither a form nor a result list |
+
+A 420px column is the wrong shape for these surfaces because they are **not
+about one member and not about one row**. They are about the household. So:
+full width, at the bottom, over the ledger — fzf-shaped.
+
+- **It floats over the bottom of the ledger**, and a shadow on its top edge
+  says so. The stage keeps `padding-bottom` equal to the split's height while
+  it is open, so the focused row can always be scrolled clear of it.
+- **The groups flow right and wrap** — a wrapping grid, `repeat(auto-fill,
+  minmax(320px, 1fr))`, with `.sect` headings spanning the row so each starts
+  a band. Not CSS multi-column: in a fixed-height box that overflows sideways
+  instead of scrolling, and it reads one stream down-then-right, which is the
+  wrong order for independent setting groups. A 1400px-wide form with one
+  400px column of fields and a lot of emptiness is not an improvement on a
+  420px column.
+- **`:grep` is deliberately not columned.** It is a result list; columns
+  would make the reading order zigzag. It gets the full width as one wide
+  list, which is what stops its rows truncating.
+- **`zz` zooms** the split between half the ledger area and nearly all of it
+  — worth it for `:grep` with forty hits.
+- **`Ctrl-j` drops into the split and `Ctrl-k` comes back out**, the mirror
+  of the rule pane's `Ctrl-h` past its left edge, rotated onto the axis the
+  split sits on. `Esc` closes it in one press **including from inside a
+  field**, which is the one place the `typing` guard yields; everywhere else
+  `Esc` still means "cancel this edit".
+
+**What stays a column beside its row:** the rule editor (`A`/`I`/`E`) and the
+change log (`gl`). Both point at a row — the editor with an arrow level with
+it, the log by closing when the cursor leaves it. A pane that is about one
+row belongs beside that row.
+
+This deviates from `design/ffm-settings-mockup.html:137`, which puts the
+settings pane as a **left** column beside the whole panels grid
+(`minmax(300px,420px) 1fr`). That mockup is normative, so the deviation is
+recorded here rather than left to be discovered.
 
 Both panes frame their groups with the existing `.card` visual language, so a
 settings group reads like a ledger group rather than like a new widget.
