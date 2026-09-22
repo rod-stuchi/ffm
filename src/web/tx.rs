@@ -678,6 +678,11 @@ struct EditRow {
     id: i64,
     title: String,
     amount: String,
+    /// The stored integer, which the mask seeds from. The formatted `value`
+    /// stays too, so the field reads correctly for the frame before Alpine
+    /// runs — but the mask never parses it back, which is the drift this
+    /// whole arrangement exists to prevent.
+    amount_cents: i64,
     day: String,
     bucket: String,
     buckets: Vec<String>,
@@ -726,6 +731,7 @@ pub async fn edit_form(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
             .amount_cents
             .map(|c| format!("{},{:02}", c / 100, (c % 100).abs()))
             .unwrap_or_default(),
+        amount_cents: row.amount_cents.unwrap_or_default(),
         title: row.title,
         day: row
             .date
@@ -913,6 +919,9 @@ async fn reopen(
             id,
             title: form.title.clone(),
             amount: form.amount.clone(),
+            amount_cents: Cents::parse(&form.amount)
+                .map(|c| c.get())
+                .unwrap_or_default(),
             day: form.day.clone(),
             bucket: form.bucket.clone(),
             buckets: crate::db::rules::buckets(&st.pool, auth.viewer.member_id)

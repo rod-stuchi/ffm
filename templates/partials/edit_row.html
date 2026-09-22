@@ -29,9 +29,13 @@
               A REJECTED save starts on the field that was rejected instead,
               so this only takes the cursor when nothing failed. -#}
           <span class="k">{{ t.row_amount() }}</span>
-          <input class="i" name="amount" value="{{ amount }}" inputmode="decimal"
-                 autocomplete="off"
-                 {% if errors.none() %}x-init="$el.focus(); $el.select()"{% endif %}>
+          {#- The live mask: only digits are typed, and the separators are
+              inserted right-to-left into minor units. It seeds from
+              `data-cents` — the row's own stored integer — never from the
+              rendered text beside it. -#}
+          <input class="i amt-in" name="amount" value="{{ amount }}" inputmode="numeric"
+                 autocomplete="off" data-cents="{{ amount_cents }}"
+                 x-init="ffmMoney($el){% if errors.none() %}; $el.focus(); $el.select(){% endif %}">
         </label>
         <label class="f{% if errors.has("title") %} is-bad{% endif %}">
           <span class="k">{{ t.row_title() }}</span>

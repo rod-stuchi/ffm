@@ -63,6 +63,9 @@ pub struct RulePane {
     income: bool,
     title: String,
     amount: String,
+    /// The stored integer the mask seeds from — see EditRow for why the
+    /// formatted string is never parsed back.
+    amount_cents: i64,
     bucket: String,
     bill_name: String,
     instance: String,
@@ -253,6 +256,7 @@ pub async fn new_rule(
         income: kind.is_income(),
         title: String::new(),
         amount: String::new(),
+        amount_cents: 0,
         bucket: String::new(),
         bill_name: String::new(),
         instance: String::new(),
@@ -316,6 +320,7 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
             .amount
             .map(|c| format!("{}", c.get() as f64 / 100.0))
             .unwrap_or_default(),
+        amount_cents: r.amount.map(|c| c.get()).unwrap_or_default(),
         bucket: r.bucket.clone().unwrap_or_default(),
         bill_name: r.bill_name.clone().unwrap_or_default(),
         instance: r.instance.clone().unwrap_or_default(),
@@ -753,6 +758,9 @@ async fn rejected(
         income: kind.is_income(),
         title: input.title.clone(),
         amount: input.amount.clone(),
+        amount_cents: Cents::parse(&input.amount)
+            .map(|c| c.get())
+            .unwrap_or_default(),
         bucket: input.bucket.clone(),
         bill_name: input.bill_name.clone(),
         instance: input.instance.clone(),

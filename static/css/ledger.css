@@ -249,12 +249,37 @@
 /* Which of the two is being added. The same open form serves `a` and `i` and
  * stays open for the next one, so the only thing saying which is this. */
 .addhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--ink-3);
   padding: 6px 0 5px 34px;
+}
+
+/* The direction, before the words say it — in the colour that direction
+ * already wears in the rows above. Bigger than the label it sits beside,
+ * because it is the thing being glanced at. */
+.addsign {
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* `--pos`, the same token an income row's amount uses. */
+.addsign.is-in {
+  color: var(--pos);
+}
+
+/* Plain ink, which is what a spend's amount is written in: only income and
+ * the deltas take a semantic colour, so a minus in red would say something
+ * the ledger does not. */
+.addsign.is-out {
+  color: var(--ink);
 }
 
 .addgrid {

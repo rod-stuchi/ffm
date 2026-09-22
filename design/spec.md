@@ -54,6 +54,20 @@ a household entering the week's spending types straight into the next one.
   from it, so the two cannot drift; what is submitted is the formatted string,
   which `Cents::parse` reads back to exactly that integer. One parse on the
   way in, rather than a second field to keep in step.
+- **A sign says the direction before the words do** — `+` in `--pos`, the
+  token an income row's amount already wears, and `−` in the plain ink a
+  spend's amount is written in. Not the accent: the accent means "you are
+  here", and a minus in red would say something the ledger does not.
+
+**All three amount fields carry the same mask** — the add row, the inline
+edit row and the rule pane. It is a plain function rather than a method on
+the ledger component, because the rule pane is its own Alpine component and
+reaching a parent's method through scope chaining is a subtlety not worth
+resting every money field on. Each seeds from `data-cents`, the row's own
+stored integer, and never from the text rendered beside it — an edit form
+that re-parsed its own display would be exactly the drift the mask exists to
+prevent. It also fixed what the rule pane used to show: the amount was
+rendered as `343.62` with a dot, which is not how a BRL household writes it.
 
 ### The foot of the shell: the command bar, then the statusline
 
