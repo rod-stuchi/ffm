@@ -130,6 +130,7 @@ impl Ctx {
             show_recurring: self.recurring != Some(0),
             show_delta: self.delta != Some(0),
             narrow: self.narrow == Some(1),
+            line_numbers: crate::ui::row::LineNumbers::parse(self.nu_code()),
         }
     }
     fn theme_css(&self) -> String {

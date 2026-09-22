@@ -405,6 +405,7 @@ function ledger() {
     monthsWord: {{ months_word|json|safe }},
     attaching: null,
     dragging: false,
+    nu: {{ nu|json|safe }},
     commanding: false,
     logFor: null,
     // Fold state is PURE visual state — the server already rendered every row
@@ -481,6 +482,7 @@ function ledger() {
       this.row = Math.max(0, Math.min(this.row, rows.length - 1));
       rows[this.row].classList.add('is-focus');
       rows[this.row].scrollIntoView({ block: 'nearest' });
+      this.renumber(rows);
       // The arrow follows the row it points at — including when a swap
       // re-renders the pane under it, which is when it would otherwise be
       // left aiming at wherever the old row used to be.
@@ -688,6 +690,22 @@ function ledger() {
       const mount = el.closest('.rulemount');
       if (mount) mount.replaceChildren();
       else el.remove();
+    },
+
+    /// Relative line numbers, measured from the cursor.
+    ///
+    /// The server renders them relative to row 0, which is where the cursor
+    /// starts — correct before the first frame, no round trip, the same
+    /// posture `layout = auto` takes. From there they are Alpine's, because
+    /// the distance to the cursor is a fact about the cursor and the cursor
+    /// is visual state. `absolute` and `none` are decided entirely on the
+    /// server and this leaves them alone.
+    renumber(rows) {
+      if (this.nu !== 'relative') return;
+      rows.forEach((row, i) => {
+        const cell = row.querySelector('.gut');
+        if (cell) cell.textContent = String(Math.abs(i - this.row));
+      });
     },
 
     /// Points the rule pane's arrow at the row it belongs to.

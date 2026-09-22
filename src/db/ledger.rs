@@ -17,7 +17,7 @@ use crate::domain::period::Period;
 use crate::domain::status::{RowFlags, RowState, TxKind, Visibility};
 use crate::domain::viewer::Viewer;
 use crate::ui::i18n::Lang;
-use crate::ui::row::{FilePresence, Gutter, LedgerRow, RowCtx};
+use crate::ui::row::{FilePresence, LedgerRow, RowCtx};
 use chrono::NaiveDate;
 use sqlx::SqlitePool;
 
@@ -360,7 +360,11 @@ pub async fn pane_with_vault(
                 recurring,
                 ..RowFlags::default()
             },
-            gutter: Gutter::Absolute(i as u32 + 1),
+            // Relative is measured from the cursor, which the server does not
+            // have — but the cursor always starts on the first row, so
+            // relative-to-0 is right for the first frame and `paint` keeps it
+            // right from there.
+            gutter: ctx.line_numbers.gutter(i, 0),
             ctx,
         });
     }

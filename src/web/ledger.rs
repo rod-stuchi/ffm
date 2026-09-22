@@ -13,7 +13,7 @@ use crate::domain::period::Period;
 use crate::state::AppState;
 use crate::ui::fmt;
 use crate::ui::i18n::Catalog;
-use crate::ui::row::{RowCtx, RowView};
+use crate::ui::row::{LineNumbers, RowCtx, RowView};
 use crate::ui::theme;
 use crate::web::session::Auth;
 use crate::web::template::Html;
@@ -92,6 +92,7 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
         show_recurring,
         show_delta: auth.settings.ledger_show_delta,
         narrow: false,
+        line_numbers: LineNumbers::parse(&auth.settings.line_numbers),
     };
 
     let mut panes = Vec::new();
@@ -195,6 +196,9 @@ struct LedgerPage {
     /// never in Alpine, either of which would be wrong on first paint and on
     /// every resize.
     layout_panes: String,
+    /// `relative` | `absolute` | `none`. The shell needs it because relative
+    /// numbers are measured from the cursor, and the cursor is Alpine's.
+    nu: &'static str,
     min_split: i64,
     max_width: i64,
     gap: i64,
@@ -256,6 +260,7 @@ pub async fn ledger(
         show_recurring,
         show_delta: auth.settings.ledger_show_delta,
         narrow: false,
+        line_numbers: LineNumbers::parse(&auth.settings.line_numbers),
     };
     let t = Catalog::new(lang);
 
@@ -315,6 +320,7 @@ pub async fn ledger(
         unresolved_title: t
             .unresolved_dot(unresolved.iter().map(|u| u.count).sum::<usize>() as i64),
         layout_panes: auth.settings.layout_panes.clone(),
+        nu: LineNumbers::parse(&auth.settings.line_numbers).code(),
         min_split: auth.settings.layout_min_split_width,
         max_width: auth.settings.layout_max_width,
         gap: auth.settings.layout_gap,

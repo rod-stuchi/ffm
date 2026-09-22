@@ -33,6 +33,7 @@ fn ctx() -> RowCtx {
         show_recurring: true,
         show_delta: true,
         narrow: false,
+        line_numbers: Default::default(),
     }
 }
 

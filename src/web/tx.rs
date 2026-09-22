@@ -22,7 +22,7 @@ use crate::domain::period::Period;
 use crate::domain::status::{RowFlags, RowState, TxKind, Visibility};
 use crate::state::AppState;
 use crate::ui::i18n::Catalog;
-use crate::ui::row::{FilePresence, Gutter, LedgerRow, RowCtx, RowView};
+use crate::ui::row::{FilePresence, Gutter, LedgerRow, LineNumbers, RowCtx, RowView};
 use crate::web::form::FieldErrors;
 use crate::web::ledger::{HouseTotals, PaneTotals};
 use crate::web::session::Auth;
@@ -94,6 +94,7 @@ fn ctx(auth: &Auth, currency: crate::domain::money::Currency, show_recurring: bo
         show_recurring,
         show_delta: auth.settings.ledger_show_delta,
         narrow: false,
+        line_numbers: LineNumbers::parse(&auth.settings.line_numbers),
     }
 }
 

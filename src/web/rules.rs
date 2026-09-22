@@ -401,6 +401,10 @@ async fn estimates_of(
             show_recurring: true,
             show_delta: false,
             narrow: false,
+            // Nothing here is rendered — this walks back through months to
+            // find confirmed amounts for the estimate box — so the gutter
+            // never reaches a screen and the default will do.
+            line_numbers: Default::default(),
         };
         let Ok(pane) = ledger::pane_with_vault(
             &st.pool,

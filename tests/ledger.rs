@@ -12,7 +12,7 @@ use ffm::domain::money::{Cents, Currency};
 use ffm::domain::period::Period;
 use ffm::domain::status::RowStatus;
 use ffm::domain::viewer::Viewer;
-use ffm::ui::row::{Gutter, RowCtx};
+use ffm::ui::row::{Gutter, LineNumbers, RowCtx};
 
 fn ctx() -> RowCtx {
     RowCtx {
@@ -25,6 +25,7 @@ fn ctx() -> RowCtx {
         show_recurring: true,
         show_delta: true,
         narrow: false,
+        line_numbers: Default::default(),
     }
 }
 
@@ -80,8 +81,41 @@ async fn a_month_reads_back_as_the_household_typed_it() {
     );
     assert_eq!(pane.balance(), pane.ins - pane.outs);
 
-    // The gutter numbers the rows as rendered, so `3j` lands where it looks.
-    assert_eq!(pane.rows[2].gutter, Gutter::Absolute(3));
+    // The gutter numbers the rows as rendered, so `3j` lands where it looks —
+    // in whichever of the three modes the member chose. This used to be
+    // hardcoded to Absolute in the query, which made `relative` and `none`
+    // settings you could pick with nothing happening.
+    assert_eq!(pane.rows[2].gutter, Gutter::Relative(2));
+
+    let absolute = db::ledger::pane(
+        &pool,
+        &members[0],
+        sep,
+        RowCtx {
+            line_numbers: LineNumbers::Absolute,
+            ..ctx()
+        },
+        Viewer::new(members[0].id, true),
+    )
+    .await
+    .unwrap();
+    assert_eq!(absolute.rows[2].gutter, Gutter::Absolute(3));
+
+    let off = db::ledger::pane(
+        &pool,
+        &members[0],
+        sep,
+        RowCtx {
+            line_numbers: LineNumbers::Off,
+            ..ctx()
+        },
+        Viewer::new(members[0].id, true),
+    )
+    .await
+    .unwrap();
+    // The cell stays in the grid and only its track narrows — `display: none`
+    // on a grid child pulls the row's content into the first track.
+    assert_eq!(off.rows[2].gutter, Gutter::Hidden);
 }
 
 #[tokio::test]

@@ -207,9 +207,34 @@ pub async fn set_member(
 
     match settings::set_member(&st.pool, auth.viewer.member_id, key, &form.value).await {
         Ok(()) => {
-            // Language and theme change every string and every colour on the
-            // page, so a partial swap would be dishonest about what moved.
-            let whole_page = matches!(key, MemberKey::Language | MemberKey::ThemeName);
+            // A whole-page refresh for anything the SERVER decides per row or
+            // per page. Language and theme were the obvious two — every
+            // string, every colour — but the same is true of the gutter, the
+            // row order, grouping, the delta column and every layout value,
+            // which is rendered into a media query in the page's own <style>.
+            //
+            // Getting this list short was a real bug: line numbers wrote the
+            // row and changed nothing on screen until the next reload, so
+            // `relative` and `none` looked broken rather than unapplied.
+            //
+            // What is deliberately NOT here is what the next render reads
+            // anyway without changing what is already on screen: the fold
+            // default (it applies when a grouped pane is next opened), the
+            // search scope (read when you search) and the privacy default
+            // (read when you add a row).
+            let whole_page = matches!(
+                key,
+                MemberKey::Language
+                    | MemberKey::ThemeName
+                    | MemberKey::LineNumbers
+                    | MemberKey::LayoutPanes
+                    | MemberKey::LayoutMinSplitWidth
+                    | MemberKey::LayoutMaxWidth
+                    | MemberKey::LayoutGap
+                    | MemberKey::LedgerSort
+                    | MemberKey::LedgerShowDelta
+                    | MemberKey::LedgerGroup
+            );
             let mut res = crate::web::tx::say_only(&t.settings_saved(&form.key), false);
             if whole_page {
                 res.headers_mut()

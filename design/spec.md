@@ -30,6 +30,40 @@ understood:
 | received | filled positive disc + received date | income that landed |
 | estimated | `~R$ …` in a quieter colour, no delta | a varying income's amount is projected from history until confirmed — the mark still carries arrival, the tilde carries "this number isn't a fact yet" |
 
+### The gutter, and which half of it the server can decide
+
+`member_settings.line_numbers` is `relative` | `absolute` | `none`, and the
+three are not decided in the same place:
+
+- **`absolute` and `none` are entirely the server's.** The row index and "no
+  numbers at all" are both known at render time, so the query builds them and
+  nothing on the client touches them.
+- **`relative` is measured from the cursor, and the cursor is Alpine's.** The
+  server still renders it correctly for the first frame — the cursor always
+  starts on the first row, so relative-to-row-0 is the right answer before any
+  key is pressed — and `paint` rewrites the numbers as the cursor moves. Same
+  posture `layout = auto` takes: correct before the first paint, no round
+  trip, and no business logic in Alpine (the distance from a row to the cursor
+  is a fact about the cursor).
+
+This was a real bug: the pane query hardcoded `Gutter::Absolute`, so
+`relative` and `none` were settings you could pick with nothing happening.
+The cause was a missing field rather than wrong arithmetic — `RowCtx` carried
+sort, currency and the delta toggle but never the one setting the gutter is
+about.
+
+**`none` narrows the gutter's track; it never removes the cell.**
+`display: none` on a grid child reflows its siblings and crushes the row —
+a gotcha this codebase has already paid for.
+
+**Changing any setting the server renders from refreshes the page.** Line
+numbers, row order, grouping, the delta column and every layout value are
+decided per render, so writing the row and swapping nothing leaves the
+screen disagreeing with the setting. Language and theme were already doing
+this; the list was simply too short. What stays a quiet write is what the
+next render reads anyway without changing what is on screen: the fold
+default, the search scope and the privacy default.
+
 ### Specifics that carry meaning
 
 - **The due ring is elapsed time**, not a countdown — from period start to due

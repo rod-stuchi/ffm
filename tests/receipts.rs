@@ -490,6 +490,7 @@ async fn page_of(pool: &SqlitePool, me: i64, period: &str) -> Option<(i32, bool)
         show_recurring: true,
         show_delta: true,
         narrow: false,
+        line_numbers: Default::default(),
     };
     let pane = ledger::pane(
         pool,

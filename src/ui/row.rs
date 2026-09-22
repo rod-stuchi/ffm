@@ -174,6 +174,49 @@ pub enum Gutter {
     Blank,
 }
 
+/// What the member chose for the gutter — `member_settings.line_numbers`.
+///
+/// **Relative is the only one the server cannot fully decide**, because it is
+/// measured from the cursor and the cursor is Alpine's. The server still
+/// renders it correctly for the first frame: the cursor always starts on the
+/// first row, so relative-to-row-0 is the right answer before any key is
+/// pressed, and `paint` keeps it right afterwards. That is the same posture
+/// `layout = auto` takes — correct before the first paint, no round trip.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum LineNumbers {
+    #[default]
+    Relative,
+    Absolute,
+    Off,
+}
+
+impl LineNumbers {
+    pub fn parse(s: &str) -> LineNumbers {
+        match s {
+            "absolute" => LineNumbers::Absolute,
+            "none" | "off" => LineNumbers::Off,
+            _ => LineNumbers::Relative,
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            LineNumbers::Relative => "relative",
+            LineNumbers::Absolute => "absolute",
+            LineNumbers::Off => "none",
+        }
+    }
+
+    /// The gutter for the row at index `i`, with the cursor at `cursor`.
+    pub fn gutter(self, i: usize, cursor: usize) -> Gutter {
+        match self {
+            LineNumbers::Relative => Gutter::Relative(i as i32 - cursor as i32),
+            LineNumbers::Absolute => Gutter::Absolute(i as u32 + 1),
+            LineNumbers::Off => Gutter::Hidden,
+        }
+    }
+}
+
 impl Gutter {
     pub fn text(self) -> String {
         match self {
@@ -201,6 +244,10 @@ pub struct RowCtx {
     pub show_delta: bool,
     /// Narrow screens keep the file rail icon-only regardless of focus.
     pub narrow: bool,
+    /// `member_settings.line_numbers`. Was missing, which is why `relative`
+    /// and `none` both rendered as `absolute`: the pane query hardcoded the
+    /// gutter and never asked what the member had chosen.
+    pub line_numbers: LineNumbers,
 }
 
 // ---------------------------------------------------------------------------
@@ -955,6 +1002,7 @@ mod tests {
             show_recurring: true,
             show_delta: true,
             narrow: false,
+            line_numbers: LineNumbers::Relative,
         }
     }
 
@@ -1335,6 +1383,31 @@ mod tests {
         assert_eq!(Gutter::Relative(0).text(), "0");
         assert_eq!(Gutter::Relative(-3).text(), "3");
         assert_eq!(Gutter::Absolute(12).text(), "12");
+    }
+
+    #[test]
+    fn the_gutter_follows_what_the_member_chose() {
+        // The pane query used to hardcode Absolute, so `relative` and `none`
+        // were settings you could pick and nothing happened.
+        use LineNumbers::*;
+        assert_eq!(Absolute.gutter(0, 0), Gutter::Absolute(1));
+        assert_eq!(Absolute.gutter(4, 2), Gutter::Absolute(5));
+        assert_eq!(Off.gutter(4, 2), Gutter::Hidden);
+
+        // Relative is measured from the cursor, and the row under it reads 0.
+        assert_eq!(Relative.gutter(2, 2), Gutter::Relative(0));
+        assert_eq!(Relative.gutter(0, 3).text(), "3");
+        assert_eq!(Relative.gutter(5, 3).text(), "2");
+    }
+
+    #[test]
+    fn relative_is_rendered_from_the_cursor_the_server_can_assume() {
+        // The server does not have the cursor — it is Alpine's — but the
+        // cursor always starts on the first row, so relative-to-0 is right
+        // for the first frame and the client keeps it right after that.
+        use LineNumbers::*;
+        let first_frame: Vec<String> = (0..4).map(|i| Relative.gutter(i, 0).text()).collect();
+        assert_eq!(first_frame, ["0", "1", "2", "3"]);
 
         let mut r = base();
         r.gutter = Gutter::Hidden;
