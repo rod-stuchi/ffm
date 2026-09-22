@@ -594,3 +594,115 @@ pub async fn grep(pool: &SqlitePool, viewer: Viewer, term: &str) -> sqlx::Result
         })
         .collect())
 }
+
+// ---------------------------------------------------------------------------
+// unresolved issues across months
+// ---------------------------------------------------------------------------
+
+/// A month with something still owed in it.
+///
+/// "Unresolved" means a **tracked** occurrence that is overdue with no
+/// receipt: `pending` past its due date, or a scheduled payment whose promise
+/// was never confirmed. An untracked bill sitting without a manual tick is
+/// **not** an issue — there is no filesystem evidence to act on, so flagging
+/// it would be nagging based on nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Unresolved {
+    pub period: Period,
+    pub count: usize,
+}
+
+/// Every month of the current calendar year with an unresolved occurrence.
+///
+/// **Bounded to the year on purpose.** On a date in September 2026 that means
+/// January–August 2026 get checked, not December 2025: a badge that reaches
+/// back forever is a badge nobody can ever clear.
+///
+/// Per viewer, by the same rule every other read follows — a private row's
+/// unresolved status counts for its owner and the admin, never for a member
+/// who cannot see the row itself. Otherwise the dot would announce the
+/// existence of something the ledger carefully hides.
+pub async fn unresolved_months(
+    pool: &SqlitePool,
+    viewer: Viewer,
+    today: NaiveDate,
+    root: Option<&std::path::Path>,
+) -> sqlx::Result<Vec<Unresolved>> {
+    let current = Period::of(today);
+    let year_start = format!("{}-01", current.year());
+    let today_s = today.format("%Y-%m-%d").to_string();
+    let viewer_id = viewer.member_id;
+    let sees_all = viewer.is_admin();
+
+    // Tracked, overdue, and not in the month already on screen — the badge is
+    // about somewhere ELSE needing attention.
+    let rows = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+                  t.amount_cents AS "amount_cents: i64",
+                  t.bucket AS "bucket: String", t.bill_name AS "bill_name: String",
+                  r.instance AS "instance: String",
+                  r.amount_in_filename AS "amount_in_filename!: i64",
+                  m.uuid AS "uuid!: String", m.slug AS "slug!: String"
+           FROM transactions t
+           JOIN recurring_rules r ON r.id = t.rule_id
+           JOIN members m ON m.id = t.member_id
+           WHERE r.tracked = 1
+             AND t.deleted_at IS NULL
+             AND t.period >= ?1
+             AND t.due_date IS NOT NULL
+             AND t.due_date < ?2
+             AND (t.visibility = 'household' OR t.member_id = ?3 OR ?4)
+           ORDER BY t.period"#,
+        year_start,
+        today_s,
+        viewer_id,
+        sees_all,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut months: Vec<Unresolved> = Vec::new();
+    for r in rows {
+        let Some(period) = Period::parse(&r.period) else {
+            continue;
+        };
+        // The current month is where the person already is; the badge points
+        // at the ones they are not looking at.
+        if period == current {
+            continue;
+        }
+
+        // The disk decides, here as everywhere: a receipt on disk resolves it,
+        // whatever the database thinks.
+        let resolved = match (root, r.bucket.as_deref(), r.bill_name.as_deref()) {
+            (Some(root), Some(bucket), Some(bill_name)) => {
+                let slot = crate::services::receipts::Slot {
+                    transaction_id: r.id,
+                    vault: format!("{}-{}", r.uuid, r.slug),
+                    bucket: bucket.to_string(),
+                    bill_name: bill_name.to_string(),
+                    instance: r.instance.clone(),
+                    period,
+                    amount: r.amount_cents.map(|c| (Cents(c), Currency::default())),
+                    amount_in_filename: r.amount_in_filename != 0,
+                };
+                crate::services::receipts::presence(pool, root, &slot)
+                    .await
+                    .map(|p| p.receipt.is_some())
+                    .unwrap_or(false)
+            }
+            // No vault to consult: nothing is resolved, which is the honest
+            // answer rather than a convenient one.
+            _ => false,
+        };
+        if resolved {
+            continue;
+        }
+
+        match months.last_mut() {
+            Some(m) if m.period == period => m.count += 1,
+            _ => months.push(Unresolved { period, count: 1 }),
+        }
+    }
+    Ok(months)
+}

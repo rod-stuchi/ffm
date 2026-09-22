@@ -79,7 +79,12 @@ async fn main() {
     // process that was down across a month boundary has to catch up the moment
     // it is back, not up to an hour later.
     ffm::services::materializer::spawn(pool.clone());
+    // One snapshot now, then one a day. Startup matters for the same reason it
+    // does for the materializer: a process that was down for a week should not
+    // also be a week without a backup.
+    ffm::services::backup::spawn(pool.clone(), cfg.backup_dir.clone());
 
+    let state_pool = pool.clone();
     let state = AppState {
         pool,
         cfg: std::sync::Arc::new(cfg),
@@ -109,7 +114,36 @@ async fn main() {
     #[cfg(debug_assertions)]
     tracing::info!("sandbox · http://{shown}/__sandbox/rows");
 
-    axum::serve(listener, app).await.unwrap();
+    // WAL mode means `ffm.db` is only the whole database when read WITH its
+    // sidecar. Checkpointing on the way out leaves a file that is complete on
+    // its own — which is what whoever copies it will assume.
+    let shutdown = {
+        let pool = state_pool.clone();
+        async move {
+            let ctrl_c = tokio::signal::ctrl_c();
+            #[cfg(unix)]
+            {
+                let mut term =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                        .expect("SIGTERM handler");
+                tokio::select! {
+                    _ = ctrl_c => {}
+                    _ = term.recv() => {}
+                }
+            }
+            #[cfg(not(unix))]
+            let _ = ctrl_c.await;
+
+            tracing::info!("shutting down");
+            ffm::services::backup::checkpoint(&pool).await;
+            pool.close().await;
+        }
+    };
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await
+        .unwrap();
 }
 
 /// The IANA name, for the boot line. `chrono::Local` knows the offset but not

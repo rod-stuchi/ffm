@@ -510,70 +510,55 @@ the candidate regex let a digit run cross a newline, so it swallowed the line
 above the barcode — on an Enel bill that is the client code, and the joined
 digits then parse as nothing at all.
 
-## Phase 13 — the unresolved badge and ops
+## Phase 13 — the unresolved badge and ops ✅
 
-A query over everything above — it cannot be right until privacy, tracking and
-materialization are. Plus the rolling two-month backup and a graceful shutdown
-that checkpoints the WAL.
+A query over everything above — it could not be right until privacy, tracking
+and materialization were.
 
----
+- **An unresolved issue is a *tracked* occurrence overdue with no receipt.** An
+  untracked bill sitting without a manual tick is not one: there is no
+  filesystem evidence to act on, so flagging it would be nagging based on
+  nothing. The disk decides here as everywhere else.
+- **Bounded to the calendar year**, on purpose. A badge that reaches back
+  forever is a badge nobody can ever clear.
+- **Per viewer**, by the same rule every other read follows — a private row's
+  unresolved status counts for its owner and the admin, never for a member who
+  cannot see the row. Otherwise the dot would announce the existence of
+  something the ledger carefully hides.
+- **A dot, not a message**: on the month-picker trigger, and again on each
+  flagged month's cell inside it. Ambient and persistent like every other
+  status in this app, rather than a toast that gets dismissed and forgotten.
+  Clicking a flagged cell jumps there — the picker's existing behaviour, so no
+  new command was needed.
+- **The month picker itself**, which the badge needed somewhere to live.
+- **`services::backup`** — `VACUUM INTO`, not a file copy. WAL keeps recent
+  commits in a sidecar, so copying `ffm.db` alone captures a database missing
+  whatever has not been checkpointed: a backup that looks fine until the day it
+  is needed. One at startup, then one a day, named for the day so a restart
+  replaces rather than accumulates, pruned at two months — and pruning removes
+  only files this module can prove it wrote.
+- **A graceful shutdown that checkpoints the WAL**, so the file left behind is
+  complete on its own, which is what whoever copies it will assume.
 
-## Scheduled for revisit
+**Also: the `layout_*` settings are finally applied.** They have been collected
+since phase 4 and written since phase 9 without reaching the page — including
+`layout_max_width`, which is why one pane stretched across a whole viewport and
+put the amount a metre from the name it belongs to. The cap, the gap and the
+`auto → tabs` threshold now render into **one media query from the member's own
+row**: resolved in CSS, never on the server and never in Alpine, either of which
+would be wrong on first paint and wrong again on every resize.
 
-Not phases — decisions already taken, with a date attached to the next look.
-
-### htmx 2 → 4 · revisit between 21/01/2027 and 21/05/2027
-
-**Decided 21/09/2026: stay on the vendored htmx 2.0.4. Re-evaluate in 4–8
-months.** htmx 4.0.0 shipped 28/08/2026 and is deliberately not `latest` — npm
-and the CDN keep serving 2.x until early 2027, and 2 stays supported and
-maintained. There is no clock running on us: `static/js/htmx.min.js` is
-self-hosted, so there is no drift, no dependency bot and no security deadline.
-
-**Nothing in 4.0 buys this app anything.** The headline feature is `hx-live` —
-declarative reactive bindings, a client-side reactive engine — which is exactly
-what `CLAUDE.md`'s *hypermedia over the wire, no client-side data model*
-invariant forbids. We would be upgrading for features we are not allowed to
-use. The one genuine improvement, 4xx/5xx responses being swapped by default,
-is already worked around and written down: an error row is HTTP 200 on purpose
-(phase 5), and that workaround costs nothing.
-
-**The argument on the other side, which is why this is dated rather than
-dropped:** the htmx surface is ten attributes today and will be several hundred
-once the rule pane, the change-log pane, the carousel and the settings vsplits
-exist. Migrating is cheapest now and gets monotonically worse. The window above
-is the trade — late enough that 4.x and its extensions have settled, early
-enough that phases 8–13 have not multiplied the surface.
-
-**What the migration would touch, as of 21/09/2026:**
-
-| site | change |
-|---|---|
-| `templates/pages/ledger.html:98` | `hx-disabled-elt` → `hx-disable` (and `hx-disable` → `hx-ignore`, which we do not use — rename in that order or one migrates into the other) |
-| `templates/pages/ledger.html:99` | `@htmx:after-request` → `@htmx:after:request`; every event listener renames, camelCase → colon-separated |
-| `ledger.html:96-97`, `rule_pane.html:19,198` | inheritance is explicit in 4 (`hx-target:inherited`). Ours look self-contained — confirm, don't assume |
-| `src/web/csrf.rs:33` | **verify `HX-Request` survives the XHR → `fetch()` move.** If it does not, the check degrades to `Sec-Fetch-Site` alone — still sound, but half the documented story, and the amendment in `CLAUDE.md` would need rewriting rather than silently becoming untrue |
-| `totals.html:7,12`, `pane_rows.html:6`, `fragment.html:7` | **verify `hx-swap-oob` semantics are unchanged.** Out-of-band swaps are how every mutation returns the totals it moved; 4.0 adds `hx-partial` for multi-target, which may or may not supersede them |
-
-The last two were not answerable from the release notes and are the load-bearing
-ones — settle them first, before touching a single attribute.
-
-**Also removed in 4**, none of which we use today, so keep it that way: `hx-ext`,
-`hx-inherit`, `hx-disinherit`, `hx-history`, `hx-vars`, `hx-params`,
-`hx-request`, `hx-prompt`. History navigation also changes from a DOM snapshot
-to a server round-trip.
-
-**Alpine.** htmx/Alpine compatibility is an extension in 4, not built in. This
-app pairs the two tightly and already has one hard-won gotcha about a swap
-destroying the Alpine state that holds parked drafts. That extension's maturity
-is a gate on this migration, not a footnote to it.
-
-**First step when the date comes:** `npx htmx.org@4.0.0 upgrade-check` walks the
-templates and prints deprecated patterns with file and line numbers. Run it
-before deciding anything — it is a minute, and it tells you whether the table
-above is still complete.
+`tests/ops.rs` — 7 tests, including a receipt on disk clearing its month, the
+calendar-year bound, a private row counting only for who can see it, and a
+backup being restorable rather than merely present.
 
 ---
+
+## The phase map is complete
+
+Every phase in this file is done. What remains is below: decisions that were
+deliberately deferred, and the open questions that were never scheduled because
+they need evidence rather than effort.
 
 ## Still open, not scheduled
 

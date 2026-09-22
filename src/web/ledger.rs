@@ -20,7 +20,7 @@ use crate::web::template::Html;
 use askama::Template;
 use axum::extract::{Query, State};
 use axum::response::IntoResponse;
-use chrono::Local;
+use chrono::{Local, NaiveDate};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -33,6 +33,18 @@ pub struct Params {
 /// A pane's three numbers, and the household's four, live in their own structs
 /// because a mutation has to send them back too: a row that lands without its
 /// totals moving is a ledger that disagrees with itself on screen.
+/// One cell in the month picker.
+pub struct MonthCell {
+    pub key: String,
+    pub label: String,
+    pub current: bool,
+    /// How many unresolved occurrences sit in this month. Zero means no dot —
+    /// ambient like every other status in this app, rather than a toast that
+    /// gets dismissed and then forgotten.
+    pub unresolved: usize,
+    pub title: String,
+}
+
 pub struct PaneTotals {
     pub id: i64,
     pub ins: String,
@@ -173,6 +185,19 @@ struct LedgerPage {
     panes: Vec<PaneView>,
     /// `YYYY-MM`, for the forms. The label above is `fmt::period`.
     period_key: String,
+    months: Vec<MonthCell>,
+    /// The dot on the trigger: any month **other than this one** with
+    /// something overdue and unreceipted.
+    unresolved_total: usize,
+    unresolved_title: String,
+    /// The member's layout, finally applied. `auto` resolves in CSS from
+    /// `min_split`, rendered into one media query — never on the server and
+    /// never in Alpine, either of which would be wrong on first paint and on
+    /// every resize.
+    layout_panes: String,
+    min_split: i64,
+    max_width: i64,
+    gap: i64,
     /// `E` on a row with no rule behind it says so in the statusline rather
     /// than doing nothing at all.
     not_a_rule: String,
@@ -253,6 +278,11 @@ pub async fn ledger(
         panes.push(view(pane, &t, currency, grouped));
     }
 
+    let unresolved =
+        ledger::unresolved_months(&st.pool, auth.viewer, today, Some(&st.cfg.receipts_root))
+            .await
+            .unwrap_or_default();
+
     let net = ins - outs;
     Html(LedgerPage {
         // The member's palette, the device's light/dark — two facts, two homes.
@@ -269,6 +299,14 @@ pub async fn ledger(
         household: name,
         period: fmt::period(period),
         period_key: period.to_string(),
+        months: month_cells(&st, &auth, period, today).await,
+        unresolved_total: unresolved.iter().map(|u| u.count).sum(),
+        unresolved_title: t
+            .unresolved_dot(unresolved.iter().map(|u| u.count).sum::<usize>() as i64),
+        layout_panes: auth.settings.layout_panes.clone(),
+        min_split: auth.settings.layout_min_split_width,
+        max_width: auth.settings.layout_max_width,
+        gap: auth.settings.layout_gap,
         not_a_rule: t.rule_none_on_row().to_string(),
         not_a_command: t.not_a_command("{cmd}"),
         no_bill: t.file_none_bill().to_string(),
@@ -286,6 +324,48 @@ pub async fn ledger(
         },
         t,
     })
+}
+
+/// The twelve cells of the current year, each carrying whatever is unresolved
+/// in it. Clicking one jumps to that month — the picker's existing behaviour,
+/// so no new command is needed on top of it.
+async fn month_cells(
+    st: &AppState,
+    auth: &Auth,
+    showing: Period,
+    today: NaiveDate,
+) -> Vec<MonthCell> {
+    let t = auth.catalog();
+    let unresolved =
+        ledger::unresolved_months(&st.pool, auth.viewer, today, Some(&st.cfg.receipts_root))
+            .await
+            .unwrap_or_default();
+
+    let names: Vec<&str> = t.months_short().split_whitespace().collect();
+    (1..=12)
+        .filter_map(|m| Period::new(showing.year(), m))
+        .map(|p| {
+            let count = unresolved
+                .iter()
+                .find(|u| u.period == p)
+                .map(|u| u.count)
+                .unwrap_or(0);
+            MonthCell {
+                key: p.to_string(),
+                label: names
+                    .get(p.month() as usize - 1)
+                    .map(|s| (*s).to_string())
+                    .unwrap_or_else(|| p.month().to_string()),
+                current: p == showing,
+                unresolved: count,
+                title: if count > 0 {
+                    t.unresolved_dot(count as i64)
+                } else {
+                    String::new()
+                },
+            }
+        })
+        .collect()
 }
 
 /// Clusters a pane's rows by `bucket`, in the order the buckets first appear

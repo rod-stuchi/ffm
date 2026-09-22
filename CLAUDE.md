@@ -1071,6 +1071,12 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   reloading proves nothing until `cargo build` has run — `just dev` watches for
   it, but a hand-started `cargo run` does not. Half an hour went into "the
   keymap stopped working" that was an old template still in a running process.
+- **A browser with forced dark mode rewrites colours, and it is not a bug in
+  the page.** A plain `<div style="background:#F6F3ED">` computed to
+  `rgb(24,26,27)` in one Chrome profile, which made the palette swatches and
+  the month picker's warning dots look broken. Verify with a clean headless
+  render (`--headless --screenshot` on a minimal HTML file) before changing a
+  colour — this has now cost time twice.
 - **Alpine merges a component's data and its methods into one object**, so a
   method named after a data property silently replaces it. `pane: 0` (the
   focused pane's index) and a later `pane(url)` helper meant `panes[this.pane]`

@@ -18,6 +18,32 @@
 <title>{{ household }} · {{ period }}</title>
 <link rel="stylesheet" href="/static/css/build.css">
 <style id="ffm-theme">{{ theme_css|safe }}</style>
+{#- The layout, from the member's own row.
+
+    `auto` resolves in CSS, never on the server and never in Alpine: the server
+    does not know the viewport width, so a round trip would be wrong on first
+    paint and wrong again on every resize. One media query, rendered from one
+    number, correct before the first frame with zero JS. -#}
+<style>
+  .stage { gap: {{ gap }}px; }
+  {%- if max_width > 0 %}
+  /* A pane stops growing: one pane stretched across a wide screen puts the
+     amount a metre from the name it belongs to. 0 means unlimited, which is a
+     real choice rather than a missing value. */
+  .pane { max-width: {{ max_width }}px; }
+  {%- endif %}
+  {%- if layout_panes == "tabs" %}
+  .pane:not(.is-focus) { display: none; }
+  {%- else if layout_panes == "auto" %}
+  @media (max-width: {{ min_split }}px) {
+    /* Below this width there is no room for two panes side by side, so the
+       unfocused ones step aside entirely — the same thing `tabs` does, decided
+       by the viewport rather than by a setting. */
+    .pane:not(.is-focus) { display: none; }
+    .pane { max-width: none; }
+  }
+  {%- endif %}
+</style>
 {#- Self-hosted, like the fonts. A household on a LAN should not need the
     open internet to open its own ledger. -#}
 <script src="/static/js/htmx.min.js"></script>
@@ -27,10 +53,28 @@
 <div class="ledger-shell" data-period="{{ period_key }}" x-data="ledger()" @keydown.window="key($event)">
   <header class="ledger-bar">
     <b>{{ household }}</b>
-    <nav class="mnav">
+    <nav class="mnav" x-data="{ picking: false }" @click.outside="picking = false">
       <a class="btn" href="?period={{ prev }}" title="previous month">‹</a>
-      <span class="mlabel">{{ period }}</span>
+      {#- The dot is ambient and persistent, like every other status in this
+          app — not a toast that gets dismissed and then forgotten. It sits on
+          the trigger when ANY other month this year has something overdue and
+          unreceipted, and again on each flagged cell inside. -#}
+      <button class="btn mlabel" type="button" @click="picking = !picking"
+              title="{% if unresolved_total > 0 %}{{ unresolved_title }}{% else %}{{ t.month_picker() }}{% endif %}">
+        {{ period }}{% if unresolved_total > 0 %}<i class="dot"></i>{% endif %}
+      </button>
       <a class="btn" href="?period={{ next }}" title="next month">›</a>
+
+      <div class="mpop" x-show="picking" x-cloak>
+        {%- for m in months %}
+        {#- Clicking a flagged cell jumps to that month: the picker's existing
+            behaviour, so nothing new is needed on top of it. -#}
+        <a class="mcell{% if m.current %} is-current{% endif %}"
+           href="?period={{ m.key }}" title="{{ m.title }}">
+          {{ m.label }}{% if m.unresolved > 0 %}<i class="dot"></i>{% endif %}
+        </a>
+        {%- endfor %}
+      </div>
     </nav>
     <div class="htotals">
       <span class="who">{{ me }}</span>

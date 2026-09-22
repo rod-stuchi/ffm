@@ -366,3 +366,13 @@ import-unresolved = o código de barras não trazia { $what }
 import-no-occurrence = não há linha deste mês para anexar
 import-unlinked = código do cliente desvinculado
 import-already-attached = esta conta já está em { $period } — uma conta, uma linha
+
+## Seletor de mês
+
+months-short = Jan Fev Mar Abr Mai Jun Jul Ago Set Out Nov Dez
+month-picker = Mês
+unresolved-dot = { $n ->
+        [one] 1 conta vencida sem comprovante
+       *[other] { $n } contas vencidas sem comprovante
+    }
+unresolved-here = vencidas aqui

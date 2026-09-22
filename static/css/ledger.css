@@ -125,6 +125,8 @@
 .pane {
   flex: 1 1 380px;
   min-width: 340px;
+  /* The cap itself is rendered from the member's own setting, in the page —
+   * this is only the floor it grows from. */
 }
 
 .pane {
@@ -817,4 +819,65 @@
   margin-left: auto;
   font-size: 11px;
   padding: 4px 9px;
+}
+
+/* --- the month picker and its warning dot -------------------------------- */
+
+.mnav {
+  position: relative;
+}
+
+.mlabel {
+  position: relative;
+  min-width: 9ch;
+}
+
+/* --neg, the same colour `scheduled overdue` already uses: a third meaning
+ * would need a twelfth token, and this is the same fact — something is owed
+ * and nothing proves it was paid. */
+.dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--neg);
+}
+
+.mpop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 7px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  box-shadow: var(--shadow-md);
+}
+
+.mcell {
+  position: relative;
+  display: block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  text-decoration: none;
+  text-align: center;
+  border: 1px solid transparent;
+}
+
+.mcell:hover {
+  background: var(--surface-2);
+}
+
+.mcell.is-current {
+  border-color: var(--accent);
+  color: var(--accent);
 }

@@ -398,3 +398,13 @@ import-unresolved = the barcode did not carry { $what }
 import-no-occurrence = there is no row for this month to attach it to
 import-unlinked = client code unlinked
 import-already-attached = this bill is already on { $period } — one bill, one row
+
+## The month picker and its warning dot
+
+months-short = Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec
+month-picker = Month
+unresolved-dot = { $n ->
+        [one] 1 bill overdue with no receipt
+       *[other] { $n } bills overdue with no receipt
+    }
+unresolved-here = overdue here
