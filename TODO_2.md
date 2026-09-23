@@ -69,31 +69,47 @@ notification arriving. This is an improvement to *when you find out*, never to
 
 ---
 
-## 2. Three commands the keymap documents and `runCommand` does not handle
+## 2. ~~Three commands the keymap documents and `runCommand` does not handle~~ — ABANDONED
+
+**Abandoned 22/09/2026.** Not deferred, not blocked, not waiting for a
+better moment: these will not be built, and the entry is kept so the next
+person reading the Type table does not take their absence for an oversight
+and re-open it.
 
 Found 22/09/2026, by writing a command-bar hint from the mock instead of from
-the code, and then checking. `design/spec.md`'s Type table lists all three:
+the code, and then checking. `design/spec.md`'s Type table listed all three:
 
-| documented | what it should do |
+| documented | what it would have done |
 |---|---|
 | `:add 50 mercado publix` | a spend, in one line |
 | `:in 2400 freelance` | an incoming |
 | `:move ana` | re-attribute the focused row to another member |
 
 None of them reach a `case` in the dispatcher, so all three answer
-*"not a command"*. The gestures they duplicate all work — `a`, `i` and
-`Ctrl-H`/`Ctrl-L` — so nothing is unreachable; what is missing is the
-one-line typed form.
+*"not a command"*.
 
-`:invite ana` has a smaller version of the same problem: it opens `:members`
-but throws its label argument away, so the invite is created without the
-*for whom* label the pane's own form offers.
+**Why abandoning them costs nothing.** Every one of them is a second
+spelling of a gesture that already works — `a`, `i` and `Ctrl-H`/`Ctrl-L` —
+so nothing in this app is unreachable without them. What was missing was the
+one-line typed form of something you can already do in one keystroke, which
+is the weakest case a feature can make for itself.
 
-**Not done here on purpose.** `:add 50 mercado publix` is a parser — an
-amount, then a title, with the amount's position and the currency mask's
-rules to agree on — and `:move ana` has to resolve a name to a member and
-then go through the private-row confirmation that `Ctrl-L` already opens.
-Both are real work with real decisions, not the tidy-up this commit was.
+**And what building them would have cost.** `:add 50 mercado publix` is a
+parser: where the amount ends and the title begins, and a set of rules that
+has to agree with the live money mask the forms use — a second place money is
+read from a string, in an app whose whole currency design is "exactly one
+place formats and parses money". `:move ana` has to resolve a typed name to a
+member and then route a private row through the confirmation `Ctrl-L` already
+opens, which is the delete-confirmation problem again with a different verb.
+Real work, real decisions, against a feature whose benefit is a keystroke.
 
-Until then the command bar advertises only what it handles, and
-`just cmd-check` fails the build if that stops being true.
+`:invite ana` is abandoned with them, for the same reason at smaller scale:
+it opens `:members` and throws its label away, and the pane's own create form
+takes the label directly.
+
+**What this obliges.** The command bar advertises only what it handles and
+`just cmd-check` fails the build if that stops being true, so nothing in the
+UI offers these. `design/spec.md`'s Type table carries a note saying they are
+not built and will not be — a spec that lists a command the app refuses is
+the thing that started this entry, and removing the rows outright would lose
+the record of why.

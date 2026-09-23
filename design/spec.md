@@ -479,9 +479,6 @@ for this row"*.
 | Key | Action |
 |---|---|
 | `:` | open the command bar |
-| `:add 50 mercado publix` | a spend, in one line |
-| `:in 2400 freelance` | an incoming |
-| `:move ana` | re-attribute to another member |
 | `:sort date` | row order: manual · date · amount |
 | `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |
@@ -491,11 +488,33 @@ for this row"*.
 | `:profile` · `:me` | your own settings, beside the ledger |
 | `:household` | household settings, admin-only · `:config` is an alias |
 | `:members` | admin only — members, and issue an invite link |
-| `:invite ana` | admin only — create an invite link and open `:members` on it |
+| `:invite` | admin only — open `:members` with the create form |
 | `:logout` | end this session |
 | `:preview` | admin only — toggle previewing the app as a non-admin member |
 | `:help` · `:h` | the keymap — the same modal `?` opens |
 | `?` | keymap |
+
+**`:add`, `:in` and `:move` are not here, and will not be.** They were
+listed for a long time and never built, which is how this table came to
+advertise three commands the app answers *"not a command"* to. They are
+abandoned rather than deferred — see `TODO_2.md` §2 for the reasoning, kept
+so their absence is not read as an oversight and re-opened.
+
+The short version: each is a second spelling of a gesture that already
+works (`a`, `i`, `Ctrl-H`/`Ctrl-L`), so nothing is unreachable without them,
+and each costs more than a keystroke is worth — `:add 50 mercado` is a
+second place money is parsed out of a string, in an app whose currency
+design is *exactly one place formats and parses money*, and `:move ana` has
+to resolve a typed name and then route a private row through the
+confirmation `Ctrl-L` already opens. `:invite`'s label argument goes with
+them; the pane's own create form takes it directly.
+
+**Nothing machine-checks this table, which is how the three survived in it.**
+`just cmd-check` guards the command *bar* — every name in `command_hint()`,
+and every `(try X)` in the catalogs, must reach a `case` in the dispatcher —
+so the app never offers a command it then refuses. This document is outside
+that loop: a row added here without an implementation fails no build. Until
+that changes, a new row is a promise somebody has to keep by hand.
 
 ### Edit fields
 | Key | Action |
