@@ -1386,10 +1386,25 @@ yesterday
   record itself.
 - **Expanding an entry** shows `old -> new` per field, formatted by `kind`,
   with an em dash for empty.
-- **Read-only.** No drafts, no save. `Esc` closes; `Ctrl-h` hands focus back
-  to the ledger (matching the rule pane's left-edge behaviour) with the pane
-  still open until the cursor actually moves; `j`/`k` walk the entries and
-  `Enter` toggles one.
+- **One field is shown inline; only two or more fold.** Expanding to reveal
+  a single line is a poor trade, and one field is the common case — a privacy
+  toggle, a reorder, a re-attribution and a single edit each produce exactly
+  one. Such an entry carries no `+` and no field count either: *"edited · 1
+  field"* above the line it describes says nothing the line does not. Delete
+  and restore have no fields at all and have never offered anything to open.
+- **Read-only.** No drafts, no save. `Esc` closes.
+- **While it is open, the log takes `j`/`k`.** Nothing is stolen by that:
+  moving the *ledger* cursor closes the log, so ledger navigation is already
+  meaningless while it is up — which is also why there is no key to focus the
+  pane, since there is nothing to focus away from. The cursor starts on the
+  first entry and is marked the way a focused row is, with an accent rail and
+  a tinted ground.
+- **Its entries answer the fold keys**, because an entry *is* a fold — a
+  header with collapsible content. `za`/`zo`/`zc` act on the entry under the
+  cursor and `zR`/`zM` on all of them, exactly as they do for `:group bucket`
+  folds; which set they act on is whichever is in front of you. `Enter`
+  toggles too, for the half of this app's userbase that does not use Vim —
+  the same reasoning that makes `?` open the keymap.
 - **It closes when the cursor leaves the row** — the same single check in
   the render loop that parks an open edit draft.
 - **A row with nothing recorded still opens the pane**, saying so. An empty

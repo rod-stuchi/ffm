@@ -902,6 +902,21 @@
   background: var(--surface-2);
 }
 
+/* The cursor, while `j`/`k` walk the entries. The same channel a focused row
+ * uses — accent rail plus a tinted ground — because it is the same idea: one
+ * mark for "where I am". */
+.logentry.is-focus > .logline {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* A single field needs no fold, so it is shown under its entry. Indented to
+ * the same place an expanded diff sits, and dimmer than the entry line: it is
+ * the detail of the thing above it, not a second entry. */
+.logentry .logfields {
+  padding-left: 7px;
+}
+
 .logline .lt {
   color: var(--ink-3);
 }

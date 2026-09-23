@@ -588,6 +588,8 @@ function ledger() {
     get sortLabel() { return this.sort; },
     commanding: false,
     logFor: null,
+    logOpen: [],
+    logCursor: 0,
     // Fold state is PURE visual state — the server already rendered every row
     // and its subtotal, so folding shows or hides what is in the DOM. That is
     // exactly the division of responsibility this app draws.
@@ -793,30 +795,30 @@ function ledger() {
       const n = parseInt(this.count || '1', 10);
       this.count = '';
 
-      if (k === 'j') { this.row += n; this.paint(); }
+      // A PREFIXED binding is resolved before any unprefixed one, always.
+      //
+      // Line order used to decide it, and line order kept getting it wrong:
+      // `gg`, then `gu1`, then `zz`, and `za` — which lost to `a` and opened
+      // the add form instead of toggling a fold. Four of the same bug in one
+      // chain is a shape problem, not four mistakes.
+      //
+      // An armed prefix also consumes its second key even when the pair means
+      // nothing: `zq` drops the prefix rather than falling through to
+      // whatever `q` would have meant on its own.
+      if (buffer) {
+        if (this.prefixed(buffer, k, n)) e.preventDefault();
+        return;
+      }
+
+      // While the log is open it owns the vertical motions — see logIsOpen.
+      if (k === 'j' && this.logIsOpen()) { this.logMove(n); }
+      else if (k === 'k' && this.logIsOpen()) { this.logMove(-n); }
+      else if (k === 'Enter' && this.logIsOpen()) { this.logToggle(this.logCursorId()); }
+      else if (k === 'j') { this.row += n; this.paint(); }
       else if (k === 'k') { this.row -= n; this.paint(); }
-      else if (buffer === 'g' && k === 'g') { this.row = 0; this.paint(); }
-      // g1 / g2 / g3 — a genuine extension of the g-prefix "goto" vocabulary
-      // already in use (gg, gt), with numbering fixed by KIND so g1 means the
-      // bill on every row in the ledger.
-      else if (buffer === 'g' && ['1', '2', '3'].includes(k)) { this.openFile(Number(k)); }
-      // `gu` — "goto upload". A second step of the g-prefix rather than a new
-      // pattern, and it reuses g1/g2/g3's fixed numbering so one set of
-      // numbers means one thing whether you are opening a file or adding one.
-      else if (buffer === 'g' && k === 'u') { this.pending = 'gu'; }
-      else if (buffer === 'gu' && ['1', '2', '3'].includes(k)) { this.attachKey(Number(k)); }
-      // `gl` — "go to log", a genuine extension of the g-prefix vocabulary
-      // already in use rather than a new pattern.
-      else if (buffer === 'g' && k === 'l') { this.openLog(); }
-      else if (buffer === 'g' && k === 'd') { this.showDetails(); }
       else if (k === 'P') { this.openCarousel(); }
       else if (k === '?') { this.keymap = true; }
       else if (k === 'G') { this.row = this.rows().length - 1; this.paint(); }
-      // `gt` / `gT` cycle the member tabs, wrapping — and a count jumps
-      // straight to that tab (`2gt`), which is why the count is read here
-      // rather than treated as a repeat. H/L keep working unchanged, so
-      // nothing is relearned when the layout flips underneath you.
-      else if (buffer === 'g' && (k === 't' || k === 'T')) { this.gotoTab(k === 't' ? 1 : -1, n); }
       else if (k === 'H') { this.pane = Math.max(0, this.pane - 1); this.row = 0; this.paint(); }
       else if (k === 'L') { this.pane = Math.min(document.querySelectorAll('.pane').length - 1, this.pane + 1); this.row = 0; this.paint(); }
       else if (k === 'a' || k === 'i') { this.open(k === 'a' ? 'out' : 'in'); }
@@ -828,20 +830,12 @@ function ledger() {
       else if (k === 'e') { this.editRow(); }
       else if (k === 'p') { this.togglePrivate(); }
       else if (k === 'x') { this.toggleSelected(); }
-      else if (k === 'd') { if (buffer === 'd') { this.askDelete(); } else { this.pending = 'd'; } }
+      else if (k === 'd') { this.pending = 'd'; }
       else if (k === 'u') { this.undo(); }
       else if (k === ':') { this.openCommand(); }
       else if (k === '/') { this.openSearch(); }
       else if (k === 'n') { this.step(1); }
       else if (k === 'N') { this.step(-1); }
-      else if (buffer === 'z' && ['a', 'o', 'c'].includes(k)) { this.fold(k); }
-      else if (buffer === 'z' && k === 'R') { this.allFolds(false); }
-      else if (buffer === 'z' && k === 'M') { this.allFolds(true); }
-      // `zz` zooms the bottom split between half the ledger and nearly all of
-      // it — worth it for `:grep` with forty hits. It borrows the `z` prefix
-      // the folds use without muddying that family: `zz` is not a fold
-      // command in Vim either.
-      else if (buffer === 'z' && k === 'z') { this.splitZoom = !this.splitZoom; }
       else if (k === 'J') { this.move(n); }
       else if (k === 'K') { this.move(-n); }
       else if (k === 'Escape') {
@@ -1430,7 +1424,120 @@ function ledger() {
 
     /// The log owns `logFor`, so closing it clears that too — otherwise
     /// `paint` keeps trying to close a pane that is already gone.
-    closeLog() { this.logFor = null; this.clearMount('#logpane'); },
+    closeLog() {
+      this.logFor = null;
+      this.logOpen = [];
+      this.logCursor = 0;
+      this.clearMount('#logpane');
+    },
+
+    // --- reading the log with the keyboard --------------------------------
+    //
+    // While the log is open it takes `j`/`k`, the fold keys and `Enter`.
+    // Nothing is stolen by doing so: moving the LEDGER cursor closes the log,
+    // so ledger navigation is already meaningless while it is up. That is
+    // also why there is no key to focus the pane — there is nothing to focus
+    // away from.
+
+    /// Every binding whose first key armed a prefix. Returns whether the
+    /// pair meant anything, so the caller knows to swallow the keystroke.
+    prefixed(buffer, k, n) {
+      // `dd` — the only destructive pair, and the only one that is not a
+      // `g`/`z` family member.
+      if (buffer === 'd' && k === 'd') { this.askDelete(); return true; }
+
+      if (buffer === 'g') {
+        if (k === 'g') { this.row = 0; this.paint(); return true; }
+        // g1 / g2 / g3 — a genuine extension of the g-prefix "goto"
+        // vocabulary already in use (gg, gt), with numbering fixed by KIND so
+        // g1 means the bill on every row in the ledger.
+        if (['1', '2', '3'].includes(k)) { this.openFile(Number(k)); return true; }
+        // `gu` — "goto upload". A second step of the g-prefix rather than a
+        // new pattern, reusing g1/g2/g3's numbering so one set of numbers
+        // means one thing whether you are opening a file or adding one.
+        if (k === 'u') { this.pending = 'gu'; return true; }
+        // `gl` — "go to log", the same extension of the g vocabulary.
+        if (k === 'l') { this.openLog(); return true; }
+        if (k === 'd') { this.showDetails(); return true; }
+        // `gt` / `gT` cycle the member tabs, wrapping — and a count jumps
+        // straight to that tab (`2gt`), which is why the count is read here
+        // rather than treated as a repeat. H/L keep working unchanged, so
+        // nothing is relearned when the layout flips underneath you.
+        if (k === 't' || k === 'T') { this.gotoTab(k === 't' ? 1 : -1, n); return true; }
+        return false;
+      }
+
+      if (buffer === 'gu' && ['1', '2', '3'].includes(k)) {
+        this.attachKey(Number(k));
+        return true;
+      }
+
+      if (buffer === 'z') {
+        // The fold keys mean the same thing in both places; which folds they
+        // act on is whichever is in front of you.
+        if (['a', 'o', 'c'].includes(k)) {
+          if (this.logIsOpen()) this.logFold(k); else this.fold(k);
+          return true;
+        }
+        if (k === 'R') { if (this.logIsOpen()) this.logAll(true); else this.allFolds(false); return true; }
+        if (k === 'M') { if (this.logIsOpen()) this.logAll(false); else this.allFolds(true); return true; }
+        // `zz` zooms the bottom split between half the ledger and nearly all
+        // of it — worth it for `:grep` with forty hits. It borrows the `z`
+        // prefix without muddying the fold family: `zz` is not a fold command
+        // in Vim either.
+        if (k === 'z') { this.splitZoom = !this.splitZoom; return true; }
+        return false;
+      }
+
+      return false;
+    },
+
+    logIsOpen() { return !!document.querySelector('#logpane'); },
+
+    logEntries() { return [...document.querySelectorAll('#logpane .logentry')]; },
+
+    logMove(n) {
+      const entries = this.logEntries();
+      if (!entries.length) return;
+      this.logCursor = Math.max(0, Math.min(this.logCursor + n, entries.length - 1));
+      entries[this.logCursor].scrollIntoView({ block: 'nearest' });
+    },
+
+    /// The id of the entry under the cursor, or null when it has nothing to
+    /// open — an inline single field, or a delete with no fields at all.
+    logCursorId() {
+      const el = this.logEntries()[this.logCursor];
+      const x = el && el.querySelector('.lx');
+      return x ? Number(el.dataset.entry) : null;
+    },
+
+    logToggle(id, index) {
+      if (index !== undefined) this.logCursor = index;
+      if (id === null || id === undefined) return;
+      const at = this.logOpen.indexOf(id);
+      if (at === -1) this.logOpen.push(id);
+      else this.logOpen.splice(at, 1);
+    },
+
+    /// `za` / `zo` / `zc` on the entry under the cursor. The log's entries
+    /// ARE folds — a header with collapsible content — so they answer to the
+    /// vocabulary `:group bucket` already taught, rather than a key invented
+    /// for this one pane.
+    logFold(k) {
+      const id = this.logCursorId();
+      if (id === null) return;
+      const open = this.logOpen.includes(id);
+      if (k === 'a' || (k === 'o' && !open) || (k === 'c' && open)) this.logToggle(id);
+    },
+
+    /// `zR` / `zM` — every entry at once.
+    logAll(open) {
+      this.logOpen = open
+        ? this.logEntries()
+            .filter((el) => el.querySelector('.lx'))
+            .map((el) => Number(el.dataset.entry))
+        : [];
+    },
 
     runCommand() {
       const raw = this.command.trim();
@@ -1596,6 +1703,8 @@ function ledger() {
       // first, and closing the log is what clears `logFor`. Setting it first
       // meant it was wiped a line later, and the log then never closed when
       // the cursor left its row.
+      this.logOpen = [];
+      this.logCursor = 0;
       this.showRowPane('/tx/' + id + '/log');
       this.logFor = id;
     },

@@ -6,7 +6,7 @@
 {#- Its OWN id, not the settings panes'. They shared one, and the
     cursor-left-the-row check closes "the pane" — so walking the
     cursor after a `gl` tore down an open `:grep` as well. -#}
-<aside class="rulepane logpane" id="logpane" x-data="{ open: null }">
+<aside class="rulepane logpane" id="logpane">
   <header class="rp-head">
     <b>{{ t.log_title() }} · {{ title }} · {{ period }}</b>
     {#- Closes through the shell, not `$root.remove()`. Three of these panes
@@ -42,8 +42,13 @@
     {%- for day in days %}
     <div class="logday">{{ day.label }}</div>
     {%- for e in day.entries %}
-    <div class="logentry{% if e.is_rule %} is-rule{% endif %}">
-      <div class="logline" @click="open = open === {{ e.id }} ? null : {{ e.id }}">
+    {#- Fold state and the cursor live on the SHELL, not on this fragment:
+        the keys that drive them (`j`/`k`, `za`/`zR`/`zM`, `Enter`) are
+        dispatched there, and the chips re-swap this whole pane. -#}
+    <div class="logentry{% if e.is_rule %} is-rule{% endif %}"
+         data-entry="{{ e.id }}"
+         :class="{ 'is-focus': logCursor === {{ loop.index0 + day.offset }} }">
+      <div class="logline" @click="logToggle({% if e.inline || e.fields.is_empty() %}null{% else %}{{ e.id }}{% endif %}, {{ loop.index0 + day.offset }})">
         <span class="lt">{{ e.time }}</span>
         <span class="la">{{ e.actor }}</span>
         <span class="lv">{{ e.verb }}</span>
@@ -53,10 +58,14 @@
             the log reads "deleted", then "restored · undo of 18:39". -#}
         {%- if let Some(u) = e.undo_of %}<span class="lu">{{ u }}</span>{% endif %}
         {%- if let Some(n) = e.note %}<span class="lu">{{ n }}</span>{% endif %}
-        {%- if !e.fields.is_empty() %}<span class="lx" x-text="open === {{ e.id }} ? '−' : '+'">+</span>{% endif %}
+        {#- No affordance on an entry with nothing to open, and none on one
+            whose single field is already showing underneath. -#}
+        {%- if !e.inline && !e.fields.is_empty() %}
+        <span class="lx" x-text="logOpen.includes({{ e.id }}) ? '−' : '+'">+</span>
+        {%- endif %}
       </div>
       {%- if !e.fields.is_empty() %}
-      <div class="logfields" x-show="open === {{ e.id }}" x-cloak>
+      <div class="logfields"{% if !e.inline %} x-show="logOpen.includes({{ e.id }})" x-cloak{% endif %}>
         {%- for f in e.fields %}
         <div class="logfield">
           <span class="lf">{{ f.label }}</span>

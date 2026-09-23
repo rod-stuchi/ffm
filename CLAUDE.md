@@ -1104,6 +1104,15 @@ that will otherwise be re-proposed.
 
 These cost real debugging time in the prototype. Do not re-introduce them.
 
+- **A prefixed binding must be resolved before any unprefixed one, and not
+  by line order.** This was written wrong four times in one keydown chain:
+  `gg` lost to the arm that arms `g`, `gu1` and `zz` lost the same way, and
+  **`za` lost to `a` and opened the add form instead of toggling a fold** —
+  a documented key that never once worked. Four instances of one bug is a
+  shape problem, not four mistakes. Every prefixed pair now lives in a single
+  `prefixed(buffer, key, count)` function consulted *before* the chain, and an
+  armed prefix consumes its second key even when the pair means nothing, so
+  `zq` drops the prefix rather than falling through to `q`.
 - **A keymap's count branch will eat a prefix's digit, twice.** `g1`/`g2`/`g3`
   and `gu1`/`gu2`/`gu3` are bindings whose last key is a *digit*, and the
   count that makes `5j` work matches digits first. Guard it on the buffer

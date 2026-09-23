@@ -33,8 +33,17 @@ pub struct EntryView {
     pub actor: String,
     pub verb: String,
     pub is_rule: bool,
-    /// `3 fields`, when there is a diff to open.
+    /// `3 fields`, when there is a diff to OPEN. A single field is shown
+    /// inline instead, so it carries no count either — "edited · 1 field"
+    /// above the one line it is describing says nothing the line does not.
     pub count: Option<String>,
+    /// One field, rendered under the entry with no fold at all.
+    ///
+    /// Expanding to reveal a single line is a poor trade, and one field is
+    /// the common case: a privacy toggle, a reorder, a re-attribution and a
+    /// single edit each produce exactly one. (Delete and restore produce
+    /// none, and already offer nothing to open.)
+    pub inline: bool,
     /// `undo of 18:39` — an undo is an entry, never a rewrite.
     pub undo_of: Option<String>,
     pub note: Option<String>,
@@ -45,6 +54,11 @@ pub struct EntryView {
 pub struct DayGroup {
     pub label: String,
     pub entries: Vec<EntryView>,
+    /// How many entries come before this group, so the template can give
+    /// every entry a **flat** index across the day headings. The cursor walks
+    /// entries, not days, and `j` from the last entry of one day belongs on
+    /// the first of the next.
+    pub offset: usize,
 }
 
 /// Groups a rule's and a row's entries by day and formats every value.
@@ -73,7 +87,8 @@ pub fn render(
             is_rule: e.is_rule,
             // Delete and restore carry no fields: it is the row's existence
             // that changed, not one of its values.
-            count: (!e.fields.is_empty()).then(|| t.log_fields(e.fields.len() as i64)),
+            count: (e.fields.len() > 1).then(|| t.log_fields(e.fields.len() as i64)),
+            inline: e.fields.len() == 1,
             undo_of: e
                 .undo_of
                 .and_then(|id| times.get(&id))
@@ -95,8 +110,16 @@ pub fn render(
             _ => groups.push(DayGroup {
                 label,
                 entries: vec![view],
+                // Filled in below, once every group is known.
+                offset: 0,
             }),
         }
+    }
+
+    let mut seen = 0;
+    for g in &mut groups {
+        g.offset = seen;
+        seen += g.entries.len();
     }
     groups
 }
@@ -325,10 +348,47 @@ mod tests {
             "older than yesterday is a date"
         );
 
-        // A field count only where there is a diff to open — delete and
-        // restore have none, because it is the row's existence that moved.
-        assert_eq!(groups[0].entries[0].count.as_deref(), Some("1 field"));
+        // A field count only where there is a diff to OPEN. One field is
+        // shown inline instead, so it carries no count either: "edited · 1
+        // field" above the single line it describes says nothing the line
+        // does not. Delete and restore have neither — it is the row's
+        // existence that moved, not one of its values.
+        assert_eq!(groups[0].entries[0].count, None);
+        assert!(groups[0].entries[0].inline, "one field is shown inline");
         assert_eq!(groups[0].entries[1].count, None);
+        assert!(
+            !groups[0].entries[1].inline,
+            "no fields at all is not an inline field"
+        );
+
+        // The cursor walks ENTRIES, not days, so each group knows how many
+        // came before it and `j` off the end of one day lands on the next.
+        assert_eq!(groups[0].offset, 0);
+        assert_eq!(groups[1].offset, groups[0].entries.len());
+    }
+
+    #[test]
+    fn two_or_more_fields_still_fold_and_still_count() {
+        let t = Catalog::new(Lang::En);
+        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let groups = render(
+            &[entry(
+                &now,
+                "edit",
+                vec![
+                    field("title", "text", Some("a"), Some("b")),
+                    field("bucket", "text", Some("c"), Some("d")),
+                ],
+            )],
+            &t,
+            Currency::Brl,
+            chrono::Local::now().date_naive(),
+        );
+        assert_eq!(groups[0].entries[0].count.as_deref(), Some("2 fields"));
+        assert!(
+            !groups[0].entries[0].inline,
+            "more than one field is worth a fold"
+        );
     }
 
     #[test]
