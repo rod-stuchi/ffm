@@ -29,6 +29,24 @@ pub fn svg(name: &str) -> &'static str {
         "private" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>"#
         }
+        // The ledger bar's own three. Light/dark is a property of the device,
+        // so the icons name a device state rather than a mood: a screen for
+        // "whatever the system says", then sun and moon for the two the member
+        // has pinned. The mockups used `○ ◐ ●`, which is exactly the emoji-ish
+        // glyph the row states forbid — different weight and shape on every
+        // platform, and unable to take a theme token.
+        "monitor" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>"#
+        }
+        "sun" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>"#
+        }
+        "moon" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>"#
+        }
+        "person" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>"#
+        }
         _ => r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>"#,
     }
 }
@@ -37,11 +55,27 @@ pub fn svg(name: &str) -> &'static str {
 mod tests {
     use super::*;
 
+    /// Every name the UI asks for by hand — the row's five and the ledger
+    /// bar's four. A name added to `svg()` and not to here is untested; a name
+    /// used in a template and not here is worse, because the fallback circle
+    /// renders and nothing complains.
+    const NAMES: [&str; 9] = [
+        "bill",
+        "scheduled",
+        "receipt",
+        "recurring",
+        "private",
+        "monitor",
+        "sun",
+        "moon",
+        "person",
+    ];
+
     #[test]
     fn every_icon_the_row_asks_for_exists() {
         // An unknown name falls back to a circle rather than rendering nothing,
         // but the names the row actually uses must all be real.
-        for name in ["bill", "scheduled", "receipt", "recurring", "private"] {
+        for name in NAMES {
             assert!(svg(name).contains("<svg"), "{name}");
             assert_ne!(svg(name), svg("nonexistent"), "{name} fell back");
         }
@@ -51,7 +85,7 @@ mod tests {
     fn icons_inherit_colour_rather_than_hardcoding_it() {
         // stroke/fill come from CSS (currentColor via the .ficon rule), so a
         // palette swap reaches them. A hex here would be invisible to the theme.
-        for name in ["bill", "scheduled", "receipt", "recurring", "private"] {
+        for name in NAMES {
             assert!(!svg(name).contains('#'), "{name} hardcodes a colour");
         }
     }

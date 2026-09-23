@@ -193,6 +193,18 @@ struct LedgerPage {
     prev: String,
     next: String,
     panes: Vec<PaneView>,
+    /// The light/dark control: the word for the state you are in, the mode its
+    /// form submits, and the icon that names it. The cookie is `HttpOnly`, so
+    /// this is a plain form POST to `/theme` — JS could not set it even if we
+    /// wanted it to.
+    mode_label: &'static str,
+    mode_next: &'static str,
+    mode_svg: &'static str,
+    /// Where `/theme` sends you back to. Rebuilt rather than read off the
+    /// request, so it is a local path by construction; the form restamps it
+    /// from `location` on submit, because `?pane=` is rewritten client-side.
+    back_to: String,
+    person_svg: &'static str,
     /// Which pane the cursor starts in, as an index into `panes` — the
     /// component counts panes, not member ids.
     focused: usize,
@@ -350,7 +362,17 @@ pub async fn ledger(
         .unwrap_or(0);
 
     let net = ins - outs;
+    let back_to = match panes.get(focused) {
+        Some(v) => format!("/?period={}&pane={}", period, v.id),
+        None => format!("/?period={period}"),
+    };
+
     Html(LedgerPage {
+        mode_label: crate::web::auth::mode_label(&t, auth.mode),
+        mode_next: auth.mode.next(),
+        mode_svg: crate::ui::icons::svg(auth.mode.icon()),
+        person_svg: crate::ui::icons::svg("person"),
+        back_to,
         focused,
         // The member's palette, the device's light/dark — two facts, two homes.
         theme_css: theme::render(

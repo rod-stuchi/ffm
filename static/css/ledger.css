@@ -86,8 +86,96 @@
   color: var(--ink-3);
 }
 
-.signout {
+/* A form in the bar must not box its button: `display: contents` drops the
+ * wrapper from layout so the button is a direct flex child of `.ledger-bar`.
+ *
+ * It was `.signout` when the sign-out form was the only one. It is now on the
+ * preview badge and the light/dark control too, and neither of those signs
+ * anybody out. */
+.barform {
   display: contents;
+}
+
+/* Icon, then the word for the state you are in. The icon is not decoration
+ * here — it is what makes the control findable at a glance in a bar that is
+ * otherwise all text. */
+.modebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  padding: 6px 11px;
+}
+
+.modebtn svg,
+.profbtn svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Built like `.mnav`: the popup is absolute inside this, so nothing has to
+ * compute coordinates. */
+.profmenu {
+  position: relative;
+}
+
+.profbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  padding: 6px 11px;
+}
+
+/* Right-anchored, unlike the month picker: this sits at the end of the bar,
+ * and a left-anchored popup would hang off the edge of the window. */
+.ppop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 45;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  box-shadow: var(--shadow-md);
+}
+
+/* The same menu-item shape `.filemenu` already uses — left-aligned, a size
+ * down, no border until it is under the pointer. */
+.ppop .btn {
+  border-color: transparent;
+  background: none;
+  text-align: left;
+  font-size: 12.5px;
+  padding: 6px 10px;
+  width: 100%;
+}
+
+.ppop .btn:hover {
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+
+.ppop form {
+  display: contents;
+}
+
+.psep {
+  height: 1px;
+  margin: 4px 2px;
+  border: 0;
+  background: var(--line);
 }
 
 /* The mode badge: accent for "you are here", the warning colour while admin

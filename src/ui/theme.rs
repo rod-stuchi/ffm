@@ -130,6 +130,29 @@ impl ModePref {
         }
     }
 
+    /// The next mode in the cycle: System -> Light -> Dark -> System.
+    ///
+    /// One definition, because there are two controls now — the pre-auth
+    /// chrome and the ledger bar — and a cycle that runs one way on the login
+    /// page and another inside the app would be a small, maddening bug.
+    pub fn next(self) -> &'static str {
+        match self {
+            ModePref::System => "light",
+            ModePref::Light => "dark",
+            ModePref::Dark => "system",
+        }
+    }
+
+    /// The icon that names the current state — a screen for "whatever the
+    /// system says", sun and moon for the two a member has pinned.
+    pub fn icon(self) -> &'static str {
+        match self {
+            ModePref::System => "monitor",
+            ModePref::Light => "sun",
+            ModePref::Dark => "moon",
+        }
+    }
+
     /// The `data-theme` attribute value, if any. `System` deliberately stamps
     /// nothing: the un-stamped document is the common case.
     pub fn attr(self) -> Option<&'static str> {

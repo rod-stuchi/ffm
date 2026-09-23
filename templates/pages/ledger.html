@@ -91,7 +91,8 @@
      @dragend.window="dragging = false">
   <header class="ledger-bar">
     <b>{{ household }}</b>
-    <nav class="mnav" x-data="{ picking: false }" @click.outside="picking = false">
+    <nav class="mnav" x-data="{ picking: false }" @click.outside="picking = false"
+         @keydown.escape.window="picking = false">
       <a class="btn" href="?period={{ prev }}" title="previous month">‹</a>
       {#- The dot is ambient and persistent, like every other status in this
           app — not a toast that gets dismissed and then forgotten. It sits on
@@ -115,9 +116,12 @@
       </div>
     </nav>
     <div class="htotals">
-      <span class="who">{{ me }}</span>
+      {#- The member's name is not here any more: it labels the profile button
+          at the end of the bar, and printing it twice within 200px was the
+          only thing keeping it in two places. The badge stays — it is a status
+          and a toggle, not a way into your settings. -#}
       {%- if admin || previewing %}
-      <form method="post" action="/preview" class="signout">
+      <form method="post" action="/preview" class="barform">
         <button class="btn badge{% if previewing %} is-preview{% endif %}" type="submit">{% if previewing %}PREVIEW{% else %}ADMIN{% endif %}</button>
       </form>
       {%- endif %}
@@ -127,9 +131,59 @@
         <span><i>NET</i> <b class="{% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
       </span>
     </div>
-    <form method="post" action="/logout" class="signout">
-      <button class="btn" type="submit">{{ t.sign_out() }}</button>
+    {#- Light/dark, as a plain form. The `ffm.theme` cookie is HttpOnly, so
+        this cannot be a JS toggle however much it looks like one — it posts to
+        the same `/theme` the login page uses, and the server redirects back.
+
+        The button shows the state you are IN and submits the next one, which
+        is the pre-auth control's shape unchanged; the cycle itself lives on
+        `ModePref::next` so the two cannot drift apart. -#}
+    <form method="post" action="/theme" class="barform"
+          @submit="$el.next.value = location.pathname + location.search">
+      {#- Restamped from `location` on submit, because `?pane=` is rewritten
+          client-side and the rendered value goes stale the moment you press
+          `L`. The server's own value is what a JS-less browser posts, and
+          `safe_next` refuses anything that is not a local path either way. -#}
+      <input type="hidden" name="next" value="{{ back_to }}">
+      <input type="hidden" name="mode" value="{{ mode_next }}">
+      <button class="btn modebtn" type="submit" title="{{ mode_label }}">
+        {{ mode_svg|safe }}<span>{{ mode_label }}</span>
+      </button>
     </form>
+
+    {#- Everything about you, in one place. Built like `.mnav` above — trigger
+        and popup in one relatively-positioned wrapper with its own small
+        `x-data` — rather than like `.filemenu`, which computes `position:
+        fixed` coordinates only because it is anchored to a row in a stage that
+        scrolls sideways. A bar control has no such problem. -#}
+    <nav class="profmenu" x-data="{ open: false }"
+         @click.outside="open = false" @keydown.escape.window="open = false">
+      <button class="btn profbtn" type="button" @click="open = !open"
+              :aria-expanded="open" title="{{ t.settings_profile() }}">
+        {{ person_svg|safe }}<span>{{ me }}</span>
+      </button>
+      <div class="ppop" x-show="open" x-cloak>
+        <button class="btn" type="button"
+                @click="open = false; showSplit('/profile')">{{ t.settings_profile() }}</button>
+        {#- Admin-only, and it DISAPPEARS under preview rather than sitting
+            there disabled: `admin` is `viewer.is_admin()`, which preview
+            already makes false. A real non-admin never sees a control for a
+            pane they cannot open. -#}
+        {%- if admin %}
+        <button class="btn" type="button"
+                @click="open = false; showSplit('/household')">{{ t.settings_household() }}</button>
+        {%- endif %}
+        {#- The same pane the first item opens, with the keyboard left on the
+            swatches — which are its first control. That is the whole
+            difference, and it is why this is not a second palette picker. -#}
+        <button class="btn" type="button"
+                @click="open = false; openColours()">{{ t.profile_theme() }}</button>
+        <hr class="psep">
+        <form method="post" action="/logout">
+          <button class="btn" type="submit">{{ t.sign_out() }}</button>
+        </form>
+      </div>
+    </nav>
   </header>
 
   {%- if empty %}
@@ -949,6 +1003,11 @@ function ledger() {
       else if (k === 'J') { this.move(n); }
       else if (k === 'K') { this.move(-n); }
       else if (k === 'Escape') {
+        // The file menu too: it lives on this component, and a popup that
+        // ignores Escape is a popup you have to reach for the mouse to close.
+        // The month picker and the profile menu keep their own `x-data`, so
+        // they listen for Escape themselves.
+        this.attaching = null;
         this.adding = null; this.closeRule(); this.closeLog();
         this.closeSplit(); this.clearSearch();
         // The command bar too. Its own input closes it on Escape, but only
@@ -1610,7 +1669,17 @@ function ledger() {
       this.closeSplit();
       this.closeLog();
       this.closeRule();
-      htmx.ajax('GET', url, { target: '#hsplitmount', swap: 'innerHTML' });
+      // Returned, not discarded: `openColours()` has to wait for the swap
+      // before it can put the keyboard on the first swatch.
+      return htmx.ajax('GET', url, { target: '#hsplitmount', swap: 'innerHTML' });
+    },
+
+    /// The profile menu's colour-scheme item. `:profile` with the cursor
+    /// already on the palette — the swatches are the pane's first control, and
+    /// `focusSplit` lands on its first visible input, so this needs no anchor
+    /// and no second picker.
+    openColours() {
+      this.showSplit('/profile').then(() => this.focusSplit());
     },
 
     /// A surface about ONE ROW — the change log. It keeps the rule editor's

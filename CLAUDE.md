@@ -355,7 +355,9 @@ card in plain CSS.
   faces) and admin-only settings become inaccessible — `:household`,
   `:currency` and `:members` all refuse, and the **Household** button
   disappears from the toolbar rather than sitting there disabled — exactly as if
-  this member held no admin role at all. No
+  this member held no admin role at all. **That button exists now**: it is the
+  Household entry in the ledger bar's profile menu, gated on `admin`, which
+  `viewer.is_admin()` already makes false under preview. No
   session swap, no acting-as-someone-else, no writes attributed to anyone
   else — see `design/spec.md`'s Auth & sessions section for the full
   reasoning and why that distinction ruled out "impersonate" as the name.
@@ -980,6 +982,28 @@ that will otherwise be re-proposed.
      distant member in a six-person household is five keystrokes.
      `:move <name>` is the right answer at that size and already exists; the
      keys stay the fast path for the common case.
+
+### The ledger bar
+
+- **Light/dark is a plain form POST to `/theme`, never JS.** The `ffm.theme`
+  cookie is `HttpOnly`, so a script could not set it if it wanted to. The
+  button shows the state you are **in** and submits the next one — the
+  pre-auth control's shape unchanged — and the cycle itself lives on
+  `ModePref::next` so the two controls cannot disagree about the order.
+  - **Its `next` is restamped from `location` on submit.** `?pane=` is
+    rewritten client-side, so the server-rendered value is stale the moment
+    you press `L`; the rendered one stays as the JS-less fallback, and
+    `safe_next` refuses anything that is not a local path either way.
+- **The profile menu is built like `.mnav`, not `.filemenu`** — trigger and
+  popup in one relatively-positioned wrapper with its own small `x-data`.
+  `.filemenu` computes `position: fixed` coordinates only because it is
+  anchored to a row in a stage that scrolls sideways; a bar control has no
+  such problem. It anchors right, because it sits at the end of the bar.
+- **The member's name is on the profile button and nowhere else in the bar.**
+  It used to sit in `.htotals` as well, which printed it twice within 200px.
+- **Colour scheme and Your settings both open `:profile`** — the difference is
+  that Colour scheme leaves the keyboard on the first swatch, which is the
+  pane's first control. There is deliberately no second palette picker.
 
 ## Server-side rules
 

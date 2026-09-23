@@ -89,11 +89,11 @@ async fn chrome(
         .map(|h| h.name.clone())
         .unwrap_or_else(|| "FFM".into());
 
-    let (mode_label, next_mode) = match mode {
-        ModePref::System => (t.auth_theme_system(), "light"),
-        ModePref::Light => (t.auth_theme_light(), "dark"),
-        ModePref::Dark => (t.auth_theme_dark(), "system"),
-    };
+    // The label names the state you are IN; the form submits the next one.
+    // The cycle itself lives on `ModePref`, because the ledger bar runs the
+    // same one and the two must not disagree about the order.
+    let mode_label = mode_label(&t, mode);
+    let next_mode = mode.next();
 
     let chrome = Chrome {
         household_slug: crate::domain::slug::slugify(&name),
@@ -715,6 +715,17 @@ pub async fn set_theme(jar: CookieJar, Form(form): Form<PrefForm>) -> Response {
         mode.code().to_string(),
     ));
     (jar, Redirect::to(&safe_next(&form.next))).into_response()
+}
+
+/// The word for a light/dark state, in the viewer's language. Shared with the
+/// ledger bar's own control — the ids are `auth-theme-*` only because that is
+/// where the first one lived; they name the mode, not the page.
+pub fn mode_label(t: &Catalog, mode: ModePref) -> &'static str {
+    match mode {
+        ModePref::System => t.auth_theme_system(),
+        ModePref::Light => t.auth_theme_light(),
+        ModePref::Dark => t.auth_theme_dark(),
+    }
 }
 
 /// A redirect target that came in on a form is attacker-controlled, so only a
