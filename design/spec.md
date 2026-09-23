@@ -1909,7 +1909,21 @@ full width, at the bottom, over the ledger — fzf-shaped.
     `fieldset`/`legend`.** A legend is rendered outside its fieldset's own
     layout box — measured, not assumed — so it cannot be a row of the band's
     grid, and the control under it lands a line off from every other control
-    there. The grouping and its name are the same to a screen reader.
+    there. The grouping and its name are the same to a screen reader, and
+    each group is still scoped to its own form, which is what keeps one
+    checked radio per setting rather than one per pane.
+  - **A hint travels with its control**, inside the control's row, rather
+    than taking a row of its own. A row of its own would line every hint in
+    the band up with every other — and in a band holding one short radio set
+    beside a tall swatch grid, that put the radios' hint a hundred pixels
+    below the radios, level with the bottom of the swatches.
+  - **A control keeps its own height.** A subgrid does not inherit the
+    band's `align-items`, so a `<select>` stretched to fill its row and the
+    currency box came out twice the height of the text input beside it. An
+    `<input>` never showed it, having an intrinsic height of its own.
+  - **A toggle stays outside the band.** It carries its own label inline, so
+    it has nothing to put in the band's label row and would only widen the
+    row it joined.
 - **`:grep` is deliberately not columned.** It is a result list; columns
   would make the reading order zigzag. It gets the full width as one wide
   list, which is what stops its rows truncating.

@@ -159,7 +159,7 @@ kbd {
  * one. */
 .band {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   column-gap: 16px;
   row-gap: 4px;
   align-items: start;
@@ -176,11 +176,32 @@ kbd {
   align-content: start;
 }
 
+/* A hint belongs to its control, so the two share the band's control row
+ * rather than the hint taking a row of its own. Given a row of its own it
+ * would line up with every other field's hint — and in a band holding one
+ * short radio set and one tall swatch grid, that put the radios' hint a
+ * hundred pixels below the radios, level with the bottom of the swatches. */
+/* A control keeps its own height rather than stretching to the tallest one
+ * in the band. A subgrid does not inherit the band's `align-items`, so a
+ * `<select>` stretched to fill its row — the currency box came out twice the
+ * height of the text input beside it, which an `<input>` never showed because
+ * it has an intrinsic height of its own. */
+.band .f > * {
+  align-self: start;
+}
+
+.band .f .ctl {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 /* The row gap already separates them, and the margin would push the control
  * off its row. */
 .band .f .k {
   margin-bottom: 0;
 }
+
 
 .f {
   display: block;
