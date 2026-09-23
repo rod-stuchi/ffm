@@ -573,6 +573,7 @@ function ledger() {
     dragging: false,
     splitZoom: false,
     nu: {{ nu|json|safe }},
+    cursorOnFold: {{ cursor_on_fold|json|safe }},
     grepNeedsTerm: {{ t.grep_needs_a_term()|json|safe }},
     addSpend: {{ t.row_add_spend()|json|safe }},
     addIncome: {{ t.row_add_income()|json|safe }},
@@ -635,10 +636,38 @@ function ledger() {
       // inside folds, and a child selector quietly returns nothing there —
       // taking j, k, dd and gl with it.
       //
-      // Hidden rows are left out, which is how `j`/`k` skip a closed fold's
-      // contents: there is nothing to skip if they were never in the list.
-      return Array.from(panes[this.pane].querySelectorAll('div[id^="row-"] .row'))
-        .filter(r => r.offsetParent !== null);
+      // These are CURSOR POSITIONS, not rows — a fold's header is one of
+      // them, exactly as a closed fold is a line in Vim.
+      //
+      // That is what makes a closed fold reachable at all. `foldAt` anchors
+      // to the position under the cursor, and closing a fold hides its rows,
+      // so without the header there was nothing left to stand on: the cursor
+      // fell into the next fold and `zo`/`za` could never reopen the one you
+      // had just closed. Only `zR` recovered it.
+      //
+      // Hidden rows are still left out, which is how `j`/`k` step over a
+      // closed fold's contents in one press: there is nothing to skip if it
+      // was never in the list.
+      return Array.from(
+        panes[this.pane].querySelectorAll('.foldhead, div[id^="row-"] .row'),
+      ).filter(el => el.offsetParent !== null);
+    },
+
+    /// The position under the cursor, when it is a row.
+    ///
+    /// A fold header is a position too, and almost nothing that acts on a row
+    /// means anything there — so this says so rather than doing nothing at
+    /// all, which is the treatment every other misplaced key in this app
+    /// already gets.
+    rowUnderCursor() {
+      const id = this.focusedId();
+      if (!id && this.onFoldHead()) this.say(this.cursorOnFold, true);
+      return id;
+    },
+
+    onFoldHead() {
+      const el = this.rows()[this.row];
+      return !!el && el.classList.contains('foldhead');
     },
 
     paint() {
@@ -657,7 +686,8 @@ function ledger() {
         this.closeLog();
       }
 
-      document.querySelectorAll('.row.is-focus').forEach(r => r.classList.remove('is-focus'));
+      document.querySelectorAll('.row.is-focus, .foldhead.is-focus')
+        .forEach(r => r.classList.remove('is-focus'));
       const rows = this.rows();
       if (!rows.length) return;
       this.row = Math.max(0, Math.min(this.row, rows.length - 1));
@@ -671,9 +701,11 @@ function ledger() {
     },
 
     focusedId() {
-      const rows = this.rows();
-      const el = rows[this.row];
-      return el ? el.closest('div[id^="row-"]').id.slice(4) : null;
+      const el = this.rows()[this.row];
+      // A fold header has no row wrapper, so it has no id — which is exactly
+      // what every row action already treats as "nothing to act on".
+      const wrap = el && el.closest('div[id^="row-"]');
+      return wrap ? wrap.id.slice(4) : null;
     },
 
     say(message, bad) { this.msg = message; this.msgBad = !!bad; },
@@ -961,11 +993,16 @@ function ledger() {
     /// the distance to the cursor is a fact about the cursor and the cursor
     /// is visual state. `absolute` and `none` are decided entirely on the
     /// server and this leaves them alone.
-    renumber(rows) {
+    renumber(positions) {
       if (this.nu !== 'relative') return;
+      // Counted among ROWS, not positions: a fold header carries no gutter,
+      // so counting it would leave a hole in the sequence where nothing is
+      // printed. The cursor sitting on a header simply means no row reads 0.
+      const rows = positions.filter(el => !el.classList.contains('foldhead'));
+      const here = rows.indexOf(positions[this.row]);
       rows.forEach((row, i) => {
         const cell = row.querySelector('.gut');
-        if (cell) cell.textContent = String(Math.abs(i - this.row));
+        if (cell) cell.textContent = here < 0 ? '' : String(Math.abs(i - here));
       });
     },
 
@@ -1021,6 +1058,7 @@ function ledger() {
     showDetails() {
       const row = this.rows()[this.row];
       if (!row) return;
+      if (this.onFoldHead()) { this.say(this.cursorOnFold, true); return; }
       if (!row.dataset.cadence && !row.dataset.receipt && !row.dataset.due) {
         this.say(this.detailsNone, true);
         return;
@@ -1043,6 +1081,7 @@ function ledger() {
     openCarousel() {
       const row = this.rows()[this.row];
       if (!row) return;
+      if (this.onFoldHead()) { this.say(this.cursorOnFold, true); return; }
       const files = Array.from(row.querySelectorAll('.fbadge[href]')).map(a => ({
         kind: a.getAttribute('href').split('/').pop(),
         number: a.querySelector('kbd')?.textContent || '',
@@ -1124,7 +1163,7 @@ function ledger() {
 
     /// `e`. A row with a parked draft resumes it exactly as it was left.
     editRow() {
-      const id = this.focusedId();
+      const id = this.rowUnderCursor();
       if (!id) return;
       this.editing = id;
       htmx.ajax('GET', '/tx/' + id + '/edit', {
@@ -1245,7 +1284,7 @@ function ledger() {
     },
 
     togglePrivate() {
-      const id = this.focusedId();
+      const id = this.rowUnderCursor();
       if (!id) return;
       htmx.ajax('POST', '/tx/' + id + '/privacy', {
         target: '#row-' + id, swap: 'outerHTML',
@@ -1254,7 +1293,7 @@ function ledger() {
 
     /// `x` — a marker for a batch operation, never a delete.
     toggleSelected() {
-      const id = this.focusedId();
+      const id = this.rowUnderCursor();
       if (!id) return;
       if (this.selected[id]) delete this.selected[id]; else this.selected[id] = true;
       this.paintSelection();
@@ -1271,7 +1310,7 @@ function ledger() {
     /// transaction to somebody makes THEM its owner, so the person who hid it
     /// stops seeing it — and that is invisible in the gesture.
     reattribute(dir) {
-      const id = this.focusedId();
+      const id = this.rowUnderCursor();
       if (!id) return;
       const panes = document.querySelectorAll('.pane');
       const target = panes[this.pane + dir];
@@ -1308,8 +1347,10 @@ function ledger() {
     /// The fold the cursor is inside, so `za` works from a row rather than
     /// only from the header.
     foldAt() {
-      const rows = this.rows();
-      const el = rows[this.row];
+      const el = this.rows()[this.row];
+      // `closest` covers both kinds of position: a row inside the fold, and
+      // the fold's own header — which is the only thing left to stand on once
+      // the fold is closed.
       const section = el && el.closest('.fold');
       if (!section) return null;
       const all = Array.from(document.querySelectorAll('.pane')[this.pane].querySelectorAll('.fold'));
@@ -1390,7 +1431,7 @@ function ledger() {
     },
 
     move(delta) {
-      const id = this.focusedId();
+      const id = this.rowUnderCursor();
       if (!id) return;
       htmx.ajax('POST', '/tx/' + id + '/move', {
         target: 'body', swap: 'none', values: { delta },
@@ -1685,7 +1726,7 @@ function ledger() {
     /// 3 is proof the money moved. One set of numbers for opening a file and
     /// for attaching one.
     attachKey(n) {
-      const id = this.focusedId();
+      const id = this.rowUnderCursor();
       if (!id) return;
       const row = document.querySelector('#row-' + id + ' .row');
       // Only a tracked recurring occurrence has a taxonomy to file under, and
@@ -1694,6 +1735,7 @@ function ledger() {
         this.say(this.fileNotTracked, true);
         return;
       }
+      if (this.onFoldHead()) { this.say(this.cursorOnFold, true); return; }
       const kind = { 1: 'barcode', 2: 'scheduled', 3: 'receipt' }[n];
       if (kind === 'scheduled' && !row.querySelector('.fdrop[data-kind="scheduled"]')) {
         // An income row has no slot 2 — you do not schedule money arriving.
@@ -1756,7 +1798,7 @@ function ledger() {
     },
 
     openLog() {
-      const id = this.focusedId();
+      const id = this.rowUnderCursor();
       if (!id) return;
       // AFTER the swap, not before: `showRowPane` closes whatever was open
       // first, and closing the log is what clears `logFor`. Setting it first
@@ -1771,6 +1813,7 @@ function ledger() {
     openFile(n) {
       const rows = this.rows();
       const el = rows[this.row];
+      if (this.onFoldHead()) { this.say(this.cursorOnFold, true); return; }
       const kind = { 1: 'barcode', 2: 'scheduled', 3: 'receipt' }[n];
       const badge = el && el.querySelector('.fbadge[href$="/' + kind + '"]');
       // Pressing a number for a file that is not there is a no-op with a
@@ -1781,7 +1824,7 @@ function ledger() {
     },
 
     askDelete() {
-      const id = this.focusedId();
+      const id = this.rowUnderCursor();
       if (!id) return;
       this.confirming = id;
     },

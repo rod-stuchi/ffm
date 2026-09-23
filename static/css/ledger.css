@@ -1009,6 +1009,14 @@
   font-size: 12.5px;
 }
 
+/* A fold header is a cursor position, so it is marked the way a focused row
+ * is — accent rail and a tinted ground. Same channel, same meaning: one mark
+ * for "where I am", whichever kind of line it lands on. */
+.foldhead.is-focus {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .foldhead .fmark {
   font-family: var(--mono);
   color: var(--ink-3);

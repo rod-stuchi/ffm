@@ -199,6 +199,7 @@ struct LedgerPage {
     /// `relative` | `absolute` | `none`. The shell needs it because relative
     /// numbers are measured from the cursor, and the cursor is Alpine's.
     nu: &'static str,
+    cursor_on_fold: String,
     /// Shown in the statusline's two clickable cells, and the initial text
     /// before Alpine takes over — so the bar is not blank for a frame.
     nu_label: &'static str,
@@ -346,6 +347,7 @@ pub async fn ledger(
             .unresolved_dot(unresolved.iter().map(|u| u.count).sum::<usize>() as i64),
         layout_panes: auth.settings.layout_panes.clone(),
         nu: LineNumbers::parse(&auth.settings.line_numbers).code(),
+        cursor_on_fold: t.cursor_on_fold().to_string(),
         nu_label: match LineNumbers::parse(&auth.settings.line_numbers) {
             LineNumbers::Relative => "rnu",
             LineNumbers::Absolute => "nu",

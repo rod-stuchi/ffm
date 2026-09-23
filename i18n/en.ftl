@@ -493,3 +493,4 @@ edit-stale-unknown = This row changed while you were editing. Nothing was writte
 edit-gone = That row was deleted while you were editing. Nothing was written — press u to bring it back.
 edit-day-bad = A day of the month is 1 to 31.
 grep-needs-a-term = grep needs something to search for
+cursor-on-fold = that is a group, not a row

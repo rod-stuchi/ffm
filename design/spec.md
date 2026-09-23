@@ -1674,8 +1674,27 @@ view.
 real Vim folds — see the Fold keymap above (`za`/`zo`/`zc`/`zR`/`zM`). Fold
 state is pure Alpine visual state — the server renders the full grouped,
 subtotaled fragment regardless of what's folded; folding only shows or hides
-what's already in the DOM. `j`/`k` skip a closed fold's contents and land on
-its header, same as real Vim.
+what's already in the DOM.
+
+**A fold's header is a cursor position**, open or closed — the same thing a
+closed fold is in Vim, a line you can put the cursor on. `j`/`k` step over a
+closed fold's contents in a single press because its rows are not positions
+while it is closed, and `za`/`zo`/`zc` act on the fold the cursor is in *or
+on*.
+
+That last part is load-bearing and was got wrong: with only rows as
+positions, closing a fold hid the very rows the cursor was standing on, so
+the cursor fell into the *next* fold and `zo`/`za` could never reopen the one
+you had just closed. **A fold could be closed and never reopened** except by
+`zR`. There was no position representing a closed fold, which is precisely
+what Vim has.
+
+A row action on a header — `e`, `dd`, `p`, `gl`, `g1`, `x`, `J`/`K`,
+`Ctrl-H`/`Ctrl-L` — says *"that is a group, not a row"* rather than doing
+nothing at all, the same treatment every other misplaced key gets. Relative
+line numbers stay counted among **rows**: a header carries no gutter, so
+counting it would leave a hole where nothing is printed; the cursor sitting
+on one simply means no row reads `0`.
 
 ### What a fold header looks like
 
