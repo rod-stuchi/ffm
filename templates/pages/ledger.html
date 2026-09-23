@@ -162,25 +162,31 @@
               :aria-expanded="open" title="{{ t.settings_profile() }}">
         {{ person_svg|safe }}<span>{{ me }}</span>
       </button>
+      {#- The items are named after the commands they run, in mono, because
+          that is what they are: a member who reads `:profile` here can type it
+          the next time. Command names are identifiers and never pass through
+          the catalog — the same rule the command bar's hint follows — so the
+          words live in the `title`, where a screen reader still reaches them
+          and neither locale loses anything. -#}
       <div class="ppop" x-show="open" x-cloak>
-        <button class="btn" type="button"
-                @click="open = false; showSplit('/profile')">{{ t.settings_profile() }}</button>
+        <button class="btn" type="button" title="{{ t.settings_profile() }}"
+                @click="open = false; showSplit('/profile')">:profile</button>
         {#- Admin-only, and it DISAPPEARS under preview rather than sitting
             there disabled: `admin` is `viewer.is_admin()`, which preview
             already makes false. A real non-admin never sees a control for a
             pane they cannot open. -#}
         {%- if admin %}
-        <button class="btn" type="button"
-                @click="open = false; showSplit('/household')">{{ t.settings_household() }}</button>
+        <button class="btn" type="button" title="{{ t.settings_household() }}"
+                @click="open = false; showSplit('/household')">:household</button>
         {%- endif %}
         {#- The same pane the first item opens, with the keyboard left on the
             swatches — which are its first control. That is the whole
             difference, and it is why this is not a second palette picker. -#}
-        <button class="btn" type="button"
-                @click="open = false; openColours()">{{ t.profile_theme() }}</button>
+        <button class="btn" type="button" title="{{ t.profile_theme() }}"
+                @click="open = false; openColours()">:theme</button>
         <hr class="psep">
         <form method="post" action="/logout">
-          <button class="btn" type="submit">{{ t.sign_out() }}</button>
+          <button class="btn" type="submit" title="{{ t.sign_out() }}">:logout</button>
         </form>
       </div>
     </nav>
@@ -1909,7 +1915,14 @@ function ledger() {
 
         // A command and a form control write the same row: `:theme nord` is
         // the swatch in :profile, reached with the keyboard instead.
-        case 'theme':    return this.setting('/settings/member', 'theme_name', arg);
+        // A bare `:theme` is a command MISSING ITS ARGUMENT, not a broken one
+        // — the same reading `:grep` already gets. It used to post an empty
+        // value and answer `✗ theme is not a bundled palette`, which reads as
+        // a rejection of the whole command. It opens the picker instead,
+        // which is exactly what the menu item of the same name does.
+        case 'theme':
+          if (!arg) return this.openColours();
+          return this.setting('/settings/member', 'theme_name', arg);
         case 'lang':     return this.setting('/settings/member', 'language', arg);
         case 'sort':     return this.setting('/settings/member', 'ledger_sort', arg);
         case 'group':    return this.setting('/settings/member', 'ledger_group', arg);

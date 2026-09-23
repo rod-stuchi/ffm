@@ -483,7 +483,7 @@ for this row"*.
 | `:sort date` | row order: manual · date · amount |
 | `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |
-| `:theme gruvbox` | colourscheme (writes your own settings row) |
+| `:theme gruvbox` | colourscheme (writes your own settings row) · bare `:theme` opens the picker |
 | `:lang en` · `:lang pt-BR` | UI language — yours alone; dates and money don't move |
 | `:currency usd` | household currency, admin-only (writes the household row) |
 | `:profile` · `:me` | your own settings, beside the ledger |

@@ -1001,9 +1001,20 @@ that will otherwise be re-proposed.
   such problem. It anchors right, because it sits at the end of the bar.
 - **The member's name is on the profile button and nowhere else in the bar.**
   It used to sit in `.htotals` as well, which printed it twice within 200px.
-- **Colour scheme and Your settings both open `:profile`** — the difference is
-  that Colour scheme leaves the keyboard on the first swatch, which is the
-  pane's first control. There is deliberately no second palette picker.
+- **`:theme` and `:profile` both open `:profile`** — the difference is that
+  `:theme` leaves the keyboard on the first swatch, which is the pane's first
+  control. There is deliberately no second palette picker.
+- **The menu's items are named after the commands they run**, in mono, and
+  those names never pass through the catalog: a command is an identifier a
+  member types back, exactly like the values in the sort-refusal message and
+  the command bar's own hint. The words live in each item's `title`, so a
+  screen reader still gets them and neither locale loses anything. The menu
+  teaches the command bar rather than duplicating it in prose.
+- **Which obliges a bare command to mean something.** Naming an item `:theme`
+  is a promise that typing `:theme` does the same thing, so it now opens the
+  picker instead of answering `✗ theme is not a bundled palette` — the same
+  reading `:grep` already had: a command missing its argument, not a broken
+  one. **Do not put a command in that menu without checking its bare form.**
 
 ## Server-side rules
 

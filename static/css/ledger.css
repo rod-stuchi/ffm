@@ -152,12 +152,17 @@
 }
 
 /* The same menu-item shape `.filemenu` already uses — left-aligned, a size
- * down, no border until it is under the pointer. */
+ * down, no border until it is under the pointer.
+ *
+ * Mono, because every item is named after the command it runs and a command
+ * is read character by character, like a path or a regex. It is also the
+ * quiet half of the point: the menu teaches the command bar. */
 .ppop .btn {
   border-color: transparent;
   background: none;
   text-align: left;
-  font-size: 12.5px;
+  font-family: var(--mono);
+  font-size: 12px;
   padding: 6px 10px;
   width: 100%;
 }
