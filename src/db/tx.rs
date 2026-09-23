@@ -521,8 +521,16 @@ pub async fn reorder(
     let Some(from) = keys.iter().position(|k| *k == row.sort_key) else {
         return Ok(false);
     };
-    let to = from as i64 + delta;
-    if to < 0 || to >= keys.len() as i64 || delta == 0 {
+    // A count bigger than the distance available CLAMPS, the way `99j` lands
+    // on the last line rather than refusing to move at all. Refusing was the
+    // first behaviour and it was silent: `99J` on the first row did nothing,
+    // with an empty statusline, which reads as a broken key rather than as a
+    // row already where it was asked to go.
+    let to = (from as i64 + delta).clamp(0, keys.len() as i64 - 1);
+    // Still a quiet no-op when there is genuinely nowhere to go — `K` on the
+    // top row, `J` on the bottom one, or a count of zero. Clamping turns
+    // "past the end" into "at the end", and at the end is where it already is.
+    if delta == 0 || to == from as i64 {
         return Ok(false);
     }
     let to = to as usize;

@@ -860,6 +860,19 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 
 ### Sort and search semantics
 
+- **The cursor follows the row it moves.** `j` moves me and `J` moves the
+  thing — and the cursor is an *index*, so the instant the row under it
+  moves, that index names whichever row took the vacated slot. Left alone,
+  a second `J` moved *that* row back down and the two traded places
+  forever: a row could not be walked down the ledger a press at a time at
+  all. A count hid it completely, because `5J` is one request and one swap.
+  The swap re-renders the pane, so the id is the only thing that survives
+  it and the only thing the cursor can be restored by.
+- **A count past the end lands on the end**, the way `99j` goes to the last
+  line rather than declining to move. Refusing it was silent — `99J` on the
+  first row did nothing at all, with an empty statusline, which reads as a
+  broken key rather than as a row already where it was asked to go. Being
+  genuinely at the end stays the quiet no-op it always was.
 - **`ledger.sort` gates reordering.** `J`/`K` work only in `manual`. Under `date`
   or `amount` they refuse with
   `ledger.sort = "date" — reorder needs sort = "manual"`. You cannot reorder a
@@ -1212,6 +1225,18 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   `this.folds`, which is correct synchronously, and `offsetParent` decides
   only what the model does not know about. **A cursor derived from layout is
   a cursor derived from a race.**
+
+- **A cursor that is an index, over a list the server re-renders, is a bug
+  waiting for a second keypress.** `J` moved the row and left the cursor on
+  the index, which after the swap named the row that had taken the vacated
+  slot — so the next `J` moved that one back and two rows traded places
+  forever. The row under the cursor is identified by **id**, never by
+  position, across anything that re-renders: the element the cursor pointed
+  at does not survive the swap. The same shape is why `rows()` reads fold
+  state from the model rather than from layout — both are the cursor being
+  asked to mean something after the ground moved under it.
+  **And a count masks it**: `5J` is one request and one swap, so it looked
+  right in every test until somebody pressed `J` five times instead.
 
 - **Alpine merges a component's data and its methods into one object**, so a
   method named after a data property silently replaces it. `pane: 0` (the

@@ -1492,6 +1492,33 @@ function ledger() {
       if (!id) return;
       htmx.ajax('POST', '/tx/' + id + '/move', {
         target: 'body', swap: 'none', values: { delta },
+      }).then(() => this.cursorTo(id));
+    },
+
+    /// Put the cursor back on a row by id, wherever the swap left it.
+    ///
+    /// `j` moves me and `J` moves the thing — and the cursor is an INDEX, so
+    /// the moment the row under it moves, that index names whichever row took
+    /// the vacated slot: the one that just swapped past it. Pressing `J`
+    /// again then moved THAT row back down, and the two traded places
+    /// forever. A row could not be walked down the ledger a press at a time
+    /// at all; it alternated with its neighbour, once per keystroke.
+    ///
+    /// `5J` hid this completely, because a count is one request and one swap
+    /// — which is why the bug survived a keymap sweep that tested counts.
+    ///
+    /// The swap re-renders the whole pane, so the element the cursor used to
+    /// point at is gone; the id is the only thing that survives it.
+    cursorTo(id) {
+      this.$nextTick(() => {
+        const i = this.rows().findIndex(
+          el => el.closest('div[id^="row-"]')?.id === 'row-' + id,
+        );
+        // Not found is a real case, not a bug: a re-attribution moves the row
+        // to another pane entirely. Leaving the cursor where it is, is the
+        // right answer there.
+        if (i >= 0) this.row = i;
+        this.paint();
       });
     },
 

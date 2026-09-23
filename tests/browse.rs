@@ -264,6 +264,40 @@ async fn moving_past_either_end_is_a_quiet_no_op() {
 }
 
 #[tokio::test]
+async fn a_count_past_the_end_lands_on_the_end_rather_than_refusing() {
+    // `99j` in Vim goes to the last line; it does not decline to move. `99J`
+    // reads the same way, and refusing it outright was silent — the row sat
+    // where it was with an empty statusline, which looks like a broken key.
+    let pool = pool().await;
+    let me = three_rows(&pool).await;
+    let first: i64 = sqlx::query_scalar("SELECT id FROM transactions ORDER BY sort_key LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert!(
+        tx::reorder(&pool, Actor::User(me), first, 99, None)
+            .await
+            .unwrap(),
+        "an overshooting count moves the row, clamped to the last position"
+    );
+    let order = titles(&pool, me, Sort::Manual).await;
+    assert_eq!(
+        order.last().map(String::as_str),
+        Some("Energia"),
+        "it lands on the end: {order:?}"
+    );
+
+    // And from there it is genuinely at the end, so another one is the quiet
+    // no-op it always was.
+    assert!(
+        !tx::reorder(&pool, Actor::User(me), first, 99, None)
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
 async fn a_derived_view_cannot_be_reordered() {
     // Not a capability check — a statement about what the gesture could even
     // mean. Under `sort = date` the rows are in an order nobody put them in.

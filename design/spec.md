@@ -366,7 +366,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | Key | Action |
 |---|---|
 | `J` / `K` | move the row — or every selected row — down / up |
-| `3J` | move it three places |
+| `3J` | move it three places — a count past the end lands on the end |
 | `Ctrl-H` / `Ctrl-L` | **re-attribute** the row to the member pane left / right |
 | `a` | add a one-off spend |
 | `i` | add a one-off income |
