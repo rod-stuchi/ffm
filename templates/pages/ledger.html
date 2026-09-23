@@ -862,6 +862,10 @@ function ledger() {
       else if (k === 'Escape') {
         this.adding = null; this.closeRule(); this.closeLog();
         this.closeSplit(); this.clearSearch();
+        // The command bar too. Its own input closes it on Escape, but only
+        // when the input has focus — and if focus ever fails to land, that
+        // left the bar open with no way to shut it from the keyboard.
+        this.commanding = false; this.command = '';
         // Esc clears the count, the buffer and the selection too.
         this.count = ''; this.pending = ''; this.selected = {}; this.paintSelection();
       }
@@ -1331,7 +1335,7 @@ function ledger() {
 
     openSearch() {
       this.searching = true;
-      this.$nextTick(() => this.$refs.search.focus());
+      this.focusSoon(this.$refs.search);
     },
 
     /// Incremental, client-side and scoped to the visible month: it filters
@@ -1397,7 +1401,28 @@ function ledger() {
 
     openCommand() {
       this.commanding = true;
-      this.$nextTick(() => this.$refs.cmd.focus());
+      this.focusSoon(this.$refs.cmd);
+    },
+
+    /// Focus a control that is revealed by `x-show`.
+    ///
+    /// An element that is still `display: none` cannot take focus, and
+    /// `.focus()` on one fails **silently** — there is no error and no event
+    /// to wait for. `$nextTick` alone is a race: sometimes the show has
+    /// landed, sometimes it has not, and when it loses, the command bar opens
+    /// with the cursor still in the ledger, so what you type is read as
+    /// motions. So: try after the update, and once more on the next frame if
+    /// it did not take.
+    focusSoon(el) {
+      if (!el) return;
+      this.$nextTick(() => {
+        el.focus();
+        // A timeout rather than requestAnimationFrame: rAF does not fire in a
+        // background tab, and "the bar opened while you were looking
+        // elsewhere" is exactly when the first attempt is most likely to have
+        // lost the race.
+        if (document.activeElement !== el) setTimeout(() => el.focus(), 0);
+      });
     },
 
 
