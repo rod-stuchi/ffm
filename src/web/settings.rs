@@ -224,10 +224,41 @@ pub async fn set_member(
             // default (it applies when a grouped pane is next opened), the
             // search scope (read when you search) and the privacy default
             // (read when you add a row).
+            // The palette is the exception, and deliberately: it is one
+            // `<style>` block and nothing else on the page depends on it, so
+            // swapping that block out of band changes every colour with no
+            // reload at all. Refreshing for it was the lazy read of "the
+            // server renders this" — and it closed the very pane you were
+            // picking from, which made trying eleven themes eleven reloads.
+            //
+            // This is also what `CLAUDE.md` already describes: the picker
+            // previews by swapping a server-rendered style block, from the
+            // same palette table the app itself uses, so the preview provably
+            // cannot drift from the real thing.
+            if key == MemberKey::ThemeName {
+                let css = crate::ui::theme::render(
+                    settings::member_settings(&st.pool, auth.viewer.member_id)
+                        .await
+                        .unwrap_or_default()
+                        .theme,
+                    auth.mode,
+                    &auth.settings.theme_overrides,
+                )
+                .to_css();
+                // `hx-swap-oob` is honoured even though the form asks for
+                // `hx-swap="none"`: out-of-band content is matched by id and
+                // applied separately from the (absent) main swap.
+                let body = format!(r#"<style id="ffm-theme" hx-swap-oob="true">{css}</style>"#);
+                return crate::web::tx::say(
+                    axum::response::Html(body).into_response(),
+                    &t.settings_saved(&form.key),
+                    false,
+                );
+            }
+
             let whole_page = matches!(
                 key,
                 MemberKey::Language
-                    | MemberKey::ThemeName
                     | MemberKey::LineNumbers
                     | MemberKey::LayoutPanes
                     | MemberKey::LayoutMinSplitWidth

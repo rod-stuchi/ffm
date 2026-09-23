@@ -55,7 +55,7 @@ pub struct Fragment {
 /// The statusline channel, carried on the response rather than in the body:
 /// the message is not part of the row, and a swap should not have to include
 /// chrome to say something.
-fn say(mut res: Response, message: &str, bad: bool) -> Response {
+pub(crate) fn say(mut res: Response, message: &str, bad: bool) -> Response {
     let payload = serde_json::json!({ "ffm:say": { "message": message, "bad": bad } });
     if let Ok(v) = HeaderValue::from_str(&ascii_json(&payload.to_string())) {
         res.headers_mut().insert("HX-Trigger", v);

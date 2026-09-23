@@ -1004,6 +1004,23 @@ that will otherwise be re-proposed.
 - **`:theme` and `:profile` both open `:profile`** — the difference is that
   `:theme` leaves the keyboard on the first swatch, which is the pane's first
   control. There is deliberately no second palette picker.
+- **A settings pane stays open across the refresh a setting causes.** Several
+  settings are rendered by the server — the gutter, the row order, every
+  layout value — so writing one answers `HX-Refresh`, and a reload took the
+  pane with it: the split is a swap into an empty mount, and a fresh page has
+  an empty mount. You changed one radio and the pane you changed it in
+  vanished. `?split=profile|household|members` remembers it, for the same
+  reasons `?pane=` does: per-window, survives a reload, and needs no
+  server-side memory that two windows would disagree about. **`:grep` is
+  deliberately not remembered** — it is a result list for a term you typed,
+  and reopening it on every reload is a nuisance, not a courtesy.
+- **A palette change does not refresh at all.** It is one `<style>` block and
+  nothing else on the page depends on it, so the write answers with that block
+  `hx-swap-oob` and every colour changes in place. This is what the Themes
+  section above already described — the picker previews by swapping a
+  server-rendered style block from the same palette table the app uses — and
+  refreshing instead was the lazy reading of "the server renders this". It
+  also made trying eleven themes eleven reloads.
 - **The menu's items are named after the commands they run**, in mono, and
   those names never pass through the catalog: a command is an identifier a
   member types back, exactly like the values in the sort-refusal message and

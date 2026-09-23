@@ -1675,9 +1675,33 @@ function ledger() {
       this.closeSplit();
       this.closeLog();
       this.closeRule();
+      this.trackSplit(url);
       // Returned, not discarded: `openColours()` has to wait for the swap
       // before it can put the keyboard on the first swatch.
       return htmx.ajax('GET', url, { target: '#hsplitmount', swap: 'innerHTML' });
+    },
+
+    /// Remember the open settings pane in the URL, so it survives the page
+    /// refresh a setting forces.
+    ///
+    /// Several settings are rendered by the server — the gutter, the row
+    /// order, every layout value — so writing one answers `HX-Refresh`, and a
+    /// reload takes the pane with it: the split is a swap into an empty mount,
+    /// and a fresh page has an empty mount. You changed one radio and the pane
+    /// you changed it in vanished.
+    ///
+    /// The URL is where this belongs for the same reason `?pane=` is: it is
+    /// per-window, it survives a reload, and it needs no server-side memory of
+    /// "which pane was open" that two windows would immediately disagree
+    /// about. Only the settings surfaces are remembered — `:grep` is a result
+    /// list for a term you typed, and reopening it on every reload would be a
+    /// nuisance rather than a courtesy.
+    trackSplit(url) {
+      const name = { '/profile': 'profile', '/household': 'household', '/members': 'members' }[url];
+      const u = new URL(location.href);
+      if (name) u.searchParams.set('split', name);
+      else u.searchParams.delete('split');
+      history.replaceState(null, '', u);
     },
 
     /// The profile menu's colour-scheme item. `:profile` with the cursor
@@ -1720,6 +1744,7 @@ function ledger() {
     closeSplit() {
       this.splitZoom = false;
       this.clearMount('#hsplitmount > *');
+      this.trackSplit(null);
     },
 
     /// `Ctrl-j` — into the split. Its first field if it has one, otherwise
@@ -2089,6 +2114,12 @@ function ledger() {
 
     init() {
       this.$nextTick(() => this.paint());
+      // Reopen the settings pane a refresh just closed. `showSplit` rewrites
+      // the same parameter it reads, so this is idempotent.
+      const split = new URLSearchParams(location.search).get('split');
+      if (['profile', 'household', 'members'].includes(split)) {
+        this.$nextTick(() => this.showSplit('/' + split));
+      }
       // The statusline is fed by a response header, so a swap never has to
       // include chrome in order to say something.
       document.body.addEventListener('ffm:say', e => this.say(e.detail.message, e.detail.bad));
