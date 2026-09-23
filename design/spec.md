@@ -529,12 +529,27 @@ editing. So:
   got wrong once: a single mount at the end of the stage looks identical with
   two members and is plainly wrong with three, putting Rodrigo's rule editor
   past Miguel at the far edge. Every pane carries its own mount and the
-  focused one is the target — which is also where `gl` and the settings
-  vsplits go, since `H`/`L` already means "move between panes". The ledger scrolls sideways when they don't all fit rather
-  than hiding a pane: a household can have more than two members. A small
-  arrow on the pane's left edge sits level with the row being edited (and
-  follows it as the ledger scrolls); the row itself keeps an accent outline
-  while its rule is open.
+  focused one is the target — which is also where `gl` goes, since it is
+  about a row too. (The settings surfaces and `:grep` do **not**: they are
+  about the household, and they open in the full-width split at the foot of
+  the ledger. See Configuration §Surface.) The ledger scrolls sideways when
+  the panes don't all fit rather than hiding one: a household can have more
+  than two members, and the mount column never shrinks to make room.
+
+  A small arrow on the pane's left edge sits level with the row being edited
+  and follows it as the ledger scrolls; the row itself keeps an accent
+  outline while its rule is open. The offset is measured in the browser and
+  written into a custom property the stylesheet reads — where a row sits is
+  not something the server can know.
+
+  **The arrow always points at the row; the pane moves only when the arrow
+  alone cannot reach it.** A rule editor is tall enough to cover most of the
+  ledger, so its arrow travels inside it and the pane stays at the top. The
+  change log often is not — one entry is a few hundred pixels against a row
+  a thousand below — so it slides down to meet the row rather than pinning
+  its arrow to its own bottom edge and pointing at nothing. Both panes are
+  aimed by the same code; the log used to be left out of it entirely and got
+  the CSS fallback, an arrow level with its own header.
 - **`A` / `I` get a placeholder row.** A brand-new rule has no row yet for the
   arrow to point at, so a dashed "New recurring bill" row appears at the
   cursor; Create turns it into the real row in that same spot, Cancel

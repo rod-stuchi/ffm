@@ -958,19 +958,40 @@ function ledger() {
     /// and is left alone, which is why the CSS keeps a fallback rather than
     /// requiring the variable.
     aimArrow() {
-      const pane = document.querySelector('#rulepane');
+      // BOTH row-anchored panes, not just the rule editor. The change log is
+      // the other one, and it only ever got the CSS fallback — an arrow at
+      // the pane's own header, level with nothing.
+      const pane = document.querySelector('#rulepane, #logpane');
       if (!pane) return;
       const row = document.querySelector('.row.is-focus, .row.is-placeholder');
       if (!row) return;
+
+      // Measure from an unshifted pane, or each call would compound the last
+      // one's offset.
+      pane.style.marginTop = '0px';
       const r = row.getBoundingClientRect();
       const p = pane.getBoundingClientRect();
-      // Clamped to the pane: a row scrolled out of sight must not drag the
-      // arrow off the top of the card, pointing at nothing again.
-      const top = Math.min(
-        Math.max(12, r.top + r.height / 2 - p.top - 6),
-        Math.max(12, p.height - 24),
-      );
-      pane.style.setProperty('--arrow-top', top + 'px');
+      const stage = document.querySelector('.stage').getBoundingClientRect();
+
+      // Where the arrow wants to be: level with the middle of the row.
+      let want = r.top + r.height / 2 - p.top - 6;
+      const reach = Math.max(12, p.height - 24);
+
+      // **The arrow always points at the row; the pane moves only when the
+      // arrow alone cannot reach it.** A tall rule editor covers most of the
+      // ledger, so the arrow travels inside it and the pane stays put. A
+      // short change log cannot — one entry is 300px against a row a
+      // thousand pixels down — so it slides down to meet the row instead of
+      // pinning its arrow to its own bottom edge and pointing at nothing.
+      if (want > reach) {
+        const shift = Math.min(want - reach, Math.max(0, stage.bottom - p.bottom));
+        if (shift > 0) {
+          pane.style.marginTop = shift + 'px';
+          want -= shift;
+        }
+      }
+
+      pane.style.setProperty('--arrow-top', Math.max(12, Math.min(want, reach)) + 'px');
     },
 
     // --- gd, P, ? ---------------------------------------------------------
@@ -1375,7 +1396,8 @@ function ledger() {
       this.closeSplit();
       this.closeLog();
       this.closeRule();
-      htmx.ajax('GET', url, { target: this.mount(), swap: 'innerHTML' });
+      htmx.ajax('GET', url, { target: this.mount(), swap: 'innerHTML' })
+           .then(() => this.aimArrow());
     },
 
     closeSplit() {
