@@ -226,6 +226,7 @@ struct LedgerPage {
     /// cannot disagree with the rows above it.
     money_format: String,
     min_split: i64,
+    min_width: i64,
     max_width: i64,
     gap: i64,
     /// `E` on a row with no rule behind it says so in the statusline rather
@@ -365,6 +366,7 @@ pub async fn ledger(
         command_hint: command_hint(auth.viewer.is_admin(), auth.session.role_admin),
         money_format: money_format(currency),
         min_split: auth.settings.layout_min_split_width,
+        min_width: auth.settings.layout_min_width,
         max_width: auth.settings.layout_max_width,
         gap: auth.settings.layout_gap,
         not_a_rule: t.rule_none_on_row().to_string(),

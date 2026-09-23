@@ -89,6 +89,7 @@ struct ProfilePane {
     folds: Vec<Choice>,
     visibilities: Vec<Choice>,
     min_split: i64,
+    min_width: i64,
     max_width: i64,
     gap: i64,
     show_delta: bool,
@@ -178,6 +179,7 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
                 .unwrap_or("household_default"),
         ),
         min_split: s.layout_min_split_width,
+        min_width: s.layout_min_width,
         max_width: s.layout_max_width,
         gap: s.layout_gap,
         show_delta: s.ledger_show_delta,
@@ -229,6 +231,7 @@ pub async fn set_member(
                     | MemberKey::LineNumbers
                     | MemberKey::LayoutPanes
                     | MemberKey::LayoutMinSplitWidth
+                    | MemberKey::LayoutMinWidth
                     | MemberKey::LayoutMaxWidth
                     | MemberKey::LayoutGap
                     | MemberKey::LedgerSort

@@ -170,6 +170,23 @@
       </form>
 
       <form class="setting" hx-post="/settings/member" hx-trigger="change" hx-swap="none">
+        <input type="hidden" name="key" value="layout_min_width">
+        <label class="f">
+          {#- The floor a pane will not be squeezed below while it shares the
+              stage with another: under it a row's file rail and amount start
+              colliding with the title, so the stage scrolls sideways instead.
+              0 means no floor, the same real choice 0 means in the cap below.
+
+              It began as a constant in the stylesheet, which was the wrong
+              place for it — how narrow a pane may get is a fact about the
+              screen somebody is sitting at, like every other value in this
+              band. -#}
+          <span class="k">{{ t.profile_min_width() }}</span>
+          <input class="i" type="number" name="value" value="{{ min_width }}" min="0" max="4000">
+        </label>
+      </form>
+
+      <form class="setting" hx-post="/settings/member" hx-trigger="change" hx-swap="none">
         <input type="hidden" name="key" value="layout_max_width">
         <label class="f">
           {#- 0 means unlimited, which is a real value rather than a missing

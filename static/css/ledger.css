@@ -332,18 +332,14 @@
  * their rows truncating. */
 .pane {
   flex: 1 1 380px;
-  /* The floor a pane may be squeezed to while it shares the stage with
-   * another. Below this a row's file rail and its amount start colliding
-   * with the title, which is the thing the ledger is read for. The stage
-   * scrolls sideways rather than compressing further — a household can have
-   * more than two members, and three unreadable panes are worse than two
-   * readable ones and a scroll.
+  /* Neither the floor nor the cap is here: both are the member's own setting
+   * and are rendered into the page's own `<style>` block, where changing one
+   * is something the household can actually do. `flex-basis` is the size a
+   * pane wants before either of them applies.
    *
-   * Tabs mode lifts it (see the page's layout block): one pane on a phone
-   * has nothing to share with, so a floor there would only overflow. */
-  min-width: 420px;
-  /* The cap itself is rendered from the member's own setting, in the page —
-   * this is only the floor it grows from. */
+   * Tabs mode lifts the floor (see the page's layout block): one pane on a
+   * phone has nothing to share the stage with, so a floor there would only
+   * overflow. */
 }
 
 .pane {

@@ -230,13 +230,18 @@ card in plain CSS.
   stealing focus.
 - Panes are cards with their own border, radius and surface, separated by
   `layout.gap`. The gap must read as separation, not as a crack.
-- **A pane has a floor it will not be squeezed below** (`min-width: 420px`).
-  Under it a row's file rail and amount start colliding with the title,
-  which is what the ledger is read for — so the stage scrolls sideways
-  instead, exactly as it already does when the panes outnumber the width.
-  Three unreadable panes are worse than two readable ones and a scroll.
-  **Tabs mode lifts the floor**: one pane has nothing to share the stage
-  with, so there it would only overflow a narrow viewport.
+- **A pane has a floor it will not be squeezed below**, and it is a member
+  setting (`member_settings.layout_min_width`, default 420px), not a number
+  in a stylesheet. Under it a row's file rail and amount start colliding
+  with the title, which is what the ledger is read for — so the stage
+  scrolls sideways instead, exactly as it already does when the panes
+  outnumber the width. Three unreadable panes are worse than two readable
+  ones and a scroll. `0` means no floor, the same way `layout_max_width`'s
+  `0` means unlimited. **Tabs mode lifts it**: one pane has nothing to share
+  the stage with, so there a floor would only overflow a narrow viewport.
+  It shipped as a CSS constant first, which was the wrong shape — how narrow
+  a pane may get describes a person at a screen, which is the whole reason
+  the `layout_*` values live on the member row at all.
 
 ### Editing — forms live in the ledger, not in modals
 
@@ -317,7 +322,7 @@ card in plain CSS.
     currency, default language, default visibility, `show_recurring`. What's here
     is what cannot coherently differ between members.
   - **`member_settings`** (one row per member, via `:profile`) — language, theme
-    and overrides, line numbers, all four `layout_*` values, `ledger_sort`,
+    and overrides, line numbers, all five `layout_*` values, `ledger_sort`,
     `search_scope`, `show_delta`, group and fold defaults, and a nullable
     privacy default that falls back to the household's.
 

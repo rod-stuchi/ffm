@@ -26,6 +26,16 @@
     number, correct before the first frame with zero JS. -#}
 <style>
   .stage { gap: {{ gap }}px; }
+  {%- if min_width > 0 %}
+  /* A pane stops shrinking: below this a row's file rail and amount collide
+     with the title, which is what the ledger is read for, so the stage
+     scrolls sideways instead of compressing further. 0 means no floor.
+
+     Rendered here rather than sitting in ledger.css, for the same reason the
+     cap below is: it is the member's own setting, and a number in a
+     stylesheet is one the household cannot reach. */
+  .pane { min-width: {{ min_width }}px; }
+  {%- endif %}
   {%- if max_width > 0 %}
   /* A pane stops growing: one pane stretched across a wide screen puts the
      amount a metre from the name it belongs to. 0 means unlimited, which is a

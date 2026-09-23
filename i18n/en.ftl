@@ -268,6 +268,7 @@ profile-theme = Colour scheme
 profile-line-numbers = Line numbers
 profile-panes = Panes
 profile-min-split = Split below this width, use tabs
+profile-min-width = Minimum pane width
 profile-max-width = Maximum pane width
 profile-gap = Gap between panes
 profile-sort = Row order

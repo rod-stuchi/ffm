@@ -238,6 +238,7 @@ profile-theme = Tema de cores
 profile-line-numbers = Números de linha
 profile-panes = Painéis
 profile-min-split = Abaixo desta largura, usar abas
+profile-min-width = Largura mínima do painel
 profile-max-width = Largura máxima do painel
 profile-gap = Espaço entre painéis
 profile-sort = Ordem das linhas

@@ -26,6 +26,7 @@ pub enum MemberKey {
     LineNumbers,
     LayoutPanes,
     LayoutMinSplitWidth,
+    LayoutMinWidth,
     LayoutMaxWidth,
     LayoutGap,
     LedgerSort,
@@ -44,6 +45,7 @@ impl MemberKey {
             "line_numbers" => MemberKey::LineNumbers,
             "layout_panes" => MemberKey::LayoutPanes,
             "layout_min_split_width" => MemberKey::LayoutMinSplitWidth,
+            "layout_min_width" => MemberKey::LayoutMinWidth,
             "layout_max_width" => MemberKey::LayoutMaxWidth,
             "layout_gap" => MemberKey::LayoutGap,
             "ledger_sort" => MemberKey::LedgerSort,
@@ -70,6 +72,9 @@ pub struct MemberSettings {
     pub line_numbers: String,
     pub layout_panes: String,
     pub layout_min_split_width: i64,
+    /// The floor a pane will not be squeezed below while it shares the stage
+    /// with another; 0 = no floor, mirroring `layout_max_width`'s 0.
+    pub layout_min_width: i64,
     pub layout_max_width: i64,
     pub layout_gap: i64,
     pub ledger_sort: String,
@@ -92,6 +97,7 @@ impl Default for MemberSettings {
             line_numbers: "relative".into(),
             layout_panes: "auto".into(),
             layout_min_split_width: 900,
+            layout_min_width: 420,
             layout_max_width: 900,
             layout_gap: 16,
             ledger_sort: "manual".into(),
@@ -112,6 +118,7 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
                   line_numbers AS "line_numbers!: String",
                   layout_panes AS "layout_panes!: String",
                   layout_min_split_width AS "layout_min_split_width!: i64",
+                  layout_min_width AS "layout_min_width!: i64",
                   layout_max_width AS "layout_max_width!: i64",
                   layout_gap AS "layout_gap!: i64",
                   ledger_sort AS "ledger_sort!: String",
@@ -138,6 +145,7 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
             line_numbers: r.line_numbers,
             layout_panes: r.layout_panes,
             layout_min_split_width: r.layout_min_split_width,
+            layout_min_width: r.layout_min_width,
             layout_max_width: r.layout_max_width,
             layout_gap: r.layout_gap,
             ledger_sort: r.ledger_sort,
@@ -257,6 +265,21 @@ pub async fn set_member(
             let v = in_range("layout.min_split_width", value, 320, 4000)?;
             sqlx::query!(
                 "UPDATE member_settings SET layout_min_split_width = ?2 WHERE member_id = ?1",
+                member_id,
+                v
+            )
+            .execute(pool)
+            .await
+            .map_err(db)?;
+        }
+        MemberKey::LayoutMinWidth => {
+            // The upper bound is the same 4000 every layout value uses. The
+            // lower one is 0 rather than a usable minimum: 0 means "no floor
+            // at all", which is a real choice — the same one
+            // `layout_max_width` spells as "unlimited".
+            let v = in_range("layout.min_width", value, 0, 4000)?;
+            sqlx::query!(
+                "UPDATE member_settings SET layout_min_width = ?2 WHERE member_id = ?1",
                 member_id,
                 v
             )
@@ -495,6 +518,7 @@ mod tests {
             "line_numbers",
             "layout_panes",
             "layout_min_split_width",
+            "layout_min_width",
             "layout_max_width",
             "layout_gap",
             "ledger_sort",

@@ -1986,6 +1986,7 @@ theme_overrides         json  -- open-ended: any of the 11 tokens, same
 line_numbers            text  -- "relative" | "absolute" | "none"
 layout_panes            text  -- "auto" | "split" | "tabs"
 layout_min_split_width  int   -- px; below this, auto → tabs
+layout_min_width        int   -- px floor per pane; 0 = no floor
 layout_max_width        int   -- px cap per pane; 0 = unlimited
 layout_gap              int   -- px between panes
 ledger_sort             text  -- "manual" | "date" | "amount"
@@ -2003,6 +2004,17 @@ default_visibility      text  -- NULL = follow the household's policy,
 - `default_visibility`'s nullable tri-state is rendered honestly in `:profile`:
   three radios, the first meaning `NULL` and labelled with what it currently
   resolves to.
+- **`layout_min_width` and `layout_max_width` are both rendered into the
+  page's own `<style>`**, not carried in a stylesheet. The floor arrived
+  first as a constant in `ledger.css`, which was the wrong place for it: how
+  narrow a pane may get is a fact about the screen somebody is sitting at,
+  exactly like every other `layout_*` value, and a number in a stylesheet is
+  one the household cannot reach. Below the floor a row's file rail and
+  amount collide with the title, so the stage scrolls sideways instead of
+  compressing further — three unreadable panes are worse than two readable
+  ones and a scroll. `0` means *no floor*, the same real choice `0` means in
+  the cap. Tabs mode lifts it: one pane has nothing to share the stage with,
+  so a floor there would only overflow a narrow viewport.
 - **`layout_min_split_width` is still rendered into a single media query
   server-side**, from the session member's row instead of from the file. The rule
   is unchanged — `auto` resolves in CSS, never on the server and never in Alpine
