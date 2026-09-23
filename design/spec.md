@@ -348,7 +348,7 @@ Nothing destructive fires from a single keystroke.
 |---|---|
 | `j` / `k` | row down / up |
 | `5j` `7k` | counted motion |
-| `gg` / `G` | first / last row |
+| `gg` / `G` | first / last row — first / last entry while the change log is open |
 | `H` / `L` | focus member pane, left / right |
 | `gt` / `gT` | next / previous member tab (tabs mode) |
 | `2gt` | jump straight to tab 2 — `{count}gt` is tab {count}, so `1gt` is the first |
@@ -1431,12 +1431,32 @@ yesterday
   field"* above the line it describes says nothing the line does not. Delete
   and restore have no fields at all and have never offered anything to open.
 - **Read-only.** No drafts, no save. `Esc` closes.
-- **While it is open, the log takes `j`/`k`.** Nothing is stolen by that:
-  moving the *ledger* cursor closes the log, so ledger navigation is already
-  meaningless while it is up — which is also why there is no key to focus the
-  pane, since there is nothing to focus away from. The cursor starts on the
-  first entry and is marked the way a focused row is, with an accent rail and
-  a tinted ground.
+- **While it is open, the log takes `j`/`k` — and `gg`/`G` with them.**
+  Nothing is stolen by that: moving the *ledger* cursor closes the log, so
+  ledger navigation is already meaningless while it is up — which is also why
+  there is no key to focus the pane, since there is nothing to focus away
+  from. The cursor starts on the first entry and is marked the way a focused
+  row is, with an accent rail and a tinted ground.
+
+  `gg` and `G` are the same motions they are in the ledger, pointed at the
+  entries: first and last. A long history is exactly where they earn their
+  keep, since the pane lists newest first and the oldest entry is the one you
+  would otherwise scroll for. **At either end they scroll the body all the
+  way, not just far enough** — `scrollIntoView`'s `nearest` stops the moment
+  the entry is visible, which leaves the day heading above the first entry
+  hidden and the padding below the last one cut off. Both read as "it did not
+  quite go there".
+- **It opens showing its own top**, and that takes two things, neither of
+  them obvious. The pane is **bounded by the viewport and scrolls inside
+  itself**: unbounded it grew to fit its entries — forty of them came to
+  2387px in a 777px stage — so reading the log scrolled the *stage*, which
+  carries the pane's header and first entries away with it. And because the
+  stage scrolls vertically while the log is a column inside it, a stage
+  already scrolled down to the focused row hides the pane's header under the
+  app bar before a single key is pressed; opening therefore scrolls the stage
+  back **up** far enough to show the pane's top, and never down — a pane
+  sitting lower was put there by the arrow to meet its row, which is
+  deliberate.
 - **Its entries answer the fold keys**, because an entry *is* a fold — a
   header with collapsible content. `za`/`zo`/`zc` act on the entry under the
   cursor and `zR`/`zM` on all of them, exactly as they do for `:group bucket`

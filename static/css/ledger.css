@@ -882,6 +882,33 @@
   background: var(--accent-soft);
 }
 
+/* The log is bounded by the viewport and scrolls INSIDE itself.
+ *
+ * Without this it grew to fit its entries — forty of them came to 2387px in a
+ * 777px stage — so reading the log meant scrolling the *stage*, and the
+ * stage carries the pane's own header and first entries away with it. A log
+ * opened on a row partway down therefore opened showing its middle.
+ *
+ * Bounding it also puts the log back in the case `aimArrow` was written for:
+ * a pane too short to reach its row with the arrow alone slides down to meet
+ * it, which is what the change log was always supposed to do.
+ *
+ * The rule editor is deliberately left unbounded for now — it is a form, its
+ * height is what lets its arrow travel inside it, and nobody has hit this
+ * with one. */
+.rulemount > .logpane {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 160px);
+}
+
+.rulemount > .logpane > .logbody {
+  overflow-y: auto;
+  /* Without it a flex child refuses to shrink below its content and the
+   * scroll never engages. */
+  min-height: 0;
+}
+
 .logbody {
   gap: 0;
 }

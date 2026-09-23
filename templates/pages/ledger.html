@@ -900,7 +900,14 @@ function ledger() {
       else if (k === 'k') { this.row -= n; this.paint(); }
       else if (k === 'P') { this.openCarousel(); }
       else if (k === '?') { this.keymap = true; }
-      else if (k === 'G') { this.row = this.rows().length - 1; this.paint(); }
+      else if (k === 'G') {
+        // The log owns the vertical motions while it is open, and `G` is one
+        // of them — `j`/`k` already are. Ending up at the bottom of a long
+        // history is the common thing to want there, since the pane lists
+        // newest first and the oldest entry is the one you scroll for.
+        if (this.logIsOpen()) this.logMove(this.logEntries().length);
+        else { this.row = this.rows().length - 1; this.paint(); }
+      }
       else if (k === 'H') { this.pane = Math.max(0, this.pane - 1); this.row = 0; this.paint(); }
       else if (k === 'L') { this.pane = Math.min(document.querySelectorAll('.pane').length - 1, this.pane + 1); this.row = 0; this.paint(); }
       else if (k === 'a' || k === 'i') { this.open(k === 'a' ? 'out' : 'in'); }
@@ -1575,7 +1582,25 @@ function ledger() {
       this.closeLog();
       this.closeRule();
       htmx.ajax('GET', url, { target: this.mount(), swap: 'innerHTML' })
-           .then(() => this.aimArrow());
+           .then(() => { this.aimArrow(); this.revealPaneTop(); });
+    },
+
+    /// Bring a row-anchored pane's own top back into view.
+    ///
+    /// The stage scrolls vertically and these panes are columns INSIDE it, so
+    /// a stage scrolled down to the focused row carries the pane's header and
+    /// first entries off the top edge — a log opened on a row partway down
+    /// opened showing its middle, with its header hidden under the app bar.
+    ///
+    /// Only ever scrolls UP, and only when the pane's top is actually above
+    /// the stage's: a pane sitting lower has been put there by `aimArrow` to
+    /// meet its row, which is deliberate and must not be undone.
+    revealPaneTop() {
+      const pane = document.querySelector('#rulepane, #logpane');
+      const stage = document.querySelector('.stage');
+      if (!pane || !stage) return;
+      const above = pane.getBoundingClientRect().top - stage.getBoundingClientRect().top;
+      if (above < 0) stage.scrollTop += above;
     },
 
     closeSplit() {
@@ -1631,7 +1656,10 @@ function ledger() {
       if (buffer === 'd' && k === 'd') { this.askDelete(); return true; }
 
       if (buffer === 'g') {
-        if (k === 'g') { this.row = 0; this.paint(); return true; }
+        if (k === 'g') {
+          if (this.logIsOpen()) { this.logMove(-this.logEntries().length); return true; }
+          this.row = 0; this.paint(); return true;
+        }
         // g1 / g2 / g3 — a genuine extension of the g-prefix "goto"
         // vocabulary already in use (gg, gt), with numbering fixed by KIND so
         // g1 means the bill on every row in the ledger.
@@ -1684,7 +1712,18 @@ function ledger() {
       const entries = this.logEntries();
       if (!entries.length) return;
       this.logCursor = Math.max(0, Math.min(this.logCursor + n, entries.length - 1));
-      entries[this.logCursor].scrollIntoView({ block: 'nearest' });
+
+      // At either end, scroll the body all the way rather than just far
+      // enough. `nearest` stops the moment the entry is in view, which is
+      // right in the middle of a list and wrong at its edges: the first
+      // entry has its day heading above it, so `gg` left "TODAY" hidden, and
+      // the last has the body's padding below it, so `G` stopped short of
+      // the end. Both read as "it did not quite go there".
+      const body = document.querySelector('#logpane .logbody');
+      if (!body) return;
+      if (this.logCursor === 0) body.scrollTop = 0;
+      else if (this.logCursor === entries.length - 1) body.scrollTop = body.scrollHeight;
+      else entries[this.logCursor].scrollIntoView({ block: 'nearest' });
     },
 
     /// The id of the entry under the cursor, or null when it has nothing to
