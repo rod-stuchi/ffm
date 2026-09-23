@@ -353,6 +353,13 @@ Nothing destructive fires from a single keystroke.
 | `gt` / `gT` | next / previous member tab (tabs mode) |
 | `2gt` | jump straight to tab 2 — `{count}gt` is tab {count}, so `1gt` is the first |
 | `2gT` | go **back** two tabs — `gT`'s count is a distance, not a destination |
+
+Every **uppercase** binding here (`G`, `J`/`K`, `gT`, `zR`/`zM`, `A`/`I`/`E`,
+`H`/`L`, `N`, `P`) is reached by holding Shift, which fires a keydown of its
+own before the letter. A keymap that resets its pending prefix and count on
+every key it sees will therefore eat the keystroke *before* the one it meant
+to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
+`KeyboardEvent` sends only the final key and will not catch it.
 | `Ctrl-P` / `Ctrl-N` | previous / next month |
 
 ### Act

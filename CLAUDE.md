@@ -1104,6 +1104,20 @@ that will otherwise be re-proposed.
 
 These cost real debugging time in the prototype. Do not re-introduce them.
 
+- **A modifier pressed on its own fires its own keydown, and a keymap that
+  clears state on every key will eat the keystroke before it.** Holding Shift
+  to type `T` sends `Shift` first; the dispatcher cleared the pending prefix
+  and the pending count on every key it saw, so `g` + Shift-`T` lost the `g`
+  and `T` arrived bare. **`gT` never worked on a real keyboard**, nor `zR`,
+  `zM`, or any count before a shifted key — `2J` moved one row, not two. The
+  fix is one line: return early for `Shift`/`Control`/`Alt`/`Meta`/
+  `CapsLock`/`AltGraph`.
+- **Which is why a synthetic `KeyboardEvent` is not a test of a keymap.** It
+  sends only the final key; a real keyboard sends the modifier first. Every
+  shifted binding in this app passed automated checks for months while being
+  broken in the browser. When a binding involves Shift, dispatch the modifier
+  keydown too — `press('g'); press('Shift', true); press('T', true)` — or
+  press it by hand.
 - **A prefixed binding must be resolved before any unprefixed one, and not
   by line order.** This was written wrong four times in one keydown chain:
   `gg` lost to the arm that arms `g`, `gu1` and `zz` lost the same way, and

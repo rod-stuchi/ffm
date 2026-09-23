@@ -679,6 +679,22 @@ function ledger() {
     say(message, bad) { this.msg = message; this.msgBad = !!bad; },
 
     key(e) {
+      // A MODIFIER pressed on its own is not a keystroke, and must not be
+      // treated as one.
+      //
+      // Holding Shift to type an uppercase key fires its own keydown first,
+      // and this dispatcher clears the pending prefix and the pending count
+      // on every key it sees. So `g` then Shift-T lost the `g` to the Shift,
+      // and `T` arrived bare: **`gT` has never worked on a real keyboard**,
+      // nor `zR`, `zM`, or any count before a shifted key — `2J` moved one
+      // row, not two.
+      //
+      // It survived every test because synthetic KeyboardEvents send only the
+      // final key. A real keyboard sends the modifier first.
+      if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) {
+        return;
+      }
+
       // A form takes literal text, so motions stop being motions inside one.
       // This is the same rule the pre-auth pages follow, not an exception.
       //
