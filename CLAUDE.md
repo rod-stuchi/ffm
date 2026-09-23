@@ -1188,6 +1188,19 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   the month picker's warning dots look broken. Verify with a clean headless
   render (`--headless --screenshot` on a minimal HTML file) before changing a
   colour — this has now cost time twice.
+- **`x-show` has not been applied yet when `$nextTick` runs.** Alpine queues
+  the DOM mutation behind its own scheduler, so for a frame after a fold key
+  the `.foldrows` are still laid out in their *previous* state — and in a
+  background tab, longer. Anything that reads a position **out of the layout**
+  in that gap gets the old answer: `zc` on the last row of a three-row fold
+  left the cursor index pointing four folds further down, so the next `j`
+  landed somewhere unrelated. `$nextTick`, `queueMicrotask` and `setTimeout(…,
+  0)` were all measured and all still saw the stale DOM. The fix is not a
+  longer wait — it is to stop asking the DOM: fold visibility comes from
+  `this.folds`, which is correct synchronously, and `offsetParent` decides
+  only what the model does not know about. **A cursor derived from layout is
+  a cursor derived from a race.**
+
 - **Alpine merges a component's data and its methods into one object**, so a
   method named after a data property silently replaces it. `pane: 0` (the
   focused pane's index) and a later `pane(url)` helper meant `panes[this.pane]`

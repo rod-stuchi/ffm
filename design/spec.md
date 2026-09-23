@@ -1689,6 +1689,16 @@ you had just closed. **A fold could be closed and never reopened** except by
 `zR`. There was no position representing a closed fold, which is precisely
 what Vim has.
 
+**Closing a fold takes the cursor with it.** `zc` (or `za`, or `zM`) from a
+row *inside* a fold leaves the cursor on that fold's header, the way Vim
+does — it does not stay behind on a line that is no longer shown. This has
+to be explicit because the cursor is an index into the visible positions,
+and collapsing a fold shortens that list underneath it: left alone the index
+kept its number and quietly meant a different line, so `zc` on the last row
+of a three-row fold followed by `j` landed four folds further down. `zR` and
+`zo` are the mirror case and keep the cursor exactly where it is, since
+nothing it could be standing on disappears.
+
 A row action on a header — `e`, `dd`, `p`, `gl`, `g1`, `x`, `J`/`K`,
 `Ctrl-H`/`Ctrl-L` — says *"that is a group, not a row"* rather than doing
 nothing at all, the same treatment every other misplaced key gets. Relative

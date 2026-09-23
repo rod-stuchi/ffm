@@ -648,9 +648,25 @@ function ledger() {
       // Hidden rows are still left out, which is how `j`/`k` step over a
       // closed fold's contents in one press: there is nothing to skip if it
       // was never in the list.
+      //
+      // Fold membership is read from `this.folds`, NOT from layout. Alpine
+      // applies the `x-show` on `.foldrows` on its own schedule — later than
+      // `$nextTick`, and later again in a background tab — so for a frame
+      // after a fold key the DOM still describes the previous state. An index
+      // taken in that gap is a different line, silently. The model is the
+      // fold's truth and it is already correct synchronously.
+      //
+      // `offsetParent` still decides everything else, which is the only other
+      // thing that hides a row here.
       return Array.from(
         panes[this.pane].querySelectorAll('.foldhead, div[id^="row-"] .row'),
-      ).filter(el => el.offsetParent !== null);
+      ).filter(el => {
+        const section = el.closest('.fold');
+        if (section && !el.classList.contains('foldhead')) {
+          return !this.closed(this.foldIdOf(section));
+        }
+        return el.offsetParent !== null;
+      });
     },
 
     /// The position under the cursor, when it is a row.
@@ -1352,24 +1368,52 @@ function ledger() {
       // the fold's own header — which is the only thing left to stand on once
       // the fold is closed.
       const section = el && el.closest('.fold');
-      if (!section) return null;
-      const all = Array.from(document.querySelectorAll('.pane')[this.pane].querySelectorAll('.fold'));
-      return document.querySelectorAll('.pane')[this.pane].querySelector('.rows').id.slice(5)
-             + '-' + all.indexOf(section);
+      return section ? this.foldIdOf(section) : null;
+    },
+
+    /// A fold's key in `this.folds` — the same `{rowsId}-{index}` the template
+    /// writes, derived from the section itself so the two cannot drift.
+    foldIdOf(section) {
+      const rows = section.closest('.rows');
+      if (!rows) return null;
+      return rows.id.slice(5)
+             + '-' + Array.from(rows.querySelectorAll('.fold')).indexOf(section);
     },
 
     fold(which) {
       const id = this.foldAt();
       if (!id) return;
+      const anchor = this.anchorCursor();
       if (which === 'a') this.toggle(id);
       else this.folds[id] = which === 'c';
+      this.settleCursor(anchor);
     },
 
     allFolds(closed) {
-      document.querySelectorAll('.fold').forEach((f, i) => {
-        const rows = f.closest('.rows');
-        this.folds[rows.id.slice(5) + '-' + Array.from(rows.querySelectorAll('.fold')).indexOf(f)] = closed;
-      });
+      const anchor = this.anchorCursor();
+      document.querySelectorAll('.fold').forEach(f => { this.folds[this.foldIdOf(f)] = closed; });
+      this.settleCursor(anchor);
+    },
+
+    /// The two positions a fold key could leave the cursor on: where it is,
+    /// and the header of the fold it is inside.
+    anchorCursor() {
+      const el = this.rows()[this.row];
+      const fold = el && el.closest('.fold');
+      return { el, head: fold && fold.querySelector('.foldhead') };
+    },
+
+    /// `zc` on a row inside the fold leaves the cursor on the fold's header,
+    /// the way Vim does — and it has to, because `this.row` is an index into
+    /// the VISIBLE positions and collapsing a fold shortens that list under
+    /// it. Without this the index kept its number and quietly meant a
+    /// different line: `zc` then `j` from the last row of a three-row fold
+    /// landed four folds further down.
+    settleCursor(anchor) {
+      const rows = this.rows();
+      const i = rows.indexOf(anchor.el);
+      this.row = i >= 0 ? i : Math.max(0, rows.indexOf(anchor.head));
+      this.paint();
     },
 
     // --- search ----------------------------------------------------------
