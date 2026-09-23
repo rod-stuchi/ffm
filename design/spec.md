@@ -351,7 +351,8 @@ Nothing destructive fires from a single keystroke.
 | `gg` / `G` | first / last row |
 | `H` / `L` | focus member pane, left / right |
 | `gt` / `gT` | next / previous member tab (tabs mode) |
-| `2gt` | jump straight to tab 2 |
+| `2gt` | jump straight to tab 2 — `{count}gt` is tab {count}, so `1gt` is the first |
+| `2gT` | go **back** two tabs — `gT`'s count is a distance, not a destination |
 | `Ctrl-P` / `Ctrl-N` | previous / next month |
 
 ### Act

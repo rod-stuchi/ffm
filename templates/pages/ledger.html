@@ -792,6 +792,11 @@ function ledger() {
         e.preventDefault();
         return;
       }
+      // Whether a count was actually TYPED, not just what it resolves to.
+      // `n` defaults to 1, so without this `1gt` and a bare `gt` are the same
+      // keystroke by the time anything reads them — and they do not mean the
+      // same thing.
+      const counted = this.count !== '';
       const n = parseInt(this.count || '1', 10);
       this.count = '';
 
@@ -806,7 +811,7 @@ function ledger() {
       // nothing: `zq` drops the prefix rather than falling through to
       // whatever `q` would have meant on its own.
       if (buffer) {
-        if (this.prefixed(buffer, k, n)) e.preventDefault();
+        if (this.prefixed(buffer, k, n, counted)) e.preventDefault();
         return;
       }
 
@@ -1072,12 +1077,25 @@ function ledger() {
 
     /// `gt` / `gT`. With no count it is the next/previous tab, wrapping; with
     /// one it is that tab by number, which is what `2gt` means in Vim.
-    gotoTab(dir, n) {
+    /// `gt` / `gT`, with Vim's own count semantics — which are **not**
+    /// symmetric, and were not before:
+    ///
+    /// - `{count}gt` goes to tab {count}. `1gt` is the first tab, which used
+    ///   to cycle forward instead, because a count of 1 was indistinguishable
+    ///   from no count at all.
+    /// - `{count}gT` goes {count} tabs BACK. `2gT` used to jump forward to
+    ///   tab 2, the same as `2gt`, which is the one thing it cannot mean.
+    ///
+    /// Uncounted, both cycle and wrap.
+    gotoTab(dir, n, counted) {
       const panes = document.querySelectorAll('.pane').length;
       if (!panes) return;
-      this.pane = n > 1
-        ? Math.min(panes, n) - 1
-        : (this.pane + dir + panes) % panes;
+      if (counted && dir > 0) {
+        this.pane = Math.min(Math.max(1, n), panes) - 1;
+      } else {
+        const steps = counted ? n : 1;
+        this.pane = (((this.pane + dir * steps) % panes) + panes) % panes;
+      }
       this.row = 0;
       this.paint();
     },
@@ -1441,7 +1459,7 @@ function ledger() {
 
     /// Every binding whose first key armed a prefix. Returns whether the
     /// pair meant anything, so the caller knows to swallow the keystroke.
-    prefixed(buffer, k, n) {
+    prefixed(buffer, k, n, counted) {
       // `dd` — the only destructive pair, and the only one that is not a
       // `g`/`z` family member.
       if (buffer === 'd' && k === 'd') { this.askDelete(); return true; }
@@ -1463,7 +1481,7 @@ function ledger() {
         // straight to that tab (`2gt`), which is why the count is read here
         // rather than treated as a repeat. H/L keep working unchanged, so
         // nothing is relearned when the layout flips underneath you.
-        if (k === 't' || k === 'T') { this.gotoTab(k === 't' ? 1 : -1, n); return true; }
+        if (k === 't' || k === 'T') { this.gotoTab(k === 't' ? 1 : -1, n, counted); return true; }
         return false;
       }
 
