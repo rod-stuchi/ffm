@@ -1893,6 +1893,23 @@ full width, at the bottom, over the ledger — fzf-shaped.
   wrong order for independent setting groups. A 1400px-wide form with one
   400px column of fields and a lot of emptiness is not an improvement on a
   420px column.
+- **Controls that have to line up sit in a `.band`, which spans the row.**
+  A band is two grid rows — every label in the first, every control in the
+  second — so a label that wraps to two lines pushes the whole band's
+  controls down together instead of leaving its own input a line below its
+  neighbours'. That was the Layout group before: a radio set, a two-up
+  `.fgrid` and a lone field, three independent items whose only alignment
+  was luck.
+  - **Each field inherits the band's rows with `subgrid`**, which is what
+    makes the label row sized by the tallest label in the band rather than
+    by each field alone. It degrades correctly to one column: a field still
+    spans two rows, so the fields stack label-over-control rather than every
+    label piling into row one.
+  - **A radio group in a band is a labelled `radiogroup`, not a
+    `fieldset`/`legend`.** A legend is rendered outside its fieldset's own
+    layout box — measured, not assumed — so it cannot be a row of the band's
+    grid, and the control under it lands a line off from every other control
+    there. The grouping and its name are the same to a screen reader.
 - **`:grep` is deliberately not columned.** It is a result list; columns
   would make the reading order zigzag. It gets the full width as one wide
   list, which is what stops its rows truncating.

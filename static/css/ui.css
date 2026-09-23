@@ -142,6 +142,46 @@ kbd {
   }
 }
 
+/* A band of controls that have to line up with each other: every label in the
+ * band's first row, every control in its second, so a label that wraps to two
+ * lines pushes the whole band's controls down together rather than just its
+ * own.
+ *
+ * Subgrid is what makes that possible — each field spans two of the band's
+ * rows and inherits them, so the label row is sized by the tallest label in
+ * the band and not by each field on its own. `display: contents` on the form
+ * is only there because a setting is its own form (see the pane's note on
+ * why) and a wrapper box between the band and its fields would hide the rows
+ * from them.
+ *
+ * It degrades correctly at one column: each field still spans two rows, so
+ * the fields stack label-over-control instead of every label piling into row
+ * one. */
+.band {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  column-gap: 16px;
+  row-gap: 4px;
+  align-items: start;
+}
+
+.band > .setting {
+  display: contents;
+}
+
+.band .f {
+  grid-row: span 2;
+  display: grid;
+  grid-template-rows: subgrid;
+  align-content: start;
+}
+
+/* The row gap already separates them, and the margin would push the control
+ * off its row. */
+.band .f .k {
+  margin-bottom: 0;
+}
+
 .f {
   display: block;
 }

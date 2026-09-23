@@ -34,6 +34,9 @@
   {%- endif %}
   {%- if layout_panes == "tabs" %}
   .pane:not(.is-focus) { display: none; }
+  /* One pane has nothing to share the stage with, so its min-width floor
+     would only overflow a narrow viewport. */
+  .pane { min-width: 0; }
   .tabbar { display: flex; }
   {%- else if layout_panes == "auto" %}
   @media (max-width: {{ min_split }}px) {
@@ -42,7 +45,7 @@
        by the viewport rather than by a setting. The tab bar appears from the
        same rule, so the two can never disagree about which layout is on. */
     .pane:not(.is-focus) { display: none; }
-    .pane { max-width: none; }
+    .pane { max-width: none; min-width: 0; }
     .tabbar { display: flex; }
   }
   {%- endif %}

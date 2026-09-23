@@ -230,6 +230,13 @@ card in plain CSS.
   stealing focus.
 - Panes are cards with their own border, radius and surface, separated by
   `layout.gap`. The gap must read as separation, not as a crack.
+- **A pane has a floor it will not be squeezed below** (`min-width: 420px`).
+  Under it a row's file rail and amount start colliding with the title,
+  which is what the ledger is read for — so the stage scrolls sideways
+  instead, exactly as it already does when the panes outnumber the width.
+  Three unreadable panes are worse than two readable ones and a scroll.
+  **Tabs mode lifts the floor**: one pane has nothing to share the stage
+  with, so there it would only overflow a narrow viewport.
 
 ### Editing — forms live in the ledger, not in modals
 
