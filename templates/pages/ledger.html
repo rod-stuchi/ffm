@@ -48,6 +48,13 @@
      would only overflow a narrow viewport. */
   .pane { min-width: 0; }
   .tabbar { display: flex; }
+  /* Tabs mode shows one pane, so there is nothing for it to sit beside and
+     no reason for it to hug the left edge of a wide screen. `safe`, never a
+     plain `center`: the stage scrolls sideways, and a plain `center` puts
+     overflow past the START edge where nothing can scroll back to it. Split
+     mode is deliberately left alone — panes there are a row, and centring a
+     row is a different question. */
+  .stage { justify-content: safe center; }
   {%- else if layout_panes == "auto" %}
   @media (max-width: {{ min_split }}px) {
     /* Below this width there is no room for two panes side by side, so the
@@ -57,6 +64,10 @@
     .pane:not(.is-focus) { display: none; }
     .pane { max-width: none; min-width: 0; }
     .tabbar { display: flex; }
+    /* Same reason as explicit tabs mode above: one pane, nothing to sit
+       beside. `max-width: none` means it fills the width anyway, so this only
+       bites if a cap is ever reinstated here. */
+    .stage { justify-content: safe center; }
   }
   {%- endif %}
 </style>
@@ -570,7 +581,10 @@ function ffmResetAmounts(form) {
 
 function ledger() {
   return {
-    pane: 0,
+    // Where the server put us: your own pane by default, or whatever `?pane=`
+    // asked for. Never a hardcoded 0 — that is somebody else's ledger for
+    // everyone but the first member.
+    pane: {{ focused }},
     row: 0,
     adding: null,
     kind: 'out',
@@ -714,6 +728,13 @@ function ledger() {
       if (this.logFor && this.logFor !== focused) {
         this.closeLog();
       }
+
+      // ABOVE the empty-pane return below, and deliberately: which member is
+      // focused has nothing to do with whether they have rows this month. In
+      // tabs mode the other panes are `display: none` and report no rows at
+      // all, so left below the return the URL simply stopped tracking — every
+      // tab read as the first one.
+      this.trackPane();
 
       document.querySelectorAll('.row.is-focus, .foldhead.is-focus')
         .forEach(r => r.classList.remove('is-focus'));
@@ -948,6 +969,24 @@ function ledger() {
         const pane = document.querySelectorAll('.pane')[this.pane];
         pane.querySelector('.addrow input[name="title"]').focus();
       });
+    },
+
+    /// Write the focused member into the URL, so a refresh comes back to the
+    /// pane you were in rather than to your own.
+    ///
+    /// `replaceState`, not `pushState`: moving between panes is not a page you
+    /// want Back to walk through one member at a time. It runs from `paint()`
+    /// because every gesture that can change the focus already goes through
+    /// there — `H`/`L`, `gt`/`gT`, a click on a pane or a tab — and only
+    /// writes when the id actually changed, since `paint()` also runs on every
+    /// `j`.
+    trackPane() {
+      const id = this.paneMemberId();
+      if (!id) return;
+      const url = new URL(location.href);
+      if (url.searchParams.get('pane') === id) return;
+      url.searchParams.set('pane', id);
+      history.replaceState(null, '', url);
     },
 
     paneMemberId() {

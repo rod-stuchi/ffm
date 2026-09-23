@@ -349,7 +349,7 @@ Nothing destructive fires from a single keystroke.
 | `j` / `k` | row down / up |
 | `5j` `7k` | counted motion |
 | `gg` / `G` | first / last row — first / last entry while the change log is open |
-| `H` / `L` | focus member pane, left / right |
+| `H` / `L` | focus member pane, left / right — the URL follows, so a refresh stays put |
 | `gt` / `gT` | next / previous member tab (tabs mode) |
 | `2gt` | jump straight to tab 2 — `{count}gt` is tab {count}, so `1gt` is the first |
 | `2gT` | go **back** two tabs — `gT`'s count is a distance, not a destination |

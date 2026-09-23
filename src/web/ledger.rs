@@ -28,6 +28,15 @@ pub struct Params {
     /// `YYYY-MM`. Absent means the current month — always, on every first load.
     /// Never the last-viewed month and never January.
     period: Option<String>,
+    /// The focused member, by id. Absent means **your own** pane: landing on
+    /// somebody else's ledger is the wrong first thing to see.
+    ///
+    /// It lives in the URL rather than the session on purpose. The focused
+    /// member decides who a new transaction is attributed to, and a
+    /// server-side idea of "current member" drifts the moment the app is open
+    /// in two windows — whereas a URL is per-window by construction, and
+    /// survives a refresh for free.
+    pane: Option<i64>,
 }
 
 /// A pane's three numbers, and the household's four, live in their own structs
@@ -184,6 +193,9 @@ struct LedgerPage {
     prev: String,
     next: String,
     panes: Vec<PaneView>,
+    /// Which pane the cursor starts in, as an index into `panes` — the
+    /// component counts panes, not member ids.
+    focused: usize,
     /// `YYYY-MM`, for the forms. The label above is `fmt::period`.
     period_key: String,
     months: Vec<MonthCell>,
@@ -326,8 +338,20 @@ pub async fn ledger(
             .await
             .unwrap_or_default();
 
+    // Which pane to land in. `?pane=` wins, so a refresh keeps you where you
+    // were; with nothing asked for it is your OWN pane, because the first
+    // thing a member should see is their own ledger and not somebody else's.
+    // An id naming nobody falls back the same way rather than erroring — a
+    // stale bookmark is not worth a failure page.
+    let focused = p
+        .pane
+        .and_then(|id| panes.iter().position(|v| v.id == id))
+        .or_else(|| panes.iter().position(|v| v.id == auth.viewer.member_id))
+        .unwrap_or(0);
+
     let net = ins - outs;
     Html(LedgerPage {
+        focused,
         // The member's palette, the device's light/dark — two facts, two homes.
         theme_css: theme::render(
             auth.settings.theme,

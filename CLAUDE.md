@@ -215,6 +215,13 @@ card in plain CSS.
 
 ### Tabs mode
 
+- **The pane is centred.** Tabs mode shows one pane, so there is nothing for
+  it to sit beside and no reason for it to hug the left edge of a wide screen.
+  `justify-content: safe center`, never a plain `center`: the stage scrolls
+  sideways, and a plain `center` puts overflow past the *start* edge where
+  nothing can scroll back to it. **Split mode is deliberately left alone** —
+  panes there are a row, and centring a row is a different question with a
+  different answer.
 - Tab bar sits under the app bar, showing each member's name **and balance**.
   The balance is deliberate: tabs mode's real cost is losing sight of the other
   pane in a *shared* ledger, and the balance in the tab buys most of that back.
@@ -981,6 +988,19 @@ that will otherwise be re-proposed.
   `:add` must **send the focused member id as a parameter**. Never keep a
   server-side session idea of "current member" — it drifts the moment the app is
   open in two windows.
+- **It lives in the URL — `?pane=<member_id>` — which is the one place that
+  does not drift.** A URL is per-window by construction, so two windows can
+  sit in two different panes without either lying to the other, and a refresh
+  comes back where you were instead of where you started. `paint()` writes it
+  with `replaceState` (not `pushState`: Back should not walk one member at a
+  time), and it writes **above** the empty-pane return, because which member
+  is focused has nothing to do with whether they have rows this month.
+- **With no `?pane=`, you land on your OWN pane, never pane one.** The first
+  thing a member sees must be their own ledger; everyone but the first member
+  was being shown somebody else's. The server resolves it —
+  `?pane=` → the session member → 0 — and an id naming nobody falls through
+  the same chain rather than erroring, because a stale bookmark is not worth a
+  failure page.
 - **Sessions are server-side, not a bare signed cookie.** A `sessions` table
   (`id`, `member_id`, `created_at`, `last_seen_at`, `label`) backs an opaque
   `HttpOnly` session cookie, so a single lost/stolen device can be logged out

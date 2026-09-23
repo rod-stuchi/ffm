@@ -212,6 +212,22 @@
   flex: none;
 }
 
+/* An empty mount is not a column, and must not be spaced like one.
+ *
+ * There is one per member, always in the markup, waiting for a rule editor or
+ * a change log to be swapped into it — and as zero-width flex items they
+ * still collect the stage's `gap` on either side. Four members means 64px of
+ * phantom gap in a ledger showing no column at all: invisible while
+ * everything is left-aligned, and plainly wrong in tabs mode, where it pushes
+ * the one centred pane a half-gap off the middle.
+ *
+ * `:empty` is strict about whitespace, which is why the template writes the
+ * div with nothing between its tags. A swap fills it and it comes straight
+ * back. */
+.rulemount:empty {
+  display: none;
+}
+
 /* The width lives here, not on `.rulepane`: the same element is full-width in
  * the bottom split, and `.rulemount` is a plain block, so a `flex-basis` on
  * the aside inside it does nothing at all. */
