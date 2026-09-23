@@ -479,6 +479,7 @@ for this row"*.
 | Key | Action |
 |---|---|
 | `:` | open the command bar |
+| `:grep vinho` | search every month — a result list, not a filter over this one |
 | `:sort date` | row order: manual · date · amount |
 | `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |
@@ -509,12 +510,22 @@ to resolve a typed name and then route a private row through the
 confirmation `Ctrl-L` already opens. `:invite`'s label argument goes with
 them; the pane's own create form takes it directly.
 
-**Nothing machine-checks this table, which is how the three survived in it.**
-`just cmd-check` guards the command *bar* — every name in `command_hint()`,
-and every `(try X)` in the catalogs, must reach a `case` in the dispatcher —
-so the app never offers a command it then refuses. This document is outside
-that loop: a row added here without an implementation fails no build. Until
-that changes, a new row is a promise somebody has to keep by hand.
+**`just cmd-check` now reads this table, in both directions.** A row here
+whose command has no `case` in the dispatcher fails the build, and so does a
+command the dispatcher handles that no row here names. It already guarded the
+command *bar* the same way — every name in `command_hint()`, and every
+`(try X)` in the catalogs, must be handled — so all three surfaces are held
+against one another and none can drift alone.
+
+Reading it **both** ways is the part worth keeping. A promise nobody kept is
+the bug that started the recipe, and it is the loud one: somebody types the
+command and the app refuses. A command nobody wrote down is the quiet one,
+and this table had that too — `:grep` worked from the day it was built and
+was named only in prose, three sections away, so the one place a person looks
+up commands did not list it. The check found it on its first run.
+
+It scans the whole row, not just the key cell, because an alias is usually
+named in the description — `:config` is one, and it is a real command.
 
 ### Edit fields
 | Key | Action |

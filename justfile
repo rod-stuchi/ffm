@@ -212,13 +212,25 @@ js-check:
         sys.exit(1)
     print("\u2713 no shadowed names in an Alpine component")
 
-# Every command the `:` bar advertises must actually be handled.
+# Every command the `:` bar advertises, every command a message tells people to
+# type, and every command the KEYMAP documents must actually be handled — and
+# every command that is handled must be documented.
 #
-# The hint is built in Rust and the dispatcher is JavaScript in a template, so
-# nothing else can hold the two together. The first version of the hint was
-# copied from the mock and offered `add`, `in`, `move`, `undo` and `help` —
-# none of which exist. A hint that lists commands the app refuses is worse
-# than no hint at all.
+# The hint is built in Rust, the dispatcher is JavaScript in a template and the
+# keymap is prose in design/spec.md, so nothing else can hold the three
+# together. All three have drifted already:
+#
+#   - the hint was copied from the mock and offered `add`, `in`, `move`, `undo`
+#     and `help`, none of which existed;
+#   - `not-a-command` said "(try help)" while `help` was not a case, so the app
+#     answered "not a command: help (try help)";
+#   - the keymap's Type table listed `:add`, `:in` and `:move` for months
+#     (abandoned now, see TODO_2.md §2) and never listed `:grep`, which has
+#     worked the whole time.
+#
+# The last of those is why this reads the spec in BOTH directions. A promise
+# nobody kept is the bug that started this recipe; a command nobody wrote down
+# is the one that hides.
 cmd-check:
     #!/usr/bin/env python3
     import re, sys, pathlib
@@ -249,8 +261,34 @@ cmd-check:
               "exist: " + ", ".join(circular))
         sys.exit(1)
 
+    # The keymap's own Type table, both ways. It is prose, so nothing compiled
+    # it against anything — which is exactly how it came to promise three
+    # commands the app refuses and to omit one it has always handled.
+    #
+    # The whole row is scanned, not just its key cell: an alias is often named
+    # in the description (`:config` is an alias`), and it is a real command.
+    spec = pathlib.Path("design/spec.md").read_text()
+    m = re.search(r"\n### Type\n(.*?)(?=\n#{2,3} )", spec, re.S)
+    if not m:
+        print("\u2717 the Type table was not found in design/spec.md"); sys.exit(1)
+    rows = [l for l in m.group(1).split("\n") if l.startswith("|")]
+    documented = {n for l in rows for n in re.findall(r"`:(\w+)", l)}
+
+    promised = sorted(documented - handled)
+    if promised:
+        print("\u2717 the keymap documents a command runCommand does not "
+              "handle: " + ", ".join(promised))
+        sys.exit(1)
+
+    undocumented = sorted(handled - documented)
+    if undocumented:
+        print("\u2717 runCommand handles a command the keymap does not "
+              "document: " + ", ".join(undocumented))
+        sys.exit(1)
+
     print(f"\u2713 all {len(advertised)} advertised commands are handled, "
-          f"and the {len(told)} named in messages exist")
+          f"the {len(told)} named in messages exist, and the keymap "
+          f"documents exactly the {len(handled)} that are")
 
 check: fmt-check lint test offline-check db-check css-check tpl-check js-check cmd-check
 
