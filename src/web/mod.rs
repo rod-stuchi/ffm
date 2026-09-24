@@ -56,6 +56,10 @@ pub fn router(state: AppState) -> Router {
         // question: each kind has its own fixed name on disk and its own
         // effect on state.
         .route("/tx/{id}/file/{kind}", get(files::open).post(files::upload))
+        // The `P` carousel's stage, and a PDF's pages as images — see
+        // `files::FileView` for why the browser's PDF viewer is not used.
+        .route("/tx/{id}/file/{kind}/view", get(files::view))
+        .route("/tx/{id}/file/{kind}/page/{n}", get(files::page))
         .route("/tx/{id}/file/{kind}/delete", post(files::delete))
         // `gl` — read-only, and the same column the rule editor uses.
         .route("/tx/{id}/log", get(log::log))

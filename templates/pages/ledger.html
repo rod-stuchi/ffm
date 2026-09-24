@@ -421,9 +421,18 @@
     </template>
   </div>
 
-  {#- `P` — full-viewport on purpose, and the ONE modal sized that way. The
-      job is reading a boleto's barcode digits or holding a phone up to its QR
-      code, and a 560px dialog cannot do either. -#}
+  {#- `P` — the WHOLE viewport, edge to edge, and the ONE modal sized that
+      way. The job is reading a boleto's barcode digits or holding a phone up
+      to its QR code; a 560px dialog cannot do either, and neither could the
+      1100 × 760 box it used to be, which kept a margin of ledger around a
+      file somebody opened precisely to see it large.
+
+      It shows the FILE, which reverses "the icon and the path, never the
+      bytes": that could not do the job this modal is sized for. It is still
+      not a renderer of ours — the browser draws all four allowed types
+      natively (an <iframe> for pdf/txt, an <img> for jpg/png), from the same
+      URL "Open in new tab" uses, so there is exactly one way a file is
+      served. The label, path and page sit in a caption above it. -#}
   <div class="carousel" x-show="carousel" x-cloak @click.self="carousel = null">
     <template x-if="carousel">
       <div class="cstage">
@@ -431,15 +440,29 @@
           <button class="btn" type="button" @click="zoom = Math.max(0.5, zoom - 0.25)">−</button>
           <button class="btn" type="button" @click="zoom = 1" title="{{ t.carousel_zoom_reset() }}">0</button>
           <button class="btn" type="button" @click="zoom = Math.min(4, zoom + 0.25)">+</button>
+          {#- Filling the viewport leaves no backdrop to click away on, so the
+              mouse gets the same way out `Esc` is — the rule pane's own
+              `esc` button, the same word. -#}
+          <button class="btn cclose" type="button" @click="carousel = null">esc</button>
         </div>
-        <div class="cfile" :style="'transform: scale(' + zoom + ')'">
-          <div class="cicon" x-html="carousel.current.svg"></div>
+        <div class="ccap">
+          <span class="cicon" x-html="carousel.current.svg"></span>
           <b x-text="carousel.current.label"></b>
           <span class="mono cpath" x-text="carousel.current.path"></span>
           <template x-if="carousel.current.page">
             <span class="cpage" :class="{ 'is-warn': carousel.current.warn }"
                   x-text="carousel.current.page"></span>
           </template>
+        </div>
+        {#- The file, as images the carousel sizes itself: the server draws a
+            PDF's pages with poppler (`files::FileView` says why the browser's
+            own PDF viewer could not be zoomed from here, in Chrome or in
+            Safari). The stage is a fragment loaded per file; `--z` sets how
+            wide the pages are, so 100% is fitted to the width and the view
+            scrolls to reach the rest when zoomed in. -#}
+        <div class="cview">
+          <div class="cviewin" :style="'--z: ' + zoom"
+               x-effect="showFile($el, carousel.current)"></div>
         </div>
         <div class="cnav">
           <button class="btn" type="button" :disabled="carousel.at === 0"
@@ -1226,7 +1249,9 @@ function ledger() {
         kind: a.getAttribute('href').split('/').pop(),
         number: a.querySelector('kbd')?.textContent || '',
         label: a.querySelector('.flabel')?.textContent || '',
-        path: a.getAttribute('title') || '',
+        // The badge's tooltip is "Bill — {path}"; the caption already shows
+        // the label, so only the path is kept.
+        path: (a.getAttribute('title') || '').replace(/^.*?\u2014\s*/, ''),
         href: a.getAttribute('href'),
         svg: a.querySelector('.ficon')?.innerHTML || '',
         page: a.querySelector('.flabel')?.textContent.includes('p.')
@@ -1240,6 +1265,21 @@ function ledger() {
         at: 0,
         get current() { return this.files[this.at]; },
       };
+    },
+
+    /// Loads the stage for the file on show, once per file — flipping with
+    /// h/l/1/2/3 swaps it, zooming never reloads it. A bill shared across
+    /// months (`spans_period`) scrolls to THIS month's page: the badge
+    /// already says `Bill · p.4`, and confirming which page is owed is the
+    /// whole reason to open that file here.
+    showFile(el, f) {
+      if (!f || el.dataset.src === f.href) return;
+      el.dataset.src = f.href;
+      el.innerHTML = '';
+      const page = (f.page.match(/p\.\s*(\d+)/) || [])[1];
+      htmx.ajax('GET', f.href + '/view' + (page ? '?page=' + page : ''),
+                { target: el, swap: 'innerHTML' })
+        .then(() => el.querySelector('[data-owed]')?.scrollIntoView({ block: 'start' }));
     },
 
     /// Clamped at either end rather than wrapping: the first file's previous
@@ -2054,9 +2094,15 @@ function ledger() {
       fetch('/tx/' + id + '/file/' + kind, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
         .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
         .then(({ html, trigger }) => {
+          // Through htmx's own swap, not `outerHTML`: the answer is the row
+          // PLUS the totals it moved, marked `hx-swap-oob`, and a bare
+          // `outerHTML` pasted those into the pane under the row — the
+          // header kept its stale figures and the new ones sat inline as
+          // loose text. `htmx.swap` routes each out-of-band piece to its own
+          // id and processes the new row, exactly as an htmx request would.
           if (html.trim()) {
             const target = document.querySelector('#row-' + id);
-            if (target) target.outerHTML = html;
+            if (target) htmx.swap(target, html, { swapStyle: 'outerHTML' });
           }
           if (trigger) {
             const payload = JSON.parse(trigger)['ffm:say'];

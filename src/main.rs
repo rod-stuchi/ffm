@@ -81,6 +81,13 @@ async fn main() {
         eprintln!("{e}");
         std::process::exit(1);
     }
+    // And into the one-trash-per-member layout: a `.delete/` beside a file
+    // moves into the member's trash, and a deleted row's still-live files
+    // follow it there. Also a no-op once done.
+    if let Err(e) = ffm::services::vault::tidy_trash(&pool, &cfg.receipts_root).await {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
 
     // One pass now, then one an hour. Startup matters as much as the tick: a
     // process that was down across a month boundary has to catch up the moment

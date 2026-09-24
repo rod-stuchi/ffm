@@ -1447,27 +1447,25 @@
 
 /* --- P: the file carousel ------------------------------------------------ */
 
-/* Full-viewport, and the one modal sized that way on purpose: the job is
- * reading a boleto's barcode digits or holding a phone up to its QR code, and
- * a 560px dialog cannot do either. */
+/* The whole viewport, edge to edge, and the one modal sized that way on
+ * purpose: the job is reading a boleto's barcode digits or holding a phone up
+ * to its QR code. It was an 1100 × 760 box on a dimmed backdrop, which kept a
+ * margin of ledger around a file opened precisely to be seen large. `dvh`, so
+ * a phone's collapsing toolbar does not cut off the file-nav row. */
 .carousel {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: color-mix(in srgb, var(--ink) 55%, transparent);
   display: grid;
-  place-items: center;
 }
 
 .cstage {
   position: relative;
-  width: min(1100px, 94vw);
-  height: min(760px, 88vh);
+  width: 100vw;
+  height: 100dvh;
   background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: 12px;
   display: grid;
-  grid-template-rows: 1fr max-content;
+  grid-template-rows: max-content 1fr max-content;
   overflow: hidden;
 }
 
@@ -1475,7 +1473,7 @@
  * chosen so it does not compete with the file-nav row for space. */
 .czoom {
   position: absolute;
-  top: 12px;
+  top: 8px;
   right: 12px;
   display: flex;
   gap: 4px;
@@ -1487,21 +1485,34 @@
   padding: 4px 10px;
 }
 
-.cfile {
-  display: grid;
-  place-content: center;
-  justify-items: center;
+/* What the file is, above the file itself: the kind, the computed path, and
+ * for a shared bill the page that is owed. Right padding keeps it clear of
+ * the zoom controls. */
+.ccap {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  transform-origin: center;
-  transition: transform 0.12s ease;
+  min-width: 0;
+  padding: 12px 210px 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.ccap b {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.cicon {
+  display: inline-flex;
 }
 
 .cicon svg {
-  width: 96px;
-  height: 96px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: var(--ink-3);
-  stroke-width: 1.2;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -1510,19 +1521,62 @@
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink-3);
-  max-width: 70vw;
-  word-break: break-all;
-  text-align: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cpage {
   font-family: var(--mono);
   font-size: 12.5px;
   color: var(--ink-2);
+  white-space: nowrap;
 }
 
 .cpage.is-warn {
   color: var(--neg);
+}
+
+/* The file, as images the carousel sizes itself — see `files::FileView`.
+ * `--z` is the zoom: at 1 the pages fill the view's width, above it they
+ * overflow and the view scrolls to them, below it they shrink and centre.
+ * Width, not CSS `zoom`: a zoomed box whose children are 100% wide stays the
+ * width of its parent, so the pages would not grow at all. */
+.cview {
+  min-height: 0;
+  overflow: auto;
+  background: var(--paper);
+}
+
+.cviewin {
+  --z: 1;
+  padding: 16px;
+}
+
+.cpages {
+  width: calc(var(--z) * 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.cpg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.ctext {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: calc(var(--z) * 13px);
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .cnav {

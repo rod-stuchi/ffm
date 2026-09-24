@@ -428,16 +428,41 @@ pub async fn delete(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>)
             true,
         );
     }
-    match tx::soft_delete(&st.pool, Actor::User(auth.viewer.member_id), id).await {
-        Ok(Some(_)) => match render_row(&st, &auth, id, false).await {
-            Ok(f) => say(Html(f).into_response(), t.row_deleted_say(), false),
-            Err(e) => say(error_row(&t, e), e, true),
-        },
+    let actor = Actor::User(auth.viewer.member_id);
+    match tx::soft_delete(&st.pool, actor, id).await {
+        Ok(Some(_)) => {
+            // The row's files follow it into the member's trash — a deleted
+            // bill left standing in the vault reads as live to anybody
+            // browsing it. `u` brings both back together.
+            files_follow_row(&st, actor, id, false).await;
+            match render_row(&st, &auth, id, false).await {
+                Ok(f) => say(Html(f).into_response(), t.row_deleted_say(), false),
+                Err(e) => say(error_row(&t, e), e, true),
+            }
+        }
         _ => say(
             error_row(&t, t.error_not_written()),
             t.error_not_written(),
             true,
         ),
+    }
+}
+
+/// Moves a row's files to the member's trash when the row is deleted, or puts
+/// them back when it is restored — whichever way `dd` or `u` just went.
+///
+/// A failure here is logged, not reported as the row failing: the row change
+/// is already committed and correct, and the disk still decides what the row
+/// shows.
+async fn files_follow_row(st: &AppState, actor: Actor, id: i64, restored: bool) {
+    let root = &st.cfg.receipts_root;
+    let done = if restored {
+        crate::services::receipts::restore_with_row(&st.pool, root, actor, id).await
+    } else {
+        crate::services::receipts::retire_with_row(&st.pool, root, actor, id).await
+    };
+    if let Err(e) = done {
+        tracing::error!("files of row {id} did not follow it: {e}");
     }
 }
 
@@ -523,12 +548,16 @@ pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
             file_row(&st, u.entity_id).await,
         )
     } else {
-        (
-            tx::undo(&st.pool, Actor::User(auth.viewer.member_id), &u)
-                .await
-                .unwrap_or(false),
-            Some(u.entity_id),
-        )
+        let actor = Actor::User(auth.viewer.member_id);
+        let ok = tx::undo(&st.pool, actor, &u).await.unwrap_or(false);
+        // The row's files come and go with it: undoing a delete restores
+        // them, undoing an add (or a restore) deletes the row, so they move.
+        match u.action.as_str() {
+            "delete" if ok => files_follow_row(&st, actor, u.entity_id, true).await,
+            "create" | "restore" if ok => files_follow_row(&st, actor, u.entity_id, false).await,
+            _ => {}
+        }
+        (ok, Some(u.entity_id))
     };
 
     // Undoing a re-attribution moves the row between two panes, and a single

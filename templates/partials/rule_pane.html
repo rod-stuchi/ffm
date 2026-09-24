@@ -379,9 +379,11 @@ function rulePane() {
             const tmp = document.createElement('div');
             tmp.innerHTML = html;
             if (rule) {
+              // htmx's own swap, so the totals riding out-of-band land in the
+              // header rather than being dropped — see the ledger's upload().
               const fresh = tmp.querySelector('[id^="row-"]');
               const target = fresh && document.getElementById(fresh.id);
-              if (target) target.replaceWith(fresh);
+              if (target) htmx.swap(target, html, { swapStyle: 'outerHTML' });
               htmx.ajax('GET', '/rules/' + rule + '/meta',
                         { target: '#barcodemeta', swap: 'outerHTML' });
             } else {

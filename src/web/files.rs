@@ -15,6 +15,7 @@ use crate::domain::receipt_path::Kind;
 use crate::services::receipts::{self, Slot};
 use crate::state::AppState;
 use crate::web::session::Auth;
+use askama::Template;
 use axum::extract::{Multipart, Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -177,37 +178,28 @@ pub async fn delete(
     }
 }
 
-/// `GET /tx/{id}/file/{kind}` — the file itself, in a new browser tab.
+/// Where one of a row's files is on disk, and its extension — or `None` when
+/// the viewer may not see it or it is not there.
 ///
-/// All four allowed extensions render natively, which is exactly why no custom
-/// renderer is built: this hands the browser the bytes and gets out of the way.
-pub async fn open(
-    State(st): State<AppState>,
-    auth: Auth,
-    Path((tx_id, kind)): Path<(i64, String)>,
-) -> Response {
-    let Some(kind) = Kind::parse(&kind) else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    let Some((slot, _, _)) = slot_for(&st, &auth, tx_id).await else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-
-    let Ok(present) = receipts::presence(&st.pool, &st.cfg.receipts_root, &slot).await else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
+/// The path is computed from the same builder the store writes with, so no
+/// handler that serves a file takes a user-supplied path, and there is
+/// nothing to traverse out of.
+async fn on_disk(
+    st: &AppState,
+    auth: &Auth,
+    tx_id: i64,
+    kind: &str,
+) -> Option<(std::path::PathBuf, String)> {
+    let kind = Kind::parse(kind)?;
+    let (slot, _, _) = slot_for(st, auth, tx_id).await?;
+    let present = receipts::presence(&st.pool, &st.cfg.receipts_root, &slot)
+        .await
+        .ok()?;
     let ext = match kind {
         Kind::Barcode => present.bill,
         Kind::Scheduled => present.scheduled,
         Kind::Receipt => present.receipt,
-    };
-    let Some(ext) = ext else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-
-    // The path is computed from the same builder the store writes with, so
-    // there is no user-supplied path anywhere in this handler and nothing to
-    // traverse out of.
+    }?;
     let rel = crate::domain::receipt_path::file(
         &crate::domain::receipt_path::Taxonomy {
             vault: &slot.vault,
@@ -220,8 +212,22 @@ pub async fn open(
         &ext,
         slot.amount_in_filename.then_some(slot.amount).flatten(),
     );
+    Some((st.cfg.receipts_root.join(rel), ext))
+}
 
-    match tokio::fs::read(st.cfg.receipts_root.join(&rel)).await {
+/// `GET /tx/{id}/file/{kind}` — the file itself, in a new browser tab.
+///
+/// All four allowed extensions render natively, which is exactly why no custom
+/// renderer is built: this hands the browser the bytes and gets out of the way.
+pub async fn open(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path((tx_id, kind)): Path<(i64, String)>,
+) -> Response {
+    let Some((path, ext)) = on_disk(&st, &auth, tx_id, &kind).await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    match tokio::fs::read(path).await {
         Ok(bytes) => (
             [
                 (header::CONTENT_TYPE, content_type(&ext)),
@@ -234,6 +240,137 @@ pub async fn open(
             .into_response(),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+// ---------------------------------------------------------------------------
+// the `P` carousel's stage
+// ---------------------------------------------------------------------------
+
+/// What the carousel's stage shows for one file.
+///
+/// **Images of the pages, not the browser's PDF viewer.** The first version
+/// embedded the viewer in a frame, and the carousel's `+`/`-` could not drive
+/// it: CSS zoom on a frame scales the viewer's toolbar while the page shrinks
+/// to compensate; a new `#zoom=` needs a fresh frame, which Chrome drew blank
+/// or ignored; and widening the frame only zooms while the viewer happens to
+/// be fitted to the width — otherwise `+` just slid the page sideways. A
+/// frame is somebody else's program, and it answers to its own controls.
+///
+/// So a PDF's pages are drawn by `pdftoppm` — poppler, which the importer
+/// already needs for `pdftotext` — and every file type becomes the same
+/// thing on screen: images the carousel sizes itself, so zoom means one
+/// thing everywhere and works in every browser. "Open in new tab" still hands
+/// over the real file.
+#[derive(Template)]
+#[template(path = "partials/file_view.html")]
+pub struct FileView {
+    t: crate::ui::i18n::Catalog,
+    /// `/tx/{id}/file/{kind}` — the file, and the root its pages hang off.
+    base: String,
+    /// A PDF's page numbers, `1..=n`. Empty for anything else.
+    pages: Vec<i64>,
+    /// The page a shared bill owes this month (`spans_period`), scrolled to
+    /// on open. 0 = none.
+    owed: i64,
+    /// jpg / png: the file itself is the one image.
+    image: bool,
+    /// txt: the text, escaped by the template like any other content.
+    text: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ViewParams {
+    #[serde(default, deserialize_with = "crate::web::form::blank_as_none")]
+    page: Option<i64>,
+}
+
+/// `GET /tx/{id}/file/{kind}/view` — the stage, as a fragment.
+pub async fn view(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path((tx_id, kind)): Path<(i64, String)>,
+    axum::extract::Query(p): axum::extract::Query<ViewParams>,
+) -> Response {
+    let t = auth.catalog();
+    let Some((path, ext)) = on_disk(&st, &auth, tx_id, &kind).await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let base = format!("/tx/{tx_id}/file/{kind}");
+    let mut view = FileView {
+        t,
+        base,
+        pages: Vec::new(),
+        owed: 0,
+        image: false,
+        text: None,
+    };
+    match ext.as_str() {
+        "pdf" => {
+            // A PDF poppler cannot count is still a file: one page is tried,
+            // and a page that will not draw says so in its own place.
+            let n = page_count(&path).await.unwrap_or(1).max(1);
+            view.pages = (1..=n).collect();
+            view.owed = p.page.filter(|p| (1..=n).contains(p)).unwrap_or(0);
+        }
+        "txt" => view.text = tokio::fs::read_to_string(&path).await.ok(),
+        _ => view.image = true,
+    }
+    crate::web::template::Html(view).into_response()
+}
+
+/// `GET /tx/{id}/file/{kind}/page/{n}` — one page of a PDF, as a PNG.
+///
+/// 150 dpi: an A4 page comes out ~1240 px wide, which fills the stage at
+/// 100% and keeps a boleto's digits and QR code sharp when zoomed in.
+pub async fn page(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path((tx_id, kind, n)): Path<(i64, String, u32)>,
+) -> Response {
+    let Some((path, ext)) = on_disk(&st, &auth, tx_id, &kind).await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if ext != "pdf" || n == 0 {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    // A subprocess, like the importer's `pdftotext`; off the async runtime,
+    // since it blocks for the few hundred milliseconds a page takes.
+    let out = tokio::task::spawn_blocking(move || {
+        let n = n.to_string();
+        std::process::Command::new("pdftoppm")
+            .args(["-f", &n, "-l", &n, "-r", "150", "-png", "-singlefile"])
+            .arg(&path)
+            .output()
+    })
+    .await;
+    match out {
+        Ok(Ok(o)) if o.status.success() && !o.stdout.is_empty() => (
+            [
+                (header::CONTENT_TYPE, "image/png"),
+                // A replaced bill keeps its path, so the page must not be
+                // served from cache after the file under it changed.
+                (header::CACHE_CONTROL, "no-cache"),
+            ],
+            o.stdout,
+        )
+            .into_response(),
+        _ => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// `pdfinfo`'s page count.
+async fn page_count(path: &std::path::Path) -> Option<i64> {
+    let path = path.to_path_buf();
+    let out = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("pdfinfo").arg(path).output()
+    })
+    .await
+    .ok()?
+    .ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("Pages:"))
+        .and_then(|n| n.trim().parse().ok())
 }
 
 fn content_type(ext: &str) -> &'static str {

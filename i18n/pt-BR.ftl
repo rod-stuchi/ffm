@@ -428,6 +428,7 @@ status-received = chegou
 
 carousel-open-tab = Abrir em nova aba
 carousel-zoom-reset = Zerar o zoom
+carousel-page-alt = página { $n }
 keymap-title = Atalhos
 keymap-close = Fechar
 details-months = mês(es)

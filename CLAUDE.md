@@ -649,10 +649,17 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   (see below) is a **second, additive** way to look at a row's files —
   reversing this repo's earlier "no in-app preview at all" stance, on the
   strength of flipping between a row's own bill/scheduled/receipt without
-  losing the ledger underneath. It still doesn't reimplement a file
-  renderer: the carousel shows the file's kind, computed path and an icon,
-  not the file's actual bytes, and "Open in new tab" is right there for
-  when the real content is needed. See `design/spec.md`'s row-component
+  losing the ledger underneath. **The carousel shows the file itself** —
+  reversing "the kind, the path and an icon, never the bytes", which could
+  not do the job the carousel is full-viewport *for*: reading a boleto's
+  digits, or holding a phone up to its QR code. **A PDF's pages are drawn
+  server-side by `pdftoppm`** (poppler, already required for `pdftotext`)
+  and shown as images; a photo is itself, a text file is text. The browser's
+  own PDF viewer was tried first, in a frame, and could not be zoomed from
+  the carousel reliably in either Chrome or Safari — a frame is somebody
+  else's program and answers to its own controls. "Open in new tab" still
+  hands over the real file. A bill shared across months scrolls to this
+  month's page. See `design/spec.md`'s row-component
   section for the on-row badges and their keybindings.
 - **`P` opens that carousel for the focused row's files.** `1`/`2`/`3`
   jump straight to that fixed file kind (unchanged from `g1`/`g2`/`g3`'s
@@ -666,7 +673,12 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   barcode digits, or holding a phone up to its QR code, both of which need
   the file genuinely large on screen. A 560px dialog can't do that; this is
   the one modal in the app sized to the full window on purpose.
-- **Zoom (`+`/`-`, or `0` to reset) scales the preview**, floating controls
+- **Zoom (`+`/`-`, or `0` to reset) scales the preview** — the page images'
+  width, so 100% is fitted to the view and above it the view scrolls to the
+  rest. It is the same on every file type and in every browser, which is the
+  reason the pages are images: three attempts at zooming the browser's PDF
+  viewer from outside (CSS zoom on the frame, a fresh frame with `#zoom=`,
+  widening the frame) each worked in one browser at most, floating controls
   in the stage's corner rather than in the button row, the same placement
   any image viewer's zoom control uses. Each file starts back at 100% when
   you flip to a different one with `h`/`l`/`1`/`2`/`3` — carrying a zoom
@@ -680,18 +692,25 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   number would be actively wrong, not just unhelpful. The very first
   occurrence of a rule has nothing to carry forward from, so it always seeds
   from the rule's own `amount` field.
-- **Deleting any of the three files is a soft delete.** The file moves into a
-  `.delete/` subfolder alongside where it lived — never removed from disk —
-  and a DB row records the move (old path, `deleted_at`, `deleted_by`, reason)
-  so `u` can put it back. Same "nothing is destroyed" rule as everything else
-  in this app.
+- **Deleting any of the three files is a soft delete.** The file moves into
+  the **member's trash**, `{slug}/.delete/`, under the same path it had —
+  never removed from disk — and a DB row records the move (old path,
+  `deleted_at`, `deleted_by`, reason) so `u` can put it back. Same "nothing
+  is destroyed" rule as everything else in this app. It was a `.delete/`
+  beside each file, which left a bill's folder standing in the vault with
+  only a hidden folder inside long after the bill was gone; one trash per
+  member keeps the live tree to what is live, and folders a move empties are
+  removed. A startup step moved the old layout over (`services::vault`).
+  **A row's files follow the row.** `dd` moves every live file of the row into
+  the trash — a deleted bill left in the vault reads as live to anybody
+  browsing it — and one `u` brings the row and its files back together: the
+  moves are tagged `moved with its row`, which `u` never picks on its own.
   **Replacing a file is the same soft delete**, tagged `superseded` — it used
   to write over the old path, destroying the old bytes while the row marked
   "deleted" pointed at the new file. And each deleted copy is named after its
-  own `receipts` row (`.delete/09_barcode.r42.pdf`): a fixed
-  `.delete/09_barcode.pdf` let a second delete of the same slot overwrite the
-  first. Restore reads the legacy name too, and refuses to overwrite a live
-  file.
+  own `receipts` row (`09_barcode.r42.pdf`): a fixed `09_barcode.pdf` let a
+  second delete of the same slot overwrite the first. Restore finds a file in
+  any place a delete has ever put one, and refuses to overwrite a live file.
 - **An untracked recurring bill gets an optional manual `paid` checkbox** — the
   one manual tick in the whole model, and only because there's no filesystem
   proof to contradict it. A *tracked* rule never gets this checkbox; the rule
@@ -1193,6 +1212,31 @@ that will otherwise be re-proposed.
   every template — including success, error and skeleton states — against dummy
   data, so UI and CSS can be iterated without touching the real database. Keep it
   in sync with the row-state table above; it is how that table stays honest.
+- **Test UI in Safari AND Chrome before calling it done.** The household uses
+  Safari; Chrome is only where the automation is convenient. A fix checked in
+  one browser is a guess about the other — the `P` carousel's zoom passed in
+  Chrome three times while doing nothing (or the wrong thing) in Safari. Say
+  which browsers were actually checked.
+  - **Chrome**: the Claude-in-Chrome tools. **Its key presses may not reach
+    the page at all** — the tab runs in the background, and a `keydown`
+    listener saw nothing — so dispatch keys from inside the page (fine for
+    unshifted keys; see the Shift gotcha below) and let Safari's native keys
+    carry the real-keyboard check. Its screenshot coordinates are
+    scaled against the real viewport — convert from `getBoundingClientRect`
+    before clicking, or a click meant for a button lands on the backdrop.
+    Its tab reports `visibilityState = hidden`, so a plugin (the PDF viewer)
+    can take seconds to paint: measure sizes in JS rather than trusting an
+    early screenshot.
+  - **Safari**: WebDriver through `safaridriver` (needs Safari → Settings →
+    Developer → "Allow remote automation", already enabled on this Mac).
+    `safaridriver -p 4444`, `POST /session`, then `/url`, `/cookie` with a
+    trial `ffm.sid`, `/execute/async`, element `/click`, key `/actions`, and
+    `/screenshot`. Native clicks and key presses — not synthetic events.
+  - **Never against the live database.** Copy `ffm.db` and `receipts/` to a
+    scratch dir and run a second process on its own port with `FFM_DB_PATH`
+    / `FFM_RECEIPTS_ROOT` / `FFM_ADDR`, signing in with a session row
+    inserted into the copy. Stop it by its port (`lsof -tiTCP:<port>`), never
+    `pkill -f target/debug/ffm` — that also matches the `just dev` server.
 
 ---
 

@@ -20,10 +20,11 @@ fn d(y: i32, m: u32, day: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, day).unwrap()
 }
 
-/// The soft-deleted copies of one file name in the test occurrence's folder,
+/// The soft-deleted copies of one file name in the member's trash, under the
+/// test occurrence's folder,
 /// whatever row id they carry: `.delete/09.r7.pdf` for `09`.
 fn deleted_copies(root: &std::path::Path, vault: &str, stem: &str) -> Vec<PathBuf> {
-    let dir = root.join(format!("{vault}/consumo/energia/2026/.delete"));
+    let dir = root.join(format!("{vault}/.delete/consumo/energia/2026"));
     let prefix = format!("{stem}.r");
     let mut found: Vec<PathBuf> = std::fs::read_dir(dir)
         .map(|d| {
@@ -878,4 +879,134 @@ async fn restoring_refuses_to_overwrite_a_live_file() {
         slot.vault
     ));
     assert_eq!(std::fs::read(&live).unwrap(), b"new");
+}
+
+/// A deleted row's files follow it into the member's trash, the folder they
+/// leave empty goes, and `u` brings the row AND its files back — one
+/// keystroke, because the file moves are part of the row's delete.
+#[tokio::test]
+async fn a_rows_files_follow_it_into_the_trash_and_back() {
+    use ffm::db::tx;
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (id, slot) = tracked_occurrence(&pool, me).await;
+    receipts::store(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Barcode,
+        "b.pdf",
+        b"bill",
+    )
+    .await
+    .unwrap();
+    let live = root.join(format!(
+        "{}/consumo/energia/2026/09_barcode.pdf",
+        slot.vault
+    ));
+    assert!(live.exists());
+
+    // What the `dd` handler does: the row, then its files.
+    tx::soft_delete(&pool, Actor::User(me), id).await.unwrap();
+    assert_eq!(
+        receipts::retire_with_row(&pool, &root, Actor::User(me), id)
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(!live.exists());
+    assert_eq!(
+        std::fs::read(deleted_copy(&root, &slot.vault, "09_barcode").unwrap()).unwrap(),
+        b"bill"
+    );
+    assert!(
+        !root.join(format!("{}/consumo", slot.vault)).exists(),
+        "the emptied folders are gone from the live tree"
+    );
+
+    // `u` picks the row's delete, not the file move it caused.
+    let u = tx::last_undoable(&pool, me).await.unwrap().unwrap();
+    assert_eq!(
+        (u.entity.as_str(), u.action.as_str()),
+        ("transaction", "delete")
+    );
+    assert!(tx::undo(&pool, Actor::User(me), &u).await.unwrap());
+    assert_eq!(
+        receipts::restore_with_row(&pool, &root, Actor::User(me), id)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(std::fs::read(&live).unwrap(), b"bill");
+    assert!(deleted_copy(&root, &slot.vault, "09_barcode").is_none());
+}
+
+/// The startup step: a deleted file still in a `.delete/` beside it moves to
+/// the member's trash, a deleted row's live files follow it there, and a
+/// second run does nothing.
+#[tokio::test]
+async fn the_startup_step_tidies_the_trash_once() {
+    use ffm::db::tx;
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (id, slot) = tracked_occurrence(&pool, me).await;
+    let folder = format!("{}/consumo/energia/2026", slot.vault);
+
+    // A deleted file where the old layout put it: beside, row-named.
+    receipts::store(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Barcode,
+        "b.pdf",
+        b"old",
+    )
+    .await
+    .unwrap();
+    receipts::store(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Barcode,
+        "b.pdf",
+        b"new",
+    )
+    .await
+    .unwrap();
+    let first: i64 = sqlx::query_scalar("SELECT min(id) FROM receipts")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let trash = root.join(ffm::domain::receipt_path::deleted_path_for(
+        &format!("{folder}/09_barcode.pdf"),
+        first,
+    ));
+    let beside = root.join(format!("{folder}/.delete/09_barcode.r{first}.pdf"));
+    std::fs::create_dir_all(beside.parent().unwrap()).unwrap();
+    std::fs::rename(&trash, &beside).unwrap();
+
+    // A row deleted the old way: its live file left standing.
+    tx::soft_delete(&pool, Actor::User(me), id).await.unwrap();
+
+    let moved = ffm::services::vault::tidy_trash(&pool, &root)
+        .await
+        .unwrap();
+    assert_eq!(moved, 2);
+    assert_eq!(std::fs::read(&trash).unwrap(), b"old");
+    assert!(!root.join(format!("{folder}/.delete")).exists());
+    assert!(
+        !root.join(&folder).exists(),
+        "nothing live is left in the folder"
+    );
+    assert_eq!(
+        ffm::services::vault::tidy_trash(&pool, &root)
+            .await
+            .unwrap(),
+        0
+    );
 }

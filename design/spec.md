@@ -308,6 +308,11 @@ receipt — without leaving the ledger behind it.
   at either end, not wrapping — the first file's "previous" button and the
   last file's "next" button are both visibly disabled rather than looping
   back around.
+- **The whole viewport, edge to edge** — not a box on a dimmed backdrop,
+  which it was until it was noticed that an 1100 × 760 stage kept a margin
+  of ledger around a file opened to be seen large. With no backdrop left to
+  click away on, an `esc` button beside the zoom controls closes it, the same
+  word the rule pane's close button uses.
 - **Full-viewport, not a dialog-sized modal** — the few other modals left
   in this app (confirmations, the keymap) are centred `min(560px, 100%)`
   boxes, and this is the one deliberate exception. The actual job is reading a boleto's barcode digits, or
@@ -319,10 +324,20 @@ receipt — without leaving the ledger behind it.
   buttons for space. Each file starts back at 100% when you flip to a
   different one; a carried-over zoom level would be a surprise applied to
   an unrelated file, not a convenience.
-- **The stage shows the file's icon (the same stroke icon the file rail
-  already uses, just bigger) and its computed path — not the file's actual
-  bytes.** This is still not a custom file renderer; "Open in new tab" sits
-  in the footer for when the real content is actually needed.
+- **The stage shows the file itself**, with its kind, icon and computed
+  path in a caption above it. It used to show only the icon and the path —
+  "not the file's actual bytes" — which could not do the one job this modal
+  is full-viewport for. **A PDF's pages are drawn by the server** with
+  `pdftoppm` at 150 dpi (`GET /tx/{id}/file/{kind}/page/{n}`) and stacked as
+  images, fitted to the width; a photo is shown as itself and a text file as
+  text. The stage is one fragment per file (`…/view`), and a bill shared
+  across months scrolls to this month's page. `+`/`-`/`0` set the pages'
+  width, so zoom is one mechanism for every type and every browser. The
+  browser's own PDF viewer in a frame was tried first and dropped: CSS zoom
+  scaled its toolbar instead of the page, a fresh frame with `#zoom=` came
+  up blank in Chrome, and widening the frame only zoomed while the viewer
+  stayed fitted to the width — in Safari `+` slid the page sideways and `-`
+  did nothing.
 - **A row with zero files refuses outright** — `P` says "no files on this
   row" rather than opening an empty carousel with nothing to look at.
 - **A bill whose rule spans several periods (`spans_period`) shows its page
@@ -1627,8 +1642,12 @@ stored file's extension mirrors whatever was actually uploaded.
   name and its own effect on state.
 - The file is renamed to the deterministic convention on disk; the user's
   original filename is kept as metadata only, for their own reference.
-- **Delete (of any of the three) is a soft delete.** The file moves into a
-  `.delete/` subfolder beside where it lived; never removed from disk. The DB
+- **Delete (of any of the three) is a soft delete.** The file moves into the
+  member's trash, `{slug}/.delete/`, under the same path it had and named
+  after its own row (`09_barcode.r42.pdf`); never removed from disk, and
+  folders the move empties are removed so the live tree holds only what is
+  live. Deleting a **row** moves its files the same way, and one `u` restores
+  the row and its files together. The DB
   change log records the move (`old_path`, `deleted_at`, `deleted_by`,
   `reason`) so `u` restores it exactly — the same one audit mechanism every
   other change goes through, not a second one for files.

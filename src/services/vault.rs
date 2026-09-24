@@ -122,3 +122,85 @@ async fn count_stored(pool: &SqlitePool, old_name: &str) -> Result<i64, VaultErr
     .await
     .map_err(|e| VaultError::Db(e.to_string()))
 }
+
+/// Brings the vault in line with the one-trash-per-member layout, at startup.
+/// Idempotent, like [`drop_uuid_prefix`]: once done, it finds nothing to do.
+///
+/// - A deleted file still in a `.delete/` beside where it lived is moved into
+///   the member's trash (`receipt_path::deleted_path_for`), and the folders
+///   that leaves empty are removed.
+/// - A **deleted row whose files are still live** — deleted before a row's
+///   files followed it — has them moved now, logged as the app's own move and
+///   tagged so restoring the row brings them back
+///   (`receipts::retire_with_row`).
+///
+/// Returns how many files were moved.
+pub async fn tidy_trash(pool: &SqlitePool, root: &Path) -> Result<usize, VaultError> {
+    use crate::domain::receipt_path::{deleted_path, deleted_path_beside, deleted_path_for};
+    use crate::services::receipts;
+
+    let mut moved = 0;
+
+    // --- deleted files, into the member's trash -------------------------
+    let deleted = sqlx::query!(
+        r#"SELECT id AS "id!: i64", deleted_from_path AS "from!: String"
+           FROM receipts
+           WHERE deleted_at IS NOT NULL AND deleted_from_path IS NOT NULL"#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| VaultError::Db(e.to_string()))?;
+    for r in &deleted {
+        let target = root.join(deleted_path_for(&r.from, r.id));
+        if target.exists() {
+            continue;
+        }
+        // The legacy fixed name is shared by every delete of that slot, so it
+        // is only claimed when exactly one deleted row could own it.
+        let owners = deleted.iter().filter(|o| o.from == r.from).count();
+        let candidates = [
+            Some(deleted_path_beside(&r.from, r.id)),
+            (owners == 1).then(|| deleted_path(&r.from)),
+        ];
+        let Some(found) = candidates
+            .into_iter()
+            .flatten()
+            .map(|p| root.join(p))
+            .find(|p| p.exists())
+        else {
+            continue;
+        };
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| VaultError::Io(e.to_string()))?;
+        }
+        std::fs::rename(&found, &target)
+            .map_err(|e| VaultError::Io(format!("cannot move {} — {e}", found.display())))?;
+        // `found` sat in `{dir}/.delete/`; prune from inside that folder so
+        // both it and anything above it left empty go.
+        if let Ok(rel) = found.strip_prefix(root) {
+            receipts::prune_empty(root, &rel.to_string_lossy());
+        }
+        tracing::info!("vault · {} → member trash", r.from);
+        moved += 1;
+    }
+
+    // --- live files of deleted rows -------------------------------------
+    let rows = sqlx::query_scalar!(
+        r#"SELECT DISTINCT t.id AS "id!: i64"
+           FROM receipts r JOIN transactions t ON t.id = r.transaction_id
+           WHERE r.deleted_at IS NULL AND t.deleted_at IS NOT NULL"#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| VaultError::Db(e.to_string()))?;
+    for id in rows {
+        let n = receipts::retire_with_row(pool, root, crate::db::changes::Actor::System, id)
+            .await
+            .map_err(|e| VaultError::Io(e.to_string()))?;
+        if n > 0 {
+            tracing::info!("vault · {n} file(s) of deleted row {id} → member trash");
+        }
+        moved += n;
+    }
+    Ok(moved)
+}

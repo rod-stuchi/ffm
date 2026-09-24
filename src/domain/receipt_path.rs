@@ -147,15 +147,36 @@ pub fn deleted_path(original: &str) -> String {
     }
 }
 
-/// Where one particular soft-deleted file goes: `.delete/` beside where it
-/// lived, named after its own `receipts` row — `09_barcode.r42.pdf`.
+/// Where one particular soft-deleted file goes: the member's own trash,
+/// `{slug}/.delete/`, under the same path it had — named after its own
+/// `receipts` row, `09_barcode.r42.pdf`.
 ///
-/// Unique per row, which is the whole point. A slot is re-filled and deleted
-/// again (a bill replaced twice, a receipt re-uploaded after a delete), and a
-/// fixed `.delete/09_barcode.pdf` let the second delete overwrite the first —
-/// a hard delete wearing a soft delete's name. The extension stays last so
-/// the file still opens by double-click in a vault browsed by hand.
+/// **One trash per member**, not a `.delete/` beside each file. Beside the
+/// file, deleting a bill's every file left its folder standing in the vault
+/// with only a hidden folder inside — `moto_honda/` looking live long after
+/// the bill was gone. In one trash, the live tree holds only what is live,
+/// and the emptied folders are removed ([`crate::services::receipts`]).
+///
+/// **Unique per row**, because a slot is re-filled and deleted again (a bill
+/// replaced twice), and a fixed name let the second delete overwrite the
+/// first — a hard delete wearing a soft delete's name. The extension stays
+/// last so the file still opens by double-click.
 pub fn deleted_path_for(original: &str, receipt_id: i64) -> String {
+    let (vault, rest) = original.split_once('/').unwrap_or(("", original));
+    let (dir, name) = match rest.rsplit_once('/') {
+        Some((dir, name)) => (format!("{dir}/"), name),
+        None => (String::new(), rest),
+    };
+    let name = match name.rsplit_once('.') {
+        Some((stem, ext)) => format!("{stem}.r{receipt_id}.{ext}"),
+        None => format!("{name}.r{receipt_id}"),
+    };
+    format!("{vault}/.delete/{dir}{name}")
+}
+
+/// Where [`deleted_path_for`] put a file for a while: a `.delete/` beside
+/// it, row-named. Read only to restore, or move, what was deleted then.
+pub fn deleted_path_beside(original: &str, receipt_id: i64) -> String {
     let (dir, name) = match original.rsplit_once('/') {
         Some((dir, name)) => (format!("{dir}/"), name),
         None => (String::new(), original),
@@ -175,7 +196,7 @@ mod tests {
     fn each_deleted_file_gets_a_name_of_its_own() {
         assert_eq!(
             deleted_path_for("udo/mobilidade/moto/2026/09_barcode.pdf", 3),
-            "udo/mobilidade/moto/2026/.delete/09_barcode.r3.pdf"
+            "udo/.delete/mobilidade/moto/2026/09_barcode.r3.pdf"
         );
         assert_ne!(
             deleted_path_for("a/09.pdf", 3),

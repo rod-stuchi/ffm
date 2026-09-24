@@ -238,6 +238,10 @@ pub async fn last_undoable(pool: &SqlitePool, member_id: i64) -> sqlx::Result<Op
                                     'privacy', 'reorder', 'reattribute'))
                   OR (c.entity = 'file' AND c.action IN ('file_upload', 'file_delete')))
              AND c.undo_of IS NULL
+             -- A file moved because its ROW was deleted is part of that
+             -- delete, not a step of its own: `u` on the row brings it back
+             -- (services::receipts::WITH_ROW).
+             AND NOT (c.entity = 'file' AND c.note IS 'moved with its row')
              -- Already undone: its reversal points back at it. Without this,
              -- `u` twice in a row would toggle the same change forever instead
              -- of walking back through history.

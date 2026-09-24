@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\", deleted_from_path AS \"from!: String\"\n           FROM receipts\n           WHERE deleted_at IS NOT NULL AND deleted_from_path IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "from!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "3ea2ceeb833af7e15f012ba234a2ac5754b035eab6b3e2258ea73b89670b1ab2"
+}

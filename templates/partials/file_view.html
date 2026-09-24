@@ -1,0 +1,17 @@
+{#- The `P` carousel's stage: the file, as images the carousel sizes itself.
+
+    Every type ends up the same shape — a PDF as one image per page, a photo
+    as itself, a text file as text — so `+`/`-`/`0` mean one thing on all of
+    them. Why not the browser's PDF viewer: see `files::FileView`. -#}
+<div class="cpages">
+  {%- for n in pages %}
+  <img class="cpg" id="cpg-{{ n }}" src="{{ base }}/page/{{ n }}"
+       alt="{{ t.carousel_page_alt(n.clone()) }}"{% if n.clone() == owed %} data-owed{% endif %}>
+  {%- endfor %}
+  {%- if image %}
+  <img class="cpg" src="{{ base }}" alt="">
+  {%- endif %}
+  {%- if let Some(text) = text %}
+  <pre class="ctext">{{ text }}</pre>
+  {%- endif %}
+</div>
