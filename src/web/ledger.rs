@@ -68,7 +68,7 @@ pub struct PaneTotals {
 /// number is a fact. One channel per fact, as everywhere else — and the two
 /// are asked separately, so a confirmed income in an estimated pane still
 /// reads as the fact it is.
-fn money(
+pub(crate) fn money(
     amount: crate::domain::money::Cents,
     currency: crate::domain::money::Currency,
     estimated: bool,

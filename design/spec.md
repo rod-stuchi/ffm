@@ -95,6 +95,7 @@ The statusline carries, left to right:
 | household · period | which ledger, which month |
 | member | the **session's** member and `(admin)` when admin powers are actually in effect, so it reads as a member under preview-as-non-admin |
 | message | the same channel the pre-auth pages use |
+| selection | `x`: `3 of 5 selected · Σ R$ 588,20` — how many of the **focused pane's** rows are selected, and their sum written like the pane header (`Σ + …` for incomes only; `in · out · net` for a mix, `~` on a projection). Rendered by the server from the same pane query as the header; hidden while nothing in the pane is selected |
 | buffer | the pending count and key prefix, so a half-typed `3d` or `g` is visible rather than silently remembered |
 | position | `4/7` in the focused pane |
 | sort | `manual` · `date` · `amount` — **clickable, cycles** |
@@ -385,7 +386,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | `Ctrl-H` / `Ctrl-L` | **re-attribute** the row to the member pane left / right |
 | `a` | add a one-off spend |
 | `i` | add a one-off income |
-| `x` | toggle selection for a batch operation |
+| `x` | toggle selection for a batch operation — the statusline counts and sums what is selected in the focused pane |
 | `e` | edit this occurrence |
 | `A` | create a recurring bill — opens the rule pane, with a placeholder row at the cursor |
 | `I` | create a recurring income — the same pane, money the other way |

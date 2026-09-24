@@ -82,6 +82,7 @@
      @keydown.window="key($event)"
      @mousemove.window="mouseMoved($event)"
      @htmx:before-swap.window="savedSwap($event)"
+     @htmx:after-swap.window="if ($event.detail.target?.id !== 'stsel') refreshSelection(true)"
      {#- A file dragged anywhere over the ledger reveals every attachable
          row's three drop targets. `dragover` rather than `dragenter` because
          it fires continuously: moving between rows raises leave/enter pairs
@@ -571,6 +572,12 @@
     <div class="st">{{ household }} · {{ period }}</div>
     <div class="st stmember">{{ me_name }}{% if me_admin %} (admin){% endif %}</div>
     <div class="st grow msg" :class="{ bad: msgBad }" x-text="msg"></div>
+    {#- `x` — how many of the focused pane's rows are selected, and their sum,
+        the way a spreadsheet shows the cells you picked. Rendered by the
+        SERVER (`web::selection`): money is formatted in exactly one place,
+        and the numbers come from the same pane query the header uses. Empty,
+        and hidden, while nothing in this pane is selected. -#}
+    <div class="st sel" id="stsel"></div>
     {#- The pending count and key buffer, so a half-typed `3d` or `g` is
         visible rather than something the app silently remembers. -#}
     <div class="st buf" x-text="count + pending" x-show="count || pending" x-cloak></div>
@@ -821,6 +828,10 @@ function ledger() {
       // all, so left below the return the URL simply stopped tracking — every
       // tab read as the first one.
       this.trackPane();
+      // The selection's cell speaks about the focused pane, so a pane change
+      // (H/L/gt) is a new question. It asks the server only when the pane or
+      // its selected ids actually changed — not on every j/k.
+      this.refreshSelection();
 
       document.querySelectorAll('.row.is-focus, .foldhead.is-focus')
         .forEach(r => r.classList.remove('is-focus'));
@@ -1508,6 +1519,36 @@ function ledger() {
       Object.keys(this.selected).forEach(id => {
         document.querySelector('#row-' + id + ' .row')?.classList.add('is-selected');
       });
+      this.refreshSelection();
+    },
+
+    /// What the selection cell last asked about — the focused member and the
+    /// selected ids on screen in that pane — so moving the cursor does not
+    /// send a request per keystroke.
+    selAsked: null,
+
+    /// The statusline's selection cell: count and sum of what `x` marked in
+    /// the focused pane. This only lists ids the page already holds; the
+    /// server counts, sums and formats them (`web::selection`), because money
+    /// is formatted in one place and privacy is applied with the numbers.
+    ///
+    /// `force` after a swap: an edited amount changes the sum without
+    /// changing which rows are selected.
+    refreshSelection(force) {
+      const cell = document.getElementById('stsel');
+      const pane = document.querySelectorAll('.pane')[this.pane];
+      if (!cell || !pane) return;
+      const member = this.paneMemberId();
+      const ids = Object.keys(this.selected)
+        .filter(id => pane.querySelector('#row-' + id))
+        .sort();
+      const ask = member + '|' + ids.join(',');
+      if (ask === this.selAsked && !force) return;
+      this.selAsked = ask;
+      if (!ids.length) { cell.innerHTML = ''; return; }
+      const period = document.querySelector('.ledger-shell')?.dataset.period || '';
+      htmx.ajax('GET', '/tx/selection?member=' + member + '&period=' + period +
+                '&ids=' + ids.join(','), { target: '#stsel', swap: 'outerHTML' });
     },
 
     /// Ctrl-H / Ctrl-L. A private row confirms first: handing a hidden

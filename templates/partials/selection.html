@@ -1,0 +1,15 @@
+{#- The selection's cell in the statusline: how many of the focused pane's
+    rows are selected, and their sum — written the way the pane header writes
+    money, with its own `in` / `out` / `net` words and colours. Empty when
+    nothing selected is in this pane; the stylesheet hides an empty cell. -#}
+<div class="st sel" id="stsel">
+  {%- if let Some(count) = count -%}
+  <span>{{ count }}</span>
+  {%- for p in parts %}
+  <span class="sel-sep">·</span><i>{{ p.label }}</i> <b class="{{ p.class }}">{{ p.value }}</b>
+  {%- endfor %}
+  {%- if let Some(n) = no_amount %}
+  <span class="sel-sep">·</span><span class="sel-dim">{{ n }}</span>
+  {%- endif %}
+  {%- endif -%}
+</div>

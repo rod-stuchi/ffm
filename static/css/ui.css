@@ -455,6 +455,39 @@ legend {
   color: var(--neg);
 }
 
+/* `x` — the selection's count and sum. Written like the pane header: the
+ * labels quiet, the money in the side's own colour. It sits beside the
+ * message rather than replacing it, and takes no room until something in the
+ * focused pane is selected. The `--info` rule on its edge is the channel a
+ * selected row already wears — "what I picked" — so the two read as one. */
+.st.sel {
+  border-left: 2px solid var(--info);
+  color: var(--ink-2);
+}
+
+.st.sel:empty {
+  display: none;
+}
+
+.st.sel i {
+  font-style: normal;
+  color: var(--ink-3);
+}
+
+.st.sel .pos {
+  color: var(--pos);
+}
+
+.st.sel .neg {
+  color: var(--neg);
+}
+
+.st.sel .sel-sep,
+.st.sel .sel-dim {
+  color: var(--ink-3);
+  margin: 0 0.5ch;
+}
+
 .st.right {
   border-right: none;
   border-left: 1px solid var(--line);

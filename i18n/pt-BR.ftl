@@ -480,3 +480,10 @@ edit-gone = Esta linha foi excluída enquanto você editava. Nada foi gravado �
 edit-day-bad = Um dia do mês vai de 1 a 31.
 grep-needs-a-term = grep precisa de algo para buscar
 cursor-on-fold = isso é um grupo, não uma linha
+
+## `x` - the selection cell in the statusline
+selection-count = { $n } de { $total } { $n ->
+    [one] selecionada
+   *[other] selecionadas
+}
+selection-no-amount = { $n } sem valor

@@ -512,3 +512,7 @@ edit-gone = That row was deleted while you were editing. Nothing was written —
 edit-day-bad = A day of the month is 1 to 31.
 grep-needs-a-term = grep needs something to search for
 cursor-on-fold = that is a group, not a row
+
+## `x` - the selection cell in the statusline
+selection-count = { $n } of { $total } selected
+selection-no-amount = { $n } without amount

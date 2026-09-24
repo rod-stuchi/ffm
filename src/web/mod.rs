@@ -8,6 +8,7 @@ pub mod import;
 pub mod ledger;
 pub mod log;
 pub mod rules;
+pub mod selection;
 pub mod session;
 pub mod settings;
 pub mod template;
@@ -55,6 +56,8 @@ pub fn router(state: AppState) -> Router {
         // Files. Three distinct actions rather than one upload plus a
         // question: each kind has its own fixed name on disk and its own
         // effect on state.
+        // The statusline's selection cell - `x`, summed like the pane header.
+        .route("/tx/selection", get(selection::cell))
         .route("/tx/{id}/file/{kind}", get(files::open).post(files::upload))
         // The `P` carousel's stage, and a PDF's pages as images — see
         // `files::FileView` for why the browser's PDF viewer is not used.
