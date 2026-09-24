@@ -1,6 +1,6 @@
 //! `gl` — the change log for one row, in a side pane.
 //!
-//! The same 420px column, arrow and cursor-follows behaviour the rule editor
+//! The same 420px column, arrow and cursor-follows behavior the rule editor
 //! uses, so nothing new has to be learned to read it. **Read-only**: no
 //! drafts, no save, nothing here writes.
 //!

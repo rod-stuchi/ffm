@@ -13,7 +13,7 @@ const RESERVED: &[&str] = &["delete"];
 ///
 /// Accents are kept rather than transliterated: a household filing under
 /// `Água` gets `água`, which every filesystem this runs on handles, and which
-/// stays recognisable when they open the folder themselves — the vault being
+/// stays recognizable when they open the folder themselves — the vault being
 /// human-browsable is the entire reason the filesystem is authoritative.
 pub fn slugify(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn keeps_accents_so_the_folder_stays_recognisable() {
+    fn keeps_accents_so_the_folder_stays_recognizable() {
         // The household opens this directory themselves; `agua` would be a
         // worse name than `água` for someone looking for the water bill.
         assert_eq!(slugify("Água"), "água");

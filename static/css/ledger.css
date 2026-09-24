@@ -198,7 +198,7 @@
   background: var(--line);
 }
 
-/* The mode badge: accent for "you are here", the warning colour while admin
+/* The mode badge: accent for "you are here", the warning color while admin
  * powers are switched off — so the state is never ambiguous at a glance. */
 .badge {
   font-family: var(--mono);
@@ -327,7 +327,7 @@
  * still collect the stage's `gap` on either side. Four members means 64px of
  * phantom gap in a ledger showing no column at all: invisible while
  * everything is left-aligned, and plainly wrong in tabs mode, where it pushes
- * the one centred pane a half-gap off the middle.
+ * the one centered pane a half-gap off the middle.
  *
  * `:empty` is strict about whitespace, which is why the template writes the
  * div with nothing between its tags. A swap fills it and it comes straight
@@ -531,7 +531,7 @@
   padding: 6px 0 5px 34px;
 }
 
-/* The direction, before the words say it — in the colour that direction
+/* The direction, before the words say it — in the color that direction
  * already wears in the rows above. Bigger than the label it sits beside,
  * because it is the thing being glanced at. */
 .addsign {
@@ -547,7 +547,7 @@
 }
 
 /* Plain ink, which is what a spend's amount is written in: only income and
- * the deltas take a semantic colour, so a minus in red would say something
+ * the deltas take a semantic color, so a minus in red would say something
  * the ledger does not. */
 .addsign.is-out {
   color: var(--ink);
@@ -813,7 +813,7 @@
 /* --- attach a file ------------------------------------------------------- */
 
 /* Anchored to the control that opened it: the ledger scrolls sideways, so a
- * centred menu would end up pointing at nothing. */
+ * centered menu would end up pointing at nothing. */
 .filemenu {
   position: fixed;
   z-index: 45;
@@ -1151,10 +1151,10 @@
 /* --- folds --------------------------------------------------------------- */
 
 /* A framed container and a text label — deliberately NOT a per-category
- * colour: `bucket` is open-vocabulary and unbounded, while the palette is
+ * color: `bucket` is open-vocabulary and unbounded, while the palette is
  * eleven tokens with pos/neg/accent/info already spoken for. An unbounded set
  * of user-typed strings either collides with those meanings or needs
- * hash-based colours for no real gain over a frame. */
+ * hash-based colors for no real gain over a frame. */
 .fold {
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -1344,7 +1344,7 @@
   min-width: 9ch;
 }
 
-/* --neg, the same colour `scheduled overdue` already uses: a third meaning
+/* --neg, the same color `scheduled overdue` already uses: a third meaning
  * would need a twelfth token, and this is the same fact — something is owed
  * and nothing proves it was paid. */
 .dot {
@@ -1555,7 +1555,7 @@
 
 /* The file, as images the carousel sizes itself — see `files::FileView`.
  * `--z` is the zoom: at 1 the pages fill the view's width, above it they
- * overflow and the view scrolls to them, below it they shrink and centre.
+ * overflow and the view scrolls to them, below it they shrink and center.
  * Width, not CSS `zoom`: a zoomed box whose children are 100% wide stays the
  * width of its parent, so the pages would not grow at all. */
 .cview {
@@ -1620,7 +1620,7 @@
 .kmap {
   display: grid;
   /* Sized to its own content: a fixed-width key column overflows onto its
-   * neighbour the moment a command is longer than it expected. */
+   * neighbor the moment a command is longer than it expected. */
   grid-template-columns: minmax(64px, max-content) 1fr;
   gap: 5px 14px;
   align-items: baseline;

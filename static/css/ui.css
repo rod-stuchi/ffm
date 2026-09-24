@@ -6,7 +6,7 @@
  * literally the same message channel, which is the point: there is one way the
  * app talks to you before and after you sign in.
  *
- * Every colour is a var(--token); `just css-check` enforces that.
+ * Every color is a var(--token); `just css-check` enforces that.
  */
 
 * {
@@ -98,7 +98,7 @@ kbd {
 }
 
 /* A section rule inside a long form — the same frame-and-label language groups
- * use, rather than a per-section colour. */
+ * use, rather than a per-section color. */
 .sect {
   margin: 20px 0 13px;
   display: flex;
@@ -456,7 +456,7 @@ legend {
 }
 
 /* `x` — the selection's count and sum. Written like the pane header: the
- * labels quiet, the money in the side's own colour. It sits beside the
+ * labels quiet, the money in the side's own color. It sits beside the
  * message rather than replacing it, and takes no room until something in the
  * focused pane is selected. The `--info` rule on its edge is the channel a
  * selected row already wears — "what I picked" — so the two read as one. */

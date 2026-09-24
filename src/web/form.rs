@@ -16,7 +16,7 @@
 //! from one `FieldErrors` rather than written twice.
 //!
 //! **Focus moves to the first bad field, server-side.** `/login` already did
-//! this for its single field; here it is one behaviour for every form, and it
+//! this for its single field; here it is one behavior for every form, and it
 //! needs no JavaScript — the template asks `errors.focus("password")` and
 //! renders `autofocus` on exactly one input. A form with no errors autofocuses
 //! whatever it normally would.

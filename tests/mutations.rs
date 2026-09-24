@@ -482,7 +482,7 @@ async fn the_recorded_sort_key_stays_out_of_the_log_pane() {
 }
 
 #[tokio::test]
-async fn undoing_a_reorder_puts_the_row_back_between_its_neighbours() {
+async fn undoing_a_reorder_puts_the_row_back_between_its_neighbors() {
     let pool = pool().await;
     let me = household(&pool).await;
     add(&pool, me, TxKind::Out, "Energia", 34362).await;

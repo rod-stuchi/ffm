@@ -64,7 +64,7 @@ VALUES
 -- title — in the previous period, never stored.
 --
 -- sort_key is a fractional index, not a position: moving a row between two
--- neighbours writes ONE row (the midpoint), so two people reordering at once
+-- neighbors writes ONE row (the midpoint), so two people reordering at once
 -- do not renumber each other's ledger. These are hand-written, so they follow
 -- the one invariant domain::sortkey rests on: a key never ends in '0', because
 -- such a key has nothing below it inside its own prefix and "insert above this

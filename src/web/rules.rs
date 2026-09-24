@@ -1,7 +1,7 @@
 //! The rule pane — `A` / `I` create, `E` edits.
 //!
 //! **A column in the ledger's grid, not a modal.** The rule form outgrew a
-//! centred dialog, and a dialog hides the very ledger you are editing — the
+//! centered dialog, and a dialog hides the very ledger you are editing — the
 //! same argument that made `:household` a vsplit. The pane sits right after the
 //! member pane it belongs to and pushes later panes right; the ledger scrolls
 //! sideways rather than hiding one, because a household can have more than two
@@ -142,7 +142,7 @@ pub struct MonthsReadback {
     /// The sentence: "ten months a year · Nov and Dec skipped", or the parse
     /// error, or "every month".
     line: String,
-    /// Colours the line as a refusal rather than a description.
+    /// Colors the line as a refusal rather than a description.
     bad: bool,
 }
 

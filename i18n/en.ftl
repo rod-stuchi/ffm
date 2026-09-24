@@ -119,7 +119,7 @@ setup-household-hint = Shown on the sign-in page.
 # second place for it to disagree.
 setup-note-axes = Dates are always { $format }. Money follows the currency you pick. Language only changes the words.
 setup-aside-signin = you will sign in with this
-setup-theme = Colour scheme
+setup-theme = Color scheme
 setup-theme-hint = Change it any time in :profile.
 setup-line-numbers = Line numbers
 setup-nu-relative = Relative
@@ -264,7 +264,7 @@ profile-appearance = Appearance
 profile-ledger = Ledger
 profile-layout = Layout
 profile-privacy = New rows
-profile-theme = Colour scheme
+profile-theme = Color scheme
 profile-line-numbers = Line numbers
 profile-panes = Panes
 profile-min-split = Split below this width, use tabs

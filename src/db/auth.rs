@@ -247,7 +247,7 @@ pub async fn revoke_all_sessions(
 /// sender in this app, and `email` plays no part in signing in.
 ///
 /// Returns `None` for both a wrong name and a wrong password, deliberately —
-/// not as security theatre (this document already declines rate limiting) but
+/// not as security theater (this document already declines rate limiting) but
 /// because both lead to the same next action, and the copy says what that is.
 pub async fn authenticate(
     pool: &SqlitePool,
@@ -818,7 +818,7 @@ mod tests {
     }
 
     #[test]
-    fn a_device_label_names_something_a_person_would_recognise() {
+    fn a_device_label_names_something_a_person_would_recognize() {
         let ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) \
                   AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
         assert_eq!(device_label(Some(ua)), "Safari on iPhone");

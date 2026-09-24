@@ -42,9 +42,9 @@ pub async fn add(pool: &SqlitePool, actor: Actor, new: NewTransaction<'_>) -> sq
     let period = new.period.to_string();
     let mut tx = pool.begin().await?;
 
-    // The neighbour this row is going next to. Only that one row's key is read,
+    // The neighbor this row is going next to. Only that one row's key is read,
     // and none is rewritten — the whole point of a fractional index.
-    let neighbour: Option<String> = if new.kind.is_income() {
+    let neighbor: Option<String> = if new.kind.is_income() {
         sqlx::query_scalar!(
             r#"SELECT min(sort_key) AS "k: String" FROM transactions
                WHERE member_id = ?1 AND period = ?2 AND deleted_at IS NULL"#,
@@ -64,7 +64,7 @@ pub async fn add(pool: &SqlitePool, actor: Actor, new: NewTransaction<'_>) -> sq
         .await?
     };
 
-    let sort_key = match (new.kind.is_income(), neighbour.as_deref()) {
+    let sort_key = match (new.kind.is_income(), neighbor.as_deref()) {
         (true, Some(first)) => sortkey::before(first),
         (false, Some(last)) => sortkey::after(last),
         (_, None) => sortkey::between(None, None),
@@ -509,7 +509,7 @@ pub async fn reorder(
 
     let Some(row) = row else { return Ok(false) };
 
-    // Manual order is what is being moved, so the neighbours are read in
+    // Manual order is what is being moved, so the neighbors are read in
     // manual order regardless of how the pane happens to be displayed. A
     // derived view refuses the gesture before it ever reaches here.
     let keys: Vec<String> = sqlx::query_scalar!(
@@ -527,7 +527,7 @@ pub async fn reorder(
     };
     // A count bigger than the distance available CLAMPS, the way `99j` lands
     // on the last line rather than refusing to move at all. Refusing was the
-    // first behaviour and it was silent: `99J` on the first row did nothing,
+    // first behavior and it was silent: `99J` on the first row did nothing,
     // with an empty statusline, which reads as a broken key rather than as a
     // row already where it was asked to go.
     let to = (from as i64 + delta).clamp(0, keys.len() as i64 - 1);
@@ -540,7 +540,7 @@ pub async fn reorder(
     let to = to as usize;
 
     // Landing between the two rows that will end up on either side. Moving
-    // DOWN means the target's neighbour is the one after it; moving up, the
+    // DOWN means the target's neighbor is the one after it; moving up, the
     // one before.
     let (before, after) = if delta > 0 {
         (

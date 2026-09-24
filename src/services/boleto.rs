@@ -82,7 +82,7 @@ impl Kind {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Barcode {
     pub kind: Kind,
-    /// The 44 digits, normalised — this is what gets stored, and what makes
+    /// The 44 digits, normalized — this is what gets stored, and what makes
     /// re-importing the same bill idempotent.
     pub raw: String,
     pub amount: Amount,

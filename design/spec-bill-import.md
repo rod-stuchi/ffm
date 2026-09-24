@@ -247,7 +247,7 @@ integers throughout.
 language or the household's currency setting.** Everything here is *input
 parsing* of a Brazilian document: a boleto is issued in Brazil, in `R$`, with
 comma-decimal — that's a fact about the paper, not a display preference. A future
-i18n pass that "fixes" this to honour `member_settings.language`, or a household
+i18n pass that "fixes" this to honor `member_settings.language`, or a household
 that switches its display currency to `USD`, would start misreading real bills.
 The three-axis rule in `CLAUDE.md`'s Conventions section governs what the app
 *shows*; this governs what it *reads*, and the two are unrelated.

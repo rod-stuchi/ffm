@@ -32,7 +32,7 @@ pub enum Mark {
     Disc { tone: Tone, glyph: &'static str },
     /// Outlined disc — asserted, not proven. `manual paid`.
     Outline { tone: Tone, glyph: &'static str },
-    /// The elapsed-time ring, optionally with a glyph at its centre.
+    /// The elapsed-time ring, optionally with a glyph at its center.
     Ring {
         progress: f32,
         tone: Tone,
@@ -46,7 +46,7 @@ pub enum Mark {
     Error,
 }
 
-/// Which semantic colour a mark uses. Deliberately not the accent: the accent
+/// Which semantic color a mark uses. Deliberately not the accent: the accent
 /// means "you are here", and a money fact must never borrow it.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Tone {
@@ -138,7 +138,7 @@ pub struct BarcodePage {
     pub in_window: bool,
 }
 
-/// The month-over-month delta. The arrow is direction; the colour is whether
+/// The month-over-month delta. The arrow is direction; the color is whether
 /// that direction is good news, which inverts for income.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Delta {
@@ -499,7 +499,7 @@ impl LedgerRow {
     // -- delta -----------------------------------------------------------
 
     /// Red up, green down — for a bill. Income inverts: more money arriving is
-    /// good news, so the arrow keeps meaning direction while the colour flips.
+    /// good news, so the arrow keeps meaning direction while the color flips.
     ///
     /// Never compares a projection to a fact.
     pub fn delta(&self) -> Option<Delta> {
@@ -1171,7 +1171,7 @@ mod tests {
     // -- delta -----------------------------------------------------------
 
     #[test]
-    fn delta_colour_inverts_for_income_but_the_arrow_does_not() {
+    fn delta_color_inverts_for_income_but_the_arrow_does_not() {
         let mut bill = base();
         bill.amount_cents = Some(Cents(34362));
         bill.prev_amount_cents = Some(Cents(28140));

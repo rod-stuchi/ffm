@@ -66,7 +66,7 @@ pub struct MemberSettings {
     pub language: Lang,
     /// The palette. Light-versus-dark is **not** here: that is a property of
     /// the device, so it lives in the `ffm.theme` cookie. Keeping them apart is
-    /// what lets `/login` honour your light/dark without knowing who you are.
+    /// what lets `/login` honor your light/dark without knowing who you are.
     pub theme: ThemeName,
     pub theme_overrides: Overrides,
     pub line_numbers: String,
@@ -83,7 +83,7 @@ pub struct MemberSettings {
     pub ledger_group: String,
     pub group_fold_default: String,
     /// `None` = follow the household's policy, which is a real third state and
-    /// is rendered as one: three radios, the first labelled with what it
+    /// is rendered as one: three radios, the first labeled with what it
     /// currently resolves to.
     pub default_visibility: Option<String>,
 }

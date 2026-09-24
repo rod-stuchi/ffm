@@ -254,7 +254,7 @@ mod tests {
             "7c3f-rodrigo/consumo/energia/2026/09_brl122.94.pdf"
         );
         // The app's own suffixes stay plain, so the three kinds remain
-        // recognisable at a glance.
+        // recognizable at a glance.
         assert_eq!(
             file(&tax(), sep(), Kind::Scheduled, "pdf", money),
             "7c3f-rodrigo/consumo/energia/2026/09_scheduled.pdf"
@@ -281,7 +281,7 @@ mod tests {
             p.chars().all(|c| c.is_alphanumeric() || "._-/".contains(c)),
             "{p}"
         );
-        assert!(p.ends_with(".pdf"), "the extension is normalised: {p}");
+        assert!(p.ends_with(".pdf"), "the extension is normalized: {p}");
     }
 
     #[test]

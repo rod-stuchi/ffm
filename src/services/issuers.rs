@@ -41,7 +41,7 @@ pub struct Issuer {
     /// parsed.
     #[serde(default)]
     pub kind: Option<String>,
-    /// A hint for the Bucket / Bill name of a rule created from a recognised
+    /// A hint for the Bucket / Bill name of a rule created from a recognized
     /// issuer. Never used to bind a file to an existing rule — that binding is
     /// always explicit, in the rule's own editor.
     #[serde(default)]

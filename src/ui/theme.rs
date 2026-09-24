@@ -13,7 +13,7 @@
 //!    cannot, and `ffm.theme = system` means it genuinely does not know which
 //!    mode the device is in — so [`RenderedTheme`] carries *both* and the
 //!    template emits bare `:root`, the `prefers-color-scheme` block, and the
-//!    `[data-theme="dark"]` block. No colour ever has its only definition
+//!    `[data-theme="dark"]` block. No color ever has its only definition
 //!    inside a media or attribute block, which is the rule from `CLAUDE.md`.
 //!
 //! 2. **One derivation function, so the preview cannot drift.** The theme
@@ -465,8 +465,8 @@ impl Overrides {
                         .join(", ")
                 )
             })?;
-            if !is_css_colour(&v) {
-                return Err(format!("`{k}` is not a colour: {v}"));
+            if !is_css_color(&v) {
+                return Err(format!("`{k}` is not a color: {v}"));
             }
             out.insert(token, v);
         }
@@ -530,7 +530,7 @@ fn shadow_md(mode: Mode) -> &'static str {
 /// The eleven tokens plus every derivation, as `(css-var-name, value)` pairs
 /// ready to emit into a `<style>` block.
 ///
-/// **This is the only place a derived colour is defined.** The app's `<head>`
+/// **This is the only place a derived color is defined.** The app's `<head>`
 /// and the picker's preview both come through here, which is what makes it
 /// impossible for the preview to show something the real thing would not.
 pub fn derive(p: &ResolvedPalette, mode: Mode) -> Vec<(&'static str, String)> {
@@ -572,7 +572,7 @@ pub fn derive(p: &ResolvedPalette, mode: Mode) -> Vec<(&'static str, String)> {
 /// Carrying both is not redundancy: `ModePref::System` means the server does
 /// not know which one the device will use, so it must ship the pair and let
 /// `prefers-color-scheme` choose. Shipping only the "current" one is how a
-/// colour ends up defined solely inside a media block.
+/// color ends up defined solely inside a media block.
 pub struct RenderedTheme {
     pub light: Vec<(&'static str, String)>,
     pub dark: Vec<(&'static str, String)>,
@@ -616,7 +616,7 @@ impl fmt::Display for RenderedTheme {
     }
 }
 
-fn is_css_colour(v: &str) -> bool {
+fn is_css_color(v: &str) -> bool {
     let h = v.strip_prefix('#');
     matches!(h, Some(h) if matches!(h.len(), 3 | 4 | 6 | 8) && h.chars().all(|c| c.is_ascii_hexdigit()))
 }
@@ -739,7 +739,7 @@ mod tests {
     }
 
     #[test]
-    fn no_colour_is_defined_only_inside_a_media_block() {
+    fn no_color_is_defined_only_inside_a_media_block() {
         // The CLAUDE.md rule, asserted mechanically: everything in the dark
         // block must also exist in the bare `:root` light block, or a viewer
         // whose OS is light and whose cookie says nothing gets an undefined var.

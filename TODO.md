@@ -19,7 +19,7 @@ typed Fluent catalog), `b3a4b0e` (domain types, `ui::fmt`, the palette table,
 decisions recorded, Tailwind wired, lib/bin split).
 
 State at the end of it: `just check` green — 68 tests, zero clippy warnings, the
-schema applies inside a transaction, no hardcoded colour below `tokens.css`. No
+schema applies inside a transaction, no hardcoded color below `tokens.css`. No
 database, no auth: every row state renders from a pure fixture.
 
 ---
@@ -277,7 +277,7 @@ unpaid, one added by hand being found, the supersede, and the window renewal
 leaving last year's pages exactly as they were.
 
 **Provisional, and flagged as such:** the *gesture* for attaching a file. The
-spec never designed one ("there's no separate upload flow modelled for this
+spec never designed one ("there's no separate upload flow modeled for this
 yet"), so the focused row grows a `+` control opening a three-item menu. The
 server side is settled — three endpoints, one per kind — but the affordance is
 a placeholder for a real design decision, listed below.
@@ -305,7 +305,7 @@ a placeholder for a real design decision, listed below.
   only income varies.
 - **A projection gets no delta**: comparing a guess against a fact is not a
   comparison worth drawing. Confirmed, it compares like any other recurring
-  income, with the colour inverted so a raise never paints itself red.
+  income, with the color inverted so a raise never paints itself red.
 - **The rule pane's estimate box mirrors the computed-path box** — the figure
   bright on the first line, the months it came from dim on the second, both
   recomputing as the basis changes, before anything is saved.
@@ -424,7 +424,7 @@ reintroducing the bug.
 - **Grouping is real Vim folds**: `za`/`zo`/`zc` toggle one, `zR`/`zM` all.
   The server renders the whole grouped, subtotaled fragment and folding only
   hides what is already there, so fold state is Alpine's and nothing else's.
-  Framed and labelled rather than colour-coded, because `bucket` is
+  Framed and labeled rather than color-coded, because `bucket` is
   open-vocabulary while the palette is eleven tokens already spoken for.
 - **The subtotal never disappears, and that is the report.** `zM` turns the
   ledger into a per-category summary with no second screen built for it.
@@ -528,7 +528,7 @@ and materialization were.
 - **A dot, not a message**: on the month-picker trigger, and again on each
   flagged month's cell inside it. Ambient and persistent like every other
   status in this app, rather than a toast that gets dismissed and forgotten.
-  Clicking a flagged cell jumps there — the picker's existing behaviour, so no
+  Clicking a flagged cell jumps there — the picker's existing behavior, so no
   new command was needed.
 - **The month picker itself**, which the badge needed somewhere to live.
 - **`services::backup`** — `VACUUM INTO`, not a file copy. WAL keeps recent
@@ -543,7 +543,7 @@ and materialization were.
 **Also: the `layout_*` settings are finally applied.** They have been collected
 since phase 4 and written since phase 9 without reaching the page — including
 `layout_max_width`, which is why one pane stretched across a whole viewport and
-put the amount a metre from the name it belongs to. The cap, the gap and the
+put the amount a meter from the name it belongs to. The cap, the gap and the
 `auto → tabs` threshold now render into **one media query from the member's own
 row**: resolved in CSS, never on the server and never in Alpine, either of which
 would be wrong on first paint and wrong again on every resize.
@@ -642,7 +642,7 @@ exclusions alone imply every month. The read-back under it is rendered by the
 server on every keystroke, so the preview and the parser cannot disagree.
 It applies to income rules too.
 
-### 3. Split mode beyond two panes ✅ — it already generalised
+### 3. Split mode beyond two panes ✅ — it already generalized
 
 Closed in prose rather than built. The stage is an N-pane scrolling flex row,
 `just seed` builds three members, tabs mode is reachable by name. The middle

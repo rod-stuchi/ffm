@@ -389,7 +389,7 @@ async fn only_the_four_allowed_extensions_are_kept() {
             "{name}"
         );
     }
-    // And the extension is normalised, so a JPG and a jpg are one file.
+    // And the extension is normalized, so a JPG and a jpg are one file.
     receipts::store(
         &pool,
         &root,

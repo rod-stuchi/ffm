@@ -264,7 +264,7 @@ fn scan_text(text: &str, code: &str, key: &str, errors: &mut Vec<String>) {
 /// `$5`, `5 $`, `BRL 10`, `10 USD` — a bare symbol or ISO code doing money's job.
 ///
 /// "Adjacent" ignores intervening spaces on purpose: `R$ 10` and `10 USD` are
-/// both money, and only the digit's nearest non-space neighbour matters.
+/// both money, and only the digit's nearest non-space neighbor matters.
 fn has_currency_adjacent_digit(text: &str) -> bool {
     let chars: Vec<char> = text.chars().collect();
 

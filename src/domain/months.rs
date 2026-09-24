@@ -1,7 +1,7 @@
 //! Which months of the year a recurring rule actually runs.
 //!
 //! Some bills only apply part of the year, every year: São Paulo's IPTU bills
-//! in ten instalments (Jan–Oct) and then starts again the next January; a
+//! in ten installments (Jan–Oct) and then starts again the next January; a
 //! school fee runs Feb–Dec and skips the holidays. The rule still recurs
 //! forever — it just skips certain months.
 //!

@@ -278,7 +278,7 @@ async fn an_unconfirmed_projection_gets_no_delta() {
     assert!(row.delta().is_none());
 
     // Confirmed, it compares like any other recurring income — and for income
-    // the colour inverts, because more money arriving is good news.
+    // the color inverts, because more money arriving is good news.
     settle(&pool, "2026-09", 475_000, true).await;
     let confirmed = &pane(&pool, me, "2026-09").await.rows[0];
     let delta = confirmed.delta().expect("a fact to compare");

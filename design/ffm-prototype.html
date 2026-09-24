@@ -214,7 +214,7 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .p-role{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--accent);border:1px solid var(--accent-line);border-radius:4px;padding:1px 5px;background:var(--accent-soft);
   cursor:pointer}
-/* Preview state gets its own colour channel (info, not accent) on purpose —
+/* Preview state gets its own color channel (info, not accent) on purpose —
    accent already means "you are here" everywhere else in this app (focus
    rail, gutter zero, mode badge); reusing it here would make "I'm admin"
    and "I'm previewing as non-admin" look like the same kind of fact when
@@ -282,7 +282,7 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 .fbadge:hover,.fbadge:focus-visible{border-color:var(--accent-line);background:var(--surface);color:var(--ink)}
 /* A spansPeriod bill whose computed page falls outside the uploaded file's
    page count — the window has run out and needs a fresh upload. Same
-   warning channel as scheduled-overdue, not a new colour meaning. */
+   warning channel as scheduled-overdue, not a new color meaning. */
 .fbadge-warn{border-color:var(--neg);color:var(--neg)}
 .fbadge-warn:hover,.fbadge-warn:focus-visible{border-color:var(--neg);color:var(--neg);background:var(--neg-soft)}
 .fbadge kbd{flex:none;font-size:9px;line-height:1.25;padding:1px 4px;border-radius:4px;
@@ -321,7 +321,7 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 .pv-path{font-family:var(--mono);font-size:12px;color:var(--ink-2);text-align:center;word-break:break-all}
 /* One barcode file, several months — see barcodePageFor(). Same warning
    channel as scheduled-overdue when the occurrence falls outside the
-   currently-uploaded file's page count, not a new colour meaning. */
+   currently-uploaded file's page count, not a new color meaning. */
 .pv-page{font-size:13px;color:var(--ink);text-align:center;max-width:44ch}
 .pv-page b{font-family:var(--mono)}
 .pv-page.warn{color:var(--neg)}
@@ -368,7 +368,7 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
    with each other or with the status above — so unlike the file rail (which
    omits a control outright when that file doesn't exist), both icons are
    always present here. Presence alone would make every row look recurring
-   *and* private at a glance; only opacity+colour tell them apart, the same
+   *and* private at a glance; only opacity+color tell them apart, the same
    "brighter = active" language `.row.focus` already uses elsewhere. */
 .mflags{display:inline-flex;gap:5px;align-items:center;flex:none}
 .mflag{width:12px;height:12px;display:inline-flex;color:var(--ink-3);opacity:.25}
@@ -382,7 +382,7 @@ body:not(.kbd-nav) .row:hover .entry{background:var(--surface-3)}
 .amt .v{font-family:var(--mono);font-size:14px;font-weight:500;font-variant-numeric:tabular-nums}
 .amt .v.in{color:var(--pos)}
 /* A projected amount is deliberately quieter than a real one — the tilde
-   says it, the colour stops it competing with facts on the same screen. */
+   says it, the color stops it competing with facts on the same screen. */
 .amt .v.est{color:var(--ink-2);font-weight:400}
 .amt .v.in.est{color:color-mix(in srgb, var(--pos) 55%, var(--ink-3))}
 .amt .d{font-family:var(--mono);font-size:10.5px;font-variant-numeric:tabular-nums;margin-top:1px}
@@ -776,7 +776,7 @@ input.i:focus,select.i:focus{outline:none;border-color:var(--accent);box-shadow:
           <label class="switch">
             <input type="checkbox" id="trackOn" checked>
             <span>Track receipt on disk
-              <span class="d">Off = no filesystem proof — you can still tick a manual "paid" box, shown in a different colour from a verified receipt.</span>
+              <span class="d">Off = no filesystem proof — you can still tick a manual "paid" box, shown in a different color from a verified receipt.</span>
             </span>
           </label>
         </div>
@@ -1231,7 +1231,7 @@ function logFor(t, p, mi, filter){
 function isAdminNow(){ return MEMBERS[0].role === 'admin' && !S.previewNonAdmin; }
 /* A private row is hidden from other members but never from its own owner
    or the admin — this is the one rule that actually changes visible
-   behaviour when admin rights are switched off in preview. Rodrigo's own
+   behavior when admin rights are switched off in preview. Rodrigo's own
    pane (p===0) is never affected: owning a row already grants visibility,
    independent of role. */
 function isPrivacyHidden(p, t){ return !!(t && t.private && p !== 0 && !isAdminNow()); }
@@ -1393,7 +1393,7 @@ function openFilePreview(startN){
   S.filePreview = { p: S.panel, i: S.focus[S.panel], n, zoom: 100 };
   renderFilePreview();
 }
-/* Full-viewport, not the standard centred dialog — a boleto's barcode or a
+/* Full-viewport, not the standard centered dialog — a boleto's barcode or a
    QR code needs to be readable, or literally scannable off the screen with
    a phone camera, which the small modal this started as never had room
    for. #modal/#scrim carry the .pv class only while this is the open
@@ -1469,7 +1469,7 @@ function deltaHTML(t){
   }
   if(t.delta === 0) return '<div class="d flat">— 0%</div>';
   const up = t.delta > 0;
-  /* The arrow is direction; the colour is whether it's good news. More money
+  /* The arrow is direction; the color is whether it's good news. More money
      out is bad, more money in is good — so income inverts, or a raise would
      paint itself red. */
   const good = t.kind === 'in' ? up : !up;
@@ -1817,12 +1817,12 @@ function closeModal(){
    shape real spatial-nav (TV remotes, gamepad UIs) uses: first keep only
    fields whose box actually starts on the correct side (a field's left edge
    must clear the current field's left edge to count as "right" of it — a
-   full-width field one row down can sit centred close enough to fail this
-   and get excluded, where a naive centre-distance metric would wrongly grab
+   full-width field one row down can sit centered close enough to fail this
+   and get excluded, where a naive center-distance metric would wrongly grab
    it); then, among those, prefer ones that overlap the current field on the
    cross axis (same row for h/l, same column for j/k) before falling back to
    nearest-by-distance so j/k tracks straight down a column instead of
-   drifting into a wider neighbour. */
+   drifting into a wider neighbor. */
 const MODAL_DIRS = {h:'left', j:'down', k:'up', l:'right'};
 function formFields(box){
   return Array.from(box.querySelectorAll('input,select,textarea'))
@@ -1853,7 +1853,7 @@ function fieldFocusMove(box, dir){
      of "same row/column" — the cross-axis term only needs to break near-ties
      (e.g. picking the closer of two equally-adjacent fields in the row
      above). Weighted heavily there, it would let a wide full-row field's
-     far-off centre outscore a narrow field's much smaller primary-axis
+     far-off center outscore a narrow field's much smaller primary-axis
      distance, which is exactly the bug this function used to have: pressing
      down from a 1-of-3 column field jumped clean over the very next
      full-width row into the one after it. The unaligned fallback pool has
@@ -1861,7 +1861,7 @@ function fieldFocusMove(box, dir){
      approximate "closest in roughly the right direction". */
   /* Sideways only ever means "same row" — with nothing left or right on this
      row, that's the form's edge (which the rule pane uses to hand focus
-     back to the ledger), not a licence to jump to some field further down. */
+     back to the ledger), not a license to jump to some field further down. */
   if(horiz && !aligned.length) return false;
   const pool = aligned.length ? aligned : inDirection;
   const crossWeight = aligned.length ? 0.2 : 2.2;
@@ -2037,7 +2037,7 @@ function blankRuleFields(kind){
 
 /* Removing a row out from under the cursor has to keep the cursor on the
    same row it was on, not the same index — otherwise dropping a draft row
-   above it silently moves focus onto its neighbour. */
+   above it silently moves focus onto its neighbor. */
 function removeRowKeepFocus(mi, p, id){
   const list = MONTHS[mi].m[p], at = list.findIndex(t => t.id === id);
   if(at < 0) return;
@@ -2246,7 +2246,7 @@ function ruleFormHTML(t, d){
          disk — income's one way to confirm without a file. */
       : income
         ? '<label class="switch"><input type="checkbox" id="rManualPaid" data-f="manualPaid"' + (f.manualPaid ? ' checked' : '') + '>'
-          + '<span>Mark as received manually<span class="d">no file to prove it — shown in a different colour '
+          + '<span>Mark as received manually<span class="d">no file to prove it — shown in a different color '
           + 'from a verified payslip</span></span></label>'
         : '')
     + (c ? '<div class="notebox">A brand-new rule — nothing in the ledger yet. Future months materialize on their own from here.</div>'
@@ -2691,7 +2691,7 @@ document.addEventListener('keydown', e => {
   }
   if(inField && e.target.id === 'cmdInput'){
     if(e.key === 'Enter'){ e.preventDefault(); runCmd($('#cmdInput').value); }
-    if(e.key === 'Escape'){ e.preventDefault(); closeCmd(); say('cancelled'); }
+    if(e.key === 'Escape'){ e.preventDefault(); closeCmd(); say('canceled'); }
     return;
   }
   if($('#scrim').classList.contains('on')){
@@ -3186,7 +3186,7 @@ const SPECS = [
     p:'A <code>_scheduled</code> file exists — proof a payment was set up ahead of the due date. It is optional: a same-day payment out of the balance skips straight to the receipt, no scheduling step to record. Calendar glyph, <code>--info</code> ring.' },
   { n:'d', h:'Scheduled, now overdue',
     r:()=>specRow(T({title:'Água · Sabesp', status:'scheduled-overdue', amount:108.40, day:14, recurring:true, tracked:true, due:'18/07/2026'})),
-    p:'The due date passed and no receipt landed — a promise that was never confirmed kept. This is a distinct warning state, not the same grey <code>pending</code> ring: something here needs checking.' },
+    p:'The due date passed and no receipt landed — a promise that was never confirmed kept. This is a distinct warning state, not the same gray <code>pending</code> ring: something here needs checking.' },
   { n:'e', h:'Paid, receipt confirmed',
     r:()=>specRow(T({title:'Energia · Enel SP', status:'paid', amount:343.62, day:11, recurring:true, tracked:true, delta:20})),
     p:'The receipt file exists at the computed path — <code>energia/2026/07.pdf</code>. Solid green mark, checkered-flag date. This is the only way a tracked row becomes paid; there is no manual tick. If a scheduled file existed for this period, uploading the receipt just moved it into <code>.delete/</code>.' },
@@ -3195,7 +3195,7 @@ const SPECS = [
       + specRow(T({title:'Uber', status:'plain', amount:112.60, day:25, delta:27}))
       + specRow(T({title:'Farmácia · Drogasil', status:'plain', amount:98.70, day:19, delta:-54}))
       + specRow(T({title:'Internet · Vivo Fibra', status:'paid', amount:139.90, day:10, recurring:true, tracked:true, delta:0})) + '</div>',
-    p:'Against the same line last month. Red up, green down, grey dash for unchanged — a window function, not a manual diff.' },
+    p:'Against the same line last month. Red up, green down, gray dash for unchanged — a window function, not a manual diff.' },
   { n:'g', h:'Untracked recurring',
     r:()=>specRow(T({title:'Netflix', status:'plain', amount:59.90, day:21, recurring:true})),
     p:'Tracking opted out. There is no filesystem proof either way, so the row carries no paid/unpaid state at all — just the recurrence glyph <code>↻</code> and a hollow mark.' },
@@ -3256,7 +3256,7 @@ const SPECS = [
           barcodePath:'energia/2026/07_barcode.pdf', receiptPath:'energia/2026/07.pdf'}), {focus:true})
       + specRow(T({title:'Água · Sabesp', status:'scheduled-overdue', amount:108.40, day:14, recurring:true, tracked:true, due:'18/07/2026',
           barcodePath:'sabesp/2026/07_barcode.pdf', scheduledPath:'sabesp/2026/07_scheduled.pdf'})) + '</div>',
-    p:'Fixed numbering by kind, always: <kbd>1</kbd> is the bill, <kbd>2</kbd> is scheduled, <kbd>3</kbd> is the receipt — never renumbered by what exists on a given row, which is what makes <code>g1</code>/<code>g2</code>/<code>g3</code> learnable everywhere. Only rendered when that file exists — a row never shows both <kbd>2</kbd> and <kbd>3</kbd>, since a receipt supersedes and removes the scheduled file. Each control is a neutral stroke icon with its keycap built in, not a colour-coded emoji or a floating notification bubble — files are actions, not payment state, so the rail stays subordinate to the status mark and never competes with it for attention. On the focused row the controls expand to show their labels (Bill, Scheduled, Receipt); every other row stays icon-only, and narrow screens keep everything icon-only regardless of focus. Click a control, or press its number — same action, new tab.' }
+    p:'Fixed numbering by kind, always: <kbd>1</kbd> is the bill, <kbd>2</kbd> is scheduled, <kbd>3</kbd> is the receipt — never renumbered by what exists on a given row, which is what makes <code>g1</code>/<code>g2</code>/<code>g3</code> learnable everywhere. Only rendered when that file exists — a row never shows both <kbd>2</kbd> and <kbd>3</kbd>, since a receipt supersedes and removes the scheduled file. Each control is a neutral stroke icon with its keycap built in, not a color-coded emoji or a floating notification bubble — files are actions, not payment state, so the rail stays subordinate to the status mark and never competes with it for attention. On the focused row the controls expand to show their labels (Bill, Scheduled, Receipt); every other row stays icon-only, and narrow screens keep everything icon-only regardless of focus. Click a control, or press its number — same action, new tab.' }
 ];
 
 $('#gallery').innerHTML = SPECS.map(s =>

@@ -287,7 +287,7 @@ backup_dir    = "./backups"
     #[test]
     fn a_hash_inside_a_quoted_value_is_not_a_comment() {
         // The gotcha this project already paid for: a hand-rolled stripper cut
-        // `accent = "#c4a7e7"` in half at the colour's own '#'. The real toml
+        // `accent = "#c4a7e7"` in half at the color's own '#'. The real toml
         // crate handles it, which is the reason it is a dependency.
         let v: FileShape = toml::from_str(
             r#"

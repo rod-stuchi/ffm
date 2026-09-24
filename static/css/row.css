@@ -7,7 +7,7 @@
  * broken the shell width. Doing it during the port is find-and-replace; doing
  * it afterwards is archaeology.
  *
- * Every colour is a var(--token). There are no hex values in this file, which
+ * Every color is a var(--token). There are no hex values in this file, which
  * `just css-check` enforces — that is what lets a palette swap actually reach
  * the row.
  */
@@ -231,7 +231,7 @@ body:not(.kbd-nav) .row:hover .entry {
 
 /* Recurring and private are always BOTH rendered, dimmed when off, so the row's
  * width does not jump as rows scroll past. Active is full opacity in the fact's
- * own colour; inactive is the same icon at low opacity. */
+ * own color; inactive is the same icon at low opacity. */
 .mflag {
   display: inline-flex;
   opacity: 0.28;
@@ -306,7 +306,7 @@ body:not(.kbd-nav) .row:hover .entry {
 
 /* A multi-period bill whose computed page falls outside the uploaded file's
  * page count: the window ran out and needs a fresh upload. Same warning channel
- * as scheduled-overdue — not a new colour meaning. */
+ * as scheduled-overdue — not a new color meaning. */
 .fbadge.is-warn {
   border-color: var(--neg);
   color: var(--neg);
@@ -364,7 +364,7 @@ body:not(.kbd-nav) .row:hover .entry {
   display: inline-flex;
 }
 
-/* Compact by default, labelled on the focused row. */
+/* Compact by default, labeled on the focused row. */
 .fbadge .flabel {
   max-width: 0;
   opacity: 0;
@@ -425,7 +425,7 @@ body:not(.kbd-nav) .row:hover .entry {
   margin-top: 1px;
 }
 
-/* The arrow is direction; the colour is whether that direction is good news.
+/* The arrow is direction; the color is whether that direction is good news.
  * For income they disagree, which is the point. */
 .amt .d.is-bad {
   color: var(--neg);

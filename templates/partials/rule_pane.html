@@ -1,6 +1,6 @@
 {#- The rule pane: a column in the ledger's grid, not a modal.
 
-    The form outgrew a centred dialog, and a dialog hides the very ledger you
+    The form outgrew a centered dialog, and a dialog hides the very ledger you
     are editing — the same argument that made :household a vsplit. It sits
     after the member pane it belongs to and pushes later panes right; the
     ledger scrolls sideways rather than hiding one, because a household can
@@ -8,7 +8,7 @@
 
     Field order is deliberate: what NAMES the bill first (Amount, Bill name),
     then how it is filed (Bucket, Cadence), then the dates. -#}
-{#- `autofocus` is honoured on a full page load but not reliably on a
+{#- `autofocus` is honored on a full page load but not reliably on a
     fragment the browser inserts, and a rejected save arrives as a
     fragment — so the pane places the cursor itself. Which field is
     focused is visual state, which is Alpine's to hold; WHICH field
@@ -236,7 +236,7 @@
         </label>
       <label class="f">
         {#- Only a tracked rule has an instance: it exists to disambiguate two
-            properties in a receipt PATH, and that meaning does not generalise. -#}
+            properties in a receipt PATH, and that meaning does not generalize. -#}
         <span class="k">{{ t.rule_instance() }}</span>
         <input class="i" name="instance" value="{{ instance }}" autocomplete="off" x-model="instance">
       </label>

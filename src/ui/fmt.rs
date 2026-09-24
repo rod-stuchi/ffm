@@ -41,7 +41,7 @@ pub fn money_signed(amount: Cents, currency: Currency) -> String {
 
 /// An income projection: `~R$ 4.133,33`.
 ///
-/// The tilde is a separate visual channel from the quieter colour the template
+/// The tilde is a separate visual channel from the quieter color the template
 /// applies, and both say the same thing — this figure is a guess from history,
 /// not a fact. It propagates: a pane's INs and Balance, and the household's IN
 /// and NET, all carry the tilde when any component is projected.

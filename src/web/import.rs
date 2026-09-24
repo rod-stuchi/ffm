@@ -104,7 +104,7 @@ pub fn parse(st: &AppState, upload: &Upload) -> Result<Parsed, Refused> {
     parsed.map_err(|e| Refused(e.to_string()))
 }
 
-/// What a bill is recognised by, as the binding check reads it.
+/// What a bill is recognized by, as the binding check reads it.
 fn read_binding(parsed: &Parsed) -> Binding<'_> {
     Binding {
         client_code: parsed.import.client_code.as_deref(),

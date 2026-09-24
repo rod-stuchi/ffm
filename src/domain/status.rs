@@ -1,4 +1,4 @@
-//! Row state, modelled as three independent things rather than one enum.
+//! Row state, modeled as three independent things rather than one enum.
 //!
 //! `design/spec.md`'s row-state table reads like twenty mutually exclusive
 //! states. It is not, and transcribing it as one flat enum is the trap: it

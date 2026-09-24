@@ -1,6 +1,6 @@
 //! Dummy rows for the sandbox.
 //!
-//! The Rust analogue of the mockup's `T({...})` factory: one [`base`] row plus
+//! The Rust analog of the mockup's `T({...})` factory: one [`base`] row plus
 //! struct-update syntax per specimen, so adding a field to `LedgerRow` does not
 //! mean editing twenty fixtures.
 //!
@@ -131,7 +131,7 @@ pub fn specs() -> Vec<Spec> {
             id: "scheduled-overdue",
             heading: "Scheduled, now overdue",
             why: "The due date passed and no receipt landed — a promise that was never \
-                  confirmed kept. This is a distinct warning state, not the same grey \
+                  confirmed kept. This is a distinct warning state, not the same gray \
                   <code>pending</code> ring: \"nothing has happened yet\" and \"something was \
                   promised and did not happen\" are different news.",
             build: |ctx| LedgerRow {
@@ -255,7 +255,7 @@ pub fn specs() -> Vec<Spec> {
             heading: "Barcode page outside the window",
             why: "The uploaded file ran out: page 9 of a six-page document. Flagged on the file \
                   control rather than silently wrong, through the same warning channel as \
-                  scheduled-overdue — not a new colour meaning. A fresh upload is needed.",
+                  scheduled-overdue — not a new color meaning. A fresh upload is needed.",
             build: |ctx| LedgerRow {
                 spans_period: true,
                 window_start: Some(Period::new(2026, 1).unwrap()),
@@ -332,7 +332,7 @@ pub fn specs() -> Vec<Spec> {
             heading: "Month-over-month delta",
             why: "Derived against the same line in the previous month, never stored — a stored \
                   delta goes stale the instant either month is edited. Red up, green down for a \
-                  bill; income inverts the colour while the arrow keeps meaning direction.",
+                  bill; income inverts the color while the arrow keeps meaning direction.",
             build: |ctx| LedgerRow {
                 date: Some(d(2026, 9, 11)),
                 prev_amount_cents: Some(Cents(28140)),
@@ -365,7 +365,7 @@ pub fn specs() -> Vec<Spec> {
             heading: "Selected",
             why: "<code>x</code> marks the row for a batch operation. It is a marker, never a \
                   delete — which is exactly why it gets its own <code>--info</code> inset bar \
-                  rather than borrowing the accent or a warning colour.",
+                  rather than borrowing the accent or a warning color.",
             build: |ctx| LedgerRow {
                 flags: RowFlags {
                     selected: true,

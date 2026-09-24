@@ -47,7 +47,7 @@ pub fn between(prev: Option<&str>, next: Option<&str>) -> String {
         (None, Some(b)) => before(b),
         (Some(a), None) => after(a),
         (Some(a), Some(b)) => {
-            // A caller that has the two neighbours the wrong way round would
+            // A caller that has the two neighbors the wrong way round would
             // otherwise get a key that sorts outside them, which is a bug that
             // only shows up as rows drifting later.
             debug_assert!(a < b, "sort keys out of order: {a:?} >= {b:?}");
@@ -135,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    fn a_key_always_lands_strictly_between_its_neighbours() {
+    fn a_key_always_lands_strictly_between_its_neighbors() {
         let a = between(None, None);
         let b = after(&a);
         let mid = between(Some(&a), Some(&b));
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn inserting_into_the_same_gap_a_thousand_times_keeps_working() {
         // The whole reason for a fractional index: a gap never runs out. The
-        // key grows a character when it has to, and never renumbers a neighbour.
+        // key grows a character when it has to, and never renumbers a neighbor.
         let low = between(None, None);
         let high = after(&low);
         let mut upper = high.clone();
@@ -225,10 +225,10 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "out of order")]
-    fn backwards_neighbours_are_a_bug_and_say_so() {
+    fn backwards_neighbors_are_a_bug_and_say_so() {
         // In release this falls back to appending rather than corrupting the
         // ordering around it; in dev it is loud, because a caller holding its
-        // neighbours the wrong way round only shows up later as rows drifting.
+        // neighbors the wrong way round only shows up later as rows drifting.
         between(Some("b"), Some("a"));
     }
 }

@@ -18,7 +18,7 @@
   WATCH the ledger while a setting takes effect — `layout.panes` and
   `line_numbers` are exactly the settings you cannot judge with the ledger
   hidden. A standalone pane could not show that, so the shell is the point.
-  Toggle Panes, Line numbers, Gap or Colour scheme and watch the right-hand
+  Toggle Panes, Line numbers, Gap or Color scheme and watch the right-hand
   side move. The ledger here is deliberately thin — just enough row to make
   the settings legible.
 
@@ -43,7 +43,7 @@
 
   ⚠ As in every mock: the JS here holds state in an object and re-renders.
     That is the client-side data model the real architecture forbids — port the
-    markup, the CSS and the copy, and rewrite the behaviour against HTMX.
+    markup, the CSS and the copy, and rewrite the behavior against HTMX.
 -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -210,7 +210,7 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .cfg-st .d{color:var(--ink-3)}
 
 /* a settings group is framed like a ledger group — the same .card language,
-   deliberately not a per-group colour */
+   deliberately not a per-group color */
 .grp{border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden}
 .grp > h4{margin:0;padding:8px 12px;background:var(--surface-2);border-bottom:1px solid var(--line);
   font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
@@ -286,7 +286,7 @@ legend{padding:0}
 .mrow .seen.pend{color:var(--accent)}
 .mrow .car{font-size:9px;color:var(--ink-3);line-height:1;margin-left:7px;
   display:inline-block;transition:transform .15s ease,color .15s ease}
-/* Flip it rather than only recolouring: at 9px an accent-vs-ink-3 shift is
+/* Flip it rather than only recoloring: at 9px an accent-vs-ink-3 shift is
    almost invisible, and open/closed has to be readable at a glance. */
 .mrow[aria-expanded="true"] .car{color:var(--accent);transform:rotate(180deg)}
 /* the expanded member's actions. Framed rather than floating, so it reads as
@@ -435,7 +435,7 @@ legend{padding:0}
             <h4>Appearance</h4>
             <div class="gb stack">
               <fieldset class="f">
-                <legend class="k">Colour scheme</legend>
+                <legend class="k">Color scheme</legend>
                 <!-- The app's FIRST palette picker: until now the palette was
                      only settable via `:theme` or by typing TOML. -->
                 <div class="swatches" id="sw-profile"></div>
@@ -450,7 +450,7 @@ legend{padding:0}
                 <!-- Not a DB column: light/dark is a property of the DEVICE, and
                      the same person uses a bright laptop and a dark phone. It is
                      the `ffm.theme` cookie, which is also what lets /login
-                     honour it without knowing who you are. -->
+                     honor it without knowing who you are. -->
                 <span class="hint">This device only &mdash; it isn't saved to your account.</span>
               </fieldset>
               <fieldset class="f">
@@ -604,7 +604,7 @@ legend{padding:0}
                       <button class="btn" type="button" onclick="copyLink(this)">Copy</button>
                     </div>
                     <p class="hint">Expires 27/09/2026. Shown once &mdash; create a new one if it's lost.
-                      It only sets a password: her name, language and colour scheme are untouched.</p>
+                      It only sets a password: her name, language and color scheme are untouched.</p>
                     <!-- A reset hands over the ability to write to the ledger as
                          somebody else, which is the one thing preview-as-non-admin
                          was built not to allow. So it is never silent. -->
@@ -668,7 +668,7 @@ legend{padding:0}
               <button class="btn pri" type="button" onclick="say('invite created · copy it now')">Create invite link</button>
               <div class="notebox">
                 You never type anyone else's password. They set it on the link, along
-                with their own name, language and colour scheme.
+                with their own name, language and color scheme.
               </div>
             </div>
           </div>
@@ -696,7 +696,7 @@ legend{padding:0}
 /* ===========================================================================
    MOCK-ONLY state object + render loop. This is the client-side data model the
    real architecture forbids: port the markup, the CSS and the copy, and
-   rewrite the behaviour against HTMX fragments.
+   rewrite the behavior against HTMX fragments.
    =========================================================================== */
 const CUR = {
   BRL:{symbol:'R$ ', dec:',', grp:'.', suffix:''},
@@ -767,7 +767,7 @@ function renderPanels(){
       else if (S.nu === 'relative') g = focused ? '0' : String(Math.abs(ri - S.focusRow));
       const cls = r.d > 0 ? 'up' : r.d < 0 ? 'dn' : 'eq';
       const arrow = r.d > 0 ? '▲' : r.d < 0 ? '▼' : '–';
-      /* the delta inverts for income: the arrow is direction, the colour is
+      /* the delta inverts for income: the arrow is direction, the color is
          whether it is good news */
       const dcls = r.inc ? (r.d > 0 ? 'dn' : r.d < 0 ? 'up' : 'eq') : cls;
       const delta = (S.showDelta && r.d !== 0)

@@ -98,7 +98,7 @@ be the wrong shape twice over:
   use. A JS config would put the eleven values in a second place that the
   rendered block cannot override, which is precisely the drift this rule exists
   to prevent. `static/css/tokens.css` therefore carries scalars and fonts only:
-  no colour, deliberately, so there is exactly one source for those.
+  no color, deliberately, so there is exactly one source for those.
 - **Tailwind v4, with a CSS-first `@theme` block, and no `tailwind.config.js`.**
   `@theme` maps utility names onto `var(--token)` rather than onto hex, so the
   utilities follow the runtime swap like everything else.
@@ -133,10 +133,10 @@ focus rail, due ring, command caret and `NORMAL` badge all move together.
 ### Rules
 
 - **Text on a semantic fill takes `var(--paper)`, never `#fff`.** A `--pos` or
-  `--neg` colour is chosen to contrast with the page ground, so the ground is the
+  `--neg` color is chosen to contrast with the page ground, so the ground is the
   correct foreground. Hardcoded white breaks on light themes (Gruvbox Light's
   `pos` is `#79740E`; Rosé Pine Dawn's is teal).
-- **Semantic colour is separate from the accent.** Accent = "you are here"
+- **Semantic color is separate from the accent.** Accent = "you are here"
   (focus rail, gutter zero, mode badge). Green/red = money facts (paid, up, down).
   They must never collide.
 - **Selection vs. focus use different channels.** Focus = accent left rail +
@@ -145,7 +145,7 @@ focus rail, due ring, command caret and `NORMAL` badge all move together.
 - **Both themes, always.** Every theme ships a light *and* a dark variant. Define
   the full light palette on bare `:root`; redefine tokens under
   `@media (prefers-color-scheme: dark)` guarded as `:root:not([data-theme="light"])`,
-  and again under `:root[data-theme="dark"]`. Never give a colour its only
+  and again under `:root[data-theme="dark"]`. Never give a color its only
   definition inside a media or `[data-theme]` block.
 
 ### Typography
@@ -172,14 +172,14 @@ property of the **device** — the same person uses a bright laptop and a dark
 phone — so it lives in the `ffm.theme` cookie alongside `system`.
 
 Keeping them separate is what makes a pre-auth page themeable at all: `/login`
-can honour your light/dark without knowing who you are, and falls back to the
+can honor your light/dark without knowing who you are, and falls back to the
 bundled `ffm` palette because an anonymous visitor's palette choice would have
 nowhere to live. `/setup` and `/invite` are the exception that proves it — they
 *do* show the full 11-palette picker, because there it's a form field writing
 `member_settings`, not chrome.
 
 **The picker previews by swapping a server-rendered `<style>` block**, not by
-recomputing colours in JS: the control does an `hx-get` and the server returns
+recomputing colors in JS: the control does an `hx-get` and the server returns
 the 11 tokens plus their `color-mix()` derivations from the same palette table
 the app itself uses. One round trip per click, zero JS, and the preview provably
 cannot drift from the real thing.
@@ -215,12 +215,12 @@ card in plain CSS.
 
 ### Tabs mode
 
-- **The pane is centred.** Tabs mode shows one pane, so there is nothing for
+- **The pane is centered.** Tabs mode shows one pane, so there is nothing for
   it to sit beside and no reason for it to hug the left edge of a wide screen.
   `justify-content: safe center`, never a plain `center`: the stage scrolls
   sideways, and a plain `center` puts overflow past the *start* edge where
   nothing can scroll back to it. **Split mode is deliberately left alone** —
-  panes there are a row, and centring a row is a different question with a
+  panes there are a row, and centering a row is a different question with a
   different answer.
 - Tab bar sits under the app bar, showing each member's name **and balance**.
   The balance is deliberate: tabs mode's real cost is losing sight of the other
@@ -298,7 +298,7 @@ card in plain CSS.
 - **Ordering uses a fractional sort key**, not an integer `position`. With two
   people entering transactions, renumbering N rows per move is write
   amplification and a merge conflict waiting to happen. Use LexoRank or
-  Figma-style fractional indexing: a move between two neighbours writes **one
+  Figma-style fractional indexing: a move between two neighbors writes **one
   row** — `sort_key = midpoint(prev.key, next.key)`. `ORDER BY sort_key` stays a
   plain index scan.
 - **The sort key is global, not per-month.** Months are views; a per-month key
@@ -316,7 +316,7 @@ card in plain CSS.
   else's.** This reverses the earlier "an admin creates the row and sets its
   initial password". The admin still decides *who* gets a link, so nothing about
   the closed household changed; what changed is that there is no initial password
-  to hand over, and the member picks their own name, language and colour scheme
+  to hand over, and the member picks their own name, language and color scheme
   when they accept. The `members` row is created on accept, not when the link is
   issued — so `password_hash` stays `NOT NULL` rather than having a
   half-real, password-less member in the table. See `design/spec.md`'s Auth &
@@ -366,7 +366,7 @@ card in plain CSS.
 
 Every change to a transaction, a rule or a file is recorded, append-only,
 and read per row with `gl` ("go to log") in a side pane — the same column,
-arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
+arrow and parking behavior the `A`/`I`/`E` rule editor uses.
 
 - **Two tables, not one.** `change` holds one row per user action (a save):
   `at`, `member_id`, `source` (`user` | `import` | `materializer` |
@@ -421,7 +421,7 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
 - **The create/edit keys are a matrix, which is a second reversal.** The
   first pass bound `r` to "create a recurring bill" and `R` to "edit the
   rule" — a split justified by barcode binding, which is a property of
-  *bills*. That justification doesn't generalise the moment income can
+  *bills*. That justification doesn't generalize the moment income can
   recur too, so the bindings are now one consistent grid rather than four
   ad-hoc keys:
 
@@ -517,7 +517,7 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
     which is what resets the page count back to 1 for the new file without
     touching anything else about the rule. Re-entering those two fields
     *is* the "I got a new file" action — there's no separate upload flow
-    modelled for this yet, same as barcode/scheduled/receipt uploads
+    modeled for this yet, same as barcode/scheduled/receipt uploads
     generally (see Upload, below).
   - **This is independent of, and doesn't resolve, the still-open cyclic/
     seasonal rule design** (`months`-of-year allow-list — see Open items,
@@ -603,7 +603,7 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
     rule itself — a narrow correction for "the wrong file got attached the
     first time," distinct from `u`'s full revert of the last change.
 - **A scheduled payment still unconfirmed past its due date is a distinct,
-  warning-coloured state** — not a generic `pending`. A
+  warning-colored state** — not a generic `pending`. A
   `{month}_scheduled.{ext}` file with no `{month}.{ext}` and a due date already
   passed means a promise wasn't verified as kept; flag it, don't silently treat
   it the same as "nothing happened yet."
@@ -717,11 +717,11 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   above is absolute for it.
 - **The paid marks are visually distinct from each other** — file-verified
   paid, manually-asserted paid (untracked only), and scheduled-overdue-warning
-  are three different colours/shades, never sharing a mark. Designs need
+  are three different colors/shades, never sharing a mark. Designs need
   updating for this.
 - **`end_date` is a plain, independently-settable field on every rule** —
   nullable, null meaning ongoing — not exclusive to installment loans. This
-  is how an ordinary open-ended bill gets cancelled: CPFL stops after July,
+  is how an ordinary open-ended bill gets canceled: CPFL stops after July,
   set `end_date = 31/07`, nothing about `total_installments` involved. A
   **finite, non-cyclic rule** (e.g. a car loan) additionally gets
   `total_installments` (nullable int; null = ongoing), and *for that rule*
@@ -754,12 +754,12 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   `paid`/`scheduled`/`pending`; income is **`expected`** until the money
   lands and **`received`** after. It never shows a paid or scheduled mark.
   The ring is the same elapsed-time arc a bill's due date drives, counting
-  toward the rule's **expected day** instead — same fact, same colours, not
+  toward the rule's **expected day** instead — same fact, same colors, not
   a second thing to learn.
 - **Confirmation needs no new verb.** A tracked income is confirmed when
   its payslip exists on disk — the identical `exists()` rule, no manual
   tick, no exception. An untracked income uses the manual tick that
-  untracked rules already get, relabelled "Mark as received manually".
+  untracked rules already get, relabeled "Mark as received manually".
 - **An amount that varies is projected, not carried forward.** A rule with
   `varies` set (commission, freelance) can't seed a new period from its own
   number the way a fixed bill does. Until that period is confirmed the row
@@ -780,13 +780,13 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   old guess into the data, and it never writes a spurious "amount changed"
   entry into the change log.
 - **An estimate is marked everywhere it reaches.** The row shows `~R$ …` in
-  a quieter colour; the pane's INs and Balance and the household's IN and
+  a quieter color; the pane's INs and Balance and the household's IN and
   NET all carry the `~` when any component is a projection. Excluding
   projections from the totals would make a future month's NET useless;
   showing them unmarked would present a guess as a fact. The mark carries
   whether the money moved, the tilde carries whether the number is real —
   one channel per fact, as everywhere else.
-- **The MoM delta inverts for income.** The arrow is direction, the colour
+- **The MoM delta inverts for income.** The arrow is direction, the color
   is whether it's good news: more money out is bad, more money in is good.
   A recurring income gets a delta (worth comparing period to period); a
   one-off and an unconfirmed projection don't — the latter would be
@@ -804,7 +804,7 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   treatment a missing file already gets. `g1` and `g3` therefore still mean
   one consistent thing on every row in the ledger.
 - **Taxonomy is the same columns with income wording.** `bucket` is
-  unchanged; `bill_name` is labelled **Source** and `total_installments`
+  unchanged; `bill_name` is labeled **Source** and `total_installments`
   **Payments** in the income form. Same columns, same computed path — do
   not add parallel fields for them.
 
@@ -884,12 +884,12 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   grouped, subtotaled fragment; folding only hides/shows what's already there.
 - **Nesting stops at `bucket`.** No nested `bill_name` sub-folds — one level is
   enough for a household-sized ledger.
-- **Groups are framed, not colour-coded.** A bordered container (reusing the
+- **Groups are framed, not color-coded.** A bordered container (reusing the
   existing `.card` visual language) plus a text label — deliberately not a
-  per-category colour system, since `bucket` is open-vocabulary and unbounded
+  per-category color system, since `bucket` is open-vocabulary and unbounded
   while a theme is deliberately only 11 tokens with `pos`/`neg`/`accent`/`info`
   already carrying fixed meanings. An unbounded set of user-typed strings
-  either collides with those meanings or needs hash-based colour assignment
+  either collides with those meanings or needs hash-based color assignment
   for no real gain over a plain frame.
 - **Scoped to each member's own panel** — no household-wide, cross-member
   category view. Grouping only reorganizes the rows already in front of you.
@@ -1000,7 +1000,7 @@ that will otherwise be re-proposed.
 2. **Seasonal / cyclic rules — one nullable `months` column, read only by
    the materializer.** `recurring_rules.months` holds a sorted comma list of
    month numbers, `NULL` meaning every month. The mock already demonstrated
-   the behaviour in seed data (`design/ffm-prototype.html:974`, IPTU running
+   the behavior in seed data (`design/ffm-prototype.html:974`, IPTU running
    Jan–Oct; `:983`, school fees running Feb–Dec) and filtered on it in one
    line; what was missing was a control, because no mockup ever drew one.
    - **Exactly one read site**: the reconciler skips a period whose month is
@@ -1081,7 +1081,7 @@ that will otherwise be re-proposed.
   and reopening it on every reload is a nuisance, not a courtesy.
 - **A palette change does not refresh at all.** It is one `<style>` block and
   nothing else on the page depends on it, so the write answers with that block
-  `hx-swap-oob` and every colour changes in place. This is what the Themes
+  `hx-swap-oob` and every color changes in place. This is what the Themes
   section above already described — the picker previews by swapping a
   server-rendered style block from the same palette table the app uses — and
   refreshing instead was the lazy reading of "the server renders this". It
@@ -1187,7 +1187,7 @@ that will otherwise be re-proposed.
   - **The statusline travels in a response header** (`HX-Trigger`), not in the
     body — a swap should not have to include chrome in order to say something.
   - **An error row is HTTP 200.** HTMX swaps a successful response by default,
-    and the error row *is* the answer; signalling failure in the status code
+    and the error row *is* the answer; signaling failure in the status code
     means the person sees nothing at all.
 - **Every soft delete, restore, reorder and re-attribution is undoable.** `u`
   must restore the exact prior state, including both ledgers for a
@@ -1279,8 +1279,14 @@ that will otherwise be re-proposed.
   catalog, it stays Portuguese when the UI language is English, and it must not
   appear in any `.ftl` file. Anything the *app itself* says is a catalog message.
 - **Copy is written from the user's side of the screen.** Name things by what
-  people recognise, active voice, a control says exactly what happens. Errors
+  people recognize, active voice, a control says exactly what happens. Errors
   explain what went wrong and how to fix it.
+- **US spelling, always** — in UI copy, identifiers, comments and docs alike:
+  `color`, `center`, `behavior`, `neighbor`, `gray`, `canceled`, `labeled`,
+  `installment`, `-ize`/`-yze`. The one exception is an already-applied
+  migration file: SQLx checksums it, so even a comment edit breaks startup
+  against an existing database. (`aria-labelledby` is the HTML spelling, not
+  a British one — leave it.)
 - **Never expose internal ids in UI copy.** The old `↩ #1042` exception went
   away with the superseding restore row — the change log speaks in times,
   actors and verbs, not row ids.
@@ -1369,12 +1375,12 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   reloading proves nothing until `cargo build` has run — `just dev` watches for
   it, but a hand-started `cargo run` does not. Half an hour went into "the
   keymap stopped working" that was an old template still in a running process.
-- **A browser with forced dark mode rewrites colours, and it is not a bug in
+- **A browser with forced dark mode rewrites colors, and it is not a bug in
   the page.** A plain `<div style="background:#F6F3ED">` computed to
   `rgb(24,26,27)` in one Chrome profile, which made the palette swatches and
   the month picker's warning dots look broken. Verify with a clean headless
   render (`--headless --screenshot` on a minimal HTML file) before changing a
-  colour — this has now cost time twice.
+  color — this has now cost time twice.
 - **`x-show` has not been applied yet when `$nextTick` runs.** Alpine queues
   the DOM mutation behind its own scheduler, so for a frame after a fold key
   the `.foldrows` are still laid out in their *previous* state — and in a
@@ -1413,13 +1419,13 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   the template. The pairing is `{{ x|json|safe }}`: the `json` filter already
   escapes the characters that could end the script tag, so `safe` suppresses
   the *wrong* escaping rather than all of it. `just tpl-check` enforces it.
-- **A quote-blind TOML comment stripper eats hex colours.** `line.replace(/#.*$/, '')`
-  cuts `accent = "#c4a7e7"` in half at the colour's own `#`. The real `toml` crate
+- **A quote-blind TOML comment stripper eats hex colors.** `line.replace(/#.*$/, '')`
+  cuts `accent = "#c4a7e7"` in half at the color's own `#`. The real `toml` crate
   handles this — which is a reason not to hand-roll a config reader.
 - **Watch class-name collisions.** An `app.cfg` state class silently matched a
   leftover `.cfg { display: grid; align-items: start }` rule and broke the whole
   shell width. Namespace state classes (`is-`/`has-` prefix) and delete dead CSS.
-- **A fixed-width key column overflows onto its neighbour.** Size it
+- **A fixed-width key column overflows onto its neighbor.** Size it
   `minmax(64px, max-content)` so long commands fit their own box.
 - **Hardcoded `#fff` on semantic fills** breaks on the fifth theme, not the first.
   Use `var(--paper)`.
@@ -1443,7 +1449,7 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   `Pending` exactly once; the next poll hits the `None` arm and ends the
   stream. The injected client reads a completed long-poll as "the server
   restarted", fetches `back-up`, gets 200, and calls `location.reload()` —
-  forever, on every page. **Symptom to recognise:** the page reloads endlessly
+  forever, on every page. **Symptom to recognize:** the page reloads endlessly
   while the server PID never changes (so it is *not* a cargo-watch rebuild
   loop), and the long-poll endpoint returns 200 in under a millisecond instead
   of hanging. 0.10 replaced it with a real SSE state machine that holds the

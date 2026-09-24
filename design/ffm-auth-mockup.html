@@ -61,7 +61,7 @@
 
 <style>
 /* ============ tokens — ported verbatim ============ */
-/* Light on bare :root, dark redefined TWICE. Never give a colour its only
+/* Light on bare :root, dark redefined TWICE. Never give a color its only
    definition inside a media or [data-theme] block. */
 :root{
   --paper:#F6F3ED;
@@ -160,8 +160,8 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
 .auth-chrome kbd{display:inline-block}
 @media (max-width:700px){ .auth-chrome kbd{display:none} }
 
-/* Vertically centred on a wide screen. On a phone it sits high instead:
-   centring a card in the viewport puts it under the software keyboard the
+/* Vertically centered on a wide screen. On a phone it sits high instead:
+   centering a card in the viewport puts it under the software keyboard the
    moment a field takes focus. */
 /* `safe center` matters: a plain `center` on a card taller than the stage
    overflows equally top and bottom, and the top half is then unreachable —
@@ -186,7 +186,7 @@ kbd{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1
   font-family:var(--mono);font-size:11px;color:var(--ink-3)}
 
 /* section rule inside a long form. The frame-and-label language groups
-   already use, rather than a per-section colour. */
+   already use, rather than a per-section color. */
 .sect{margin:20px 0 13px;display:flex;align-items:center;gap:10px;
   font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
 .sect::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -399,7 +399,7 @@ legend{padding:0}
             </label>
           </div>
           <fieldset class="f">
-            <legend class="k" data-t="fTheme">Colour scheme</legend>
+            <legend class="k" data-t="fTheme">Color scheme</legend>
             <div class="swatches" id="sw-setup"></div>
             <span class="hint" data-t="hTheme">Change it any time in <span class="mono">:profile</span>.</span>
           </fieldset>
@@ -480,7 +480,7 @@ legend{padding:0}
             <span class="hint" data-t="hLanguage">Dates and money don't change with this.</span>
           </fieldset>
           <fieldset class="f">
-            <legend class="k" data-t="fTheme">Colour scheme</legend>
+            <legend class="k" data-t="fTheme">Color scheme</legend>
             <div class="swatches" id="sw-invite"></div>
           </fieldset>
         </div>
@@ -580,7 +580,7 @@ const STR = {
     loginSub:"Sign in to the household ledger",
     fName:"Name", fPassword:"Password", fConfirm:"Confirm password",
     fLanguage:"Language", fDefaultLang:"Default language", fCurrency:"Currency",
-    fTheme:"Colour scheme", fLineNumbers:"Line numbers", fHouseholdName:"Household name",
+    fTheme:"Color scheme", fLineNumbers:"Line numbers", fHouseholdName:"Household name",
     nuRel:"Relative", nuAbs:"Absolute", nuOff:"Off",
     asideSignIn:"you'll sign in with this",
     btnSignIn:"Sign in", btnCreateHousehold:"Create the household",
@@ -776,7 +776,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme
 
 /* Light/dark is per DEVICE, not per member — the same person uses a bright
    laptop and a dark phone. In the real app it is the `ffm.theme` cookie, which
-   is what lets /login honour it with zero JS and no pre-paint script. */
+   is what lets /login honor it with zero JS and no pre-paint script. */
 const VARIANTS = [
   { v:null,      icon:'◐', label:'System' },
   { v:'light',   icon:'○', label:'Light'  },

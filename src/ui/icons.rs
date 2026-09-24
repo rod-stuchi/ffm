@@ -9,7 +9,7 @@
 //!
 //! They are stroke paths in `currentColor`, not an emoji font: emoji render
 //! differently on every platform and cannot take a theme token, whereas these
-//! inherit colour from whatever control holds them — which is what lets the
+//! inherit color from whatever control holds them — which is what lets the
 //! file rail stay neutral and the meta flags dim when off.
 
 pub fn svg(name: &str) -> &'static str {
@@ -82,11 +82,11 @@ mod tests {
     }
 
     #[test]
-    fn icons_inherit_colour_rather_than_hardcoding_it() {
+    fn icons_inherit_color_rather_than_hardcoding_it() {
         // stroke/fill come from CSS (currentColor via the .ficon rule), so a
         // palette swap reaches them. A hex here would be invisible to the theme.
         for name in NAMES {
-            assert!(!svg(name).contains('#'), "{name} hardcodes a colour");
+            assert!(!svg(name).contains('#'), "{name} hardcodes a color");
         }
     }
 }

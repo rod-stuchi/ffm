@@ -374,7 +374,7 @@ async fn every_materialized_row_says_nobody_typed_it() {
 async fn a_seasonal_rule_never_materializes_the_months_it_skips() {
     let pool = pool().await;
     let me = household(&pool).await;
-    // IPTU: ten instalments, January to October, then nothing until the next
+    // IPTU: ten installments, January to October, then nothing until the next
     // January. The mock demonstrated this in seed data; this is the rule.
     let mut f = form(me, "IPTU", d(2025, 1, 1));
     f.months = Some(Months::parse("1-10").unwrap());
@@ -450,7 +450,7 @@ async fn narrowing_the_months_leaves_what_was_already_recorded() {
 #[tokio::test]
 async fn a_skipped_month_does_not_consume_an_installment() {
     // `total_installments` counts PAYMENTS. A month the rule does not run in
-    // is not one, so "12 instalments" has to mean twelve actual rows.
+    // is not one, so "12 installments" has to mean twelve actual rows.
     let pool = pool().await;
     let me = household(&pool).await;
     let mut f = form(me, "Parcelado", d(2026, 1, 1));

@@ -1,6 +1,6 @@
 /* Scalar tokens and fonts.
  *
- * NOTE WHAT IS NOT HERE: colours.
+ * NOTE WHAT IS NOT HERE: colors.
  *
  * The plan called for this file to also carry a baseline copy of the bundled
  * `ffm` palette, as a fallback if the server-rendered <style> block failed to
@@ -9,7 +9,7 @@
  * only holds while there is exactly one source for them. A request that fails to
  * render the theme block has bigger problems than being unstyled.
  *
- * So every colour comes from `ui::theme::render()`, emitted into <head> as the
+ * So every color comes from `ui::theme::render()`, emitted into <head> as the
  * full light/dark triple. This file holds only what never varies by theme.
  */
 

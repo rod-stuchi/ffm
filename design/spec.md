@@ -11,14 +11,14 @@ understood:
 |---|---|---|
 | `paid` | filled green disc + flag-icon date | tracked, receipt file found on disk |
 | `scheduled` | calendar-icon glyph over the ring | tracked, scheduled-payment file exists, due date not yet passed |
-| `scheduled overdue` | warning-icon glyph, warning colour | tracked, scheduled-payment file exists **past** due date, no receipt yet — an unconfirmed promise |
+| `scheduled overdue` | warning-icon glyph, warning color | tracked, scheduled-payment file exists **past** due date, no receipt yet — an unconfirmed promise |
 | `pending` | ring, filling green → amber → red | tracked, neither a receipt nor a scheduled-payment file exists yet |
 | `plain` | hollow dot | untracked, not marked paid — no filesystem proof either way |
 | `manual paid` | filled disc, distinct shade from `paid` | untracked — user asserted paid, no file to prove it |
-| income | filled dot, `+ R$`, positive colour | sums into the pane header |
+| income | filled dot, `+ R$`, positive color | sums into the pane header |
 | focused | accent left rail, gutter `0`, tinted ground | cursor position |
 | selected | `--info` inset bar | `x` — a marker for a batch op, never a delete |
-| private | lock-icon glyph, full colour when set, faint when not | hidden from other members, never from admin |
+| private | lock-icon glyph, full color when set, faint when not | hidden from other members, never from admin |
 | deleted | dimmed, strikethrough, deletion date | soft delete, row retained; `u` clears the mark on this same row |
 | skeleton | shimmer bars, **identical geometry** | in flight |
 | error | red ground, message + **Try Again** | server said no, nothing was written |
@@ -26,9 +26,9 @@ understood:
 | rule open | accent outline, the rule pane's arrow pointing at it | `E` — see Edit fields |
 | unsaved | dashed accent border + `unsaved · e to resume` tag | a draft left behind when the cursor moved on |
 | placeholder | dashed, empty "New recurring bill / income" row | `A` / `I` — where the new rule's row will land |
-| expected | ring toward the expected day, `+` at its centre | income, not yet received — the same elapsed-time arc a bill's due date drives |
+| expected | ring toward the expected day, `+` at its center | income, not yet received — the same elapsed-time arc a bill's due date drives |
 | received | filled positive disc + received date | income that landed |
-| estimated | `~R$ …` in a quieter colour, no delta | a varying income's amount is projected from history until confirmed — the mark still carries arrival, the tilde carries "this number isn't a fact yet" |
+| estimated | `~R$ …` in a quieter color, no delta | a varying income's amount is projected from history until confirmed — the mark still carries arrival, the tilde carries "this number isn't a fact yet" |
 
 ### The add form (`a` / `i`)
 
@@ -170,7 +170,7 @@ default, the search scope and the privacy default.
   column, and it degrades the right way: rename the line and the delta
   disappears, which is arguably correct — it is not that line any more.
 - **The MoM delta is derived, not stored.** Compare each row to the same line in
-  the previous month (a window function). Red ▲ up, green ▼ down, grey dash for
+  the previous month (a window function). Red ▲ up, green ▼ down, gray dash for
   unchanged.
 - **Skeleton geometry must match the real row exactly**, so nothing shifts when
   the server's fragment lands.
@@ -194,7 +194,7 @@ default, the search scope and the privacy default.
   (scheduled overdue) reuse the exact same line-icon language as the file
   rail's bill/scheduled/receipt icons (unfilled paths, `currentColor`,
   matching stroke weight), just sized down to sit inline with the meta
-  text. An emoji font renders differently — sometimes in full colour, at a
+  text. An emoji font renders differently — sometimes in full color, at a
   different weight — on every OS, which fights the "one visual system"
   point of the rest of this table.
 - **Recurring and private are always both rendered, dimmed when off,
@@ -204,7 +204,7 @@ default, the search scope and the privacy default.
   independent per-row booleans that can be on, off, or both at once — a
   fixed two-icon pair with opacity carrying the fact reads at a glance
   without the row's width jumping around as flags toggle. Active is full
-  opacity in the fact's own colour (`--accent` for recurring, `--info`
+  opacity in the fact's own color (`--accent` for recurring, `--info`
   for private, unchanged from before); inactive is the same icon at low
   opacity in `--ink-3` — present, but deliberately not competing for
   attention. `ledger.show_recurring = false` still removes the recurring
@@ -247,17 +247,17 @@ standing out.)
   no scheduled file shows `[1] [3]` — nothing sits where `2` would be. No
   ghost/hollow placeholder; the keybinding still works purely off kind, not
   position.
-- **Neutral stroke icon per kind, not a colour-coded emoji.** Bill, scheduled
+- **Neutral stroke icon per kind, not a color-coded emoji.** Bill, scheduled
   and receipt each get their own small matching-weight line-icon (a
   document, a clock-in-a-box, a checked receipt) rendered in `currentColor` —
   legible in every theme, and never competing with `pos`/`neg`/`accent` for
-  attention the way a full-colour emoji glyph did.
+  attention the way a full-color emoji glyph did.
 - **The number is a real `<kbd>` built into the control itself**, not a
   floating notification-style bubble pinned to its corner — same key-cap
   styling used everywhere else in the app (surface-2 fill, bottom-weighted
   border, mono font). It doesn't just label the control, it reads as "press
   this," the same trick the gutter's relative line numbers already pull off.
-- **Compact by default, labelled on the focused row.** Every control is
+- **Compact by default, labeled on the focused row.** Every control is
   icon-and-keycap only until its row is focused; the focused row's controls
   expand in place to add the file's name (`Bill`, `Scheduled`, `Receipt`), so
   the one row you're actually looking at spells itself out without every row
@@ -315,7 +315,7 @@ receipt — without leaving the ledger behind it.
   click away on, an `esc` button beside the zoom controls closes it, the same
   word the rule pane's close button uses.
 - **Full-viewport, not a dialog-sized modal** — the few other modals left
-  in this app (confirmations, the keymap) are centred `min(560px, 100%)`
+  in this app (confirmations, the keymap) are centered `min(560px, 100%)`
   boxes, and this is the one deliberate exception. The actual job is reading a boleto's barcode digits, or
   holding a phone up to its QR code to scan it — both need the file
   genuinely large on screen, which a 560px dialog can't give.
@@ -346,7 +346,7 @@ receipt — without leaving the ledger behind it.
   "One file, 10 pages — this month is page **4**" sits right under the
   icon, since the whole point of opening the carousel for this file kind
   is confirming which page is actually owed this period. A page outside
-  the current window's count shows the same warning colour and copy as
+  the current window's count shows the same warning color and copy as
   the file rail's `fbadge-warn` state: "page 11 — outside this file's 10
   pages, a new upload is needed for this month" — the carousel and the
   badge always agree, never one flagging a problem the other stays quiet
@@ -417,7 +417,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 - **The row's own status text stays short; the full explanation lives in
   this popup.** `scheduled overdue`'s meta line is just `overdue since
   {date}` — enough to scan at a glance, backed by the mark's own warning
-  colour and icon (see the row-state table above). A full sentence
+  color and icon (see the row-state table above). A full sentence
   (`scheduled, due date passed, no receipt yet`) sits in the popup instead,
   next to the `Due`/`Cadence`/`Receipt` fields it belongs with — the same
   glance-vs-read-on-demand split every other on-row status already makes,
@@ -504,7 +504,7 @@ for this row"*.
 | `:sort date` | row order: manual · date · amount |
 | `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |
-| `:theme gruvbox` | colourscheme (writes your own settings row) · bare `:theme` opens the picker |
+| `:theme gruvbox` | colorscheme (writes your own settings row) · bare `:theme` opens the picker |
 | `:lang en` · `:lang pt-BR` | UI language — yours alone; dates and money don't move |
 | `:currency usd` | household currency, admin-only (writes the household row) |
 | `:profile` · `:me` | your own settings, beside the ledger |
@@ -569,13 +569,13 @@ in, and `e`/`E` edit either side of that split:
 
 This replaces `r` (create rule) / `R` (edit rule), which were bound that way
 because a barcode binding has to happen at a bill's creation — a reason that
-stops generalising the moment income can recur too. **`i` no longer means
+stops generalizing the moment income can recur too. **`i` no longer means
 "add before the current row."** `a` adds below; above is `a` then `K`. That
 gesture was in the keymap table but never in the code (`a` and `i` ran
 identical logic), so nothing working was removed — but it is a deletion, not
 a rename.
 
-**Neither edit form is a modal.** The forms outgrew a centred 560px dialog
+**Neither edit form is a modal.** The forms outgrew a centered 560px dialog
 (the rule form especially), and a dialog hides the very ledger you're
 editing. So:
 
@@ -750,7 +750,7 @@ editing. So:
     owed.
   - **The app's own suffixes are untouched** — `{month}_scheduled.{ext}`
     and `{month}_barcode.{ext}` keep their plain `_` form, so the three file
-    kinds stay recognisable at a glance.
+    kinds stay recognizable at a glance.
 - **The barcode upload field is a dropzone, not a file `<input>` styled to
   look like one** — attaching a file there is what derives `client_code`
   on save (see Bill import, below), and it's optional in both `A` and `E`:
@@ -777,7 +777,7 @@ editing. So:
   there's exactly one control for that fact, never two disagreeing about
   which one a future materialized period actually follows.
 - **Bucket is the identical combobox in both forms** — same per-member
-  datalist, same "pick one of yours or type a new one" behaviour, in the
+  datalist, same "pick one of yours or type a new one" behavior, in the
   occurrence form and the rule form alike. The rule form's Bucket starts
   blank when creating a new rule specifically (not when editing an
   existing one), regardless of what the anchor transaction was tagged
@@ -802,7 +802,7 @@ editing. So:
   saved value can't disagree with each other because the display is
   computed from the same integer that gets saved.
 - **A datalist's native suggestion popup is browser chrome, not page DOM** —
-  closing a form while it's open (saving, cancelling, or collapsing the
+  closing a form while it's open (saving, canceling, or collapsing the
   row) blurs the focused field first, on purpose, before the field is torn down. Skipping
   that step can leave the popup visually stuck on screen with nothing left
   to anchor to, since removing its input from under it isn't the same thing
@@ -856,7 +856,7 @@ never in the source.
   on exactly one input — no JavaScript. A clean load keeps whatever autofocus
   it normally has, which is why every one of those is conditional rather than
   two elements competing for one cursor. (The rule pane and the edit row
-  place the cursor themselves, because `autofocus` is not honoured reliably
+  place the cursor themselves, because `autofocus` is not honored reliably
   on a fragment the browser inserts, and both arrive as fragments.)
 - **A cross-field rule is reported on the field you would retype.** "The two
   passwords do not match" lands on Confirm, not on Password — and only once
@@ -904,7 +904,7 @@ does most of the real work, so the auth layer stays simple on purpose.
 - **The invitee sets their own password.** This reverses the earlier "an admin
   creates a member row *and sets its initial password*". An admin issues a
   one-time link; the person who accepts it picks their own name, password,
-  language and colour scheme. The closed-household rule is untouched — an admin
+  language and color scheme. The closed-household rule is untouched — an admin
   still decides who gets a link — but nobody ever types somebody else's
   password, and there is no initial password to hand over on a sticky note.
 - **The login identifier is `members.name`, not an email.** `name` is already
@@ -952,7 +952,7 @@ does most of the real work, so the auth layer stays simple on purpose.
 All three pre-auth pages share a layout that **does not exist anywhere else in
 this app**: every current surface lives inside the full-viewport `.app` grid
 (`.topbar` / `.tabbar` / `.stage` / `.status`), and pre-auth there is no ledger,
-no month, and no member. One new layout, `.auth` — a centred card on
+no month, and no member. One new layout, `.auth` — a centered card on
 `var(--paper)`, a thin chrome strip, and the existing statusline.
 
 What it reuses unchanged, so the app looks like itself before you are in it: the
@@ -996,7 +996,7 @@ What is still guaranteed from the keyboard:
   combinations rather than bare letters, so nothing is swallowed mid-typing.
   Rendered as `kbd` caps beside each control at ≥ 700px and dropped below, the
   same treatment the tab bar's `gt · gT` hint already gets.
-- The colour-scheme picker is a real `<fieldset>` of radios, so `←`/`→` walk it
+- The color-scheme picker is a real `<fieldset>` of radios, so `←`/`→` walk it
   natively. Do not build a grid of buttons and then reimplement arrow keys.
 
 The keyboard-first identity still shows: every primary button carries a real `⏎`
@@ -1017,7 +1017,7 @@ configured. One POST is one SQLite transaction that creates
 `household_settings` + `members` + `member_settings` + `sessions`, or creates
 nothing at all.
 
-It collects, in three labelled sections:
+It collects, in three labeled sections:
 
 - **Your household** — household name, currency, default language. The name is
   a real need, not decoration: `/login`'s heading, the statusline's left cell
@@ -1025,7 +1025,7 @@ It collects, in three labelled sections:
   hardcoding "FFM" is worst on the one page whose job is *am I on the right
   server*.
 - **You** — name (with "you'll sign in with this" said plainly next to it),
-  password, confirm password, colour scheme.
+  password, confirm password, color scheme.
 - **Storage · `ffm.toml`** — `db_path`, `receipts_root` and `backup_dir`, shown
   **read-only** with a line saying to edit the file and restart. They are the
   operator's, not the admin's. Showing them lets the admin confirm the vault is
@@ -1070,7 +1070,7 @@ Links **expire after 7 days** by default. It is a LAN app and the link is handed
 over in person or over a chat app; the number is named so the page has something
 to render.
 
-The accept form asks for name, password, confirm, language and colour scheme —
+The accept form asks for name, password, confirm, language and color scheme —
 the same field grid as `/setup`'s second section, which is the point: one form,
 two entry points. Above it sits the context (*"Rodrigo invited you to Casa
 Stuchi"*) and below it the expiry, in mono.
@@ -1131,7 +1131,7 @@ That would also rewrite their `slug`, and `slug` is their receipt-vault folder
 (`{slug}`). Recovering a password must never orphan somebody's filing.
 
 The accept form asks for **password and confirm only**. No name — renaming is a
-vault move once files exist, and this person is not new. No language or colour
+vault move once files exist, and this person is not new. No language or color
 scheme — they already have both, and a reset has no business resetting taste.
 
 **At most one live reset link per member**, enforced by a partial unique index.
@@ -1225,19 +1225,19 @@ The card's heading is the household name and its subtitle says what this is.
 
 - **One error message for both a wrong name and a wrong password**: *"That name
   and password don't match. Check the name, or ask an admin for a new invite
-  link."* Not security theatre — this document already declines rate limiting on
+  link."* Not security theater — this document already declines rate limiting on
   the grounds that the network is the boundary. It is that "we have no rodrigo"
   and "wrong password" lead to the same next action, and the copy rule says tell
   people what to do about it. On failure the name is kept, the password cleared,
   and focus returns to the password field.
-- **No colour-scheme picker here.** A palette chosen by an anonymous visitor has
+- **No color-scheme picker here.** A palette chosen by an anonymous visitor has
   nowhere to live, and a returning member's real palette is in their settings
   row and would override it three seconds later. Language and light/dark only —
   both of which genuinely apply to this page. `/setup` and `/invite` *do* get
   the full picker, because on those two pages it is a form field writing
   `member_settings`, not chrome.
-- **On a phone the card is not vertically centred.** It sits at `12vh` from the
-  top: centring a card in the viewport puts it underneath the software keyboard
+- **On a phone the card is not vertically centered.** It sits at `12vh` from the
+  top: centering a card in the viewport puts it underneath the software keyboard
   the moment a field takes focus.
 
 ---
@@ -1257,7 +1257,7 @@ nothing about it is destructive or hard to undo.
   admin-only visibility and actions are currently in effect for that one
   session, not a session swap to someone else's account.
 - **What actually changes**: other members' `private` rows go back to being
-  genuinely hidden — not greyed out, not present-but-redacted, absent from
+  genuinely hidden — not grayed out, not present-but-redacted, absent from
   the row list, the pane's totals, and any group subtotal exactly the way
   they'd be absent for a real non-admin, so nothing about the numbers can
   leak a hidden row's existence by not adding up. Admin-only settings become
@@ -1303,7 +1303,7 @@ spend states and stay that way.
 - **Tracked income is confirmed by its payslip on disk** — the same single
   `exists()` check, the same absolute "no manual tick for a tracked rule".
 - **Untracked income uses the manual tick** untracked rules already get,
-  relabelled *"Mark as received manually"*. Same one exception, same reason:
+  relabeled *"Mark as received manually"*. Same one exception, same reason:
   there is no filesystem evidence to contradict it.
 
 ### A varying amount is projected
@@ -1329,14 +1329,14 @@ period is confirmed, the row shows an **estimate** derived from history.
 
 ### Saying so, everywhere the number goes
 
-- The row reads `~R$ 4.133,33` in a quieter colour. The mark carries whether
+- The row reads `~R$ 4.133,33` in a quieter color. The mark carries whether
   the money moved; the tilde carries whether the number is a fact — one
   channel per fact, as everywhere else in this document.
 - **The pane's INs and Balance, and the household's IN and NET, all carry
   the `~`** when any component is a projection. Leaving projections out of
   the totals would make a future month's NET useless; putting them in
   unmarked would present a guess as a fact.
-- **The MoM delta inverts.** The arrow is direction, the colour is whether
+- **The MoM delta inverts.** The arrow is direction, the color is whether
   it's good news: more money out is bad, more money in is good, so a raise
   never paints itself red. A recurring income gets a delta; a one-off and an
   unconfirmed projection don't — the latter would compare a guess to a fact.
@@ -1349,7 +1349,7 @@ period is confirmed, the row shows an **estimate** derived from history.
   row. A hard "income always floats" tier was rejected: it would contradict
   being able to move it, and it would quietly override an explicit sort.
 - **The form is the same field grid with income wording** — `bill_name` is
-  labelled **Source**, the due date **Expected day**, installments
+  labeled **Source**, the due date **Expected day**, installments
   **Payments**. Same columns, same computed path
   (`bucket / source / year / month.ext`); no parallel fields.
 - **The whole barcode apparatus is absent.** No "no barcode file" switch, no
@@ -1366,7 +1366,7 @@ period is confirmed, the row shows an **estimate** derived from history.
 
 Every change to a transaction, a rule or a file is recorded. `gl` on the
 focused row opens its history in a side pane — the same 420px column, arrow
-and cursor-follows behaviour the `A`/`I`/`E` rule editor uses, so nothing new has
+and cursor-follows behavior the `A`/`I`/`E` rule editor uses, so nothing new has
 to be learned to read it.
 
 ### Tables
@@ -1557,7 +1557,7 @@ each member's own folder regardless of tag overlap:
 
 A scheduled file with no receipt and a due date already in the past is not
 generic `pending` — it's a promise that hasn't been confirmed kept, and gets
-its own warning-coloured state (see the row-state table above) rather than
+its own warning-colored state (see the row-state table above) rather than
 silently reading the same as "nothing has happened yet."
 
 **Uploading the receipt supersedes the scheduled file automatically.** The
@@ -1596,7 +1596,7 @@ one bill document doesn't mean sharing one payment.
   there's never a second file to upload. A cyclic bill gets a **new**
   window every cycle: re-entering `window_size`/`window_start` when that
   cycle's document actually arrives is the whole "I got a new file"
-  action — there's no separate upload flow modelled for any of the three
+  action — there's no separate upload flow modeled for any of the three
   file kinds yet (see Upload, below), and this doesn't need one either.
 - **Independent of the still-open cyclic/seasonal rule design** (a
   `months`-of-year allow-list — see CLAUDE.md's Open items). This doesn't
@@ -1668,7 +1668,7 @@ three, and they all end in the same request:
   only files that *exist* — no ghost placeholders — so attaching lives behind
   one control rather than three empty slots pretending to be files. Clicking
   it opens a menu of the three kinds, anchored to the control itself because
-  the ledger scrolls sideways and a centred menu would point at nothing.
+  the ledger scrolls sideways and a centered menu would point at nothing.
 - **Dropping a file on the row.** A row drop infers nothing: the row is
   identified by where you let go. What a drop cannot say by itself is *which
   of the three kinds* it is, and guessing that from the filename is exactly
@@ -1727,10 +1727,10 @@ UI-facing:
   exists" is absolute for it — ticking a box is not a substitute for evidence,
   which is the entire reason tracking was opted into.
 - Visually distinguish the two "paid" marks — file-verified vs. manually
-  asserted — with different colours/shades of the same glyph, never the same
+  asserted — with different colors/shades of the same glyph, never the same
   mark (see the row-state table above).
 
-### Not modelled yet
+### Not modeled yet
 
 - A `months` allow-list and a tracking-window `interval` (e.g. a tax tracked
   only January–October). ffm's rule already has a start/end date; a
@@ -1797,10 +1797,10 @@ on one simply means no row reads `0`.
 A framed container (same visual language as the existing `.card` component),
 one per `bucket`, holding the bucket name, a row count, and a **subtotal that
 stays visible whether the fold is open or closed**. Deliberately not
-colour-coded — `bucket` is open-vocabulary and unbounded, while a theme's
+color-coded — `bucket` is open-vocabulary and unbounded, while a theme's
 palette is a fixed 11 tokens with `pos`/`neg`/`accent`/`info` already spoken
 for; a frame plus a label scales to any number of categories without risking a
-collision or inventing a hash-based colour scheme for marginal gain.
+collision or inventing a hash-based color scheme for marginal gain.
 
 Rows with no `bucket` set land in an **`Uncategorized`** group — grouping never
 silently drops a row. Nesting stops at `bucket` — no nested `bill_name`
@@ -1853,7 +1853,7 @@ rule (a private row only counts for its owner and the admin).
 
 ### Surfaced as a badge, not a message
 
-- A small dot (`--neg` token, the same warning colour already used for
+- A small dot (`--neg` token, the same warning color already used for
   `scheduled overdue`) overlays the month-picker trigger button whenever any
   month this year, other than the one currently open, has an unresolved
   occurrence.
@@ -1865,7 +1865,7 @@ rule (a private row only counts for its owner and the admin).
   ambient like every other status in this app, not a one-shot notification
   that gets dismissed and then forgotten.
 - Clicking a flagged cell jumps to that month — the picker's existing
-  behaviour, unchanged. No new command.
+  behavior, unchanged. No new command.
 
 ### Defaults
 
@@ -1894,7 +1894,7 @@ exactly the failure mode the single-source-of-truth rule exists to prevent. Once
 that argument is admitted for theme it applies unchanged to line numbers, sort,
 search scope, the delta toggle and every layout threshold — all of which
 describe *a person at a screen*, not a process. A `member_id`-keyed row sidesteps
-the whole problem, and SQLite already serialises concurrent writes where a file
+the whole problem, and SQLite already serializes concurrent writes where a file
 does not.
 
 What stayed household-wide is what cannot coherently differ between members:
@@ -1998,7 +1998,7 @@ full width, at the bottom, over the ledger — fzf-shaped.
   A band is two grid rows — every label in the first, every control in the
   second — so a label that wraps to two lines pushes the whole band's
   controls down together instead of leaving its own input a line below its
-  neighbours'. That was the Layout group before: a radio set, a two-up
+  neighbors'. That was the Layout group before: a radio set, a two-up
   `.fgrid` and a lone field, three independent items whose only alignment
   was luck.
   - **Each field inherits the band's rows with `subgrid`**, which is what
@@ -2006,7 +2006,7 @@ full width, at the bottom, over the ledger — fzf-shaped.
     by each field alone. It degrades correctly to one column: a field still
     spans two rows, so the fields stack label-over-control rather than every
     label piling into row one.
-  - **A radio group in a band is a labelled `radiogroup`, not a
+  - **A radio group in a band is a labeled `radiogroup`, not a
     `fieldset`/`legend`.** A legend is rendered outside its fieldset's own
     layout box — measured, not assumed — so it cannot be a row of the band's
     grid, and the control under it lands a line off from every other control
@@ -2103,7 +2103,7 @@ default_visibility      text  -- NULL = follow the household's policy,
   enum still makes an unknown token a real error naming the valid tokens — only
   the source format changed (JSON column vs. TOML file), not the validation.
 - `default_visibility`'s nullable tri-state is rendered honestly in `:profile`:
-  three radios, the first meaning `NULL` and labelled with what it currently
+  three radios, the first meaning `NULL` and labeled with what it currently
   resolves to.
 - **`layout_min_width` and `layout_max_width` are both rendered into the
   page's own `<style>`**, not carried in a stylesheet. The floor arrived
@@ -2125,7 +2125,7 @@ default_visibility      text  -- NULL = follow the household's policy,
   belongs to the member; light-versus-dark is a property of the *device* — the
   same person uses a bright laptop and a dark phone — so it lives in the
   `ffm.theme` cookie. Keeping the two separate is what makes a pre-auth page
-  themeable at all: `/login` can honour your light/dark without knowing who you
+  themeable at all: `/login` can honor your light/dark without knowing who you
   are.
 
 ### Currency (`household_settings.locale_currency`)
@@ -2248,7 +2248,7 @@ builtins, a literal `dd/mm/yyyy`-shaped date pattern, or a currency glyph. Money
 and dates are formatted by `fmt::money(cents, Currency)` and
 `fmt::date(NaiveDate)` — neither of which takes a language — and their output is
 passed *into* a message as a `&str`. The catalog is structurally incapable of
-localising a number, rather than merely discouraged from it.
+localizing a number, rather than merely discouraged from it.
 
 ### Where the pre-login choice lives: a cookie
 

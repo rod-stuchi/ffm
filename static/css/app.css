@@ -9,7 +9,7 @@
 
 @import "tailwindcss";
 
-/* Fonts and scalars. No colour: every colour comes from the server-rendered
+/* Fonts and scalars. No color: every color comes from the server-rendered
  * theme block, which is the single source for the eleven values. */
 @import "./fonts.css";
 @import "./tokens.css";

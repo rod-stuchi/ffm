@@ -90,7 +90,7 @@ pub fn summarize(items: &[Item], ids: &HashSet<i64>) -> Summary {
 }
 
 /// One figure in the cell: an optional label (`in`, `out`, `net`), the money,
-/// and the colour class the header gives the same figure.
+/// and the color class the header gives the same figure.
 pub struct Part {
     label: &'static str,
     value: String,

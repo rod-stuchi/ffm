@@ -379,7 +379,7 @@ mod policy_tests {
 // what a rule's bill is bound to
 // ---------------------------------------------------------------------------
 
-/// The identifiers a bill can be recognised by. The same shape serves both
+/// The identifiers a bill can be recognized by. The same shape serves both
 /// sides: what a rule has on file, and what a freshly-read bill says.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Binding<'a> {

@@ -39,7 +39,7 @@
   {%- endif %}
   {%- if max_width > 0 %}
   /* A pane stops growing: one pane stretched across a wide screen puts the
-     amount a metre from the name it belongs to. 0 means unlimited, which is a
+     amount a meter from the name it belongs to. 0 means unlimited, which is a
      real choice rather than a missing value. */
   .pane { max-width: {{ max_width }}px; }
   {%- endif %}
@@ -53,7 +53,7 @@
      no reason for it to hug the left edge of a wide screen. `safe`, never a
      plain `center`: the stage scrolls sideways, and a plain `center` puts
      overflow past the START edge where nothing can scroll back to it. Split
-     mode is deliberately left alone — panes there are a row, and centring a
+     mode is deliberately left alone — panes there are a row, and centering a
      row is a different question. */
   .stage { justify-content: safe center; }
   {%- else if layout_panes == "auto" %}
@@ -112,7 +112,7 @@
       <div class="mpop" x-show="picking" x-cloak>
         {%- for m in months %}
         {#- Clicking a flagged cell jumps to that month: the picker's existing
-            behaviour, so nothing new is needed on top of it. -#}
+            behavior, so nothing new is needed on top of it. -#}
         <a class="mcell{% if m.current %} is-current{% endif %}"
            href="?period={{ m.key }}" title="{{ m.title }}">
           {{ m.label }}{% if m.unresolved > 0 %}<i class="dot"></i>{% endif %}
@@ -188,7 +188,7 @@
             swatches — which are its first control. That is the whole
             difference, and it is why this is not a second palette picker. -#}
         <button class="btn" type="button" title="{{ t.profile_theme() }}"
-                @click="open = false; openColours()">:theme</button>
+                @click="open = false; openColors()">:theme</button>
         <hr class="psep">
         <form method="post" action="/logout">
           <button class="btn" type="submit" title="{{ t.sign_out() }}">:logout</button>
@@ -263,10 +263,10 @@
         <input type="hidden" name="period" value="{{ period_key }}">
         <input type="hidden" name="kind" :value="kind">
 
-        {#- The sign says which direction before the words do, in the colour
+        {#- The sign says which direction before the words do, in the color
             that direction already wears in the ledger: `+` in `--pos`, the
             same token an income row's amount uses, and `−` in the plain ink
-            a spend's amount is written in. Semantic colour for a money fact,
+            a spend's amount is written in. Semantic color for a money fact,
             never the accent — the accent means "you are here". -#}
         <div class="addhead">
           <span class="addsign" :class="kind === 'in' ? 'is-in' : 'is-out'"
@@ -1411,7 +1411,7 @@ function ledger() {
       form.querySelectorAll('[name]').forEach(el => {
         values[el.name] = el.type === 'checkbox' ? el.checked : el.value;
       });
-      // The version travelled with the form and is now stale by definition.
+      // The version traveled with the form and is now stale by definition.
       // Keeping it would make the retry refuse for the same reason, forever.
       delete values.version;
       this.drafts[id] = values;
@@ -1681,7 +1681,7 @@ function ledger() {
     /// the vacated slot: the one that just swapped past it. Pressing `J`
     /// again then moved THAT row back down, and the two traded places
     /// forever. A row could not be walked down the ledger a press at a time
-    /// at all; it alternated with its neighbour, once per keystroke.
+    /// at all; it alternated with its neighbor, once per keystroke.
     ///
     /// `5J` hid this completely, because a count is one request and one swap
     /// — which is why the bug survived a keymap sweep that tested counts.
@@ -1744,7 +1744,7 @@ function ledger() {
       this.closeLog();
       this.closeRule();
       this.trackSplit(url);
-      // Returned, not discarded: `openColours()` has to wait for the swap
+      // Returned, not discarded: `openColors()` has to wait for the swap
       // before it can put the keyboard on the first swatch.
       return htmx.ajax('GET', url, { target: '#hsplitmount', swap: 'innerHTML' });
     },
@@ -1772,11 +1772,11 @@ function ledger() {
       history.replaceState(null, '', u);
     },
 
-    /// The profile menu's colour-scheme item. `:profile` with the cursor
+    /// The profile menu's color-scheme item. `:profile` with the cursor
     /// already on the palette — the swatches are the pane's first control, and
     /// `focusSplit` lands on its first visible input, so this needs no anchor
     /// and no second picker.
-    openColours() {
+    openColors() {
       this.showSplit('/profile').then(() => this.focusSplit());
     },
 
@@ -2014,7 +2014,7 @@ function ledger() {
         // a rejection of the whole command. It opens the picker instead,
         // which is exactly what the menu item of the same name does.
         case 'theme':
-          if (!arg) return this.openColours();
+          if (!arg) return this.openColors();
           return this.setting('/settings/member', 'theme_name', arg);
         case 'lang':     return this.setting('/settings/member', 'language', arg);
         case 'sort':     return this.setting('/settings/member', 'ledger_sort', arg);
@@ -2047,7 +2047,7 @@ function ledger() {
 
     attach(id, e) {
       // Anchored to the control that opened it, because the ledger scrolls
-      // sideways and a centred menu would point at nothing.
+      // sideways and a centered menu would point at nothing.
       const r = e.currentTarget.getBoundingClientRect();
       this.attaching = id;
       this.menuStyle = 'top:' + (r.bottom + 6) + 'px; left:' + Math.max(8, r.left - 80) + 'px';

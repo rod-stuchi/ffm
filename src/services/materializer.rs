@@ -241,7 +241,7 @@ async fn insert_occurrence(pool: &SqlitePool, o: Occurrence<'_>) -> sqlx::Result
     // Income lands at the top of its pane, a spend at the bottom — the same
     // rule a hand-entered row follows, because a materialized row is an
     // ordinary transaction that happens to have a rule behind it.
-    let neighbour: Option<String> = if o.kind == "in" {
+    let neighbor: Option<String> = if o.kind == "in" {
         sqlx::query_scalar!(
             r#"SELECT min(sort_key) AS "k: String" FROM transactions
                WHERE member_id = ?1 AND period = ?2 AND deleted_at IS NULL"#,
@@ -260,7 +260,7 @@ async fn insert_occurrence(pool: &SqlitePool, o: Occurrence<'_>) -> sqlx::Result
         .fetch_one(&mut *tx)
         .await?
     };
-    let sort_key = match (o.kind == "in", neighbour.as_deref()) {
+    let sort_key = match (o.kind == "in", neighbor.as_deref()) {
         (true, Some(first)) => sortkey::before(first),
         (false, Some(last)) => sortkey::after(last),
         (_, None) => sortkey::between(None, None),

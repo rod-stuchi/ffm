@@ -159,7 +159,7 @@ fn currencies(t: &Catalog, selected: Currency) -> Vec<CurrencyChoice> {
         .collect()
 }
 
-/// The 11 palettes, each shown as its own colours rather than its name alone —
+/// The 11 palettes, each shown as its own colors rather than its name alone —
 /// a name is not a preview.
 fn swatches(selected: ThemeName) -> Vec<Swatch> {
     ThemeName::ALL
@@ -270,7 +270,7 @@ pub async fn login(
 }
 
 /// One message for both a wrong name and a wrong password. Not security
-/// theatre — this design already declines rate limiting on the grounds that the
+/// theater — this design already declines rate limiting on the grounds that the
 /// network is the boundary. It is that "we have no rodrigo" and "wrong
 /// password" lead to the same next action, and the copy rule says tell people
 /// what to do about it.
@@ -729,7 +729,7 @@ pub fn mode_label(t: &Catalog, mode: ModePref) -> &'static str {
 }
 
 /// A redirect target that came in on a form is attacker-controlled, so only a
-/// path on this server is ever honoured. `//evil.example` is a protocol-relative
+/// path on this server is ever honored. `//evil.example` is a protocol-relative
 /// URL and is rejected along with everything else that is not a local path.
 fn safe_next(next: &str) -> String {
     if next.starts_with('/') && !next.starts_with("//") {

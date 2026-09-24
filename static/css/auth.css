@@ -65,7 +65,7 @@
   overflow: auto;
 }
 
-/* On a phone the card is not vertically centred: centring it puts it under the
+/* On a phone the card is not vertically centered: centering it puts it under the
  * software keyboard the moment a field takes focus. */
 @media (max-width: 560px) {
   .auth-stage {

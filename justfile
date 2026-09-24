@@ -152,7 +152,7 @@ css-check:
     set -euo pipefail
     found=0
     for f in static/css/*.css; do
-        # tokens.css is where colour is allowed to be literal; build.css and
+        # tokens.css is where color is allowed to be literal; build.css and
         # app.css are generated / Tailwind's own, not hand-written components.
         case "$f" in */tokens.css|*/build.css|*/app.css) continue;; esac
         stripped=$(perl -0777 -pe 's{/\*.*?\*/}{}gs' "$f")
@@ -163,10 +163,10 @@ css-check:
         fi
     done
     if [ "$found" = 1 ]; then
-        echo "✗ hardcoded colour outside tokens.css" >&2
+        echo "✗ hardcoded color outside tokens.css" >&2
         exit 1
     fi
-    echo "✓ no hardcoded colours outside tokens.css"
+    echo "✓ no hardcoded colors outside tokens.css"
 
 # Askama HTML-escapes every expression, including the json filter's output —
 # and inside a <script> that turns `"` into `&#34;` and kills the whole block,

@@ -68,7 +68,7 @@ mod tests {
         assert!(!previewing.is_admin(), "admin-only actions refuse");
         assert!(
             !previewing.sees_private_of(2),
-            "somebody else's private row is genuinely hidden, not greyed out"
+            "somebody else's private row is genuinely hidden, not grayed out"
         );
         assert!(
             previewing.sees_private_of(1),

@@ -30,7 +30,7 @@ UA = (
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
-LICENCES = {
+LICENSES = {
     "OFL-Archivo.txt": "https://raw.githubusercontent.com/google/fonts/main/ofl/archivo/OFL.txt",
     "OFL-JetBrainsMono.txt": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/OFL.txt",
 }
@@ -97,7 +97,7 @@ def main() -> int:
         (FONT_DIR / name).write_bytes(get(url))
         print(f"  {name}")
 
-    for name, url in LICENCES.items():
+    for name, url in LICENSES.items():
         (FONT_DIR / name).write_bytes(get(url))
         print(f"  {name}")
 

@@ -43,7 +43,7 @@ pub struct RuleForm {
     pub due_day: Option<i64>,
     pub start_date: NaiveDate,
     /// `None` = ongoing. Plain and independently settable on every rule — this
-    /// is how an ordinary open-ended bill gets cancelled, with nothing about
+    /// is how an ordinary open-ended bill gets canceled, with nothing about
     /// installments involved.
     pub end_date: Option<NaiveDate>,
     /// A finite, non-cyclic run. Set only for something like a car loan.

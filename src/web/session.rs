@@ -10,7 +10,7 @@
 //!   re-translated DOM. A cookie arrives *with the request*, so the first byte
 //!   is already right, with zero JS. `HttpOnly`, since only the server reads it.
 //! * **`ffm.theme`** — light / dark / system. A property of the *device*, not
-//!   of the member, which is exactly what lets `/login` honour it without
+//!   of the member, which is exactly what lets `/login` honor it without
 //!   knowing who you are.
 
 use crate::db::auth::{self, Session};
@@ -88,7 +88,7 @@ pub fn pre_auth_lang(jar: &CookieJar, parts: &Parts, household_default: Option<L
 }
 
 /// `pt-BR;q=0.9, en;q=0.8` → the best supported match. Quality values are
-/// honoured, because a browser that lists English first at q=0.5 is stating a
+/// honored, because a browser that lists English first at q=0.5 is stating a
 /// preference, not an order.
 pub fn best_accept_language(header: &str) -> Option<Lang> {
     let mut best: Option<(f32, Lang)> = None;
@@ -194,7 +194,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn accept_language_honours_quality_not_order() {
+    fn accept_language_honors_quality_not_order() {
         assert_eq!(
             best_accept_language("pt-BR,pt;q=0.9,en;q=0.8"),
             Some(Lang::PtBr)

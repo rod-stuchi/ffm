@@ -545,7 +545,7 @@ async fn a_private_row_is_absent_from_the_list_and_from_the_totals() {
             .rows
             .iter()
             .any(|r| r.title == "Presente · aniversário"),
-        "a private row is absent, not greyed out"
+        "a private row is absent, not grayed out"
     );
 
     // And the numbers add up WITHOUT it, which is the half that is easy to get

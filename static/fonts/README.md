@@ -23,4 +23,4 @@ browser only fetches the subsets a page actually uses because the
     just fonts
 
 Both families are SIL Open Font License 1.1 — `OFL-Archivo.txt` and
-`OFL-JetBrainsMono.txt`, kept alongside as the licence requires.
+`OFL-JetBrainsMono.txt`, kept alongside as the license requires.

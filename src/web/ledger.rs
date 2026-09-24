@@ -153,10 +153,10 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
 ///
 /// **That subtotal is why there is no separate report screen.** `zM` closes
 /// every fold and the ledger already reads as a per-category summary —
-/// browsing and summarising are one mechanism at two zoom levels.
+/// browsing and summarizing are one mechanism at two zoom levels.
 pub struct Group {
     pub name: String,
-    /// Already pluralised — the count is a number the catalog has to agree
+    /// Already pluralized — the count is a number the catalog has to agree
     /// with, so it is rendered where the catalog lives rather than cast in a
     /// template.
     pub count: String,
@@ -486,7 +486,7 @@ fn command_hint(admin: bool, holds_admin_role: bool) -> String {
 ///
 /// Lowercase acts on the **occurrence**, uppercase on the **rule or the
 /// window** — which is the rule the whole table follows, and the reason it can
-/// be read rather than memorised.
+/// be read rather than memorized.
 fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
     vec![
         (
@@ -562,7 +562,7 @@ fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
 }
 
 /// The twelve cells of the current year, each carrying whatever is unresolved
-/// in it. Clicking one jumps to that month — the picker's existing behaviour,
+/// in it. Clicking one jumps to that month — the picker's existing behavior,
 /// so no new command is needed on top of it.
 async fn month_cells(
     st: &AppState,

@@ -163,7 +163,7 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
             &s.group_fold_default,
         ),
         // The nullable tri-state, rendered honestly: the first option means
-        // NULL and is labelled with what it currently resolves to, so nobody
+        // NULL and is labeled with what it currently resolves to, so nobody
         // has to guess what "follow the household" is following.
         visibilities: choices(
             &[
@@ -211,7 +211,7 @@ pub async fn set_member(
         Ok(()) => {
             // A whole-page refresh for anything the SERVER decides per row or
             // per page. Language and theme were the obvious two — every
-            // string, every colour — but the same is true of the gutter, the
+            // string, every color — but the same is true of the gutter, the
             // row order, grouping, the delta column and every layout value,
             // which is rendered into a media query in the page's own <style>.
             //
@@ -226,7 +226,7 @@ pub async fn set_member(
             // (read when you add a row).
             // The palette is the exception, and deliberately: it is one
             // `<style>` block and nothing else on the page depends on it, so
-            // swapping that block out of band changes every colour with no
+            // swapping that block out of band changes every color with no
             // reload at all. Refreshing for it was the lazy read of "the
             // server renders this" — and it closed the very pane you were
             // picking from, which made trying eleven themes eleven reloads.
@@ -245,7 +245,7 @@ pub async fn set_member(
                     &auth.settings.theme_overrides,
                 )
                 .to_css();
-                // `hx-swap-oob` is honoured even though the form asks for
+                // `hx-swap-oob` is honored even though the form asks for
                 // `hx-swap="none"`: out-of-band content is matched by id and
                 // applied separately from the (absent) main swap.
                 let body = format!(r#"<style id="ffm-theme" hx-swap-oob="true">{css}</style>"#);

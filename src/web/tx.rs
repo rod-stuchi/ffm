@@ -370,7 +370,7 @@ fn error_row(t: &Catalog, message: &str) -> Response {
         t: &'a Catalog,
     }
     // 200, not 4xx: HTMX swaps a successful response by default, and this row
-    // IS the answer. Signalling failure in the status code would mean the user
+    // IS the answer. Signaling failure in the status code would mean the user
     // sees nothing at all.
     Html(ErrorRow { message, t }).into_response()
 }
@@ -619,7 +619,7 @@ pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
         return res;
     }
 
-    // Undoing a reorder changes where a row sits among its neighbours, which
+    // Undoing a reorder changes where a row sits among its neighbors, which
     // no single-row fragment can express — the whole pane comes back, exactly
     // as `J`/`K` themselves answer.
     if ok
