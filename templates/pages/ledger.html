@@ -80,6 +80,7 @@
 <div class="ledger-shell" data-period="{{ period_key }}" x-data="ledger()"
      :class="{ 'is-dragging': dragging }"
      @keydown.window="key($event)"
+     @mousemove.window="mouseMoved($event)"
      @htmx:before-swap.window="savedSwap($event)"
      {#- A file dragged anywhere over the ledger reveals every attachable
          row's three drop targets. `dragover` rather than `dragenter` because
@@ -674,6 +675,8 @@ function ledger() {
     confirming: null,
     movingPrivate: null,
     tip: null,
+    /// Where the pointer last was, in screen coordinates — see `mouseMoved`.
+    pointerAt: null,
     tipStyle: '',
     carousel: null,
     zoom: 1,
@@ -871,6 +874,12 @@ function ledger() {
       // Any keypress dismisses a details popup — the same way any hover
       // artifact goes away — before that key does whatever else it does.
       if (this.tip) { this.tip = null; }
+      // Keyboard motion wins over a stale hover: the row the resting mouse
+      // happens to be over stops painting its highlight, so only the real
+      // cursor is lit. The CSS half (`body:not(.kbd-nav) .row:hover`) was
+      // written long ago; nothing ever set the class, so the pointer's row
+      // stayed lit beside the cursor's on every j/k. Cleared by `mouseMoved`.
+      if (!typing) document.body.classList.add('kbd-nav');
 
       if (this.carousel) { e.preventDefault(); this.carouselKey(e.key); return; }
       if (this.keymap) {
@@ -1214,6 +1223,21 @@ function ledger() {
     },
 
     // --- gd, P, ? ---------------------------------------------------------
+
+    /// The mouse is the thing moving again, so hover comes back.
+    ///
+    /// Only a REAL move counts. A browser fires `mousemove` when the page
+    /// scrolls under a pointer that never moved — which is exactly what `j`
+    /// past the edge of the view does — and taking that as the mouse would
+    /// undo `kbd-nav` a frame after the key set it. So the screen position
+    /// must actually change.
+    mouseMoved(e) {
+      const at = e.screenX + ',' + e.screenY;
+      if (at === this.pointerAt) return;
+      const first = this.pointerAt === null;
+      this.pointerAt = at;
+      if (!first) document.body.classList.remove('kbd-nav');
+    },
 
     /// `gd` is the hover tooltip with no mouse involved: the same panel over
     /// the same facts, anchored to the focused row because there is no pointer

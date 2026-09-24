@@ -433,7 +433,12 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
   correct than the other, which is exactly the ambiguity a modal ledger
   cannot afford. Any real mouse movement clears the suppression immediately
   — hover and the tooltip both come right back the instant the mouse is the
-  thing actually moving again.
+  thing actually moving again. **"Real" is load-bearing:** a browser fires
+  `mousemove` when the page scrolls under a pointer that never moved — which
+  is exactly what `j` past the edge of the view does — so the suppression is
+  cleared only when the pointer's screen position actually changes. (The CSS
+  half of this, `body:not(.kbd-nav) .row:hover`, existed for a long time with
+  nothing setting the class, so the hovered row stayed lit beside the cursor.)
 
 ### Find
 | Key | Action |
