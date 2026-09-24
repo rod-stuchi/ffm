@@ -336,3 +336,98 @@ mod policy_tests {
         assert_eq!(reconcile(None::<Cents>, None), Fill::Missing);
     }
 }
+
+// ---------------------------------------------------------------------------
+// what a rule's bill is bound to
+// ---------------------------------------------------------------------------
+
+/// The identifiers a bill can be recognised by. The same shape serves both
+/// sides: what a rule has on file, and what a freshly-read bill says.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Binding<'a> {
+    /// The subscriber's account, from the text layer. The strongest identity
+    /// there is — two bills from the same company to two houses differ here.
+    pub client_code: Option<&'a str>,
+    /// The arrecadação company code, from the barcode. Weaker (it names the
+    /// company, not the account) but always there on a utility bill, which is
+    /// what makes it the fallback when no profile could read a client code.
+    pub company: Option<&'a str>,
+}
+
+/// Which identifier disagreed, and both values — the message names them so a
+/// person can see *why* this is the wrong row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Mismatch {
+    pub found: String,
+    pub known: String,
+}
+
+/// Whether a bill belongs to a rule, before anything is written.
+///
+/// **Refuse only on a positive disagreement.** A value the bill did not carry
+/// proves nothing, and a rule with nothing bound yet accepts anything — that
+/// first attach is what binds it. The client code is consulted first and, when
+/// both sides have one, decides alone: two houses with the same water company
+/// share a company code and are still two different bills.
+pub fn binding_check(bound: Binding<'_>, read: Binding<'_>) -> Result<(), Mismatch> {
+    let differs = |known: Option<&str>, found: Option<&str>| match (known, found) {
+        (Some(k), Some(f)) if k != f => Some(Mismatch {
+            found: f.to_string(),
+            known: k.to_string(),
+        }),
+        _ => None,
+    };
+    if let (Some(k), Some(f)) = (bound.client_code, read.client_code) {
+        return match differs(Some(k), Some(f)) {
+            Some(m) => Err(m),
+            None => Ok(()),
+        };
+    }
+    match differs(bound.company, read.company) {
+        Some(m) => Err(m),
+        None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod binding_tests {
+    use super::*;
+
+    fn b<'a>(client: Option<&'a str>, company: Option<&'a str>) -> Binding<'a> {
+        Binding {
+            client_code: client,
+            company,
+        }
+    }
+
+    #[test]
+    fn an_unbound_rule_accepts_any_bill() {
+        assert!(binding_check(b(None, None), b(Some("123"), Some("0048"))).is_ok());
+    }
+
+    #[test]
+    fn a_different_client_code_is_the_wrong_row() {
+        let m = binding_check(b(Some("5544332211"), None), b(Some("123"), None)).unwrap_err();
+        assert_eq!(m.found, "123");
+        assert_eq!(m.known, "5544332211");
+    }
+
+    #[test]
+    fn the_client_code_decides_alone_when_both_sides_have_one() {
+        // Same account, and the company code somehow differs: the account is
+        // the stronger identity, so this is still the right row.
+        assert!(binding_check(b(Some("1"), Some("0048")), b(Some("1"), Some("0099"))).is_ok());
+    }
+
+    #[test]
+    fn the_company_code_is_the_fallback() {
+        assert!(binding_check(b(None, Some("0048")), b(None, Some("0099"))).is_err());
+        assert!(binding_check(b(Some("1"), Some("0048")), b(None, Some("0099"))).is_err());
+        assert!(binding_check(b(None, Some("0048")), b(None, Some("0048"))).is_ok());
+    }
+
+    #[test]
+    fn a_value_the_bill_did_not_carry_proves_nothing() {
+        assert!(binding_check(b(Some("1"), Some("0048")), b(None, None)).is_ok());
+    }
+}

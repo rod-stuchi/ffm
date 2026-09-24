@@ -76,6 +76,10 @@ pub fn router(state: AppState) -> Router {
         // editor, where the rule is already identified.
         .route("/rules/{id}/barcode", post(import::attach))
         .route("/rules/{id}/unlink", post(import::unlink))
+        // `A`'s dropzone: the rule does not exist yet, so the bill is read
+        // and parked, and Create attaches it.
+        .route("/rules/barcode/preview", post(import::preview))
+        .route("/rules/{id}/meta", get(import::meta))
         // The settings surfaces. Vsplit panes with no Save button: every
         // control writes on `change`, so there is never a pending second copy
         // of the truth.

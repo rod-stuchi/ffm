@@ -284,7 +284,6 @@ pub struct LedgerRow {
     pub cadence_months: Option<i64>,
 
     // --- member facts needed to compute a path ----------------------------
-    pub member_uuid: String,
     pub member_slug: String,
 
     // --- computed by the QUERY, not by this struct ------------------------
@@ -526,16 +525,16 @@ impl LedgerRow {
 
     // -- files -----------------------------------------------------------
 
-    /// `{uuid}-{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}...`
+    /// `{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}...`
     ///
     /// Fully computed, never authored and never stored — which is exactly why
     /// renaming a rule's taxonomy has to *move* the files rather than just
     /// relabel them.
     pub fn file_path(&self, kind: FileKind) -> Option<String> {
         let ext = self.files.get(kind)?;
-        // `{uuid}-{slug}`: files live under their owner's folder, so two
+        // `{slug}`: files live under their owner's folder, so two
         // members using the same bucket name never collide.
-        let vault = format!("{}-{}", self.member_uuid, self.member_slug);
+        let vault = crate::domain::receipt_path::vault(&self.member_slug);
         let tax = receipt_path::Taxonomy {
             vault: &vault,
             bucket: self.bucket.as_deref()?,
@@ -603,7 +602,7 @@ impl LedgerRow {
     /// Where this period's receipt would live, file or no file — "where would
     /// it go" is exactly the question somebody asks when it is missing.
     fn receipt_path_preview(&self) -> Option<String> {
-        let vault = format!("{}-{}", self.member_uuid, self.member_slug);
+        let vault = crate::domain::receipt_path::vault(&self.member_slug);
         let tax = receipt_path::Taxonomy {
             vault: &vault,
             bucket: self.bucket.as_deref()?,
@@ -1030,7 +1029,6 @@ mod tests {
             window_start: None,
             amount_in_filename: false,
             varies: false,
-            member_uuid: "a1b2c3".into(),
             member_slug: "rodrigo".into(),
             prev_amount_cents: None,
             estimate_cents: None,
@@ -1216,19 +1214,19 @@ mod tests {
         r.files.receipt = Some("pdf".into());
         assert_eq!(
             r.file_path(FileKind::Receipt).unwrap(),
-            "a1b2c3-rodrigo/consumption/power/2026/09.pdf"
+            "rodrigo/consumption/power/2026/09.pdf"
         );
 
         r.files.bill = Some("jpg".into());
         assert_eq!(
             r.file_path(FileKind::Bill).unwrap(),
-            "a1b2c3-rodrigo/consumption/power/2026/09_barcode.jpg"
+            "rodrigo/consumption/power/2026/09_barcode.jpg"
         );
 
         r.files.scheduled = Some("pdf".into());
         assert_eq!(
             r.file_path(FileKind::Scheduled).unwrap(),
-            "a1b2c3-rodrigo/consumption/power/2026/09_scheduled.pdf"
+            "rodrigo/consumption/power/2026/09_scheduled.pdf"
         );
     }
 
@@ -1241,7 +1239,7 @@ mod tests {
         r.instance = Some("House 8898".into());
         assert_eq!(
             r.file_path(FileKind::Receipt).unwrap(),
-            "a1b2c3-rodrigo/consumption/power/house_8898/2026/09.pdf"
+            "rodrigo/consumption/power/house_8898/2026/09.pdf"
         );
     }
 
@@ -1252,14 +1250,14 @@ mod tests {
         r.amount_in_filename = true;
         assert_eq!(
             r.file_path(FileKind::Receipt).unwrap(),
-            "a1b2c3-rodrigo/consumption/power/2026/09_brl343.62.pdf"
+            "rodrigo/consumption/power/2026/09_brl343.62.pdf"
         );
 
         // Nothing is ever named after a zero nobody owes.
         r.amount_cents = None;
         assert_eq!(
             r.file_path(FileKind::Receipt).unwrap(),
-            "a1b2c3-rodrigo/consumption/power/2026/09.pdf"
+            "rodrigo/consumption/power/2026/09.pdf"
         );
 
         // And the app's own suffixes keep their plain form.

@@ -5,4 +5,6 @@ pub mod boleto;
 pub mod import;
 pub mod issuers;
 pub mod materializer;
+pub mod pending;
 pub mod receipts;
+pub mod vault;

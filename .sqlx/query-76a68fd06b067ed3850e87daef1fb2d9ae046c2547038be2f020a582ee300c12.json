@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT t.member_id AS \"member_id!: i64\", t.period AS \"period!: String\",\n                  t.amount_cents AS \"amount_cents: i64\",\n                  t.visibility AS \"visibility!: String\",\n                  t.rule_id AS \"rule_id: i64\",\n                  r.tracked AS \"tracked?: i64\",\n                  r.bucket AS \"bucket?: String\", r.bill_name AS \"bill_name?: String\",\n                  r.instance AS \"instance?: String\",\n                  r.amount_in_filename AS \"amount_in_filename?: i64\",\n                  m.uuid AS \"uuid!: String\", m.slug AS \"slug!: String\"\n           FROM transactions t\n           JOIN members m ON m.id = t.member_id\n           LEFT JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.id = ?1 AND t.deleted_at IS NULL",
+  "query": "SELECT t.member_id AS \"member_id!: i64\", t.period AS \"period!: String\",\n                  t.amount_cents AS \"amount_cents: i64\",\n                  t.visibility AS \"visibility!: String\",\n                  t.rule_id AS \"rule_id: i64\",\n                  r.tracked AS \"tracked?: i64\",\n                  r.bucket AS \"bucket?: String\", r.bill_name AS \"bill_name?: String\",\n                  r.instance AS \"instance?: String\",\n                  r.amount_in_filename AS \"amount_in_filename?: i64\",\n                  m.slug AS \"slug!: String\"\n           FROM transactions t\n           JOIN members m ON m.id = t.member_id\n           LEFT JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.id = ?1 AND t.deleted_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -54,13 +54,8 @@
         "type_info": "Integer"
       },
       {
-        "name": "uuid!: String",
-        "ordinal": 10,
-        "type_info": "Text"
-      },
-      {
         "name": "slug!: String",
-        "ordinal": 11,
+        "ordinal": 10,
         "type_info": "Text"
       }
     ],
@@ -78,9 +73,8 @@
       true,
       true,
       true,
-      false,
       false
     ]
   },
-  "hash": "98a7c72c390b91ce6611385b532ab459be8afc830a676040684bdf927e089757"
+  "hash": "76a68fd06b067ed3850e87daef1fb2d9ae046c2547038be2f020a582ee300c12"
 }

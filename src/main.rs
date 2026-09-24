@@ -75,6 +75,13 @@ async fn main() {
         std::process::exit(reset_link(&pool, name).await);
     }
 
+    // Before anything reads a receipt path: folders named `{uuid}-{slug}` by
+    // an earlier version move to `{slug}`. A no-op once done.
+    if let Err(e) = ffm::services::vault::drop_uuid_prefix(&pool, &cfg.receipts_root).await {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
+
     // One pass now, then one an hour. Startup matters as much as the tick: a
     // process that was down across a month boundary has to catch up the moment
     // it is back, not up to an hour later.

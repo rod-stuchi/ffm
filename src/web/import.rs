@@ -20,13 +20,18 @@ use crate::domain::money::Cents;
 use crate::domain::period::Period;
 use crate::domain::receipt_path::Kind as FileKind;
 use crate::services::boleto::Amount;
-use crate::services::import::{self, ImportError};
+use crate::services::import::{self, Binding, Parsed, binding_check};
 use crate::services::issuers::Profiles;
+use crate::services::pending;
 use crate::services::receipts;
 use crate::state::AppState;
 use crate::ui::fmt;
+use crate::ui::i18n::Catalog;
 use crate::web::session::Auth;
+use crate::web::template::Html;
+use askama::Template;
 use axum::extract::{Multipart, Path, Query, State};
+use axum::response::IntoResponse;
 use axum::response::Response;
 use chrono::{Local, NaiveDate};
 use serde::Deserialize;
@@ -39,6 +44,70 @@ pub struct Params {
     /// and the pane knows which one is on screen.
     #[serde(default)]
     period: String,
+}
+
+/// A file as it arrived, before anything has been decided about it.
+pub struct Upload {
+    pub filename: String,
+    pub bytes: Vec<u8>,
+}
+
+/// Why an attach did not happen — always a statusline message, and always
+/// "nothing was written".
+pub struct Refused(pub String);
+
+/// Reads the `file` field of a multipart body.
+async fn read_upload(t: &Catalog, form: &mut Multipart) -> Result<Upload, Refused> {
+    let mut filename = String::new();
+    let mut bytes: Vec<u8> = Vec::new();
+    while let Ok(Some(field)) = form.next_field().await {
+        if field.name() != Some("file") {
+            continue;
+        }
+        filename = field.file_name().unwrap_or_default().to_string();
+        match field.bytes().await {
+            Ok(b) if b.len() <= MAX_BYTES => bytes = b.to_vec(),
+            Ok(_) => return Err(Refused(t.file_too_big().to_string())),
+            Err(_) => return Err(Refused(t.error_not_written().to_string())),
+        }
+    }
+    if bytes.is_empty() {
+        return Err(Refused(t.error_not_written().to_string()));
+    }
+    Ok(Upload { filename, bytes })
+}
+
+/// Reads a bill. Pure: nothing lands in the vault or the database here —
+/// `pdftotext` takes a path, so the bytes visit a scratch file and leave.
+pub fn parse(st: &AppState, upload: &Upload) -> Result<Parsed, Refused> {
+    let mut raw = [0u8; 8];
+    rand::RngCore::fill_bytes(&mut rand::rng(), &mut raw);
+    let tag: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+    // The extension is kept: `import` reads a `.txt` as text and hands
+    // anything else to `pdftotext`, and it decides by the name.
+    let ext = std::path::Path::new(&upload.filename)
+        .extension()
+        .and_then(|e| e.to_str())
+        .filter(|e| e.chars().all(|c| c.is_ascii_alphanumeric()))
+        .unwrap_or("pdf");
+    let scratch = std::env::temp_dir().join(format!("ffm-import-{tag}.{ext}"));
+    if std::fs::write(&scratch, &upload.bytes).is_err() {
+        return Err(Refused("could not read the file".into()));
+    }
+    let profiles = Profiles::load(&st.cfg.issuers_path()).unwrap_or_default();
+    let parsed = import::import(&scratch, &profiles, Local::now().date_naive());
+    let _ = std::fs::remove_file(&scratch);
+    // A misread is reported, never worked around: a number that failed its
+    // own checksum is not a number to fall back from.
+    parsed.map_err(|e| Refused(e.to_string()))
+}
+
+/// What a bill is recognised by, as the binding check reads it.
+fn read_binding(parsed: &Parsed) -> Binding<'_> {
+    Binding {
+        client_code: parsed.import.client_code.as_deref(),
+        company: parsed.barcode.company.as_deref(),
+    }
 }
 
 /// `POST /rules/{id}/barcode` — the dropzone in `E`.
@@ -58,29 +127,33 @@ pub async fn attach(
     if !auth.viewer.sees_private_of(rule.member_id) {
         return say(t.error_not_written(), true);
     }
-
-    let mut filename = String::new();
-    let mut bytes: Vec<u8> = Vec::new();
-    while let Ok(Some(field)) = form.next_field().await {
-        if field.name() != Some("file") {
-            continue;
-        }
-        filename = field.file_name().unwrap_or_default().to_string();
-        match field.bytes().await {
-            Ok(b) if b.len() <= MAX_BYTES => bytes = b.to_vec(),
-            Ok(_) => return say(t.file_too_big(), true),
-            Err(_) => return say(t.error_not_written(), true),
-        }
-    }
-    if bytes.is_empty() {
-        return say(t.error_not_written(), true);
-    }
-
-    // The occurrence this bill is for. A barcode file is per period, and the
-    // period is the one the ledger is showing.
+    let upload = match read_upload(&t, &mut form).await {
+        Ok(u) => u,
+        Err(Refused(m)) => return say(&m, true),
+    };
     let period = Period::parse(&p.period).unwrap_or_else(|| Period::of(Local::now().date_naive()));
+    let Some(tx_id) = occurrence_of(&st, rule_id, period).await else {
+        return say(t.import_no_occurrence(), true);
+    };
+    let parsed = match parse(&st, &upload) {
+        Ok(p) => p,
+        Err(Refused(m)) => return say(&m, true),
+    };
+    match attach_to(&st, &auth, &rule, tx_id, period, &upload, &parsed).await {
+        Ok((member_id, message)) => {
+            // The row is re-read through the pane query, so what comes back
+            // was decided by the database and the disk rather than by this
+            // handler.
+            crate::web::tx::row_fragment(&st, &auth, tx_id, member_id, period, &message).await
+        }
+        Err(Refused(m)) => say(&m, true),
+    }
+}
+
+/// The live occurrence of a rule in one period, if it has been materialized.
+pub async fn occurrence_of(st: &AppState, rule_id: i64, period: Period) -> Option<i64> {
     let period_s = period.to_string();
-    let tx_id: Option<i64> = sqlx::query_scalar!(
+    sqlx::query_scalar!(
         r#"SELECT id AS "id!: i64" FROM transactions
            WHERE rule_id = ?1 AND period = ?2 AND deleted_at IS NULL"#,
         rule_id,
@@ -89,36 +162,60 @@ pub async fn attach(
     .fetch_optional(&st.pool)
     .await
     .ok()
-    .flatten();
+    .flatten()
+}
 
-    let Some(tx_id) = tx_id else {
-        return say(t.import_no_occurrence(), true);
+/// Attaches an already-parsed bill to one occurrence of a rule, and binds the
+/// rule to it where nothing is bound yet.
+///
+/// **Every refusal happens before the first write.** A bill for another
+/// account is the wrong row, and a bill already filed elsewhere is a
+/// duplicate; both used to be discovered after the file was already in the
+/// vault. Returns the owning member and the statusline message.
+pub async fn attach_to(
+    st: &AppState,
+    auth: &Auth,
+    rule: &rules::Rule,
+    tx_id: i64,
+    period: Period,
+    upload: &Upload,
+    parsed: &Parsed,
+) -> Result<(i64, String), Refused> {
+    let t = auth.catalog();
+    let not_written = || Refused(t.error_not_written().to_string());
+
+    // --- is this the right row? ---------------------------------------------
+    let bound = Binding {
+        client_code: rule.client_code.as_deref(),
+        company: rule.barcode_company.as_deref(),
     };
-
-    // pdftotext takes a path, so the upload lands in a scratch file first.
-    // Not the vault: nothing goes in there until it has actually parsed.
-    let scratch = std::env::temp_dir().join(format!("ffm-import-{tx_id}-{filename}"));
-    if std::fs::write(&scratch, &bytes).is_err() {
-        return say(t.error_not_written(), true);
+    if let Err(m) = binding_check(bound, read_binding(parsed)) {
+        return Err(Refused(t.import_wrong_row(&m.found, &rule.title, &m.known)));
     }
-    let profiles = Profiles::load(&st.cfg.issuers_path()).unwrap_or_default();
-    let parsed = import::import(&scratch, &profiles, Local::now().date_naive());
-    let _ = std::fs::remove_file(&scratch);
 
-    let parsed = match parsed {
-        Ok(p) => p,
-        // A misread is reported, never worked around: a number that failed its
-        // own checksum is not a number to fall back from.
-        Err(e @ (ImportError::Misread(_) | ImportError::NoBarcode | ImportError::NoText)) => {
-            return say(&e.to_string(), true);
-        }
-        Err(e) => return say(&e.to_string(), true),
-    };
+    // --- is it already filed somewhere? -------------------------------------
+    // `barcode_raw` is the natural idempotency key, with a unique index behind
+    // it: the same bill cannot end up on two rows.
+    let raw = parsed.barcode.raw.clone();
+    let already: Option<String> = sqlx::query_scalar!(
+        r#"SELECT period AS "p!: String" FROM transactions
+           WHERE barcode_raw = ?1 AND id <> ?2 AND deleted_at IS NULL"#,
+        raw,
+        tx_id
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .ok()
+    .flatten();
+    if let Some(period) = already {
+        let label = Period::parse(&period).map(fmt::period).unwrap_or(period);
+        return Err(Refused(t.import_already_attached(&label)));
+    }
 
     // The file itself is kept, under the deterministic name every other
     // receipt uses.
-    let Some((slot, _, member_id)) = crate::web::files::slot_for(&st, &auth, tx_id).await else {
-        return say(t.file_not_tracked(), true);
+    let Some((slot, _, member_id)) = crate::web::files::slot_for(st, auth, tx_id).await else {
+        return Err(Refused(t.file_not_tracked().to_string()));
     };
     if receipts::store(
         &st.pool,
@@ -126,13 +223,13 @@ pub async fn attach(
         Actor::User(auth.viewer.member_id),
         &slot,
         FileKind::Barcode,
-        &filename,
-        &bytes,
+        &upload.filename,
+        &upload.bytes,
     )
     .await
     .is_err()
     {
-        return say(t.error_not_written(), true);
+        return Err(not_written());
     }
 
     let mut notes: Vec<String> = Vec::new();
@@ -182,36 +279,15 @@ pub async fn attach(
     let write_due = due_fill.to_write();
 
     let Ok(mut tx) = st.pool.begin().await else {
-        return say(t.error_not_written(), true);
+        return Err(not_written());
     };
 
-    let raw = parsed.barcode.raw.clone();
     let kind = parsed.barcode.kind.code();
     let amount_source = parsed.import.amount_source;
     let due_source = parsed.import.due_source;
     let amount_value = write_amount.map(|c| c.get());
     let due_value = write_due.map(|d| d.format("%Y-%m-%d").to_string());
     let issuer = parsed.import.issuer.clone();
-
-    // `barcode_raw` is the natural idempotency key, with a unique index behind
-    // it: the same bill cannot end up on two rows. Hitting that index is not a
-    // failure — it means this exact bill is already filed — so it gets its own
-    // message rather than the generic one.
-    let already: Option<String> = sqlx::query_scalar!(
-        r#"SELECT period AS "p!: String" FROM transactions
-           WHERE barcode_raw = ?1 AND id <> ?2 AND deleted_at IS NULL"#,
-        raw,
-        tx_id
-    )
-    .fetch_optional(&mut *tx)
-    .await
-    .ok()
-    .flatten();
-
-    if let Some(period) = already {
-        let label = Period::parse(&period).map(fmt::period).unwrap_or(period);
-        return say(&t.import_already_attached(&label), true);
-    }
 
     let ok = sqlx::query!(
         r#"UPDATE transactions SET
@@ -235,30 +311,39 @@ pub async fn attach(
     .is_ok();
 
     if !ok {
-        return say(t.error_not_written(), true);
+        return Err(not_written());
     }
 
-    // --- the client code, which lives on the RULE -----------------------
+    // --- the binding, which lives on the RULE ---------------------------
     // The same account every period, unlike the value and the due date, which
-    // are genuinely per-period.
-    if let Some(found) = parsed.import.client_code.as_deref() {
-        match rule.client_code.as_deref() {
-            None => {
-                let _ = sqlx::query!(
-                    "UPDATE recurring_rules SET client_code = ?2 WHERE id = ?1",
-                    rule_id,
-                    found
-                )
-                .execute(&mut *tx)
-                .await;
-            }
-            // Flagged, not silently overwritten — the same "flag it, do not
-            // guess" posture as the multi-page barcode window.
-            Some(known) if known != found => {
-                notes.push(t.import_code_differs(found, known));
-            }
-            _ => {}
-        }
+    // are genuinely per-period. Only what is empty is filled: the check above
+    // already refused anything that disagreed with what is bound.
+    let client_code = rule
+        .client_code
+        .clone()
+        .or(parsed.import.client_code.clone());
+    let company = rule
+        .barcode_company
+        .clone()
+        .or(parsed.barcode.company.clone());
+    let issuer_id = rule.issuer_id.clone().or(issuer.clone());
+    let barcode_kind = rule.barcode_kind.clone().or(Some(kind.to_string()));
+    let rule_id = rule.id;
+    let bound_ok = sqlx::query!(
+        "UPDATE recurring_rules SET client_code = ?2, barcode_company = ?3,
+                issuer_id = ?4, barcode_kind = ?5
+         WHERE id = ?1",
+        rule_id,
+        client_code,
+        company,
+        issuer_id,
+        barcode_kind
+    )
+    .execute(&mut *tx)
+    .await
+    .is_ok();
+    if !bound_ok {
+        return Err(not_written());
     }
 
     let entry = Change::file(
@@ -266,7 +351,7 @@ pub async fn attach(
         FileAction::Attach,
         tx_id,
     )
-    .from_rule(Some(rule_id))
+    .from_rule(Some(rule.id))
     .in_period(period)
     .diff("barcode", Value::Text(None), Value::text(&raw))
     .diff(
@@ -277,16 +362,17 @@ pub async fn attach(
     .diff(
         "client_code",
         Value::Text(rule.client_code.clone()),
-        Value::Text(
-            parsed
-                .import
-                .client_code
-                .clone()
-                .or(rule.client_code.clone()),
-        ),
+        Value::Text(client_code),
+    )
+    .diff(
+        "company_code",
+        Value::Text(rule.barcode_company.clone()),
+        Value::Text(company),
     );
     let _ = entry.write(&mut tx).await;
-    let _ = tx.commit().await;
+    if tx.commit().await.is_err() {
+        return Err(not_written());
+    }
 
     // What actually happened, in one line.
     let headline = match (barcode_amount, barcode_due) {
@@ -305,15 +391,172 @@ pub async fn attach(
     } else {
         format!("{headline} · {}", notes.join(" · "))
     };
-
-    // The row is re-read through the pane query, so what comes back was
-    // decided by the database and the disk rather than by this handler.
-    crate::web::tx::row_fragment(&st, &auth, tx_id, member_id, period, &message).await
+    Ok((member_id, message))
 }
 
-/// Clears just the client code — a narrow correction for "the wrong file got
-/// attached the first time", distinct from `u`'s full revert of the last
-/// change. It touches nothing else about the rule.
+// ---------------------------------------------------------------------------
+// what the pane shows about the bill
+// ---------------------------------------------------------------------------
+
+/// "Bill on file": what a rule is bound to, or — in `A`, before the rule
+/// exists — what the dropped bill will bind it to.
+///
+/// No amount and no due date: those change every period, and this box is
+/// about the identity that does not.
+#[derive(Template)]
+#[template(path = "partials/barcode_meta.html")]
+pub struct BarcodeMeta {
+    pub t: Catalog,
+    /// `E`: the rule, for Unlink. `None` in `A`.
+    pub rule_id: Option<i64>,
+    pub issuer: Option<String>,
+    /// Already a label, not the stored code.
+    pub kind: Option<String>,
+    pub company: Option<String>,
+    pub client_code: Option<String>,
+    /// `A` only: the parked file Create will attach.
+    pub token: Option<String>,
+    pub filename: Option<String>,
+}
+
+fn issuer_name(profiles: &Profiles, id: Option<&str>) -> Option<String> {
+    let id = id?;
+    Some(
+        profiles
+            .issuers
+            .iter()
+            .find(|i| i.id == id)
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| id.to_string()),
+    )
+}
+
+fn kind_label(t: &Catalog, code: Option<&str>) -> Option<String> {
+    match code? {
+        "consumo" => Some(t.import_meta_kind_consumo().to_string()),
+        "cobranca" => Some(t.import_meta_kind_cobranca().to_string()),
+        other => Some(other.to_string()),
+    }
+}
+
+impl BarcodeMeta {
+    pub fn empty(t: Catalog) -> BarcodeMeta {
+        BarcodeMeta {
+            t,
+            rule_id: None,
+            issuer: None,
+            kind: None,
+            company: None,
+            client_code: None,
+            token: None,
+            filename: None,
+        }
+    }
+
+    pub fn of_rule(st: &AppState, t: Catalog, rule: &rules::Rule) -> BarcodeMeta {
+        let profiles = Profiles::load(&st.cfg.issuers_path()).unwrap_or_default();
+        BarcodeMeta {
+            rule_id: Some(rule.id),
+            issuer: issuer_name(&profiles, rule.issuer_id.as_deref()),
+            kind: kind_label(&t, rule.barcode_kind.as_deref()),
+            company: rule.barcode_company.clone(),
+            client_code: rule.client_code.clone(),
+            token: None,
+            filename: None,
+            t,
+        }
+    }
+
+    pub fn of_parsed(t: Catalog, parsed: &Parsed, token: String, filename: String) -> BarcodeMeta {
+        BarcodeMeta {
+            issuer: parsed
+                .import
+                .issuer_name
+                .clone()
+                .or(parsed.import.issuer.clone()),
+            kind: kind_label(&t, Some(parsed.barcode.kind.code())),
+            company: parsed.barcode.company.clone(),
+            client_code: parsed.import.client_code.clone(),
+            rule_id: None,
+            token: Some(token),
+            filename: Some(filename),
+            t,
+        }
+    }
+
+    /// Nothing bound and nothing parked: the box is not drawn at all — the
+    /// same "absent, not a blank field" treatment `instance` gets.
+    pub fn is_empty(&self) -> bool {
+        self.token.is_none()
+            && self.issuer.is_none()
+            && self.kind.is_none()
+            && self.company.is_none()
+            && self.client_code.is_none()
+    }
+}
+
+/// `GET /rules/{id}/meta` — the box on its own, refreshed after an `E` drop.
+pub async fn meta(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<i64>) -> Response {
+    let t = auth.catalog();
+    match rules::get(&st.pool, rule_id).await {
+        Ok(Some(rule)) if auth.viewer.sees_private_of(rule.member_id) => {
+            Html(BarcodeMeta::of_rule(&st, t, &rule)).into_response()
+        }
+        _ => Html(BarcodeMeta::empty(t)).into_response(),
+    }
+}
+
+/// `POST /rules/barcode/preview` — the dropzone in `A`.
+///
+/// The rule does not exist yet, so nothing is attached: the bill is read,
+/// parked under a token, and the pane gets back what it says. Create carries
+/// the token and attaches it — see `services::pending`.
+pub async fn preview(State(st): State<AppState>, auth: Auth, mut form: Multipart) -> Response {
+    let t = auth.catalog();
+    let upload = match read_upload(&t, &mut form).await {
+        Ok(u) => u,
+        Err(Refused(m)) => return crate::web::tx::say_only(&m, true),
+    };
+    let parsed = match parse(&st, &upload) {
+        Ok(p) => p,
+        Err(Refused(m)) => return crate::web::tx::say_only(&m, true),
+    };
+    let Ok(token) = pending::park(auth.viewer.member_id, &upload.filename, &upload.bytes) else {
+        return crate::web::tx::say_only(t.error_not_written(), true);
+    };
+    Html(BarcodeMeta::of_parsed(t, &parsed, token, upload.filename)).into_response()
+}
+
+/// The same box for a parked bill, re-read — a rejected Create renders the
+/// pane again and must not lose what was dropped.
+pub fn meta_of_parked(
+    st: &AppState,
+    t: Catalog,
+    token: &str,
+    member_id: i64,
+) -> Option<BarcodeMeta> {
+    let filename = pending::filename_of(token, member_id)?;
+    let bytes = pending::peek(token, member_id)?;
+    let parsed = parse(
+        st,
+        &Upload {
+            filename: filename.clone(),
+            bytes,
+        },
+    )
+    .ok()?;
+    Some(BarcodeMeta::of_parsed(
+        t,
+        &parsed,
+        token.to_string(),
+        filename,
+    ))
+}
+
+/// Clears what the rule is bound to — a narrow correction for "the wrong
+/// file got attached the first time", distinct from `u`'s full revert of the
+/// last change. It touches nothing else about the rule, and it answers with
+/// the (now empty) box, so the pane stays open for the corrected drop.
 pub async fn unlink(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<i64>) -> Response {
     let t = auth.catalog();
     let Ok(Some(rule)) = rules::get(&st.pool, rule_id).await else {
@@ -327,7 +570,9 @@ pub async fn unlink(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<
         return crate::web::tx::say_only(t.error_not_written(), true);
     };
     let _ = sqlx::query!(
-        "UPDATE recurring_rules SET client_code = NULL WHERE id = ?1",
+        "UPDATE recurring_rules SET client_code = NULL, barcode_company = NULL,
+                issuer_id = NULL, barcode_kind = NULL
+         WHERE id = ?1",
         rule_id
     )
     .execute(&mut *tx)
@@ -342,11 +587,19 @@ pub async fn unlink(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<
         Value::Text(rule.client_code),
         Value::Text(None),
     )
+    .diff(
+        "company_code",
+        Value::Text(rule.barcode_company),
+        Value::Text(None),
+    )
     .write(&mut tx)
     .await;
-    let _ = tx.commit().await;
+    if tx.commit().await.is_err() {
+        return crate::web::tx::say_only(t.error_not_written(), true);
+    }
 
-    crate::web::tx::say_only(t.import_unlinked(), false)
+    let res = Html(BarcodeMeta::empty(t)).into_response();
+    crate::web::tx::say(res, t.import_unlinked(), false)
 }
 
 /// Amount and due date as the import sees them, for the resolver.

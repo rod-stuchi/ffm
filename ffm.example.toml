@@ -18,7 +18,7 @@
 # database, for the obvious reason.
 db_path       = "./ffm.db"
 
-# The receipt vault. Per-member folders ({uuid}-{slug}) are generated under it.
+# The receipt vault. Per-member folders ({slug}) are generated under it.
 # It must already exist and be writable — the process refuses to start
 # otherwise, rather than conjuring an empty vault at a mistyped path.
 receipts_root = "./receipts"

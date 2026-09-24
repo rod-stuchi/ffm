@@ -459,8 +459,15 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   own power bill); if there's only one, it's skipped entirely rather than
   named — "Power" alone is enough.
 - **Path is fully computed, never authored**:
-  `{member_uuid}-{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}.{ext}`
-  — the `instance` segment is only present when the rule has one. Slugified
+  `{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}.{ext}`
+  — the `instance` segment is only present when the rule has one.
+  **The member folder is `{slug}`, no longer `{member_uuid}-{slug}`.** The
+  uuid was there so a rename would not move the folder, but names are
+  `UNIQUE` and cannot be changed, and `slug` is `UNIQUE` too, so it bought
+  nothing except a path nobody could read in a vault meant to be browsed by
+  hand. `services::vault` moves an old `{uuid}-{slug}` folder, and the stored
+  paths pointing into it, once at startup; `domain::receipt_path::vault` is
+  the one place the folder name is decided. Slugified
   (lowercase, spaces → `_`). Renaming a rule's taxonomy fields must move its
   existing files to the new path — it isn't just a label edit.
   `bucket`/`bill_name`/`instance` may not slugify to `delete` or start with
@@ -557,10 +564,25 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
     `barcode_raw`/value/due date which are genuinely per-period — and it's
     populated by attaching a file in the rule's own editor, not typed by
     hand: no form field, shown read-only once set, absent until a file has
-    been attached. A parse that resolves to an existing rule but reads a
-    *different* client code than the one on file is flagged, not silently
-    overwritten — same "flag it, don't guess" posture as the multi-page
-    barcode window above. It can also be unlinked independently of the
+    been attached.
+  - **The first bill attached BINDS the rule, and a later bill that
+    disagrees is refused as the wrong row — before anything is written.**
+    This hardens the earlier "flagged, not silently overwritten", which
+    stored the file and noted the mismatch afterwards: a bill for another
+    account on this row is the wrong file, not a note. The binding is
+    `client_code` when a profile could read one (it decides alone — two
+    houses with the same water company share a company code), else the
+    arrecadação `barcode_company` straight off the barcode; `issuer_id` and
+    `barcode_kind` are kept for display. A value a bill did not carry proves
+    nothing and is never a refusal. A cobrança bank code is deliberately not
+    a binding: it names the bank, and one bank issues slips for a hundred
+    billers.
+  - **`A` takes the bill too, not only `E`.** The rule does not exist yet, so
+    the drop is read and parked (`services::pending`) and the pane shows what
+    it will bind to; Create carries a token and attaches it to the occurrence
+    it just materialized. Either pane shows a **Bill on file** box — issuer,
+    barcode kind, company code, client code, never the amount or due date,
+    which change every period. It can also be unlinked independently of the
     rule itself — a narrow correction for "the wrong file got attached the
     first time," distinct from `u`'s full revert of the last change.
 - **A scheduled payment still unconfirmed past its due date is a distinct,

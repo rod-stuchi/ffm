@@ -1267,33 +1267,53 @@
   background: var(--accent-soft);
 }
 
-/* Read-only, with its own Unlink: the code is populated by attaching a file,
- * never typed, so there is nothing here to edit directly. */
-.clientcode {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--paper);
+/* "Bill on file": what the rule is bound to. Read-only, with its own
+ * Unlink — every value here came off a bill, never off a keyboard, so there
+ * is nothing to edit directly. A definition list because it is exactly that:
+ * a label and the value it names, read across. */
+.barcodemeta {
+  display: grid;
+  gap: 6px;
+  position: relative;
 }
 
-.clientcode .k {
+.barcodemeta .bm-title {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.barcodemeta .bm-list {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) 1fr;
+  gap: 3px 12px;
+  margin: 0;
+}
+
+.barcodemeta dt {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-3);
+  align-self: baseline;
 }
 
-.clientcode .mono {
+.barcodemeta dd {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.barcodemeta dd.mono {
   font-family: var(--mono);
   font-size: 12px;
 }
 
-.clientcode .btn {
-  margin-left: auto;
+.barcodemeta .bm-unlink {
+  position: absolute;
+  top: 8px;
+  right: 10px;
   font-size: 11px;
   padding: 4px 9px;
 }

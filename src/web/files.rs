@@ -39,7 +39,7 @@ pub(crate) async fn slot_for(
                   r.bucket AS "bucket?: String", r.bill_name AS "bill_name?: String",
                   r.instance AS "instance?: String",
                   r.amount_in_filename AS "amount_in_filename?: i64",
-                  m.uuid AS "uuid!: String", m.slug AS "slug!: String"
+                  m.slug AS "slug!: String"
            FROM transactions t
            JOIN members m ON m.id = t.member_id
            LEFT JOIN recurring_rules r ON r.id = t.rule_id
@@ -68,7 +68,7 @@ pub(crate) async fn slot_for(
     Some((
         Slot {
             transaction_id: tx_id,
-            vault: format!("{}-{}", row.uuid, row.slug),
+            vault: crate::domain::receipt_path::vault(&row.slug),
             bucket: row.bucket?,
             bill_name: row.bill_name?,
             instance: row.instance,

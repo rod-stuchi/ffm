@@ -256,7 +256,7 @@ async fn deleted_row(
                   t.amount_cents AS "amount_cents: i64",
                   t.visibility AS "visibility!: String",
                   t.rule_id AS "rule_id: i64",
-                  m.uuid AS "uuid!: String", m.slug AS "slug!: String"
+                  m.slug AS "slug!: String"
            FROM transactions t JOIN members m ON m.id = t.member_id
            WHERE t.id = ?1"#,
         id
@@ -294,7 +294,6 @@ async fn deleted_row(
         amount_in_filename: false,
         varies: false,
         cadence_months: None,
-        member_uuid: row.uuid,
         member_slug: row.slug,
         prev_amount_cents: None,
         estimate_cents: None,

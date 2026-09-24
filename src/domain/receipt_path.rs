@@ -67,11 +67,22 @@ impl Kind {
     }
 }
 
+/// The member's folder in the vault: their slug, and nothing else.
+///
+/// It was `{uuid}-{slug}`, on the theory that a rename would otherwise move
+/// the folder. But names are `UNIQUE` and cannot be changed, and slugs are
+/// `UNIQUE` too, so the uuid bought nothing except a path nobody could read
+/// at a glance — in a vault that exists to be browsed by hand. One function,
+/// so the rule is written once.
+pub fn vault(slug: &str) -> String {
+    slug.to_string()
+}
+
 /// Everything a path needs. Gathered into one struct because a function taking
 /// six strings in a row is a function whose arguments get swapped.
 #[derive(Clone, Debug)]
 pub struct Taxonomy<'a> {
-    /// `{uuid}-{slug}` — the member's folder. Files live under their owner
+    /// `{slug}` — the member's folder, from [`vault`]. Files live under their owner
     /// regardless of whether two members happen to use the same bucket name.
     pub vault: &'a str,
     pub bucket: &'a str,

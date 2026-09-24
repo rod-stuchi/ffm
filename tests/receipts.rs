@@ -91,18 +91,17 @@ async fn tracked_occurrence(pool: &SqlitePool, me: i64) -> (i64, Slot) {
         .fetch_one(pool)
         .await
         .unwrap();
-    let (uuid, slug): (String, String) =
-        sqlx::query_as("SELECT uuid, slug FROM members WHERE id = ?")
-            .bind(me)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    let slug: String = sqlx::query_scalar("SELECT slug FROM members WHERE id = ?")
+        .bind(me)
+        .fetch_one(pool)
+        .await
+        .unwrap();
 
     (
         id,
         Slot {
             transaction_id: id,
-            vault: format!("{uuid}-{slug}"),
+            vault: ffm::domain::receipt_path::vault(&slug),
             bucket: "Consumo".into(),
             bill_name: "Energia".into(),
             instance: None,
@@ -704,4 +703,61 @@ async fn u_reaches_a_deleted_file_and_puts_it_back() {
             .is_some()
     );
     assert_eq!(tx_id, slot.transaction_id);
+}
+
+/// A vault written by an earlier version — `{uuid}-{slug}` — is moved to
+/// `{slug}` at startup, with every stored path following it, and running the
+/// step again changes nothing.
+#[tokio::test]
+async fn the_uuid_prefix_is_dropped_once_and_the_paths_follow() {
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (_, mut slot) = tracked_occurrence(&pool, me).await;
+    let uuid: String = sqlx::query_scalar("SELECT uuid FROM members WHERE id = ?")
+        .bind(me)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let old_vault = format!("{uuid}-{}", slot.vault);
+    let new_vault = std::mem::replace(&mut slot.vault, old_vault.clone());
+
+    receipts::store(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Receipt,
+        "c.pdf",
+        b"%PDF-",
+    )
+    .await
+    .unwrap();
+    assert!(root.join(&old_vault).is_dir());
+
+    let moved = ffm::services::vault::drop_uuid_prefix(&pool, &root)
+        .await
+        .unwrap();
+    assert_eq!(moved, 1);
+    assert!(!root.join(&old_vault).exists());
+    assert!(root.join(&new_vault).is_dir());
+
+    let path: String = sqlx::query_scalar("SELECT path FROM receipts LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(path.starts_with(&format!("{new_vault}/")), "{path}");
+
+    // The disk and the database agree: the row reads as paid under the new name.
+    slot.vault = new_vault;
+    let now = receipts::presence(&pool, &root, &slot).await.unwrap();
+    assert_eq!(now.receipt.as_deref(), Some("pdf"));
+
+    // Idempotent: a second startup does nothing.
+    assert_eq!(
+        ffm::services::vault::drop_uuid_prefix(&pool, &root)
+            .await
+            .unwrap(),
+        0
+    );
 }

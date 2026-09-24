@@ -362,11 +362,21 @@ import-read = li { $what } da conta
 import-filled = li { $amount } com vencimento { $date } do código de barras
 import-amount-differs = o código de barras diz { $barcode }, esta linha diz { $row } — mantida como estava
 import-date-differs = o código de barras diz { $barcode }, esta linha diz { $row } — mantida como estava
-import-code-differs = o código do cliente desta conta é { $found }, mas a regra tem { $known } — mantido como estava
 import-unresolved = o código de barras não trazia { $what }
 import-no-occurrence = não há linha deste mês para anexar
-import-unlinked = código do cliente desvinculado
+import-unlinked = conta desvinculada desta regra — solte a correta
 import-already-attached = esta conta já está em { $period } — uma conta, uma linha
+rule-path-missing-bucket = ‹categoria›
+import-wrong-row = linha errada? esta conta é de { $found }, mas { $rule } está vinculada a { $known } — nada foi salvo
+import-meta-title = Conta vinculada
+import-meta-hint = a que esta regra está vinculada — uma conta de qualquer outra coisa é recusada
+import-meta-issuer = Emissor
+import-meta-kind = Código de barras
+import-meta-company = Código da empresa
+import-meta-kind-consumo = consumo / tributo
+import-meta-kind-cobranca = boleto bancário
+import-meta-pending = anexada quando você criar a regra
+import-no-occurrence-new-rule = a regra começa depois deste mês, então a conta não foi anexada — anexe pelo E quando a primeira linha existir
 
 ## Seletor de mês
 

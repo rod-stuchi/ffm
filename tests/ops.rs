@@ -136,8 +136,8 @@ async fn a_receipt_on_disk_clears_the_month() {
         .await
         .unwrap();
 
-    let (id, uuid, slug): (i64, String, String) = sqlx::query_as(
-        "SELECT t.id, m.uuid, m.slug FROM transactions t JOIN members m ON m.id = t.member_id
+    let (id, slug): (i64, String) = sqlx::query_as(
+        "SELECT t.id, m.slug FROM transactions t JOIN members m ON m.id = t.member_id
           WHERE t.period = '2026-07'",
     )
     .fetch_one(&pool)
@@ -146,7 +146,7 @@ async fn a_receipt_on_disk_clears_the_month() {
 
     let slot = receipts::Slot {
         transaction_id: id,
-        vault: format!("{uuid}-{slug}"),
+        vault: ffm::domain::receipt_path::vault(&slug),
         bucket: "Consumo".into(),
         bill_name: "Energia".into(),
         instance: None,

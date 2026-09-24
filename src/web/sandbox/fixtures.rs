@@ -63,7 +63,6 @@ pub fn base(ctx: RowCtx) -> LedgerRow {
         amount_in_filename: false,
         varies: false,
         cadence_months: None,
-        member_uuid: "a1b2c3".into(),
         member_slug: "rodrigo".into(),
         prev_amount_cents: None,
         estimate_cents: None,

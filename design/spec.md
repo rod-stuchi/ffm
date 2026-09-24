@@ -699,7 +699,8 @@ editing. So:
   month.ext`). It recomputes on every keystroke in Bucket, Bill name or
   Instance, so renaming taxonomy shows where the files will move before the
   rule is saved. It includes the **bucket** segment, matching the storage
-  layout above; the mock still omits the `{member_uuid}-{slug}` prefix.
+  layout above, under the member's `{slug}` folder. A tracked rule with no
+  bucket shows the missing segment by name rather than as `//`.
 - **"Amount in filename" appends it to the month** —
   `{month}_{currency}{amount}.{ext}`, so `09.pdf` becomes
   `09_brl122.94.pdf`. Off by default, per tracked rule.
@@ -734,17 +735,21 @@ editing. So:
   on save (see Bill import, below), and it's optional in both `A` and `E`:
   a rule can be created and saved with tracking on and no file yet, the
   same way an amount or due date can be filled in later.
-- **A rule with a `client_code` on file shows it read-only**, above the
-  upload field — a plain "Client code: 0123456789-0" line with its own
-  **Unlink** button, no input box. The code itself is populated only by
-  attaching a file (see Bill import, below), never typed by hand, so
-  there's nothing here to edit directly; a rule with no file attached yet
-  shows no line at all, the same "absent, not a blank field" treatment
-  `instance` already gets when a rule doesn't need one. **Unlink** clears
-  just the code — it doesn't close the pane, doesn't touch `tracked`/
-  `bucket`/`billName`/`pattern`, and exists specifically for "the wrong
-  file got attached the first time": drop a corrected one right after,
-  in the same still-open dropzone.
+- **A bound rule shows a "Bill on file" box**, above the upload field —
+  issuer, barcode kind, company code and client code, each only when the
+  bill carried it, with its own **Unlink** button and no input box. Never
+  the amount or the due date: they change every period, and this box is
+  about the identity that does not — the one a later bill is checked
+  against, and refused as *"wrong row?"* when it disagrees. Every value
+  came off a bill (see Bill import, below), never off a keyboard, so there
+  is nothing here to edit; a rule with no bill yet shows no box at all, the
+  same "absent, not a blank field" treatment `instance` gets. In `A` the
+  same box appears the moment a bill is dropped, before Create, saying it
+  will be attached when the rule is created — so what you see is exactly
+  what `E` will show afterwards. **Unlink** clears the binding only — it
+  doesn't close the pane, doesn't touch `tracked`/`bucket`/`billName`, and
+  exists specifically for "the wrong file got attached the first time":
+  drop a corrected one right after, in the same still-open dropzone.
 - **Due date moved from the occurrence form to the rule form.** The
   edit-occurrence form's Day field only renders at all for a non-recurring
   row; a recurring row's due day is edited on the rule (`E`) instead, so
@@ -1050,7 +1055,7 @@ two entry points. Above it sits the context (*"Rodrigo invited you to Casa
 Stuchi"*) and below it the expiry, in mono.
 
 - **Editing the name here is free; later it isn't.** `members.slug` is the
-  receipt vault's folder name (`{uuid}-{slug}`), so renaming a member after
+  receipt vault's folder name (`{slug}`), so renaming a member after
   files exist is a vault move. At accept time there are no files, which makes
   this the one moment it costs nothing — so the field is editable here and gated
   behind a move afterwards.
@@ -1102,7 +1107,7 @@ matters that this is written down: an invite's accept path *inserts*, and
 `members.name` is `UNIQUE`, so a member trying to recover through one would hit
 the name-taken error and could only get back in by choosing a *different* name.
 That would also rewrite their `slug`, and `slug` is their receipt-vault folder
-(`{uuid}-{slug}`). Recovering a password must never orphan somebody's filing.
+(`{slug}`). Recovering a password must never orphan somebody's filing.
 
 The accept form asks for **password and confirm only**. No name — renaming is a
 vault move once files exist, and this person is not new. No language or colour
@@ -1498,10 +1503,16 @@ each member's own folder regardless of tag overlap:
 ### Storage layout — fully deterministic
 
 ```
-{member_uuid}-{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}.{ext}           # definitive receipt
-{member_uuid}-{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}_scheduled.{ext} # scheduled-payment proof (optional)
-{member_uuid}-{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}_barcode.{ext}   # the bill/invoice itself
+{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}.{ext}           # definitive receipt
+{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}_scheduled.{ext} # scheduled-payment proof (optional)
+{slug}/{bucket}/{bill_name}[/{instance}]/{year}/{month}_barcode.{ext}   # the bill/invoice itself
 ```
+
+- **The member folder is `{slug}`** — it was `{member_uuid}-{slug}`. Names
+  and slugs are both `UNIQUE` and a member cannot be renamed, so the uuid
+  protected against nothing and made the one folder a person browses first
+  unreadable. Existing folders are moved once at startup, with the stored
+  paths that point into them (see CLAUDE.md's Recurring rules).
 
 - `{month}` is zero-padded `01`–`12`; the `{year}` folder exists specifically so
   the same month doesn't collide across years. `{instance}` is only present in

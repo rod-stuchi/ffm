@@ -90,6 +90,27 @@ impl FieldErrors {
     }
 }
 
+/// A number field left blank is **no value**, not a malformed one.
+///
+/// A form posts every input it holds, including the ones `x-show` has hidden,
+/// and an untouched number box posts `""`. Deserialized as a plain
+/// `Option<i64>`, that empty string is a parse error — the whole body is
+/// refused with a 422 before a single field is checked, and HTMX swaps nothing
+/// on a 4xx. That is exactly how the rule pane's Create came to do nothing at
+/// all: "Pages in this file" sits hidden under a switch that is off, blank,
+/// and it took the submission down with it.
+///
+/// Anything that is present but not a number is still `None` here; the
+/// handler's own validation is what decides whether that is an error worth a
+/// message beside the field.
+pub fn blank_as_none<'de, D>(d: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: Option<String> = serde::Deserialize::deserialize(d)?;
+    Ok(raw.and_then(|s| s.trim().parse().ok()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

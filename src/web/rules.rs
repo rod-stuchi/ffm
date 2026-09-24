@@ -24,6 +24,7 @@ use crate::state::AppState;
 use crate::ui::i18n::Catalog;
 use crate::ui::row::RowView;
 use crate::web::form::FieldErrors;
+use crate::web::import::BarcodeMeta;
 use crate::web::ledger::{HouseTotals, PaneTotals};
 use crate::web::session::Auth;
 use crate::web::template::Html;
@@ -103,10 +104,13 @@ pub struct RulePane {
     /// The member's vault folder, so the computed path shown in the pane is
     /// the real one rather than a prefix-less approximation.
     vault: String,
-    /// Shown read-only once a bill has been attached; absent until then — the
-    /// same "absent, not a blank field" treatment `instance` gets when a rule
-    /// does not need one.
-    client_code: Option<String>,
+    /// "Bill on file": what the rule is bound to, or in `A` what a dropped
+    /// bill will bind it to. Absent until then — the same "absent, not a
+    /// blank field" treatment `instance` gets when a rule does not need one.
+    meta: BarcodeMeta,
+    /// What the path preview prints where the bucket should be, so a tracked
+    /// rule with none says so instead of rendering `//`.
+    missing_bucket: String,
     /// One ready-made projection per basis: `(basis, "~R$ 5.033,33",
     /// "08/2026 · 07/2026 · 06/2026")`.
     ///
@@ -288,7 +292,8 @@ pub async fn new_rule(
         months_readback: MonthsReadback::every_month(&t),
         private: false,
         vault: vault_of(&st, p.member_id).await,
-        client_code: None,
+        meta: BarcodeMeta::empty(t),
+        missing_bucket: t.rule_path_missing_bucket().to_string(),
         // A brand-new rule has no history to project from; the box says so
         // rather than showing a number with nothing behind it.
         estimates: Vec::new(),
@@ -360,7 +365,8 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         },
         private: r.visibility == Visibility::Private,
         vault: vault_of(&st, r.member_id).await,
-        client_code: r.client_code.clone(),
+        meta: BarcodeMeta::of_rule(&st, t, &r),
+        missing_bucket: t.rule_path_missing_bucket().to_string(),
         estimates: estimates_of(&st, &auth, &r).await,
         no_history: t.estimate_no_history().to_string(),
         errors: FieldErrors::new(),
@@ -465,7 +471,7 @@ async fn vault_of(st: &AppState, member_id: i64) -> String {
         .unwrap_or_default()
         .into_iter()
         .find(|m| m.id == member_id)
-        .map(|m| format!("{}-{}", m.uuid, m.slug))
+        .map(|m| crate::domain::receipt_path::vault(&m.slug))
         .unwrap_or_default()
 }
 
@@ -500,7 +506,7 @@ pub struct RuleFormInput {
     no_barcode: Option<String>,
     #[serde(default)]
     spans_period: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::web::form::blank_as_none")]
     window_size: Option<i64>,
     #[serde(default)]
     window_start: String,
@@ -510,7 +516,7 @@ pub struct RuleFormInput {
     varies: Option<String>,
     #[serde(default)]
     estimate_basis: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::web::form::blank_as_none")]
     estimate_window: Option<i64>,
     #[serde(default)]
     amount_in_filename: Option<String>,
@@ -521,6 +527,10 @@ pub struct RuleFormInput {
     #[serde(default)]
     months: String,
     period: String,
+    /// `A` only: a bill dropped before the rule existed, parked until this
+    /// Create — see `services::pending`.
+    #[serde(default)]
+    barcode_token: Option<String>,
 }
 
 /// An unchecked checkbox sends nothing at all, so presence is the value.
@@ -681,18 +691,72 @@ pub async fn create(
         Err(errors) => return rejected(&st, &auth, &input, None, errors).await,
     };
 
-    match rules::create(&st.pool, Actor::User(auth.viewer.member_id), &form).await {
-        Ok(_) => {
-            finish(
-                &st,
-                &auth,
-                input.member_id,
-                &input.period,
-                t.rule_created(0),
-            )
-            .await
+    let rule_id = match rules::create(&st.pool, Actor::User(auth.viewer.member_id), &form).await {
+        Ok(id) => id,
+        Err(_) => return crate::web::tx::say_only(t.error_not_written(), true),
+    };
+
+    // A bill dropped into `A` is attached now that there is a rule to attach
+    // it to. The rule stands either way: a bill that cannot be attached is
+    // reported, never a reason to throw away the rule somebody just filled in.
+    // Materialize before attaching: the bill goes on the occurrence this
+    // Create brings into being. `finish` reconciles again, which is a no-op
+    // by then — `UNIQUE(rule_id, period)` makes it idempotent — so the count
+    // is taken here, where the rows are actually made.
+    let created = materializer::reconcile(&st.pool, Local::now().date_naive())
+        .await
+        .map(|r| r.created)
+        .unwrap_or(0);
+    let headline = t.rule_created(created as i64);
+
+    let attached = match input.barcode_token.as_deref() {
+        Some(tok) if !tok.is_empty() => {
+            Some(attach_parked(&st, &auth, rule_id, &input.period, tok).await)
         }
-        Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
+        _ => None,
+    };
+
+    let mut res = finish(&st, &auth, input.member_id, &input.period, headline.clone()).await;
+    if let Some((message, bad)) = attached {
+        // The attach's own line is the more specific news, so it joins the
+        // statusline — with the creation still in front of it.
+        let line = format!("{headline} · {message}");
+        res = crate::web::tx::say(res, &line, bad);
+    }
+    res
+}
+
+/// Attaches a parked bill to the rule `A` just created, in the period the
+/// ledger is showing. Returns the statusline line and whether it is bad news.
+async fn attach_parked(
+    st: &AppState,
+    auth: &Auth,
+    rule_id: i64,
+    period: &str,
+    token: &str,
+) -> (String, bool) {
+    let t = auth.catalog();
+    let Some(parked) = crate::services::pending::claim(token, auth.viewer.member_id) else {
+        return (t.error_not_written().to_string(), true);
+    };
+    let Ok(Some(rule)) = rules::get(&st.pool, rule_id).await else {
+        return (t.error_not_written().to_string(), true);
+    };
+    let period = Period::parse(period).unwrap_or_else(|| Period::of(Local::now().date_naive()));
+    let Some(tx_id) = crate::web::import::occurrence_of(st, rule_id, period).await else {
+        return (t.import_no_occurrence_new_rule().to_string(), true);
+    };
+    let upload = crate::web::import::Upload {
+        filename: parked.filename,
+        bytes: parked.bytes,
+    };
+    let parsed = match crate::web::import::parse(st, &upload) {
+        Ok(p) => p,
+        Err(crate::web::import::Refused(m)) => return (m, true),
+    };
+    match crate::web::import::attach_to(st, auth, &rule, tx_id, period, &upload, &parsed).await {
+        Ok((_, m)) => (m, false),
+        Err(crate::web::import::Refused(m)) => (m, true),
     }
 }
 
@@ -736,6 +800,7 @@ async fn rejected(
     errors: FieldErrors,
 ) -> Response {
     let t = auth.catalog();
+    let first = errors.messages().first().map(|m| m.to_string());
     let kind = TxKind::parse(&input.kind).unwrap_or(TxKind::Out);
     let cadence = input.cadence_months;
     // The read-back follows the expression that was rejected, so the months
@@ -794,7 +859,17 @@ async fn rejected(
         // These two are facts about the stored rule, not about the
         // submission, so they come from the database even here — a client
         // code cannot be typed, and the estimates are computed from history.
-        client_code: rule.as_ref().and_then(|r| r.client_code.clone()),
+        // A dropped-but-not-yet-created bill survives the round trip: the
+        // token is still parked, so the box is rebuilt from it.
+        meta: match (&rule, input.barcode_token.as_deref()) {
+            (Some(r), _) => BarcodeMeta::of_rule(st, t, r),
+            (None, Some(tok)) => {
+                crate::web::import::meta_of_parked(st, t, tok, auth.viewer.member_id)
+                    .unwrap_or_else(|| BarcodeMeta::empty(t))
+            }
+            (None, None) => BarcodeMeta::empty(t),
+        },
+        missing_bucket: t.rule_path_missing_bucket().to_string(),
         estimates: match &rule {
             Some(r) => estimates_of(st, auth, r).await,
             None => Vec::new(),
@@ -818,7 +893,13 @@ async fn rejected(
         "HX-Retarget",
         axum::http::HeaderValue::from_static("#rulepane"),
     );
-    res
+    // The statusline says it too. The pane draws every message beside its
+    // field, but a rejected Create that only changed the pane was exactly how
+    // it came to read as a dead button.
+    match first {
+        Some(m) => crate::web::tx::say(res, &m, true),
+        None => res,
+    }
 }
 
 /// `GET /rules/months?expr=…` — the read-back, on its own.
@@ -936,6 +1017,73 @@ pub fn computed_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn input(tracked: bool, bucket: &str) -> RuleFormInput {
+        RuleFormInput {
+            member_id: 1,
+            kind: "out".into(),
+            title: "Moto Honda 150X".into(),
+            amount: "450,32".into(),
+            bucket: bucket.into(),
+            bill_name: String::new(),
+            instance: String::new(),
+            cadence_months: 1,
+            start: "2026-09-23".into(),
+            due_day: String::new(),
+            end: String::new(),
+            installments: String::new(),
+            tracked: tracked.then(|| "on".into()),
+            no_barcode: None,
+            spans_period: None,
+            window_size: None,
+            window_start: String::new(),
+            carry_forward: Some("on".into()),
+            varies: None,
+            estimate_basis: String::new(),
+            estimate_window: None,
+            amount_in_filename: None,
+            private: None,
+            seasonal: None,
+            months: String::new(),
+            period: "2026-09".into(),
+            barcode_token: None,
+        }
+    }
+
+    /// What the browser actually posts for a fresh `A` with tracking on:
+    /// every input the pane holds, including the hidden, blank "Pages in
+    /// this file". That blank used to fail `Option<i64>` and refuse the whole
+    /// body with a 422 — which HTMX does not swap, so Create did nothing.
+    #[tokio::test]
+    async fn a_blank_hidden_number_field_does_not_refuse_the_body() {
+        use axum::extract::FromRequest;
+        let body = "member_id=4&kind=out&period=2026-09&amount=450%2C32&title=Moto&bucket=\
+                    &cadence_months=1&start=2026-09-23&due_day=&end=&installments=\
+                    &carry_forward=on&tracked=on&window_size=&window_start=&months=";
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(axum::body::Body::from(body.replace(' ', "")))
+            .unwrap();
+        let Ok(Form(input)) = Form::<RuleFormInput>::from_request(req, &()).await else {
+            panic!("the form body was refused before validation");
+        };
+        assert_eq!(input.window_size, None);
+    }
+
+    /// The shape of the "Create does nothing" report: tracked, no bucket. It
+    /// must be a field error on `bucket` — which the pane now draws — and
+    /// never a silent pass that the schema's CHECK would refuse later.
+    #[test]
+    fn a_tracked_rule_without_a_bucket_is_refused_on_the_bucket() {
+        let t = Catalog::new(crate::ui::i18n::Lang::En);
+        let Err(errors) = input(true, "  ").to_form(&t) else {
+            panic!("a tracked rule with no bucket was accepted");
+        };
+        assert!(errors.focus("bucket"));
+        assert!(input(false, "").to_form(&t).is_ok());
+        assert!(input(true, "Transporte").to_form(&t).is_ok());
+    }
 
     #[test]
     fn the_computed_path_is_slugified_all_the_way_down() {

@@ -32,6 +32,12 @@
     <input type="hidden" name="kind" value="{{ kind }}">
     <input type="hidden" name="period" :value="period">
 
+    {#- A rejected save used to come back looking exactly like the pane it was
+        submitted from — the errors were computed and never drawn, so Create
+        read as a dead button. The summary is what a screen reader announces;
+        each field also carries its own line below. -#}
+    {% include "partials/form_errors.html" %}
+
     <div class="fgrid">
       <label class="f">
         <span class="k">{{ t.row_amount() }}</span>
@@ -49,23 +55,27 @@
                x-init="ffmMoney($el)"
                {% if errors.none() %}autofocus{% endif %}>
       </label>
-      <label class="f">
+      <label class="f{% if errors.has("title") %} is-bad{% endif %}">
         {#- What the ROW says. `bill_name` below is a different column doing a
             different job: it is a path segment, and "Energia · Enel SP" is a
             title while "Energia" is a folder. -#}
         <span class="k">{{ t.row_title() }}</span>
-        <input class="i" name="title" value="{{ title }}" autocomplete="off" required x-model="title">
+        <input class="i" name="title" value="{{ title }}" autocomplete="off" required x-model="title"
+               {% if errors.focus("title") %}autofocus{% endif %}>
+        {%- if let Some(m) = errors.get("title") %}<span class="ferr">{{ m }}</span>{% endif %}
       </label>
     </div>
 
     <div class="fgrid">
-      <label class="f">
+      <label class="f{% if errors.has("bucket") %} is-bad{% endif %}">
         {#- A native combobox: an input paired with a datalist. A <select>
             would make typing a brand-new bucket impossible, and a plain input
             would drop the "pick one you already use" affordance. -#}
         <span class="k">{{ t.rule_bucket() }}</span>
         <input class="i" name="bucket" list="buckets" value="{{ bucket }}"
-               autocomplete="off" x-model="bucket">
+               autocomplete="off" x-model="bucket"
+               {% if errors.focus("bucket") %}autofocus{% endif %}>
+        {%- if let Some(m) = errors.get("bucket") %}<span class="ferr">{{ m }}</span>{% endif %}
         <datalist id="buckets">
           {%- for b in buckets %}<option value="{{ b }}">{% endfor %}
         </datalist>
@@ -81,9 +91,11 @@
     </div>
 
     <div class="fgrid">
-      <label class="f">
+      <label class="f{% if errors.has("start") %} is-bad{% endif %}">
         <span class="k">{{ t.rule_start() }}</span>
-        <input class="i" type="date" name="start" value="{{ start }}" x-model="start">
+        <input class="i" type="date" name="start" value="{{ start }}" x-model="start"
+               {% if errors.focus("start") %}autofocus{% endif %}>
+        {%- if let Some(m) = errors.get("start") %}<span class="ferr">{{ m }}</span>{% endif %}
       </label>
       <label class="f">
         <span class="k">{% if income %}{{ t.rule_expected_day() }}{% else %}{{ t.rule_due_day() }}{% endif %}</span>
@@ -125,7 +137,7 @@
         <input type="checkbox" name="seasonal"{% if seasonal %} checked{% endif %} x-model="seasonal">
         <span>{{ t.months_seasonal() }}<span class="d">{{ t.months_seasonal_hint() }}</span></span>
       </label>
-      <div class="f" x-show="seasonal" x-cloak>
+      <div class="f{% if errors.has("months") %} is-bad{% endif %}" x-show="seasonal" x-cloak>
         <span class="k">{{ t.months_label() }}</span>
         <input class="i mono" name="months" value="{{ months }}"
                placeholder="{{ t.months_placeholder() }}" autocomplete="off"
@@ -239,26 +251,18 @@
       </div>
     </div>
 
-    {%- if let Some(rid) = id %}
     {%- if !income %}
     {#- The ONE place a barcode file is ever attached. The rule is already
-        identified here, so there is no matching left to get wrong — which is
-        why a panel drop was downgraded to a notifier rather than kept as an
-        upload path. -#}
+        identified here — or, in `A`, is about to be — so there is no matching
+        left to get wrong, which is why a panel drop was downgraded to a
+        notifier rather than kept as an upload path.
+
+        In `A` it is also where the rule gets BOUND: the account and company
+        the bill names are stored on the rule, and a later bill for anything
+        else is refused as the wrong row. The box above the dropzone shows
+        exactly what that binding is, before Create. -#}
     <div x-show="tracked && !noBarcode" x-cloak class="dropwrap">
-      {%- if let Some(code) = client_code %}
-      {#- Read-only once set: the code is only ever populated by attaching a
-          file, never typed, so there is nothing here to edit. Unlink clears
-          just this — it does not touch tracked, bucket or bill name — and
-          exists for "the wrong file got attached the first time". -#}
-      <div class="clientcode">
-        <span class="k">{{ t.import_client_code() }}</span>
-        <span class="mono">{{ code }}</span>
-        <button class="btn" type="button"
-                hx-post="/rules/{{ rid }}/unlink"
-                hx-target="#rulepane" hx-swap="delete">{{ t.import_unlink() }}</button>
-      </div>
-      {%- endif %}
+      {{ meta|safe }}
 
       {#- A dropzone, not a file input styled to look like one. -#}
       <label class="dropzone" :class="{ 'is-over': over }"
@@ -266,10 +270,11 @@
              @drop.prevent="over = false; send($event.dataTransfer.files[0])">
         <span>{{ t.import_dropzone() }}</span>
         <input type="file" class="hidden-input" accept=".pdf,.txt,.jpg,.png"
-               @change="send($el.files[0])">
+               @change="send($el.files[0]); $el.value = ''">
       </label>
     </div>
     {%- endif %}
+    {%- if id.is_some() %}
     <div class="notebox">{{ t.rule_past_note() }}</div>
     {%- endif %}
 
@@ -305,6 +310,7 @@ function rulePane() {
     end: {{ end|json|safe }},
     installments: {{ installments|json|safe }},
     vault: {{ vault|json|safe }},
+    missingBucket: {{ missing_bucket|json|safe }},
     // [basis, formatted money, the months it came from] — one ready-made
     // projection per basis, computed and formatted by the SERVER. The pane
     // only chooses which to show; it never does the arithmetic and never
@@ -331,7 +337,10 @@ function rulePane() {
       // bill_name names the folder; the title is the fallback, which is what
       // the field's own placeholder already shows.
       const file = this.billName.trim() || this.title;
-      const parts = [this.vault, this.slug(this.bucket), this.slug(file)];
+      // An empty segment is shown as what is missing rather than as `//`: a
+      // tracked rule cannot be saved without a bucket, and the preview is the
+      // first place that can say so.
+      const parts = [this.vault, this.slug(this.bucket) || this.missingBucket, this.slug(file)];
       if (this.instance.trim()) parts.push(this.slug(this.instance));
       const [y, m] = this.period.split('-');
       parts.push(y);
@@ -350,24 +359,36 @@ function rulePane() {
 
     over: false,
 
-    /// Uploads the bill and swaps the row it belongs to. A plain fetch
-    /// because htmx.ajax cannot carry a FormData body — the contract is the
-    /// same either way: a row fragment back, the statusline in HX-Trigger.
+    /// `E`: uploads the bill, swaps the row it belongs to, and refreshes the
+    /// "Bill on file" box. `A`: there is no rule yet, so the bill is only
+    /// read and parked, and the box comes back carrying the token Create
+    /// will attach it with. A plain fetch because htmx.ajax cannot carry a
+    /// FormData body — the contract is the same either way: HTML back, the
+    /// statusline in HX-Trigger.
     send(file) {
       if (!file) return;
       const body = new FormData();
       body.append('file', file);
+      const rule = {{ id.unwrap_or(0) }};
       const period = document.querySelector('.ledger-shell')?.dataset.period || '';
-      fetch('/rules/{{ id.unwrap_or(0) }}/barcode?period=' + period,
-            { method: 'POST', body, headers: { 'HX-Request': 'true' } })
+      const url = rule ? '/rules/' + rule + '/barcode?period=' + period : '/rules/barcode/preview';
+      fetch(url, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
         .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
         .then(({ html, trigger }) => {
           if (html.trim()) {
             const tmp = document.createElement('div');
             tmp.innerHTML = html;
-            const fresh = tmp.querySelector('[id^="row-"]');
-            const target = fresh && document.getElementById(fresh.id);
-            if (target) target.replaceWith(fresh);
+            if (rule) {
+              const fresh = tmp.querySelector('[id^="row-"]');
+              const target = fresh && document.getElementById(fresh.id);
+              if (target) target.replaceWith(fresh);
+              htmx.ajax('GET', '/rules/' + rule + '/meta',
+                        { target: '#barcodemeta', swap: 'outerHTML' });
+            } else {
+              const fresh = tmp.querySelector('#barcodemeta');
+              const box = this.$root.querySelector('#barcodemeta');
+              if (fresh && box) { box.replaceWith(fresh); htmx.process(fresh); }
+            }
           }
           if (trigger) {
             const payload = JSON.parse(trigger)['ffm:say'];

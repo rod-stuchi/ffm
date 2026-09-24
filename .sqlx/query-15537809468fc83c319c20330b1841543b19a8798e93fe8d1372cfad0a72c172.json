@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", member_id AS \"member_id!: i64\",\n                  kind AS \"kind!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\",\n                  cadence_months AS \"cadence_months!: i64\",\n                  due_day AS \"due_day: i64\",\n                  start_date AS \"start_date!: String\",\n                  end_date AS \"end_date: String\",\n                  total_installments AS \"total_installments: i64\",\n                  carry_forward_amount AS \"carry_forward_amount!: i64\",\n                  tracked AS \"tracked!: i64\",\n                  bucket AS \"bucket: String\", bill_name AS \"bill_name: String\",\n                  instance AS \"instance: String\",\n                  no_barcode AS \"no_barcode!: i64\", varies AS \"varies!: i64\",\n                  client_code AS \"client_code: String\",\n                  spans_period AS \"spans_period!: i64\",\n                  window_size AS \"window_size: i64\",\n                  window_start AS \"window_start: String\",\n                  estimate_basis AS \"estimate_basis!: String\",\n                  estimate_window AS \"estimate_window!: i64\",\n                  amount_in_filename AS \"amount_in_filename!: i64\",\n                  months AS \"months: String\",\n                  visibility AS \"visibility!: String\"\n           FROM recurring_rules WHERE id = ?1 AND deleted_at IS NULL",
+  "query": "SELECT id AS \"id!: i64\", member_id AS \"member_id!: i64\",\n                  kind AS \"kind!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\",\n                  cadence_months AS \"cadence_months!: i64\",\n                  due_day AS \"due_day: i64\",\n                  start_date AS \"start_date!: String\",\n                  end_date AS \"end_date: String\",\n                  total_installments AS \"total_installments: i64\",\n                  carry_forward_amount AS \"carry_forward_amount!: i64\",\n                  tracked AS \"tracked!: i64\",\n                  bucket AS \"bucket: String\", bill_name AS \"bill_name: String\",\n                  instance AS \"instance: String\",\n                  no_barcode AS \"no_barcode!: i64\", varies AS \"varies!: i64\",\n                  client_code AS \"client_code: String\",\n                  issuer_id AS \"issuer_id: String\",\n                  barcode_company AS \"barcode_company: String\",\n                  barcode_kind AS \"barcode_kind: String\",\n                  spans_period AS \"spans_period!: i64\",\n                  window_size AS \"window_size: i64\",\n                  window_start AS \"window_start: String\",\n                  estimate_basis AS \"estimate_basis!: String\",\n                  estimate_window AS \"estimate_window!: i64\",\n                  amount_in_filename AS \"amount_in_filename!: i64\",\n                  months AS \"months: String\",\n                  visibility AS \"visibility!: String\"\n           FROM recurring_rules WHERE id = ?1 AND deleted_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -94,43 +94,58 @@
         "type_info": "Text"
       },
       {
-        "name": "spans_period!: i64",
+        "name": "issuer_id: String",
         "ordinal": 18,
-        "type_info": "Integer"
+        "type_info": "Text"
       },
       {
-        "name": "window_size: i64",
+        "name": "barcode_company: String",
         "ordinal": 19,
-        "type_info": "Integer"
+        "type_info": "Text"
       },
       {
-        "name": "window_start: String",
+        "name": "barcode_kind: String",
         "ordinal": 20,
         "type_info": "Text"
       },
       {
-        "name": "estimate_basis!: String",
+        "name": "spans_period!: i64",
         "ordinal": 21,
-        "type_info": "Text"
+        "type_info": "Integer"
       },
       {
-        "name": "estimate_window!: i64",
+        "name": "window_size: i64",
         "ordinal": 22,
         "type_info": "Integer"
       },
       {
-        "name": "amount_in_filename!: i64",
+        "name": "window_start: String",
         "ordinal": 23,
-        "type_info": "Integer"
+        "type_info": "Text"
       },
       {
-        "name": "months: String",
+        "name": "estimate_basis!: String",
         "ordinal": 24,
         "type_info": "Text"
       },
       {
-        "name": "visibility!: String",
+        "name": "estimate_window!: i64",
         "ordinal": 25,
+        "type_info": "Integer"
+      },
+      {
+        "name": "amount_in_filename!: i64",
+        "ordinal": 26,
+        "type_info": "Integer"
+      },
+      {
+        "name": "months: String",
+        "ordinal": 27,
+        "type_info": "Text"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 28,
         "type_info": "Text"
       }
     ],
@@ -156,6 +171,9 @@
       false,
       false,
       true,
+      true,
+      true,
+      true,
       false,
       true,
       true,
@@ -166,5 +184,5 @@
       false
     ]
   },
-  "hash": "4661cab6bf704bb7e09f814c402aa34a4ade899996fe79b8d7aa9b01c064ce7c"
+  "hash": "15537809468fc83c319c20330b1841543b19a8798e93fe8d1372cfad0a72c172"
 }

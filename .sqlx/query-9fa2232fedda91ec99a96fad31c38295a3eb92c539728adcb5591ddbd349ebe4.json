@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT uuid AS \"uuid!: String\", slug AS \"slug!: String\" FROM members",
+  "describe": {
+    "columns": [
+      {
+        "name": "uuid!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "slug!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "9fa2232fedda91ec99a96fad31c38295a3eb92c539728adcb5591ddbd349ebe4"
+}

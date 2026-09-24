@@ -341,7 +341,6 @@ pub async fn pane_with_vault(
             varies: r.varies.unwrap_or(0) != 0,
             cadence_months: r.cadence_months,
 
-            member_uuid: member.uuid.clone(),
             member_slug: member.slug.clone(),
 
             prev_amount_cents: r.prev_amount_cents.map(Cents),
@@ -406,7 +405,7 @@ pub async fn pane_with_vault(
             };
             let slot = crate::services::receipts::Slot {
                 transaction_id: row.id,
-                vault: format!("{}-{}", member.uuid, member.slug),
+                vault: crate::domain::receipt_path::vault(&member.slug),
                 bucket,
                 bill_name,
                 instance: row.instance.clone(),
@@ -496,7 +495,7 @@ async fn confirmed_history(
                 (Some(root), Some(bucket), Some(bill_name)) => {
                     let slot = crate::services::receipts::Slot {
                         transaction_id: r.id,
-                        vault: format!("{}-{}", member.uuid, member.slug),
+                        vault: crate::domain::receipt_path::vault(&member.slug),
                         bucket: bucket.to_string(),
                         bill_name: bill_name.to_string(),
                         instance: r.instance.clone(),
@@ -648,7 +647,7 @@ pub async fn unresolved_months(
                   t.bucket AS "bucket: String", t.bill_name AS "bill_name: String",
                   r.instance AS "instance: String",
                   r.amount_in_filename AS "amount_in_filename!: i64",
-                  m.uuid AS "uuid!: String", m.slug AS "slug!: String"
+                  m.slug AS "slug!: String"
            FROM transactions t
            JOIN recurring_rules r ON r.id = t.rule_id
            JOIN members m ON m.id = t.member_id
@@ -684,7 +683,7 @@ pub async fn unresolved_months(
             (Some(root), Some(bucket), Some(bill_name)) => {
                 let slot = crate::services::receipts::Slot {
                     transaction_id: r.id,
-                    vault: format!("{}-{}", r.uuid, r.slug),
+                    vault: crate::domain::receipt_path::vault(&r.slug),
                     bucket: bucket.to_string(),
                     bill_name: bill_name.to_string(),
                     instance: r.instance.clone(),

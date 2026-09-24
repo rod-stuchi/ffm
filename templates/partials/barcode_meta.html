@@ -1,0 +1,33 @@
+{#- "Bill on file" — what a rule's bill is bound to, or in `A` what the
+    dropped bill will bind it to. The same box in both, so what you see before
+    Create is exactly what you will see in `E` afterwards.
+
+    No amount and no due date: they change every period, and this box is about
+    the identity that does not. That identity is what refuses a later bill for
+    another account — "wrong row?" — before anything is written. -#}
+<div id="barcodemeta">
+  {%- if !is_empty() %}
+  <div class="notebox barcodemeta">
+    <b class="bm-title">{{ t.import_meta_title() }}</b>
+    <dl class="bm-list">
+      {%- if let Some(v) = issuer %}<dt>{{ t.import_meta_issuer() }}</dt><dd>{{ v }}</dd>{% endif %}
+      {%- if let Some(v) = kind %}<dt>{{ t.import_meta_kind() }}</dt><dd>{{ v }}</dd>{% endif %}
+      {%- if let Some(v) = company %}<dt>{{ t.import_meta_company() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
+      {%- if let Some(v) = client_code %}<dt>{{ t.import_client_code() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
+    </dl>
+    {%- if let Some(tok) = token %}
+    <span class="p2">{% if let Some(f) = filename %}<span class="mono">{{ f }}</span> · {% endif %}{{ t.import_meta_pending() }}</span>
+    {#- Create carries this like any other field; the parked file is attached
+        to the rule it creates. -#}
+    <input type="hidden" name="barcode_token" value="{{ tok }}">
+    {%- else %}
+    <span class="p2">{{ t.import_meta_hint() }}</span>
+    {%- endif %}
+    {%- if let Some(rid) = rule_id %}
+    <button class="btn bm-unlink" type="button"
+            hx-post="/rules/{{ rid }}/unlink"
+            hx-target="#barcodemeta" hx-swap="outerHTML">{{ t.import_unlink() }}</button>
+    {%- endif %}
+  </div>
+  {%- endif %}
+</div>

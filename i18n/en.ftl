@@ -394,11 +394,21 @@ import-read = read { $what } from the bill
 import-filled = read { $amount } due { $date } from the barcode
 import-amount-differs = the barcode says { $barcode }, this row says { $row } — left as it was
 import-date-differs = the barcode says { $barcode }, this row says { $row } — left as it was
-import-code-differs = this bill's client code is { $found }, but the rule has { $known } — left as it was
 import-unresolved = the barcode did not carry { $what }
 import-no-occurrence = there is no row for this month to attach it to
-import-unlinked = client code unlinked
+import-unlinked = bill unlinked from this rule — drop the right one
 import-already-attached = this bill is already on { $period } — one bill, one row
+rule-path-missing-bucket = ‹bucket›
+import-wrong-row = wrong row? this bill is for { $found }, but { $rule } is bound to { $known } — nothing was saved
+import-meta-title = Bill on file
+import-meta-hint = what this rule is bound to — a bill for anything else is refused
+import-meta-issuer = Issuer
+import-meta-kind = Barcode
+import-meta-company = Company code
+import-meta-kind-consumo = utility / tax
+import-meta-kind-cobranca = bank slip
+import-meta-pending = attached when you create the rule
+import-no-occurrence-new-rule = the rule starts after this month, so the bill was not attached — attach it from E once its first row exists
 
 ## The month picker and its warning dot
 
