@@ -558,3 +558,40 @@ legend {
 input.i.mono {
   font-family: var(--mono);
 }
+
+/* The FFM mark (partials/logo.html). Its container sets the height; the width
+ * follows the viewBox. Colors are the fixed --logo-* brand values. */
+.logo {
+  display: block;
+  height: 100%;
+  width: auto;
+}
+
+.logo .logo-h1 {
+  fill: var(--logo-h1);
+}
+
+.logo .logo-h2 {
+  fill: var(--logo-h2);
+}
+
+.logo .logo-h3 {
+  fill: var(--logo-h3);
+}
+
+.logo .logo-line {
+  fill: none;
+  stroke: var(--logo-h1);
+  stroke-width: 4.5;
+  stroke-linecap: butt;
+  stroke-linejoin: round;
+}
+
+/* 700, not the source's 800: that is the heaviest JetBrains Mono we self-host,
+ * and an 800 request would only be faux-bolded. */
+.logo .logo-text {
+  fill: var(--logo-ink);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 98.6px;
+}

@@ -30,6 +30,21 @@
   font-size: 14px;
 }
 
+/* `<logo> FFM | household`. The bar's own gap spaces all three; the divider
+ * is a hairline rather than a `|` glyph so it sits at the bar's height. */
+.bar-logo {
+  flex: none;
+  height: 22px;
+}
+
+.bar-sep {
+  flex: none;
+  width: 1px;
+  align-self: stretch;
+  margin-block: 4px;
+  background: var(--line);
+}
+
 .mnav {
   display: flex;
   align-items: center;

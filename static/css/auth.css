@@ -163,3 +163,10 @@
   color: var(--ink-2);
   word-break: break-all;
 }
+
+/* The FFM mark at the head of every pre-auth card. It reads only the
+ * light/dark already on <html>, nothing from a member row. */
+.auth-logo {
+  height: 48px;
+  margin: 4px 0 14px;
+}

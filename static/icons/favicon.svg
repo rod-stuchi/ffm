@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -14 120 120">
+<!-- The houses mark from design/logo/, without the wordmark. The same fixed
+     brand colors as the in-page logo (the logo tokens in tokens.css); a favicon cannot
+     see the page's ffm.theme cookie, so it follows the OS scheme instead. -->
+<style>
+.h1{fill:#005523}.h2{fill:#007373}.h3{fill:#004C73}.ln{fill:none;stroke:#005523;stroke-width:4.5;stroke-linejoin:round}
+@media (prefers-color-scheme: dark){.h1{fill:#B3F6C0}.h2{fill:#8CF8F7}.h3{fill:#A6DBFF}.ln{stroke:#B3F6C0}}
+</style>
+<defs>
+<mask id="family">
+<rect x="-1" y="-14" width="120" height="120" fill="white"/>
+<circle cx="51" cy="74" r="3.6" fill="black"/>
+<path d="M46 90 V85 a5 5 0 0 1 10 0 V90 Z" fill="black"/>
+<circle cx="60" cy="81.5" r="2.4" fill="black"/>
+<path d="M57 90 V87 a3 3 0 0 1 6 0 V90 Z" fill="black"/>
+<circle cx="69" cy="74" r="3.6" fill="black"/>
+<path d="M64 90 V85 a5 5 0 0 1 10 0 V90 Z" fill="black"/>
+</mask>
+</defs>
+<polygon class="h1" points="4,90 4,66 20,50 36,66 36,90"/>
+<polygon class="h2" points="44,90 44,50 60,34 76,50 76,90" mask="url(#family)"/>
+<polygon class="h3" points="84,90 84,34 100,18 116,34 116,90"/>
+<polyline class="ln" points="0,59 20,42 40,45 60,26 80,29 100,10 108.7,5"/>
+<polygon class="h1" points="116.5,0.5 111.2,9.3 106.2,0.7"/>
+</svg>

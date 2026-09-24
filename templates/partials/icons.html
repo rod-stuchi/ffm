@@ -1,0 +1,12 @@
+{#- The browser-tab and home-screen icons: the logo's houses mark.
+
+    Dark marks on a light system, light marks on a dark one — decided by the
+    OS scheme, not the ffm.theme cookie, because the tab bar the icon sits on
+    is the browser's chrome and follows the OS, not the page. The SVG switches
+    itself with a prefers-color-scheme rule inside it; the PNGs are for a
+    browser without SVG favicons and switch with `media` on the link. The
+    touch icon is an opaque tile, because iOS fills transparency with black. -#}
+<link rel="icon" href="/static/icons/favicon-light-32.png" sizes="32x32" type="image/png" media="(prefers-color-scheme: light)">
+<link rel="icon" href="/static/icons/favicon-dark-32.png" sizes="32x32" type="image/png" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/static/icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">

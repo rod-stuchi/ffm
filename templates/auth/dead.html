@@ -3,7 +3,10 @@
     no form at all, because a disabled form invites retrying. One way onward. -#}
 {% block card %}
 <div class="card" style="max-width:440px">
-  <div class="ch"><h1>{{ chrome.household }}</h1></div>
+  <div class="ch">
+    <div class="auth-logo">{% include "partials/logo.html" %}</div>
+    <h1>{{ chrome.household }}</h1>
+  </div>
   <div class="cb">
     {%- if note %}
     <div class="notebox" style="margin-top:0">{{ body }}</div>

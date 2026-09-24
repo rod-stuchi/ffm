@@ -31,3 +31,31 @@
 .gut {
   font-variant-numeric: tabular-nums;
 }
+
+/* The logo's colors — the one exception to "no colors here", and not a
+ * palette: these are the brand mark's own fixed values, the same on all eleven
+ * themes, from design/logo/ffm-logo-{light,dark}.svg. Only light/dark picks
+ * between the two sets, so they take the usual triple: light on bare :root,
+ * dark under the media query and again under [data-theme="dark"]. */
+:root {
+  --logo-h1: #005523;
+  --logo-h2: #007373;
+  --logo-h3: #004C73;
+  --logo-ink: #14161B;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --logo-h1: #B3F6C0;
+    --logo-h2: #8CF8F7;
+    --logo-h3: #A6DBFF;
+    --logo-ink: #E0E2EA;
+  }
+}
+
+:root[data-theme="dark"] {
+  --logo-h1: #B3F6C0;
+  --logo-h2: #8CF8F7;
+  --logo-h3: #A6DBFF;
+  --logo-ink: #E0E2EA;
+}

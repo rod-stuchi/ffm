@@ -1,0 +1,27 @@
+{#- The FFM mark, from design/logo/ffm-logo-{light,dark}.svg.
+
+    Inline rather than an <img>: an image cannot see the page's data-theme or
+    its self-hosted fonts, so it would need a file per mode and would load the
+    wordmark's font from Google. The two source files differ only in color,
+    and the colors are the --logo-* tokens in tokens.css — fixed brand values,
+    not palette, so the mark reads the same on all eleven themes and only
+    light/dark picks between the two sets. Sized by its container's height. -#}
+<svg class="logo" viewBox="0 -2 310 98" role="img" aria-label="FFM" focusable="false">
+  <defs>
+    <mask id="ffm-logo-family">
+      <rect x="0" y="-2" width="310" height="98" fill="white"/>
+      <circle cx="51" cy="74" r="3.6" fill="black"/>
+      <path d="M46 90 V85 a5 5 0 0 1 10 0 V90 Z" fill="black"/>
+      <circle cx="60" cy="81.5" r="2.4" fill="black"/>
+      <path d="M57 90 V87 a3 3 0 0 1 6 0 V90 Z" fill="black"/>
+      <circle cx="69" cy="74" r="3.6" fill="black"/>
+      <path d="M64 90 V85 a5 5 0 0 1 10 0 V90 Z" fill="black"/>
+    </mask>
+  </defs>
+  <polygon class="logo-h1" points="4,90 4,66 20,50 36,66 36,90"/>
+  <polygon class="logo-h2" points="44,90 44,50 60,34 76,50 76,90" mask="url(#ffm-logo-family)"/>
+  <polygon class="logo-h3" points="84,90 84,34 100,18 116,34 116,90"/>
+  <polyline class="logo-line" points="0,59 20,42 40,45 60,26 80,29 100,10 108.7,5"/>
+  <polygon class="logo-h1" points="116.5,0.5 111.2,9.3 106.2,0.7"/>
+  <text class="logo-text" x="132" y="90">FFM</text>
+</svg>
