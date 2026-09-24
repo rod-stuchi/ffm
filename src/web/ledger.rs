@@ -666,7 +666,7 @@ pub fn group_rows(
         .collect()
 }
 
-fn view(
+pub(crate) fn view(
     pane: Pane,
     t: &Catalog,
     currency: crate::domain::money::Currency,

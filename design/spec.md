@@ -1813,6 +1813,21 @@ ledger straight into a per-category summary — Consumption R$ 1.556,92,
 Subscriptions R$ 59,90, and so on — with zero additional screen to build.
 Browsing and summarizing are the same mechanism at two zoom levels.
 
+### A change that moves a row re-renders the pane
+
+In a grouped pane — and under `sort = date` / `amount` — where a row sits
+follows from what it says. Saving an edit, adding a row, or undoing an edit
+can therefore move it: a new bucket belongs in another fold, a new amount
+elsewhere in the order. Such an answer is the **whole pane**, not the one row
+swapped back in place, with the cursor put back on the row by id (the same
+way `J`/`K` keep it on the row they moved). "Venda" filed under `Abc` used to
+stay under `Sem categoria` until a reload.
+
+The pane fragment and the page render **one partial**
+(`partials/pane_body.html`) from one value (`web::ledger::PaneView`). They
+were two copies, and the fragment's only knew the flat layout — every answer
+that re-rendered a grouped pane (a rule save included) flattened it.
+
 ### Interaction with sort and reorder
 
 Grouping is a derived view exactly like `ledger.sort = "date"`/`"amount"` — the

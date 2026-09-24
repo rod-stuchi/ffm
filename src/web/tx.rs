@@ -162,14 +162,17 @@ pub async fn pane_fragment(
     };
 
     let t = auth.catalog();
-    let rows: Vec<RowView> = pane.rows.into_iter().map(|r| r.view(&t)).collect();
+    // Built by the page's own `view`, grouped exactly when the page groups —
+    // this fragment used to render the rows flat, which un-grouped a grouped
+    // pane on every answer that re-rendered it.
+    let grouped = auth.settings.ledger_group == "bucket";
+    let p = crate::web::ledger::view(pane, &t, currency, grouped);
     let (panes, totals) = crate::web::ledger::totals(st, auth, period).await;
 
     say(
         Html(crate::web::rules::PaneRows {
             t,
-            member_id,
-            rows,
+            p,
             pane_totals: panes.into_iter().find(|p| p.id == member_id),
             house_totals: Some(totals),
         })
@@ -177,6 +180,43 @@ pub async fn pane_fragment(
         message,
         false,
     )
+}
+
+/// Whether the focused ordering is one the SERVER derives — grouped by
+/// bucket, or sorted by date or amount — rather than the stored manual order.
+///
+/// In a derived view, where a row sits follows from what it says: change its
+/// bucket and it belongs in another fold, change its amount under
+/// `sort = amount` and it belongs elsewhere in the list. A single row swapped
+/// back in place is then in the wrong spot — "Venda" filed under `Abc` stayed
+/// in `Sem categoria` until a reload — so such an answer re-renders the pane.
+fn derived_view(auth: &Auth) -> bool {
+    crate::db::ledger::Sort::parse(&auth.settings.ledger_sort).is_derived()
+        || auth.settings.ledger_group != "none"
+}
+
+/// The pane, re-rendered, for a change that may have moved `id` — with the
+/// cursor put back on that row once the pane has settled, and no swap of the
+/// requesting element (the row it targeted may now live in another fold).
+///
+/// The cursor rides `HX-Trigger-After-Settle`, not `HX-Trigger`: the latter
+/// fires as the response arrives, before the pane it points into exists.
+async fn pane_at(
+    st: &AppState,
+    auth: &Auth,
+    id: i64,
+    member_id: i64,
+    period: Period,
+    message: &str,
+) -> Response {
+    let mut res = pane_fragment(st, auth, member_id, period, message).await;
+    let cursor = serde_json::json!({ "ffm:cursor": { "id": id } }).to_string();
+    if let Ok(v) = HeaderValue::from_str(&cursor) {
+        res.headers_mut().insert("HX-Trigger-After-Settle", v);
+    }
+    res.headers_mut()
+        .insert("HX-Reswap", HeaderValue::from_static("none"));
+    res
 }
 
 /// Re-reads one row through the **pane query**, so a fragment is rendered by
@@ -403,6 +443,11 @@ pub async fn add(State(st): State<AppState>, auth: Auth, Form(form): Form<AddFor
     };
 
     match tx::add(&st.pool, Actor::User(auth.viewer.member_id), new).await {
+        // In a derived view the new row belongs where its bucket, date or
+        // amount puts it — not before the skeleton at the foot of the pane.
+        Ok(id) if derived_view(&auth) => {
+            pane_at(&st, &auth, id, form.member_id, period, &t.row_added(title)).await
+        }
         Ok(id) => match render_row(&st, &auth, id, false).await {
             Ok(f) => say(Html(f).into_response(), &t.row_added(title), false),
             Err(e) => say(error_row(&t, e), e, true),
@@ -582,6 +627,17 @@ pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
         && let Ok(Some((member_id, period, _))) = tx::one(&st.pool, u.entity_id).await
     {
         return pane_fragment(&st, &auth, member_id, period, t.undone()).await;
+    }
+
+    // Undoing an edit puts back a bucket, amount or date — which, in a derived
+    // view, can put the row back somewhere else.
+    if ok
+        && u.entity == "transaction"
+        && u.action == "edit"
+        && derived_view(&auth)
+        && let Ok(Some((member_id, period, _))) = tx::one(&st.pool, u.entity_id).await
+    {
+        return pane_at(&st, &auth, u.entity_id, member_id, period, t.undone()).await;
     }
 
     match (ok, row_id) {
@@ -857,6 +913,9 @@ pub async fn save_edit(
 
     match ok {
         Ok(tx::Saved::Ok) => match tx::one(&st.pool, id).await {
+            Ok(Some((member_id, period, _))) if derived_view(&auth) => {
+                pane_at(&st, &auth, id, member_id, period, t.edit_saved()).await
+            }
             Ok(Some((member_id, period, _))) => {
                 row_fragment(&st, &auth, id, member_id, period, t.edit_saved()).await
             }

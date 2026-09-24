@@ -1,23 +1,10 @@
-{#- A whole pane's rows, swapped out of band.
+{#- A whole pane's rows, swapped out of band — through the same
+    `pane_body.html` the page renders, grouped or flat.
 
     A row mutation answers with one row; a rule save can create several periods
     at once, so it answers with the pane. The skeleton row goes back in with
     them — it is part of the container's markup, not a leftover. -#}
-<div class="rows" id="rows-{{ member_id }}" hx-swap-oob="true">
-  {%- for v in rows %}
-  <div id="row-{{ v.id }}">{% include "partials/row.html" %}</div>
-  {%- endfor %}
-  <div class="row is-skeleton sk-row" id="sk-{{ member_id }}">
-    <div class="gut"></div>
-    <div class="entry">
-      <div class="mark"><div class="sk-disc"></div></div>
-      <div class="name">
-        <div class="sk-bar" style="width:56%"></div>
-        <div class="sk-bar" style="width:32%;height:7px;margin-top:6px"></div>
-      </div>
-      <div></div>
-      <div class="amt"><div class="sk-bar" style="width:74px"></div></div>
-    </div>
-  </div>
+<div class="rows" id="rows-{{ p.id }}" hx-swap-oob="true">
+{% include "partials/pane_body.html" %}
 </div>
 {% if let Some(pt) = pane_totals %}{% let house = house_totals.as_ref().unwrap() %}{% include "partials/totals.html" %}{% endif %}

@@ -237,51 +237,11 @@
       </header>
 
       <div class="rows" id="rows-{{ p.id }}">
-        {%- if p.grouped %}
-        {#- Real Vim folds, not an invented gesture: za/zo/zc toggle one,
-            zR/zM open and close every one. The server renders the whole
-            grouped, subtotaled fragment regardless of what is folded —
-            folding only hides what is already here, which is why fold state
-            is Alpine's and nothing else's.
-
-            The subtotal stays visible open OR closed, and that is why there
-            is no separate report screen: zM turns the ledger into a
-            per-category summary with nothing else built. -#}
-        {%- for g in p.groups %}
-        <section class="fold" :class="{ 'is-closed': closed('{{ p.id }}-{{ loop.index0 }}') }">
-          <header class="foldhead" @click="toggle('{{ p.id }}-{{ loop.index0 }}')">
-            <span class="fmark" x-text="closed('{{ p.id }}-{{ loop.index0 }}') ? '▸' : '▾'">▾</span>
-            <b>{{ g.name }}</b>
-            <span class="fcount">{{ g.count }}</span>
-            <span class="fsub {% if g.negative %}neg{% else %}pos{% endif %}">{% if g.negative %}−{% endif %}{{ g.subtotal }}</span>
-          </header>
-          <div class="foldrows" x-show="!closed('{{ p.id }}-{{ loop.index0 }}')">
-            {%- for v in g.rows %}
-            <div id="row-{{ v.id }}">{% include "partials/row.html" %}</div>
-            {%- endfor %}
-          </div>
-        </section>
-        {%- endfor %}
-        {%- else %}
-        {%- for v in p.rows %}
-        <div id="row-{{ v.id }}">{% include "partials/row.html" %}</div>
-        {%- endfor %}
-        {%- endif %}
-
-        {#- In flight. Identical geometry to a real row, so nothing shifts when
-            the server's fragment lands beside it. -#}
-        <div class="row is-skeleton sk-row" id="sk-{{ p.id }}">
-          <div class="gut"></div>
-          <div class="entry">
-            <div class="mark"><div class="sk-disc"></div></div>
-            <div class="name">
-              <div class="sk-bar" style="width:56%"></div>
-              <div class="sk-bar" style="width:32%;height:7px;margin-top:6px"></div>
-            </div>
-            <div></div>
-            <div class="amt"><div class="sk-bar" style="width:74px"></div></div>
-          </div>
-        </div>
+        {#- The rows — grouped into folds or flat, plus the skeleton — are ONE
+            partial, shared with the pane fragment a mutation answers with.
+            Two copies had drifted: the fragment only knew the flat layout, so
+            any answer that re-rendered a grouped pane flattened it. -#}
+        {% include "partials/pane_body.html" %}
       </div>
 
       {#- The add form lives in the ledger, not in a modal: a dialog hides the
@@ -2234,6 +2194,10 @@ function ledger() {
       // The statusline is fed by a response header, so a swap never has to
       // include chrome in order to say something.
       document.body.addEventListener('ffm:say', e => this.say(e.detail.message, e.detail.bad));
+      // A change that re-rendered a derived pane (grouped, or sorted by date or
+      // amount) names the row it moved; the cursor follows it by id, the same
+      // way it follows a row that `J`/`K` moved.
+      document.body.addEventListener('ffm:cursor', e => this.cursorTo(String(e.detail.id)));
       document.body.addEventListener('htmx:afterSwap', () => {
         this.markDrafts();
         this.paintSelection();

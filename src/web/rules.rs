@@ -22,7 +22,6 @@ use crate::domain::status::{TxKind, Visibility};
 use crate::services::materializer;
 use crate::state::AppState;
 use crate::ui::i18n::Catalog;
-use crate::ui::row::RowView;
 use crate::web::form::FieldErrors;
 use crate::web::import::BarcodeMeta;
 use crate::web::ledger::{HouseTotals, PaneTotals};
@@ -985,8 +984,10 @@ async fn finish(
 #[template(path = "partials/pane_rows.html")]
 pub struct PaneRows {
     pub t: Catalog,
-    pub member_id: i64,
-    pub rows: Vec<RowView>,
+    /// The pane exactly as the page builds it (`web::ledger::view`) — grouped
+    /// into folds when the member grouped it, so the fragment and the page
+    /// render one partial from one value.
+    pub p: crate::web::ledger::PaneView,
     pub pane_totals: Option<PaneTotals>,
     pub house_totals: Option<HouseTotals>,
 }

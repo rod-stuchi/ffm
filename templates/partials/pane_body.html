@@ -1,0 +1,51 @@
+{#- A pane's rows, as the page renders them AND as a mutation's pane
+    fragment does: grouped into folds when the member grouped the pane, flat
+    otherwise, then the in-flight skeleton. Reads `p`, a `web::ledger::PaneView`
+    — the same value on both paths, so the fragment cannot flatten a grouped
+    pane (it did, when it had its own copy) or disagree with the page in any
+    other way. -#}
+{%- if p.grouped %}
+{#- Real Vim folds, not an invented gesture: za/zo/zc toggle one,
+    zR/zM open and close every one. The server renders the whole
+    grouped, subtotaled fragment regardless of what is folded —
+    folding only hides what is already here, which is why fold state
+    is Alpine's and nothing else's.
+
+    The subtotal stays visible open OR closed, and that is why there
+    is no separate report screen: zM turns the ledger into a
+    per-category summary with nothing else built. -#}
+{%- for g in p.groups %}
+<section class="fold" :class="{ 'is-closed': closed('{{ p.id }}-{{ loop.index0 }}') }">
+  <header class="foldhead" @click="toggle('{{ p.id }}-{{ loop.index0 }}')">
+    <span class="fmark" x-text="closed('{{ p.id }}-{{ loop.index0 }}') ? '▸' : '▾'">▾</span>
+    <b>{{ g.name }}</b>
+    <span class="fcount">{{ g.count }}</span>
+    <span class="fsub {% if g.negative %}neg{% else %}pos{% endif %}">{% if g.negative %}−{% endif %}{{ g.subtotal }}</span>
+  </header>
+  <div class="foldrows" x-show="!closed('{{ p.id }}-{{ loop.index0 }}')">
+    {%- for v in g.rows %}
+    <div id="row-{{ v.id }}">{% include "partials/row.html" %}</div>
+    {%- endfor %}
+  </div>
+</section>
+{%- endfor %}
+{%- else %}
+{%- for v in p.rows %}
+<div id="row-{{ v.id }}">{% include "partials/row.html" %}</div>
+{%- endfor %}
+{%- endif %}
+
+{#- In flight. Identical geometry to a real row, so nothing shifts when
+    the server's fragment lands beside it. -#}
+<div class="row is-skeleton sk-row" id="sk-{{ p.id }}">
+  <div class="gut"></div>
+  <div class="entry">
+    <div class="mark"><div class="sk-disc"></div></div>
+    <div class="name">
+      <div class="sk-bar" style="width:56%"></div>
+      <div class="sk-bar" style="width:32%;height:7px;margin-top:6px"></div>
+    </div>
+    <div></div>
+    <div class="amt"><div class="sk-bar" style="width:74px"></div></div>
+  </div>
+</div>
