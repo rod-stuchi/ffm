@@ -113,6 +113,14 @@ pub async fn upload(
         return crate::web::tx::say_only(t.error_not_written(), true);
     }
 
+    // A bill is not just a file: it is checked against what the rule is bound
+    // to, through the same attach the rule pane's dropzone uses — see
+    // `import::attach_on_row`. Scheduled and receipt stay plain files.
+    if kind == Kind::Barcode {
+        let upload = crate::web::import::Upload { filename, bytes };
+        return crate::web::import::attach_on_row(&st, &auth, tx_id, upload).await;
+    }
+
     match receipts::store(
         &st.pool,
         &st.cfg.receipts_root,

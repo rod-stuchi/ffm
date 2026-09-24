@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT rule_id AS \"rule_id: i64\", period AS \"period!: String\"\n           FROM transactions WHERE id = ?1 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "rule_id: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "ad7b87cf0d96f8a84fbac7ad5d510536b1968cb5dbd30a975012f3fe028a2593"
+}

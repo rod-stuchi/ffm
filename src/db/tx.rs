@@ -662,6 +662,11 @@ pub async fn edit(
 
     let amount = fields.amount.map(|c| c.get());
     let visibility = fields.visibility.code();
+    // A changed amount is marked as a person's, so a bill attached later
+    // flags it rather than replacing it — see `services::import::reconcile`.
+    // Clearing it makes it a placeholder again. An undo only puts back what
+    // was there, so it leaves the mark alone.
+    let is_undo = undo_of.is_some();
 
     // The check itself. `version` is compared in the WHERE rather than
     // against the row read above, so the test and the write are one
@@ -671,6 +676,10 @@ pub async fn edit(
     let wrote = sqlx::query!(
         r#"UPDATE transactions SET title = ?2, amount_cents = ?3, date = ?4,
                                    bucket = ?5, visibility = ?6,
+                                   amount_source = CASE
+                                       WHEN ?3 IS amount_cents OR ?8 THEN amount_source
+                                       WHEN ?3 IS NULL THEN NULL
+                                       ELSE 'user' END,
                                    version = version + 1
            WHERE id = ?1 AND version = ?7"#,
         id,
@@ -680,6 +689,7 @@ pub async fn edit(
         fields.bucket,
         visibility,
         expected,
+        is_undo,
     )
     .execute(&mut *tx)
     .await?

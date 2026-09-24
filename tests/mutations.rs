@@ -725,3 +725,56 @@ async fn undo_writes_regardless_of_the_version() {
         .unwrap();
     assert_eq!(title, "Mercado");
 }
+
+async fn amount_source_of(pool: &SqlitePool, id: i64) -> Option<String> {
+    sqlx::query_scalar("SELECT amount_source FROM transactions WHERE id = ?1")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn edit_amount(pool: &SqlitePool, me: i64, id: i64, amount: Option<i64>) {
+    tx::edit(
+        pool,
+        Actor::User(me),
+        id,
+        tx::EditFields {
+            title: "Mercado",
+            amount: amount.map(Cents),
+            day: None,
+            bucket: None,
+            visibility: Visibility::Household,
+        },
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+}
+
+/// An amount set with `e` is a person's, and a bill attached later must flag
+/// it rather than replace it — which only works if the row remembers it. A
+/// seeded amount stays unmarked, clearing one makes it a placeholder again,
+/// and an undo leaves the mark alone: it only puts back what was there.
+#[tokio::test]
+async fn an_edited_amount_is_marked_as_the_persons() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let id = add(&pool, me, TxKind::Out, "Mercado", 65890).await;
+    assert_eq!(amount_source_of(&pool, id).await, None);
+
+    // Saving the form without touching the amount marks nothing.
+    edit_amount(&pool, me, id, Some(65890)).await;
+    assert_eq!(amount_source_of(&pool, id).await, None);
+
+    edit_amount(&pool, me, id, Some(61230)).await;
+    assert_eq!(amount_source_of(&pool, id).await.as_deref(), Some("user"));
+
+    assert!(undo_last(&pool, me).await);
+    assert_eq!(amount_of(&pool, id).await, Some(65890));
+    assert_eq!(amount_source_of(&pool, id).await.as_deref(), Some("user"));
+
+    edit_amount(&pool, me, id, None).await;
+    assert_eq!(amount_source_of(&pool, id).await, None);
+}

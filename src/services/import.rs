@@ -261,28 +261,45 @@ regex = 'N[uú]mero do cliente:?\s*(\d[\d-]+)'
 
 /// What to do with one value the bill claims.
 ///
-/// **Fill what is empty; flag what disagrees; never overwrite.** The one thing
-/// worse than failing to import is silently replacing a right answer with a
-/// wrong one — and the household typed theirs on purpose, while the barcode is
-/// only *probably* about this period.
+/// **Fill what is empty; replace what was only a seed; flag what a person
+/// typed.** A rule's occurrence starts with an amount the materializer copied
+/// in — the rule's own figure, or last period's — and that is a placeholder
+/// waiting for the bill, not a decision anybody made about this period. The
+/// barcode is checksummed; it *is* the amount owed, so it replaces a seed.
+/// What it must never do is silently replace a number somebody typed on this
+/// row with `e`: that one keeps, and the person is told.
+///
+/// This was "never overwrite" outright, which read a seed as a person's
+/// choice: a rule created at R$ 883,34 kept that figure against its own bill
+/// for R$ 131,45, and the row went on showing a number nobody had meant.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Fill<T> {
     /// Nothing was there; write it.
     Write(T),
+    /// A seed was there, and the bill says otherwise: write the bill's, and
+    /// say what it replaced.
+    Replace { found: T, was: T },
     /// Both present and equal — nothing to do, nothing to say.
     Agrees,
-    /// Both present and different. The row keeps what it had, and the person
-    /// is told.
+    /// A person typed something else. The row keeps it, and the person is
+    /// told.
     Differs { found: T, kept: T },
     /// The bill did not carry it.
     Missing,
 }
 
-pub fn reconcile<T: PartialEq + Copy>(found: Option<T>, existing: Option<T>) -> Fill<T> {
+/// `typed` is whether the value on the row was set by a person on this row
+/// (`amount_source = 'user'`), as opposed to seeded or read off a bill.
+pub fn reconcile<T: PartialEq + Copy>(
+    found: Option<T>,
+    existing: Option<T>,
+    typed: bool,
+) -> Fill<T> {
     match (found, existing) {
         (Some(f), None) => Fill::Write(f),
-        (Some(f), Some(k)) if f != k => Fill::Differs { found: f, kept: k },
-        (Some(_), Some(_)) => Fill::Agrees,
+        (Some(f), Some(k)) if f == k => Fill::Agrees,
+        (Some(f), Some(k)) if typed => Fill::Differs { found: f, kept: k },
+        (Some(f), Some(k)) => Fill::Replace { found: f, was: k },
         (None, _) => Fill::Missing,
     }
 }
@@ -291,7 +308,7 @@ impl<T> Fill<T> {
     /// The value to write, if any. `Differs` deliberately writes nothing.
     pub fn to_write(self) -> Option<T> {
         match self {
-            Fill::Write(v) => Some(v),
+            Fill::Write(v) | Fill::Replace { found: v, .. } => Some(v),
             _ => None,
         }
     }
@@ -305,20 +322,35 @@ mod policy_tests {
     #[test]
     fn an_empty_field_is_filled() {
         assert_eq!(
-            reconcile(Some(Cents(34362)), None),
+            reconcile(Some(Cents(34362)), None, false),
             Fill::Write(Cents(34362))
         );
         assert_eq!(
-            reconcile(Some(Cents(34362)), None).to_write(),
+            reconcile(Some(Cents(34362)), None, true).to_write(),
             Some(Cents(34362))
         );
     }
 
+    /// The report: a rule created at R$ 883,34, its bill for R$ 131,45. The
+    /// row's figure was only ever the rule's seed, so the bill replaces it.
     #[test]
-    fn a_disagreement_keeps_what_the_household_typed() {
+    fn a_seeded_value_is_replaced_by_the_bill() {
+        let got = reconcile(Some(Cents(13145)), Some(Cents(88334)), false);
+        assert_eq!(
+            got,
+            Fill::Replace {
+                found: Cents(13145),
+                was: Cents(88334)
+            }
+        );
+        assert_eq!(got.to_write(), Some(Cents(13145)));
+    }
+
+    #[test]
+    fn a_value_typed_on_the_row_is_kept_and_flagged() {
         // The one thing worse than failing to import is silently replacing a
         // right answer with a wrong one.
-        let got = reconcile(Some(Cents(34362)), Some(Cents(35000)));
+        let got = reconcile(Some(Cents(34362)), Some(Cents(35000)), true);
         assert_eq!(
             got,
             Fill::Differs {
@@ -331,9 +363,15 @@ mod policy_tests {
 
     #[test]
     fn agreement_is_silent_and_a_missing_value_is_not_a_problem() {
-        assert_eq!(reconcile(Some(Cents(1)), Some(Cents(1))), Fill::Agrees);
-        assert_eq!(reconcile(None::<Cents>, Some(Cents(1))), Fill::Missing);
-        assert_eq!(reconcile(None::<Cents>, None), Fill::Missing);
+        assert_eq!(
+            reconcile(Some(Cents(1)), Some(Cents(1)), true),
+            Fill::Agrees
+        );
+        assert_eq!(
+            reconcile(None::<Cents>, Some(Cents(1)), false),
+            Fill::Missing
+        );
+        assert_eq!(reconcile(None::<Cents>, None, false), Fill::Missing);
     }
 }
 
@@ -352,41 +390,81 @@ pub struct Binding<'a> {
     /// company, not the account) but always there on a utility bill, which is
     /// what makes it the fallback when no profile could read a client code.
     pub company: Option<&'a str>,
+    /// `consumo` | `cobranca`. Not an identity on its own, but a disagreement
+    /// is decisive: a bank slip dropped on a rule bound to a utility company
+    /// is the wrong bill, even though it carries no company code to compare.
+    pub kind: Option<&'a str>,
+    /// A cobrança's bank code. Read-side only — it is never a binding, since
+    /// one bank issues slips for a hundred billers — and used only to *name*
+    /// what a refused bill was.
+    pub bank: Option<&'a str>,
 }
 
-/// Which identifier disagreed, and both values — the message names them so a
+/// One side of a disagreement, for the message: what the bill is for, or
+/// what the rule is bound to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Ident {
+    Account(String),
+    Company(String),
+    Bank(String),
+    Kind(String),
+}
+
+impl Binding<'_> {
+    /// The most specific thing this side can be named by.
+    fn ident(&self) -> Option<Ident> {
+        self.company
+            .map(|c| Ident::Company(c.into()))
+            .or(self.bank.map(|b| Ident::Bank(b.into())))
+            .or(self.kind.map(|k| Ident::Kind(k.into())))
+            .or(self.client_code.map(|c| Ident::Account(c.into())))
+    }
+
+    /// Whether anything is bound at all. An unbound rule accepts any bill —
+    /// that first attach is what binds it.
+    pub fn is_bound(&self) -> bool {
+        self.client_code.is_some() || self.company.is_some() || self.kind.is_some()
+    }
+}
+
+/// Which identifier disagreed, and both sides — the message names them so a
 /// person can see *why* this is the wrong row.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mismatch {
-    pub found: String,
-    pub known: String,
+    pub found: Ident,
+    pub known: Ident,
 }
 
 /// Whether a bill belongs to a rule, before anything is written.
 ///
-/// **Refuse only on a positive disagreement.** A value the bill did not carry
-/// proves nothing, and a rule with nothing bound yet accepts anything — that
-/// first attach is what binds it. The client code is consulted first and, when
-/// both sides have one, decides alone: two houses with the same water company
-/// share a company code and are still two different bills.
+/// **Refuse on a positive disagreement.** The client code is consulted first
+/// and, when both sides have one, decides alone: two houses with the same
+/// water company share a company code and are still two different bills.
+/// Then the barcode kind — a bank slip is never a utility bill. Then the
+/// company code. A value the bill simply did not carry proves nothing, and a
+/// rule with nothing bound yet accepts anything.
 pub fn binding_check(bound: Binding<'_>, read: Binding<'_>) -> Result<(), Mismatch> {
-    let differs = |known: Option<&str>, found: Option<&str>| match (known, found) {
-        (Some(k), Some(f)) if k != f => Some(Mismatch {
-            found: f.to_string(),
-            known: k.to_string(),
-        }),
-        _ => None,
-    };
+    let fail = |found: Ident, known: Ident| Err(Mismatch { found, known });
     if let (Some(k), Some(f)) = (bound.client_code, read.client_code) {
-        return match differs(Some(k), Some(f)) {
-            Some(m) => Err(m),
-            None => Ok(()),
+        return if k == f {
+            Ok(())
+        } else {
+            fail(Ident::Account(f.into()), Ident::Account(k.into()))
         };
     }
-    match differs(bound.company, read.company) {
-        Some(m) => Err(m),
-        None => Ok(()),
+    if let (Some(k), Some(f)) = (bound.kind, read.kind)
+        && k != f
+    {
+        let found = read.ident().unwrap_or(Ident::Kind(f.into()));
+        let known = bound.ident().unwrap_or(Ident::Kind(k.into()));
+        return fail(found, known);
     }
+    if let (Some(k), Some(f)) = (bound.company, read.company)
+        && k != f
+    {
+        return fail(Ident::Company(f.into()), Ident::Company(k.into()));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -397,25 +475,34 @@ mod binding_tests {
         Binding {
             client_code: client,
             company,
+            kind: company.map(|_| "consumo"),
+            bank: None,
+        }
+    }
+
+    fn slip<'a>(bank: &'a str) -> Binding<'a> {
+        Binding {
+            kind: Some("cobranca"),
+            bank: Some(bank),
+            ..Default::default()
         }
     }
 
     #[test]
     fn an_unbound_rule_accepts_any_bill() {
-        assert!(binding_check(b(None, None), b(Some("123"), Some("0048"))).is_ok());
+        assert!(binding_check(Binding::default(), b(Some("123"), Some("0048"))).is_ok());
+        assert!(binding_check(Binding::default(), slip("077")).is_ok());
     }
 
     #[test]
     fn a_different_client_code_is_the_wrong_row() {
         let m = binding_check(b(Some("5544332211"), None), b(Some("123"), None)).unwrap_err();
-        assert_eq!(m.found, "123");
-        assert_eq!(m.known, "5544332211");
+        assert_eq!(m.found, Ident::Account("123".into()));
+        assert_eq!(m.known, Ident::Account("5544332211".into()));
     }
 
     #[test]
     fn the_client_code_decides_alone_when_both_sides_have_one() {
-        // Same account, and the company code somehow differs: the account is
-        // the stronger identity, so this is still the right row.
         assert!(binding_check(b(Some("1"), Some("0048")), b(Some("1"), Some("0099"))).is_ok());
     }
 
@@ -426,8 +513,17 @@ mod binding_tests {
         assert!(binding_check(b(None, Some("0048")), b(None, Some("0048"))).is_ok());
     }
 
+    /// The case that got through: a credit-card statement — a bank slip with
+    /// no company code — dropped on a rule bound to utility company 0162.
+    #[test]
+    fn a_bank_slip_on_a_rule_bound_to_a_company_is_the_wrong_row() {
+        let m = binding_check(b(None, Some("0162")), slip("077")).unwrap_err();
+        assert_eq!(m.found, Ident::Bank("077".into()));
+        assert_eq!(m.known, Ident::Company("0162".into()));
+    }
+
     #[test]
     fn a_value_the_bill_did_not_carry_proves_nothing() {
-        assert!(binding_check(b(Some("1"), Some("0048")), b(None, None)).is_ok());
+        assert!(binding_check(b(Some("1"), Some("0048")), Binding::default()).is_ok());
     }
 }

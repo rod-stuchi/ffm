@@ -577,6 +577,23 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
     nothing and is never a refusal. A cobrança bank code is deliberately not
     a binding: it names the bank, and one bank issues slips for a hundred
     billers.
+  - **Every way a bill reaches a row is checked the same way** — `A`/`E`'s
+    dropzone, and the row's own slot 1 (the `+` menu, a drop on target `1`,
+    `gu1`). The row path used to store whatever it was given, so a
+    credit-card statement replaced a bound utility bill unchecked. A
+    different barcode *kind* is a mismatch on its own: a bank slip is never
+    a utility bill, even though it carries no company code to compare. A file
+    with no readable barcode is refused on a bound rule — nothing could
+    confirm it — and filed as a plain document on an unbound one.
+  - **A bill's amount replaces a seeded one, and only a seeded one.** An
+    occurrence's amount starts as whatever the materializer copied in — the
+    rule's figure or last period's — which is a placeholder waiting for the
+    bill, not anybody's decision about this period. The checksummed barcode
+    replaces it and the statusline says what it replaced. An amount a person
+    set on the row with `e` (`amount_source = 'user'`) is kept and the
+    difference flagged. This amends "fill what is empty, never overwrite",
+    which read a seed as a choice: a rule created at R$ 883,34 kept that
+    figure against its own bill for R$ 131,45.
   - **`A` takes the bill too, not only `E`.** The rule does not exist yet, so
     the drop is read and parked (`services::pending`) and the pane shows what
     it will bind to; Create carries a token and attaches it to the occurrence
@@ -668,6 +685,13 @@ arrow and parking behaviour the `A`/`I`/`E` rule editor uses.
   and a DB row records the move (old path, `deleted_at`, `deleted_by`, reason)
   so `u` can put it back. Same "nothing is destroyed" rule as everything else
   in this app.
+  **Replacing a file is the same soft delete**, tagged `superseded` — it used
+  to write over the old path, destroying the old bytes while the row marked
+  "deleted" pointed at the new file. And each deleted copy is named after its
+  own `receipts` row (`.delete/09_barcode.r42.pdf`): a fixed
+  `.delete/09_barcode.pdf` let a second delete of the same slot overwrite the
+  first. Restore reads the legacy name too, and refuses to overwrite a live
+  file.
 - **An untracked recurring bill gets an optional manual `paid` checkbox** — the
   one manual tick in the whole model, and only because there's no filesystem
   proof to contradict it. A *tracked* rule never gets this checkbox; the rule

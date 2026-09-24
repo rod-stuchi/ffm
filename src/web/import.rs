@@ -10,9 +10,11 @@
 //! to get wrong.
 //!
 //! What the parse then writes is deliberately conservative. It **fills what is
-//! empty and flags what disagrees** — it never overwrites a number a person
-//! typed, because the one thing worse than failing to import is silently
-//! replacing a right answer with a wrong one.
+//! empty, replaces what was only a seed, and flags what a person typed** — a
+//! row's amount copied in by the materializer is a placeholder waiting for
+//! this bill, but a number somebody set with `e` is never silently replaced,
+//! because the one thing worse than failing to import is replacing a right
+//! answer with a wrong one.
 
 use crate::db::changes::{Actor, Change, FileAction, Value};
 use crate::db::rules;
@@ -20,7 +22,7 @@ use crate::domain::money::Cents;
 use crate::domain::period::Period;
 use crate::domain::receipt_path::Kind as FileKind;
 use crate::services::boleto::Amount;
-use crate::services::import::{self, Binding, Parsed, binding_check};
+use crate::services::import::{self, Binding, Ident, Parsed, binding_check};
 use crate::services::issuers::Profiles;
 use crate::services::pending;
 use crate::services::receipts;
@@ -107,6 +109,28 @@ fn read_binding(parsed: &Parsed) -> Binding<'_> {
     Binding {
         client_code: parsed.import.client_code.as_deref(),
         company: parsed.barcode.company.as_deref(),
+        kind: Some(parsed.barcode.kind.code()),
+        bank: parsed.barcode.bank.as_deref(),
+    }
+}
+
+/// What a rule's bill is bound to, as the binding check reads it.
+fn rule_binding(rule: &rules::Rule) -> Binding<'_> {
+    Binding {
+        client_code: rule.client_code.as_deref(),
+        company: rule.barcode_company.as_deref(),
+        kind: rule.barcode_kind.as_deref(),
+        bank: None,
+    }
+}
+
+/// One side of a wrong-row refusal, in words: "company 0162", "bank 077".
+fn ident_label(t: &Catalog, id: &Ident) -> String {
+    match id {
+        Ident::Account(c) => t.import_id_account(c),
+        Ident::Company(c) => t.import_id_company(c),
+        Ident::Bank(c) => t.import_id_bank(c),
+        Ident::Kind(k) => kind_label(t, Some(k)).unwrap_or_else(|| k.clone()),
     }
 }
 
@@ -150,6 +174,80 @@ pub async fn attach(
     }
 }
 
+/// The row's own slot 1 — the file rail's `+` menu, a drop on target `1`,
+/// and `gu1` all land here via `POST /tx/{id}/file/barcode`.
+///
+/// **It is the same attach as the rule pane's, not a second one.** It used to
+/// store whatever it was given: a credit-card statement replaced a rule's
+/// bound utility bill without a word, and the row went on recording the old
+/// barcode beside a file that no longer matched it. Now the bill is read and
+/// checked against the rule's binding exactly as `E`'s dropzone does.
+///
+/// A file that cannot be read — a photo, a scan with no text layer — is
+/// refused on a BOUND rule, because there is nothing to confirm it is that
+/// rule's bill, and accepting it would let any file past the check. On a rule
+/// with nothing bound it is filed as a plain document, which is all it ever
+/// was before.
+pub async fn attach_on_row(st: &AppState, auth: &Auth, tx_id: i64, upload: Upload) -> Response {
+    let t = auth.catalog();
+    let say = |m: &str, bad: bool| crate::web::tx::say_only(m, bad);
+
+    let row = sqlx::query!(
+        r#"SELECT rule_id AS "rule_id: i64", period AS "period!: String"
+           FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
+        tx_id
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .ok()
+    .flatten();
+    let Some((Some(rule_id), Some(period))) = row.map(|r| (r.rule_id, Period::parse(&r.period)))
+    else {
+        return say(t.file_not_tracked(), true);
+    };
+    let Ok(Some(rule)) = rules::get(&st.pool, rule_id).await else {
+        return say(t.file_not_tracked(), true);
+    };
+
+    match parse(st, &upload) {
+        Ok(parsed) => match attach_to(st, auth, &rule, tx_id, period, &upload, &parsed).await {
+            Ok((member_id, message)) => {
+                crate::web::tx::row_fragment(st, auth, tx_id, member_id, period, &message).await
+            }
+            Err(Refused(m)) => say(&m, true),
+        },
+        // The reader's own reason (pdftotext's stderr, usually) is for the
+        // log, not the statusline.
+        Err(Refused(why)) if rule_binding(&rule).is_bound() => {
+            tracing::info!("unreadable bill for rule {}: {why}", rule.id);
+            say(&t.import_unreadable_bound(&rule.title), true)
+        }
+        Err(_) => {
+            let Some((slot, _, member_id)) = crate::web::files::slot_for(st, auth, tx_id).await
+            else {
+                return say(t.file_not_tracked(), true);
+            };
+            match receipts::store(
+                &st.pool,
+                &st.cfg.receipts_root,
+                Actor::User(auth.viewer.member_id),
+                &slot,
+                FileKind::Barcode,
+                &upload.filename,
+                &upload.bytes,
+            )
+            .await
+            {
+                Ok(_) => {
+                    crate::web::tx::row_fragment(st, auth, tx_id, member_id, period, t.file_added())
+                        .await
+                }
+                Err(e) => say(&e.to_string(), true),
+            }
+        }
+    }
+}
+
 /// The live occurrence of a rule in one period, if it has been materialized.
 pub async fn occurrence_of(st: &AppState, rule_id: i64, period: Period) -> Option<i64> {
     let period_s = period.to_string();
@@ -185,12 +283,12 @@ pub async fn attach_to(
     let not_written = || Refused(t.error_not_written().to_string());
 
     // --- is this the right row? ---------------------------------------------
-    let bound = Binding {
-        client_code: rule.client_code.as_deref(),
-        company: rule.barcode_company.as_deref(),
-    };
-    if let Err(m) = binding_check(bound, read_binding(parsed)) {
-        return Err(Refused(t.import_wrong_row(&m.found, &rule.title, &m.known)));
+    if let Err(m) = binding_check(rule_binding(rule), read_binding(parsed)) {
+        return Err(Refused(t.import_wrong_row(
+            &ident_label(&t, &m.found),
+            &rule.title,
+            &ident_label(&t, &m.known),
+        )));
     }
 
     // --- is it already filed somewhere? -------------------------------------
@@ -242,7 +340,9 @@ pub async fn attach_to(
 
     // --- what the barcode said about this occurrence --------------------
     let row = sqlx::query!(
-        r#"SELECT amount_cents AS "amount_cents: i64", due_date AS "due_date: String"
+        r#"SELECT amount_cents AS "amount_cents: i64", due_date AS "due_date: String",
+                  amount_source AS "amount_source: String",
+                  due_date_source AS "due_date_source: String"
            FROM transactions WHERE id = ?1"#,
         tx_id
     )
@@ -259,20 +359,33 @@ pub async fn attach_to(
     let barcode_amount = parsed.import.amount;
     let barcode_due = parsed.import.due;
 
-    // Fill what is empty; flag what disagrees; never overwrite. The policy
+    // Fill what is empty; replace a seed; flag what a person typed. The policy
     // itself lives in `services::import` so it can be pinned by a test rather
     // than re-derived in each handler that imports something.
     use crate::services::import::{Fill, reconcile};
 
-    let amount_fill = reconcile(barcode_amount, existing_amount);
-    if let Fill::Differs { found, kept } = amount_fill {
-        notes.push(
+    // Only a value a person set on this row with `e` is protected; a seed
+    // from the materializer, or an earlier bill's figure, gives way to this
+    // bill's.
+    let typed = |source: Option<&str>| source == Some("user");
+    let amount_typed = typed(row.as_ref().and_then(|r| r.amount_source.as_deref()));
+    let due_typed = typed(row.as_ref().and_then(|r| r.due_date_source.as_deref()));
+
+    let amount_fill = reconcile(barcode_amount, existing_amount, amount_typed);
+    match amount_fill {
+        Fill::Differs { found, kept } => notes.push(
             t.import_amount_differs(&fmt::money(found, currency), &fmt::money(kept, currency)),
-        );
+        ),
+        Fill::Replace { was, .. } => notes.push(t.import_replaced(&fmt::money(was, currency))),
+        _ => {}
     }
-    let due_fill = reconcile(barcode_due, existing_due);
-    if let Fill::Differs { found, kept } = due_fill {
-        notes.push(t.import_date_differs(&fmt::date(found), &fmt::date(kept)));
+    let due_fill = reconcile(barcode_due, existing_due, due_typed);
+    match due_fill {
+        Fill::Differs { found, kept } => {
+            notes.push(t.import_date_differs(&fmt::date(found), &fmt::date(kept)))
+        }
+        Fill::Replace { was, .. } => notes.push(t.import_replaced(&fmt::date(was))),
+        _ => {}
     }
 
     let write_amount = amount_fill.to_write();
@@ -283,8 +396,11 @@ pub async fn attach_to(
     };
 
     let kind = parsed.barcode.kind.code();
-    let amount_source = parsed.import.amount_source;
-    let due_source = parsed.import.due_source;
+    // A source is stamped only with the value it describes. It used to be
+    // written whenever the bill carried one, so a row that KEPT its own figure
+    // still claimed the barcode as the source of it.
+    let amount_source = write_amount.and(parsed.import.amount_source);
+    let due_source = write_due.and(parsed.import.due_source);
     let amount_value = write_amount.map(|c| c.get());
     let due_value = write_due.map(|d| d.format("%Y-%m-%d").to_string());
     let issuer = parsed.import.issuer.clone();
@@ -377,6 +493,17 @@ pub async fn attach_to(
     // What actually happened, in one line.
     let headline = match (barcode_amount, barcode_due) {
         (Some(a), Some(d)) => t.import_filled(&fmt::money(a, currency), &fmt::date(d)),
+        // The amount is the news; what the bill did not carry follows it,
+        // rather than being the only thing said.
+        (Some(a), None) => {
+            let read = t.import_read_amount(&fmt::money(a, currency));
+            let what = parsed.import.unresolved.join(", ");
+            if what.is_empty() {
+                read
+            } else {
+                format!("{read} · {}", t.import_unresolved(&what))
+            }
+        }
         _ => {
             let what = parsed.import.unresolved.join(", ");
             if what.is_empty() {

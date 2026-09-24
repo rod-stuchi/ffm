@@ -158,6 +158,14 @@ pub async fn store(
         return Err(StoreError::NotTracked);
     }
 
+    // **Replacing a file moves the old one aside first.** This used to write
+    // straight over the same path and only mark the old row deleted — so the
+    // old bytes were gone, and the "deleted" row's path pointed at the new
+    // file. A bill replaced by the wrong upload could not be got back. Now it
+    // is the same soft delete every other removal is, tagged `superseded`,
+    // and `u` walks back through it: first the new upload, then the old file.
+    soft_delete(pool, root, actor, slot, kind, "superseded", None).await?;
+
     let rel = slot.path(kind, &ext);
     let full = root.join(&rel);
     if let Some(parent) = full.parent() {
@@ -175,8 +183,9 @@ pub async fn store(
         _ => return Err(StoreError::Db("no uploader".into())),
     };
 
-    // One live file of each kind per occurrence: replacing one retires the row
-    // that was there, so the undo trail keeps both.
+    // One live file of each kind per occurrence. The soft delete above has
+    // already retired the row of a file that was on disk; this catches a row
+    // whose file had vanished by hand, so there is still only one live row.
     sqlx::query!(
         r#"UPDATE receipts SET deleted_at = ?3, deleted_by = ?4,
                                delete_reason = 'manual', deleted_from_path = path
@@ -269,14 +278,12 @@ pub async fn soft_delete(
     let Some(ext) = ext else { return Ok(false) };
 
     let rel = slot.path(kind, &ext);
-    let to = receipt_path::deleted_path(&rel);
     let from_full = root.join(&rel);
-    let to_full = root.join(&to);
-    if let Some(parent) = to_full.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| StoreError::Io(e.to_string()))?;
-    }
-    std::fs::rename(&from_full, &to_full).map_err(|e| StoreError::Io(e.to_string()))?;
 
+    // The row first, so the file's new name can carry its id — see
+    // `receipt_path::deleted_path_for`. The rename happens while the
+    // transaction is open and the commit comes last, so the disk and the
+    // database never disagree about where the file is.
     let mut tx = pool.begin().await.map_err(db)?;
     let at = now();
     let kind_s = kind.code();
@@ -335,6 +342,19 @@ pub async fn soft_delete(
         .map_err(db)?,
     };
 
+    let to = receipt_path::deleted_path_for(&rel, id);
+    let to_full = root.join(&to);
+    if let Some(parent) = to_full.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| StoreError::Io(e.to_string()))?;
+    }
+    if to_full.exists() {
+        return Err(StoreError::Io(format!(
+            "{} already exists — refusing to overwrite a deleted file",
+            to_full.display()
+        )));
+    }
+    std::fs::rename(&from_full, &to_full).map_err(|e| StoreError::Io(e.to_string()))?;
+
     let mut entry = Change::file(actor, FileAction::Delete, id)
         .in_period(slot.period)
         .note(reason)
@@ -342,9 +362,14 @@ pub async fn soft_delete(
     if let Some(of) = undo_of {
         entry = entry.undoing(of);
     }
-    entry.write(&mut tx).await.map_err(db)?;
-
-    tx.commit().await.map_err(db)?;
+    if let Err(e) = entry.write(&mut tx).await {
+        let _ = std::fs::rename(&to_full, &from_full);
+        return Err(db(e));
+    }
+    if let Err(e) = tx.commit().await {
+        let _ = std::fs::rename(&to_full, &from_full);
+        return Err(db(e));
+    }
     Ok(true)
 }
 
@@ -369,8 +394,23 @@ pub async fn restore(
 
     let Some(rel) = rel else { return Ok(false) };
 
-    let from = root.join(receipt_path::deleted_path(&rel));
+    // Named after its row since `deleted_path_for`; a file deleted before that
+    // still sits under the legacy fixed name.
+    let named = root.join(receipt_path::deleted_path_for(&rel, receipt_id));
+    let from = if named.exists() {
+        named
+    } else {
+        root.join(receipt_path::deleted_path(&rel))
+    };
     let to = root.join(&rel);
+    // Restoring over a live file would be the hard delete this module exists
+    // to prevent, pointed the other way.
+    if from.exists() && to.exists() {
+        return Err(StoreError::Io(format!(
+            "{} is occupied — move the current file aside before restoring",
+            to.display()
+        )));
+    }
     if from.exists() {
         if let Some(parent) = to.parent() {
             std::fs::create_dir_all(parent).map_err(|e| StoreError::Io(e.to_string()))?;

@@ -136,6 +136,10 @@ pub fn file(
 /// lived. Never off disk — the same "nothing is destroyed" rule the ledger
 /// follows, which is also why `delete` and a leading `.` are reserved
 /// taxonomy values.
+///
+/// This is the **legacy** name, with no way to tell two deletes of the same
+/// slot apart — the second one overwrote the first. It is only still read, so
+/// a file deleted before [`deleted_path_for`] existed can be restored.
 pub fn deleted_path(original: &str) -> String {
     match original.rsplit_once('/') {
         Some((dir, name)) => format!("{dir}/.delete/{name}"),
@@ -143,9 +147,41 @@ pub fn deleted_path(original: &str) -> String {
     }
 }
 
+/// Where one particular soft-deleted file goes: `.delete/` beside where it
+/// lived, named after its own `receipts` row — `09_barcode.r42.pdf`.
+///
+/// Unique per row, which is the whole point. A slot is re-filled and deleted
+/// again (a bill replaced twice, a receipt re-uploaded after a delete), and a
+/// fixed `.delete/09_barcode.pdf` let the second delete overwrite the first —
+/// a hard delete wearing a soft delete's name. The extension stays last so
+/// the file still opens by double-click in a vault browsed by hand.
+pub fn deleted_path_for(original: &str, receipt_id: i64) -> String {
+    let (dir, name) = match original.rsplit_once('/') {
+        Some((dir, name)) => (format!("{dir}/"), name),
+        None => (String::new(), original),
+    };
+    let name = match name.rsplit_once('.') {
+        Some((stem, ext)) => format!("{stem}.r{receipt_id}.{ext}"),
+        None => format!("{name}.r{receipt_id}"),
+    };
+    format!("{dir}.delete/{name}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_deleted_file_gets_a_name_of_its_own() {
+        assert_eq!(
+            deleted_path_for("udo/mobilidade/moto/2026/09_barcode.pdf", 3),
+            "udo/mobilidade/moto/2026/.delete/09_barcode.r3.pdf"
+        );
+        assert_ne!(
+            deleted_path_for("a/09.pdf", 3),
+            deleted_path_for("a/09.pdf", 4)
+        );
+    }
 
     fn tax() -> Taxonomy<'static> {
         Taxonomy {

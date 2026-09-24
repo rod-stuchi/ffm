@@ -20,6 +20,31 @@ fn d(y: i32, m: u32, day: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, day).unwrap()
 }
 
+/// The soft-deleted copies of one file name in the test occurrence's folder,
+/// whatever row id they carry: `.delete/09.r7.pdf` for `09`.
+fn deleted_copies(root: &std::path::Path, vault: &str, stem: &str) -> Vec<PathBuf> {
+    let dir = root.join(format!("{vault}/consumo/energia/2026/.delete"));
+    let prefix = format!("{stem}.r");
+    let mut found: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|d| {
+            d.flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.starts_with(&prefix))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    found.sort();
+    found
+}
+
+fn deleted_copy(root: &std::path::Path, vault: &str, stem: &str) -> Option<PathBuf> {
+    deleted_copies(root, vault, stem).into_iter().next()
+}
+
 fn vault() -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "ffm-vault-{}-{:?}",
@@ -236,13 +261,7 @@ async fn uploading_the_receipt_supersedes_the_scheduled_file() {
 
     // Moved, not destroyed — and the log says WHY it moved, so the audit trail
     // does not read as somebody deleting it on purpose.
-    assert!(
-        root.join(format!(
-            "{}/consumo/energia/2026/.delete/09_scheduled.pdf",
-            slot.vault
-        ))
-        .exists()
-    );
+    assert!(deleted_copy(&root, &slot.vault, "09_scheduled").is_some());
     let reason: Option<String> =
         sqlx::query_scalar("SELECT delete_reason FROM receipts WHERE kind = 'scheduled'")
             .fetch_one(&pool)
@@ -282,12 +301,8 @@ async fn deleting_a_file_moves_it_and_restoring_puts_it_back() {
     .unwrap();
 
     let live = root.join(format!("{}/consumo/energia/2026/09.pdf", slot.vault));
-    let graveyard = root.join(format!(
-        "{}/consumo/energia/2026/.delete/09.pdf",
-        slot.vault
-    ));
     assert!(
-        !live.exists() && graveyard.exists(),
+        !live.exists() && deleted_copy(&root, &slot.vault, "09").is_some(),
         "never removed from disk"
     );
     assert_eq!(
@@ -306,7 +321,7 @@ async fn deleting_a_file_moves_it_and_restoring_puts_it_back() {
         .await
         .unwrap();
 
-    assert!(live.exists() && !graveyard.exists());
+    assert!(live.exists() && deleted_copy(&root, &slot.vault, "09").is_none());
     assert!(
         receipts::presence(&pool, &root, &slot)
             .await
@@ -760,4 +775,107 @@ async fn the_uuid_prefix_is_dropped_once_and_the_paths_follow() {
             .unwrap(),
         0
     );
+}
+
+/// Replacing a bill used to write over it: the old bytes were gone, and the
+/// row marked deleted pointed at the new file. Every replaced version is now
+/// kept in `.delete/` under a name of its own, and `u` walks back through them.
+#[tokio::test]
+async fn replacing_a_file_keeps_every_earlier_version() {
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (_, slot) = tracked_occurrence(&pool, me).await;
+
+    for body in [b"first".as_slice(), b"second", b"third"] {
+        receipts::store(
+            &pool,
+            &root,
+            Actor::User(me),
+            &slot,
+            Kind::Barcode,
+            "b.pdf",
+            body,
+        )
+        .await
+        .unwrap();
+    }
+
+    let live = root.join(format!(
+        "{}/consumo/energia/2026/09_barcode.pdf",
+        slot.vault
+    ));
+    assert_eq!(std::fs::read(&live).unwrap(), b"third");
+    let kept: Vec<Vec<u8>> = deleted_copies(&root, &slot.vault, "09_barcode")
+        .iter()
+        .map(|p| std::fs::read(p).unwrap())
+        .collect();
+    assert_eq!(kept.len(), 2, "both earlier versions are on disk");
+    assert!(kept.contains(&b"first".to_vec()) && kept.contains(&b"second".to_vec()));
+
+    // The row the second upload retired restores to exactly its own bytes —
+    // once the live file has been moved aside, which is what `u` on the
+    // third upload does first.
+    receipts::soft_delete(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Barcode,
+        "manual",
+        None,
+    )
+    .await
+    .unwrap();
+    let second: i64 = sqlx::query_scalar(
+        "SELECT id FROM receipts WHERE kind = 'barcode' ORDER BY id LIMIT 1 OFFSET 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        receipts::restore(&pool, &root, Actor::User(me), second, None)
+            .await
+            .unwrap()
+    );
+    assert_eq!(std::fs::read(&live).unwrap(), b"second");
+}
+
+/// Restoring never overwrites a live file — that would be the hard delete
+/// this module exists to prevent, pointed the other way.
+#[tokio::test]
+async fn restoring_refuses_to_overwrite_a_live_file() {
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (_, slot) = tracked_occurrence(&pool, me).await;
+
+    for body in [b"old".as_slice(), b"new"] {
+        receipts::store(
+            &pool,
+            &root,
+            Actor::User(me),
+            &slot,
+            Kind::Barcode,
+            "b.pdf",
+            body,
+        )
+        .await
+        .unwrap();
+    }
+    let old: i64 =
+        sqlx::query_scalar("SELECT id FROM receipts WHERE kind = 'barcode' ORDER BY id LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        receipts::restore(&pool, &root, Actor::User(me), old, None)
+            .await
+            .is_err()
+    );
+    let live = root.join(format!(
+        "{}/consumo/energia/2026/09_barcode.pdf",
+        slot.vault
+    ));
+    assert_eq!(std::fs::read(&live).unwrap(), b"new");
 }

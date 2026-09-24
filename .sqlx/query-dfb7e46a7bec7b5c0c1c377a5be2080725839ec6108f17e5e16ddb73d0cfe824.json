@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT amount_cents AS \"amount_cents: i64\", due_date AS \"due_date: String\",\n                  amount_source AS \"amount_source: String\",\n                  due_date_source AS \"due_date_source: String\"\n           FROM transactions WHERE id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "due_date: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_source: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "due_date_source: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "dfb7e46a7bec7b5c0c1c377a5be2080725839ec6108f17e5e16ddb73d0cfe824"
+}
