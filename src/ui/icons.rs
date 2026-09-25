@@ -44,6 +44,11 @@ pub fn svg(name: &str) -> &'static str {
         "moon" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>"#
         }
+        // The pre-auth chrome's language switch, so it sits beside the
+        // light/dark control as the same kind of button.
+        "globe" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>"#
+        }
         "person" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>"#
         }
@@ -55,11 +60,11 @@ pub fn svg(name: &str) -> &'static str {
 mod tests {
     use super::*;
 
-    /// Every name the UI asks for by hand — the row's five and the ledger
-    /// bar's four. A name added to `svg()` and not to here is untested; a name
+    /// Every name the UI asks for by hand — the row's five, the ledger
+    /// bar's four and the pre-auth chrome's globe. A name added to `svg()` and not to here is untested; a name
     /// used in a template and not here is worse, because the fallback circle
     /// renders and nothing complains.
-    const NAMES: [&str; 9] = [
+    const NAMES: [&str; 10] = [
         "bill",
         "scheduled",
         "receipt",
@@ -69,6 +74,7 @@ mod tests {
         "sun",
         "moon",
         "person",
+        "globe",
     ];
 
     #[test]

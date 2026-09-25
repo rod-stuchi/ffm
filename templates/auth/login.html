@@ -2,7 +2,7 @@
 {% block card %}
 <form class="card" style="max-width:380px" method="post" action="/login">
   <div class="ch">
-    <div class="auth-logo">{% include "partials/logo.html" %}</div>
+    {% include "partials/auth_brand.html" %}
     <h1>{{ chrome.household }}</h1>
     <p>{{ t.login_subtitle() }}</p>
   </div>

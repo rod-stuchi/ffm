@@ -40,6 +40,10 @@ pub struct Chrome {
     pub attr: Option<&'static str>,
     pub lang_code: &'static str,
     pub lang_label: &'static str,
+    /// The two chrome buttons carry the ledger bar's icons, so both sides of
+    /// the login draw the same control.
+    pub lang_svg: &'static str,
+    pub mode_svg: &'static str,
     pub next_lang: &'static str,
     pub mode_label: String,
     pub next_mode: &'static str,
@@ -109,6 +113,8 @@ async fn chrome(
             Lang::En => "EN",
             Lang::PtBr => "PT",
         },
+        lang_svg: crate::ui::icons::svg("globe"),
+        mode_svg: crate::ui::icons::svg(mode.icon()),
         next_lang: match lang {
             Lang::En => "pt-BR",
             Lang::PtBr => "en",

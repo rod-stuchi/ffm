@@ -111,29 +111,6 @@
   display: contents;
 }
 
-/* Icon, then the word for the state you are in. The icon is not decoration
- * here — it is what makes the control findable at a glance in a bar that is
- * otherwise all text. */
-.modebtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
-  padding: 6px 11px;
-}
-
-.modebtn svg,
-.profbtn svg {
-  width: 15px;
-  height: 15px;
-  flex: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 /* Built like `.mnav`: the popup is absolute inside this, so nothing has to
  * compute coordinates. */
 .profmenu {

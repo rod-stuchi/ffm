@@ -559,6 +559,30 @@ input.i.mono {
   font-family: var(--mono);
 }
 
+/* A bar button: icon, then the word for the state you are in. The icon is not
+ * decoration — it is what makes the control findable at a glance in a bar that
+ * is otherwise all text. Shared by the ledger bar and the pre-auth chrome, so
+ * the light/dark control is the same size on both sides of the login. */
+.modebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  padding: 6px 11px;
+}
+
+.modebtn svg,
+.profbtn svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* The FFM mark (partials/logo.html). Its container sets the height; the width
  * follows the viewBox. Colors are the fixed --logo-* brand values. */
 .logo {

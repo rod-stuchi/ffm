@@ -164,9 +164,26 @@
   word-break: break-all;
 }
 
-/* The FFM mark at the head of every pre-auth card. It reads only the
- * light/dark already on <html>, nothing from a member row. */
+/* The FFM mark at the head of every pre-auth card, with the name it
+ * abbreviates under it. It reads only the light/dark already on <html>,
+ * nothing from a member row. */
+.auth-brand {
+  margin: 4px 0 14px;
+}
+
 .auth-logo {
   height: 48px;
-  margin: 4px 0 14px;
+}
+
+/* Tracked uppercase mono, like the chrome strip's brand, so it reads as the
+ * logo's caption rather than a second subtitle; sized to about the logo's
+ * width. Plain text, so a palette token rather than a --logo-* color. */
+.auth-name {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
 }

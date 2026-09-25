@@ -45,13 +45,13 @@
       <form method="post" action="/lang">
         <input type="hidden" name="next" value="{{ chrome.path }}">
         <input type="hidden" name="lang" value="{{ chrome.next_lang }}">
-        <button class="btn" type="submit" title="{{ t.auth_lang_switch() }}">{{ chrome.lang_label }}</button>
+        <button class="btn modebtn" type="submit" title="{{ t.auth_lang_switch() }}">{{ chrome.lang_svg|safe }}<span>{{ chrome.lang_label }}</span></button>
       </form>
       <kbd>Alt-L</kbd>
       <form method="post" action="/theme">
         <input type="hidden" name="next" value="{{ chrome.path }}">
         <input type="hidden" name="mode" value="{{ chrome.next_mode }}">
-        <button class="btn" type="submit">{{ chrome.mode_label }}</button>
+        <button class="btn modebtn" type="submit">{{ chrome.mode_svg|safe }}<span>{{ chrome.mode_label }}</span></button>
       </form>
       <kbd>Alt-T</kbd>
     </div>

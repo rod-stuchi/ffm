@@ -8,7 +8,7 @@
 <form class="card" style="max-width:520px" method="post" action="/setup">
   <div class="ch">
     <span class="step">{{ t.setup_step() }}</span>
-    <div class="auth-logo">{% include "partials/logo.html" %}</div>
+    {% include "partials/auth_brand.html" %}
     <h1>{{ t.setup_title() }}</h1>
     <p>{{ t.setup_subtitle() }}</p>
   </div>

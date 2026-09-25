@@ -6,7 +6,7 @@
 {% block card %}
 <form class="card" style="max-width:440px" method="post" action="{{ action }}">
   <div class="ch">
-    <div class="auth-logo">{% include "partials/logo.html" %}</div>
+    {% include "partials/auth_brand.html" %}
     <h1>{% if is_reset %}{{ t.reset_title() }}{% else %}{{ t.invite_title(chrome.household.as_str()) }}{% endif %}</h1>
     <p>{% if is_reset %}{{ t.reset_subtitle() }}{% else %}{{ t.invite_subtitle(inviter.as_str()) }}{% endif %}</p>
   </div>
