@@ -393,6 +393,15 @@ unresolved-dot = { $n ->
        *[other] { $n } contas vencidas sem comprovante
     }
 unresolved-here = vencidas aqui
+month-picker-select = escolha o mês
+month-future = nada registrado ainda
+year-so-far = { $year } até agora · { $range }
+year-full = { $year } · ano inteiro
+year-avg = média { $amount } / mês
+year-unresolved = { $n ->
+        [one] 1 mês precisa de comprovante
+       *[other] { $n } meses precisam de comprovante
+    }
 
 ## `e` — editar a linha
 

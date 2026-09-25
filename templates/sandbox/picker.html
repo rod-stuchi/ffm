@@ -1,0 +1,27 @@
+{% extends "sandbox/base.html" %}
+{% block title %}Picker · FFM sandbox{% endblock %}
+{% block body %}
+<div class="sb-bar"><span class="sb-k">sandbox</span>
+  <a href="/__sandbox/rows">rows</a>
+  <a href="/__sandbox/themes">themes</a>
+  <a href="/__sandbox/catalog">catalog</a>
+  <a href="/__sandbox/picker" class="is-on">picker</a>
+</div>
+<div class="sb-wrap">
+  <h1>Month picker</h1>
+  <p class="sb-lede">
+    The month on screen (accent), today's month (the <code>--info</code> bar), a deficit month
+    in <code>--neg</code>, a projected month with its <code>~</code>, a flagged month with its
+    dot, and the future as <code>—</code>. Rendered by the same partial <code>GET /months</code>
+    answers with, in each language.
+  </p>
+  <div style="display:flex;flex-wrap:wrap;gap:24px">
+    {%- for (lang, pop) in pops %}
+    <div>
+      <div class="sb-k">{{ lang }}</div>
+      <div class="mnav"><div class="mpop" style="position:static">{{ pop|safe }}</div></div>
+    </div>
+    {%- endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -40,6 +40,7 @@ where
         .route("/__sandbox/rows", get(rows))
         .route("/__sandbox/themes", get(themes))
         .route("/__sandbox/catalog", get(catalog))
+        .route("/__sandbox/picker", get(picker))
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +350,82 @@ async fn catalog(Query(ctx): Query<Ctx>) -> impl IntoResponse {
         attr: ctx.attr(),
         ids: crate::ui::i18n::MESSAGE_IDS.to_vec(),
         count: crate::ui::i18n::MESSAGE_IDS.len(),
+    })
+}
+
+#[derive(Template)]
+#[template(path = "sandbox/picker.html")]
+struct PickerPage {
+    theme_css: String,
+    attr: Option<&'static str>,
+    /// `(lang, rendered popup)` — the real `partials/month_pop.html`, so the
+    /// sandbox cannot drift from what `GET /months` answers with.
+    pops: Vec<(&'static str, String)>,
+}
+
+/// The month picker with every cell state at once: the month on screen,
+/// today's month, a deficit month, a projected month, a flagged month and the
+/// future — plus the year's foot. Numbers are fixtures; nothing is summed.
+async fn picker(Query(ctx): Query<Ctx>) -> impl IntoResponse {
+    use crate::db::ledger::Unresolved;
+    use crate::domain::money::Cents;
+    use crate::domain::period::Period;
+    use crate::web::ledger::{MonthPop, month_cells, year_summary};
+
+    let today = ctx.today();
+    let now = Period::of(today);
+    let showing = now.pred_n(2);
+    let flagged = [Unresolved {
+        period: now.pred_n(4),
+        count: 2,
+    }];
+    let currency = ctx.currency();
+    let nets: [i64; 12] = [
+        1_950_000, 1_812_000, -340_000, 1_700_000, 85_000, 1_690_000, 1_640_000, 1_700_000,
+        2_210_000, 0, 0, 0,
+    ];
+
+    let pops = ctx
+        .lang
+        .langs()
+        .into_iter()
+        .map(|lang| {
+            let t = Catalog::new(lang);
+            let mut months = month_cells(&t, &flagged, showing, today);
+            let mut counted = Vec::new();
+            let (mut ins, mut outs) = (Cents::ZERO, Cents::ZERO);
+            for (i, cell) in months.iter_mut().enumerate().filter(|(_, c)| !c.future) {
+                let net = Cents(nets[i]);
+                let compact = crate::ui::fmt::money_compact(net, currency);
+                // The month on screen stands in for a varying income's month.
+                cell.net = Some(if cell.current {
+                    format!("~{compact}")
+                } else {
+                    compact
+                });
+                cell.negative = net.is_negative();
+                ins += Cents(net.get().max(0) + 1_000_000);
+                outs += Cents(1_000_000 - net.get().min(0));
+                if let Some(p) = Period::parse(&cell.key) {
+                    counted.push(p);
+                }
+            }
+            let summary = year_summary(&t, &months, &counted, ins, outs, true, currency);
+            let pop = MonthPop {
+                year: showing.year(),
+                months,
+                summary,
+                t,
+            };
+            let code = if lang == Lang::En { "en" } else { "pt-BR" };
+            (code, pop.render().unwrap_or_default())
+        })
+        .collect();
+
+    Html(PickerPage {
+        theme_css: ctx.theme_css(),
+        attr: ctx.attr(),
+        pops,
     })
 }
 

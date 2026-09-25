@@ -109,15 +109,13 @@
       </button>
       <a class="btn" href="?period={{ next }}" title="next month">›</a>
 
-      <div class="mpop" x-show="picking" x-cloak>
-        {%- for m in months %}
-        {#- Clicking a flagged cell jumps to that month: the picker's existing
-            behavior, so nothing new is needed on top of it. -#}
-        <a class="mcell{% if m.current %} is-current{% endif %}"
-           href="?period={{ m.key }}" title="{{ m.title }}">
-          {{ m.label }}{% if m.unresolved > 0 %}<i class="dot"></i>{% endif %}
-        </a>
-        {%- endfor %}
+      {#- Each month's NET is a dozen pane reads, so it is fetched when the
+          picker opens — every time, so it is never stale after an edit —
+          rather than on every ledger load for a popup that is usually closed.
+          Open/closed is Alpine's; the fetch is HTMX's. -#}
+      <div class="mpop" x-show="picking" x-cloak x-ref="pop"
+           x-init="$watch('picking', v => v && htmx.ajax('GET', '/months?period={{ period_key }}', { target: $refs.pop, swap: 'innerHTML' }))">
+        {{ picker|safe }}
       </div>
     </nav>
     <div class="htotals">

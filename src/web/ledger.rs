@@ -46,12 +46,49 @@ pub struct Params {
 pub struct MonthCell {
     pub key: String,
     pub label: String,
+    /// The month on screen — the accent outline, "you are here".
     pub current: bool,
+    /// Today's month — the `--info` bar. A different fact from `current`: you
+    /// can be looking at March in September.
+    pub now: bool,
+    /// Past today's month. Nothing is materialized there, so the cell says
+    /// `—` rather than a NET of zero that nobody earned.
+    pub future: bool,
+    /// The month's NET, compact and signed. `None` on the page render — the
+    /// numbers arrive when the picker opens (see [`month_pop`]).
+    pub net: Option<String>,
+    pub negative: bool,
     /// How many unresolved occurrences sit in this month. Zero means no dot —
     /// ambient like every other status in this app, rather than a toast that
     /// gets dismissed and then forgotten.
     pub unresolved: usize,
     pub title: String,
+}
+
+/// The picker's foot: the year so far, in facts. Absent for a year that has
+/// not started, which has nothing to sum.
+pub struct YearSummary {
+    pub heading: String,
+    pub ins: String,
+    pub outs: String,
+    pub net: String,
+    pub negative: bool,
+    pub avg: String,
+    /// "2 months need a receipt" — what the dots mean, said once. Empty when
+    /// nothing is flagged.
+    pub unresolved: String,
+}
+
+/// The popup's body: the page renders it with labels and dots only, and
+/// `GET /months` renders it again with the numbers. One partial, so the two
+/// cannot come apart.
+#[derive(Template)]
+#[template(path = "partials/month_pop.html")]
+pub struct MonthPop {
+    pub t: Catalog,
+    pub year: i32,
+    pub months: Vec<MonthCell>,
+    pub summary: Option<YearSummary>,
 }
 
 pub struct PaneTotals {
@@ -91,43 +128,21 @@ pub struct HouseTotals {
 /// same pane query a page load uses, so a fragment's numbers are computed by
 /// exactly the same path as the page's.
 pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTotals>, HouseTotals) {
-    let house = ledger::household(&st.pool).await.ok().flatten();
-    let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
-    let show_recurring = house.as_ref().is_none_or(|h| h.show_recurring);
-    let ctx = RowCtx {
-        today: Local::now().date_naive(),
-        sort: ledger::Sort::parse(&auth.settings.ledger_sort),
-        currency,
-        show_recurring,
-        show_delta: auth.settings.ledger_show_delta,
-        narrow: false,
-        line_numbers: LineNumbers::parse(&auth.settings.line_numbers),
-    };
+    let ctx = session_ctx(st, auth).await;
+    let currency = ctx.currency;
 
     let mut panes = Vec::new();
     let mut ins = crate::domain::money::Cents::ZERO;
     let mut outs = crate::domain::money::Cents::ZERO;
     let mut any_estimated = false;
 
-    for m in ledger::members(&st.pool).await.unwrap_or_default() {
-        let Ok(pane) = ledger::pane_with_vault(
-            &st.pool,
-            &m,
-            period,
-            ctx,
-            auth.viewer,
-            Some(&st.cfg.receipts_root),
-        )
-        .await
-        else {
-            continue;
-        };
+    for pane in member_panes(st, auth, period, ctx).await {
         ins += pane.ins;
         outs += pane.outs;
         any_estimated |= pane.estimated;
         let balance = pane.balance();
         panes.push(PaneTotals {
-            id: m.id,
+            id: pane.member.id,
             ins: money(pane.ins, currency, pane.estimated),
             // Only income varies, so OUTs are never a projection.
             outs: fmt::money(pane.outs, currency),
@@ -146,6 +161,45 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
             negative: net.is_negative(),
         },
     )
+}
+
+/// The render context a total needs, from the session's settings and the
+/// household row. Sort, gutter and delta do not move a sum, but the pane query
+/// takes them all, and building it in one place keeps two callers from
+/// disagreeing about the currency.
+async fn session_ctx(st: &AppState, auth: &Auth) -> RowCtx {
+    let house = ledger::household(&st.pool).await.ok().flatten();
+    RowCtx {
+        today: Local::now().date_naive(),
+        sort: ledger::Sort::parse(&auth.settings.ledger_sort),
+        currency: house.as_ref().map(|h| h.currency).unwrap_or_default(),
+        show_recurring: house.as_ref().is_none_or(|h| h.show_recurring),
+        show_delta: auth.settings.ledger_show_delta,
+        narrow: false,
+        line_numbers: LineNumbers::parse(&auth.settings.line_numbers),
+    }
+}
+
+/// Every member's pane for one period, as this viewer sees it — the one loop
+/// the header totals and the month picker both sum from. Privacy is applied
+/// inside the pane query, so neither can count a row the ledger hides.
+async fn member_panes(st: &AppState, auth: &Auth, period: Period, ctx: RowCtx) -> Vec<Pane> {
+    let mut out = Vec::new();
+    for m in ledger::members(&st.pool).await.unwrap_or_default() {
+        if let Ok(pane) = ledger::pane_with_vault(
+            &st.pool,
+            &m,
+            period,
+            ctx,
+            auth.viewer,
+            Some(&st.cfg.receipts_root),
+        )
+        .await
+        {
+            out.push(pane);
+        }
+    }
+    out
 }
 
 /// One `bucket` fold: a framed container with its name, a row count and a
@@ -210,7 +264,9 @@ struct LedgerPage {
     focused: usize,
     /// `YYYY-MM`, for the forms. The label above is `fmt::period`.
     period_key: String,
-    months: Vec<MonthCell>,
+    /// The picker's body, rendered by the same partial `GET /months` answers
+    /// with — here without the numbers, which are fetched when it opens.
+    picker: MonthPop,
     /// The dot on the trigger: any month **other than this one** with
     /// something overdue and unreceipted.
     unresolved_total: usize,
@@ -388,7 +444,12 @@ pub async fn ledger(
         household: name,
         period: fmt::period(period),
         period_key: period.to_string(),
-        months: month_cells(&st, &auth, period, today).await,
+        picker: MonthPop {
+            t: Catalog::new(lang),
+            year: period.year(),
+            months: month_cells(&t, &unresolved, period, today),
+            summary: None,
+        },
         unresolved_total: unresolved.iter().map(|u| u.count).sum(),
         unresolved_title: t
             .unresolved_dot(unresolved.iter().map(|u| u.count).sum::<usize>() as i64),
@@ -561,21 +622,19 @@ fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
     ]
 }
 
-/// The twelve cells of the current year, each carrying whatever is unresolved
-/// in it. Clicking one jumps to that month — the picker's existing behavior,
-/// so no new command is needed on top of it.
-async fn month_cells(
-    st: &AppState,
-    auth: &Auth,
+/// The twelve cells of the year on screen, each carrying whatever is
+/// unresolved in it. Clicking one jumps to that month — the picker's existing
+/// behavior, so no new command is needed on top of it.
+///
+/// Labels, dots and marks only: everything here is known without summing a
+/// single pane, so the page render stays as cheap as it was.
+pub(crate) fn month_cells(
+    t: &Catalog,
+    unresolved: &[ledger::Unresolved],
     showing: Period,
     today: NaiveDate,
 ) -> Vec<MonthCell> {
-    let t = auth.catalog();
-    let unresolved =
-        ledger::unresolved_months(&st.pool, auth.viewer, today, Some(&st.cfg.receipts_root))
-            .await
-            .unwrap_or_default();
-
+    let now = Period::of(today);
     let names: Vec<&str> = t.months_short().split_whitespace().collect();
     (1..=12)
         .filter_map(|m| Period::new(showing.year(), m))
@@ -585,22 +644,153 @@ async fn month_cells(
                 .find(|u| u.period == p)
                 .map(|u| u.count)
                 .unwrap_or(0);
+            let future = p > now;
             MonthCell {
                 key: p.to_string(),
-                label: names
-                    .get(p.month() as usize - 1)
-                    .map(|s| (*s).to_string())
-                    .unwrap_or_else(|| p.month().to_string()),
+                label: month_name(&names, p),
                 current: p == showing,
+                now: p == now,
+                future,
+                net: None,
+                negative: false,
                 unresolved: count,
                 title: if count > 0 {
                     t.unresolved_dot(count as i64)
+                } else if future {
+                    t.month_future().to_string()
                 } else {
                     String::new()
                 },
             }
         })
         .collect()
+}
+
+fn month_name(names: &[&str], p: Period) -> String {
+    names
+        .get(p.month() as usize - 1)
+        .map(|s| (*s).to_string())
+        .unwrap_or_else(|| p.month().to_string())
+}
+
+#[derive(Deserialize)]
+pub struct MonthParams {
+    period: Option<String>,
+}
+
+/// `GET /months` — the picker's body with its numbers, fetched each time the
+/// picker opens.
+///
+/// A month's NET is the real pane query for every member, vault included: a
+/// tracked income is only confirmed — and so only stops being an estimate —
+/// when its payslip is on disk. That is a dozen pane reads, which is fine for
+/// a popup somebody asked to see and waste on every ledger load for one that
+/// is usually closed. Fetched on every open rather than once, so a NET is
+/// never stale after an edit.
+pub async fn month_pop(
+    State(st): State<AppState>,
+    auth: Auth,
+    Query(p): Query<MonthParams>,
+) -> impl IntoResponse {
+    use crate::domain::money::Cents;
+
+    let today = Local::now().date_naive();
+    let showing = p
+        .period
+        .as_deref()
+        .and_then(Period::parse)
+        .unwrap_or_else(|| Period::of(today));
+    let ctx = session_ctx(&st, &auth).await;
+    let currency = ctx.currency;
+    let t = auth.catalog();
+    let unresolved =
+        ledger::unresolved_months(&st.pool, auth.viewer, today, Some(&st.cfg.receipts_root))
+            .await
+            .unwrap_or_default();
+    let mut months = month_cells(&t, &unresolved, showing, today);
+
+    let (mut ins, mut outs, mut estimated) = (Cents::ZERO, Cents::ZERO, false);
+    let mut counted: Vec<Period> = Vec::new();
+    for cell in months.iter_mut().filter(|c| !c.future) {
+        let Some(period) = Period::parse(&cell.key) else {
+            continue;
+        };
+        let (mut m_in, mut m_out, mut m_est) = (Cents::ZERO, Cents::ZERO, false);
+        for pane in member_panes(&st, &auth, period, ctx).await {
+            m_in += pane.ins;
+            m_out += pane.outs;
+            m_est |= pane.estimated;
+        }
+        let net = m_in - m_out;
+        let compact = fmt::money_compact(net, currency);
+        cell.net = Some(if m_est { format!("~{compact}") } else { compact });
+        cell.negative = net.is_negative();
+        ins += m_in;
+        outs += m_out;
+        estimated |= m_est;
+        counted.push(period);
+    }
+
+    let summary = year_summary(&t, &months, &counted, ins, outs, estimated, currency);
+    Html(MonthPop {
+        t,
+        year: showing.year(),
+        months,
+        summary,
+    })
+}
+
+/// The foot: IN, OUT and NET over the months that have happened, their
+/// average, and — only when something is flagged — how many months carry a
+/// dot. Full money format: this is the one place in the picker the exact
+/// figure is read.
+pub(crate) fn year_summary(
+    t: &Catalog,
+    months: &[MonthCell],
+    counted: &[Period],
+    ins: crate::domain::money::Cents,
+    outs: crate::domain::money::Cents,
+    estimated: bool,
+    currency: crate::domain::money::Currency,
+) -> Option<YearSummary> {
+    use crate::domain::money::Cents;
+
+    let (&first, &last) = (counted.first()?, counted.last()?);
+    let names: Vec<&str> = t.months_short().split_whitespace().collect();
+    let year = first.year().to_string();
+    let heading = if counted.len() == 12 {
+        t.year_full(&year)
+    } else if first == last {
+        t.year_so_far(&year, &month_name(&names, first))
+    } else {
+        let range = format!("{}–{}", month_name(&names, first), month_name(&names, last));
+        t.year_so_far(&year, &range)
+    };
+    // The same minus the ledger bar's NET uses, and a plus beside it: a
+    // year's NET is a signed fact, not a direction carried by a row's kind.
+    // The tilde leads, as it does in the cells: it qualifies the whole figure,
+    // sign included.
+    let signed = |c: Cents| {
+        let sign = if c.is_negative() { "−" } else { "+" };
+        let tilde = if estimated { "~" } else { "" };
+        format!("{tilde}{sign}{}", fmt::money(c.abs(), currency))
+    };
+    let net = ins - outs;
+    let avg = Cents(net.get() / counted.len() as i64);
+    let flagged = months.iter().filter(|c| c.unresolved > 0).count();
+    Some(YearSummary {
+        heading,
+        ins: money(ins, currency, estimated),
+        outs: fmt::money(outs, currency),
+        net: signed(net),
+        negative: net.is_negative(),
+        avg: t.year_avg(&signed(avg)),
+        unresolved: if flagged > 0 {
+            t.year_unresolved(flagged as i64)
+        } else {
+            String::new()
+        },
+    })
 }
 
 /// Clusters a pane's rows by `bucket`, in the order the buckets first appear
@@ -695,5 +885,53 @@ pub(crate) fn view(
             Vec::new()
         },
         grouped,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::money::{Cents, Currency};
+    use crate::ui::i18n::Lang;
+
+    fn d(y: i32, m: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    #[test]
+    fn cells_mark_the_month_on_screen_today_and_the_future_apart() {
+        let t = Catalog::new(Lang::En);
+        let showing = Period::new(2026, 3).unwrap();
+        let cells = month_cells(&t, &[], showing, d(2026, 9, 25));
+        assert_eq!(cells.len(), 12);
+        assert!(cells[2].current && !cells[2].now);
+        assert!(cells[8].now && !cells[8].current && !cells[8].future);
+        assert!(cells[9..].iter().all(|c| c.future && c.net.is_none()));
+        assert!(cells[..9].iter().all(|c| !c.future));
+    }
+
+    #[test]
+    fn the_summary_covers_only_the_months_counted_and_signs_the_net() {
+        let t = Catalog::new(Lang::En);
+        let months = month_cells(&t, &[], Period::new(2026, 9).unwrap(), d(2026, 9, 25));
+        let counted: Vec<Period> = (1..=9).filter_map(|m| Period::new(2026, m)).collect();
+        let y = year_summary(
+            &t,
+            &months,
+            &counted,
+            Cents(900_000),
+            Cents(1_080_000),
+            false,
+            Currency::Brl,
+        )
+        .unwrap();
+        assert_eq!(y.heading, "2026 so far · Jan–Sep");
+        assert_eq!(y.net, "−R$ 1.800,00");
+        assert!(y.negative);
+        assert_eq!(y.avg, "avg −R$ 200,00 / month");
+        assert!(y.unresolved.is_empty());
+
+        assert!(year_summary(&t, &months, &[], Cents::ZERO, Cents::ZERO, false, Currency::Brl)
+            .is_none());
     }
 }

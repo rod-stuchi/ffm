@@ -1867,6 +1867,32 @@ rule (a private row only counts for its owner and the admin).
 - Clicking a flagged cell jumps to that month — the picker's existing
   behavior, unchanged. No new command.
 
+### The picker is also the year
+
+Each cell carries its month's NET under the label, compact and signed —
+`+20k`, `−3,4k`, `~+13k` — and the popup's foot sums the year so far: IN,
+OUT and NET in full, the monthly average, and how many months carry a dot.
+With `zM` this is the second "report" that needed no report screen.
+
+- **Gray when fine, `--neg` when not.** A deficit month is the thing to find;
+  twelve green numbers would only be noise around it. The sign is in the text
+  either way, and the `~` leads when any part of the month is a projection.
+- **Two marks, two facts.** The month on screen wears the accent — "you are
+  here" — and today's month the `--info` bar along its foot. You can be
+  looking at March in September.
+- **A future month says `—`, never "projected".** The materializer never
+  writes past the current month and the pane query reads only rows that
+  exist, so a future NET would be a zero nobody earned. (The mock's
+  "projected" label promises a rule-based projection this app does not yet
+  make.) The summary covers only the months that have happened.
+- **The numbers are fetched when the picker opens**, from `GET /months`, and
+  on every open. A NET is the real pane query for every member, vault
+  included — a tracked income only stops being an estimate when its payslip
+  is on disk — so it is a dozen pane reads: fine for a popup somebody asked
+  to see, waste on every ledger load for one that is usually closed. The page
+  renders the same partial with labels, dots and marks only, holding the NET
+  line open at full height so nothing shifts when the numbers land.
+
 ### Defaults
 
 The app opens to the current month on first load, always — never the

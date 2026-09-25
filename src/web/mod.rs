@@ -68,6 +68,9 @@ pub fn router(state: AppState) -> Router {
         .route("/tx/{id}/log", get(log::log))
         // `:grep` — every month, which is what makes it a different verb.
         .route("/grep", get(log::grep))
+        // The month picker's numbers — fetched when it opens, not on every
+        // ledger load. See `ledger::month_pop`.
+        .route("/months", get(ledger::month_pop))
         // The rule pane. A / I open it blank, E on a recurring row opens it
         // filled in; saving reconciles immediately so the periods the rule is
         // responsible for arrive in the same response.

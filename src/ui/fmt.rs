@@ -49,6 +49,41 @@ pub fn money_estimated(amount: Cents, currency: Currency) -> String {
     format!("~{}", money(amount, currency))
 }
 
+/// A month's NET in the picker: `+20k`, `−3,4k`, `+850`.
+///
+/// Signed, because a picker cell has no `kind` to carry direction the way a
+/// row does. No symbol: twelve `R$` in a 320px popup is noise, and the ledger
+/// bar beside it already says which currency this is. The decimal separator is
+/// still the currency's own, so a BRL household reads `3,4k` and a USD one
+/// `3.4k` — the one part of the format a compact figure keeps.
+///
+/// Whole units under a thousand, one decimal under ten thousand, whole
+/// thousands above. Zero is `0`, with no sign to argue about.
+pub fn money_compact(amount: Cents, currency: Currency) -> String {
+    let f = currency.format();
+    let div = 10_i64.pow(f.decimals);
+    let abs = amount.abs().get();
+    let sign = if amount.is_negative() { "−" } else { "+" };
+
+    let units = (abs + div / 2) / div;
+    if units == 0 {
+        return "0".to_string();
+    }
+    if units < 1000 {
+        return format!("{sign}{units}");
+    }
+    let tenths = (abs * 10 + 500 * div) / (1000 * div);
+    if tenths < 100 {
+        return if tenths % 10 == 0 {
+            format!("{sign}{}k", tenths / 10)
+        } else {
+            format!("{sign}{}{}{}k", tenths / 10, f.decimal_sep, tenths % 10)
+        };
+    }
+    let thousands = (abs + 500 * div) / (1000 * div);
+    format!("{sign}{}k", group(thousands, f.group_sep))
+}
+
 /// The "no amount yet" placeholder: `R$ __,__`.
 ///
 /// This is itself a money format, so it follows the household's currency like
@@ -138,6 +173,21 @@ mod tests {
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    #[test]
+    fn compact_money_keeps_the_currency_separator_and_nothing_else() {
+        assert_eq!(money_compact(Cents(123_400), Currency::Brl), "+1,2k");
+        assert_eq!(money_compact(Cents(123_400), Currency::Usd), "+1.2k");
+        assert_eq!(money_compact(Cents(-340_000), Currency::Brl), "−3,4k");
+        assert_eq!(money_compact(Cents(85_000), Currency::Brl), "+850");
+        assert_eq!(money_compact(Cents(2_000_000), Currency::Brl), "+20k");
+        assert_eq!(money_compact(Cents(300_000), Currency::Brl), "+3k");
+        // Rounds up across the decimal boundary rather than printing `10,0k`.
+        assert_eq!(money_compact(Cents(996_000), Currency::Brl), "+10k");
+        assert_eq!(money_compact(Cents(123_456_700), Currency::Usd), "+1,235k");
+        assert_eq!(money_compact(Cents(40), Currency::Brl), "0");
+        assert_eq!(money_compact(Cents::ZERO, Currency::Brl), "0");
     }
 
     #[test]

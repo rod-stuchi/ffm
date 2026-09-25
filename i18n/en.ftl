@@ -425,6 +425,15 @@ unresolved-dot = { $n ->
        *[other] { $n } bills overdue with no receipt
     }
 unresolved-here = overdue here
+month-picker-select = select month
+month-future = nothing recorded yet
+year-so-far = { $year } so far · { $range }
+year-full = { $year } · full year
+year-avg = avg { $amount } / month
+year-unresolved = { $n ->
+        [one] 1 month needs a receipt
+       *[other] { $n } months need a receipt
+    }
 
 ## `e` — editing an occurrence in place
 
