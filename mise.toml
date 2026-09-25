@@ -1,0 +1,18 @@
+# Dev toolchain. `mise install` on a fresh checkout gives every tool below at
+# this version.
+#
+# Rust is deliberately not here: rust-toolchain.toml pins it, and mise's rust
+# backend is rustup anyway — a second pin would be two places to disagree.
+# System tools stay system: sqlite3 (macOS ships it), poppler for
+# pdftoppm/pdftotext (`brew install poppler`), and Safari's safaridriver.
+
+[tools]
+# Tailwind's standalone binary. Node was only ever here to run this CLI.
+"aqua:tailwindlabs/tailwindcss" = "4.3.3"
+just = "1.58.0"
+"cargo:cargo-watch" = "8.5.3"
+# Matched to the sqlx in Cargo.lock; sqlite only, so it builds without
+# Postgres or MySQL client libraries.
+"cargo:sqlx-cli" = { version = "0.8.6", features = "sqlite", default-features = "false" }
+# The js-check, cmd-check and fonts recipes run python3.
+python = "3.13.15"

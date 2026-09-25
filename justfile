@@ -30,10 +30,10 @@ dev-lan: css-build
 # Tailwind in watch mode. v4 is CSS-first — the tokens live in an @theme block
 # in static/css/app.css, so there is deliberately no tailwind.config.js.
 css:
-    npx @tailwindcss/cli -i static/css/app.css -o static/css/build.css --watch
+    tailwindcss -i static/css/app.css -o static/css/build.css --watch
 
 css-build:
-    npx @tailwindcss/cli -i static/css/app.css -o static/css/build.css --minify
+    tailwindcss -i static/css/app.css -o static/css/build.css --minify
 
 # Re-download the self-hosted font subsets and regenerate static/css/fonts.css.
 # The output is committed, so this is only needed when the weights change.

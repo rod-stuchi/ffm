@@ -1197,6 +1197,12 @@ that will otherwise be re-proposed.
 
 ## Development workflow
 
+- **`mise install` sets up the toolchain** from `mise.toml`: the standalone
+  `tailwindcss` binary, `just`, `cargo-watch`, `sqlx-cli` and `python`. There is
+  no Node — it was only ever there to run Tailwind. Rust is pinned by
+  `rust-toolchain.toml` (rustup), including `rust-analyzer`, not by mise. Left to
+  the system: `sqlite3`, `poppler` (`pdftoppm`/`pdftotext`, `brew install
+  poppler`) and Safari's `safaridriver`.
 - `just dev` — Tailwind build, then `cargo watch` recompiling and restarting on
   save. `just css` in a second pane for CSS-only iteration.
 - `tower-livereload` **0.10+**, behind the opt-in `dev-reload` feature (which is

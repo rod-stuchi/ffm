@@ -13,9 +13,6 @@
 # Rolling backups of the database
 /backups
 
-# node — Tailwind's CLI is the only thing here
-/node_modules
-
 # Tailwind output. static/css/*.css is source; build.css is generated.
 /static/css/build.css
 
