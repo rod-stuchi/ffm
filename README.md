@@ -16,16 +16,20 @@ The dev toolchain is pinned in `mise.toml`: the standalone `tailwindcss` binary,
 
 ```sh
 # 1. mise itself, once per machine
-brew install mise
+brew install mise                  # macOS
+sudo pacman -S mise                # Arch Linux
 echo 'eval "$(mise activate zsh)"' >> ~/.zshrc   # then open a new shell
 
 # 2. Rust, once per machine. rustup installs the toolchain and components
 #    rust-toolchain.toml asks for on the first cargo call in this repo.
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # macOS
+sudo pacman -S rustup && rustup default stable                   # Arch Linux
 
 # 3. Tools mise does not manage
-brew install poppler       # pdftoppm / pdftotext: the P carousel and bill import
-                           # sqlite3 ships with macOS
+brew install poppler                # macOS — sqlite3 ships with the OS
+sudo pacman -S poppler sqlite       # Arch Linux
+                                    # poppler: pdftoppm / pdftotext, for the P
+                                    # carousel and bill import
 
 # 4. The pinned tools
 mise trust                 # allow this repo's mise.toml
@@ -69,7 +73,8 @@ Two pins are tied to something else, so don't bump them on their own:
 - **`tailwindcss`**: after bumping, run `just css-build` and check the app in
   Safari and Chrome. v4 minors occasionally change the output.
 
-mise itself is updated the way it was installed: `brew upgrade mise`.
+mise itself is updated the way it was installed: `brew upgrade mise` on macOS,
+`sudo pacman -Syu` on Arch Linux.
 
 ### Rust — rustup, not mise
 
@@ -86,4 +91,6 @@ be a second pin that could disagree with the first.
 
 ### Everything else
 
-`brew upgrade poppler`. `sqlite3` and `safaridriver` come with macOS.
+`brew upgrade poppler` on macOS, where `sqlite3` and `safaridriver` come with the
+OS. On Arch Linux, `sudo pacman -Syu` covers `poppler` and `sqlite`. There is no
+`safaridriver` on Linux, so the Safari half of UI testing needs a Mac.
