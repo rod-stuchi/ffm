@@ -63,6 +63,7 @@ pub fn base(ctx: RowCtx) -> LedgerRow {
         amount_in_filename: false,
         varies: false,
         cadence_months: None,
+        rule_deleted_on: None,
         member_slug: "rodrigo".into(),
         prev_amount_cents: None,
         estimate_cents: None,
@@ -142,6 +143,24 @@ pub fn specs() -> Vec<Spec> {
                 files: FilePresence {
                     bill: Some("pdf".into()),
                     scheduled: Some("pdf".into()),
+                    ..Default::default()
+                },
+                ..base(ctx)
+            },
+        },
+        Spec {
+            id: "orphaned",
+            heading: "Orphaned — its rule was deleted",
+            why: "Deleting a rule stops future periods; it never rewrites the ones already \
+                  recorded. This row keeps its files and its tracked status, because the files \
+                  live at the rule's taxonomy — a receipt still turns it green. What it stops \
+                  doing is claiming to recur: the ↻ is dim, the popup says when the rule was \
+                  deleted instead of a cadence, and <code>E</code> says there is nothing to open.",
+            build: |ctx| LedgerRow {
+                title: "Moto CG".into(),
+                rule_deleted_on: Some(d(2026, 9, 24)),
+                files: FilePresence {
+                    bill: Some("pdf".into()),
                     ..Default::default()
                 },
                 ..base(ctx)

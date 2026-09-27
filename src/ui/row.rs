@@ -282,6 +282,10 @@ pub struct LedgerRow {
     pub varies: bool,
     /// Months between occurrences, for the details popup.
     pub cadence_months: Option<i64>,
+    /// The day the rule behind this row was deleted. Its occurrences keep
+    /// their files and their tracked status — the files live at the rule's
+    /// taxonomy — and only stop claiming to recur.
+    pub rule_deleted_on: Option<NaiveDate>,
 
     // --- member facts needed to compute a path ----------------------------
     pub member_slug: String,
@@ -443,11 +447,7 @@ impl LedgerRow {
     }
 
     fn ring_tone(&self) -> Tone {
-        match self.ring_progress() {
-            Some(p) if p >= 1.0 => Tone::Neg,
-            Some(p) if p >= 0.66 => Tone::Accent,
-            _ => Tone::Pos,
-        }
+        ring_tone_at(self.ring_progress().unwrap_or(0.0))
     }
 
     // -- amount ----------------------------------------------------------
@@ -520,6 +520,9 @@ impl LedgerRow {
     /// The bare `7/12` badge. Not baked into the title — it lives in the meta
     /// slot beside the due date and the recurrence glyph.
     pub fn installments(&self) -> Option<(u16, u16)> {
+        if !self.is_recurring() {
+            return None;
+        }
         Some((self.installments_paid?, self.total_installments?))
     }
 
@@ -592,7 +595,9 @@ impl LedgerRow {
     /// Only a recurring row has one, which is why this is an `Option` rather
     /// than a default of "monthly".
     fn cadence_label(&self, _t: &Catalog) -> Option<String> {
-        self.rule_id?;
+        if !self.is_recurring() {
+            return None;
+        }
         Some(match self.cadence_months {
             Some(1) | None => "1".to_string(),
             Some(n) => n.to_string(),
@@ -648,8 +653,11 @@ impl LedgerRow {
 
     // -- chrome ----------------------------------------------------------
 
+    /// A live rule. A deleted one leaves its rows as orphaned bills: they
+    /// keep `rule_id` (the log and the files still need it) but nothing about
+    /// them recurs any more.
     pub fn is_recurring(&self) -> bool {
-        self.rule_id.is_some()
+        self.rule_id.is_some() && self.rule_deleted_on.is_none()
     }
 
     pub fn is_private(&self) -> bool {
@@ -732,6 +740,9 @@ pub struct Details {
     pub receipt: Option<String>,
     pub status: String,
     pub recurring: bool,
+    /// When the rule behind an orphaned bill was deleted — said in place of
+    /// the cadence, which no longer applies.
+    pub rule_deleted: Option<String>,
 }
 
 pub struct RowView {
@@ -746,13 +757,7 @@ pub struct RowView {
     pub gutter: String,
     pub title: String,
 
-    // mark
-    pub mark_kind: &'static str, // disc | outline | ring | dot | skeleton | error
-    pub mark_tone: &'static str,
-    pub mark_glyph: &'static str,
-    pub mark_inner: Option<&'static str>,
-    /// Pre-computed `stroke-dashoffset` for a 10.5px-radius ring.
-    pub ring_offset: f32,
+    pub mark: MarkView,
 
     // meta
     pub meta_text: Option<String>,
@@ -777,6 +782,66 @@ pub struct RowView {
     pub error: Option<String>,
     pub is_skeleton: bool,
     pub details: Details,
+}
+
+/// The status mark, flattened for `partials/mark.html`. Shared by the row
+/// and by the `?` legend, so the legend cannot show a mark the ledger does
+/// not draw.
+#[derive(Clone, Copy, Debug)]
+pub struct MarkView {
+    pub kind: &'static str, // disc | outline | ring | dot | skeleton | error
+    pub tone: &'static str,
+    pub glyph: &'static str,
+    pub inner: Option<&'static str>,
+    /// Pre-computed `stroke-dashoffset` for a 10.5px-radius ring.
+    pub ring_offset: f32,
+}
+
+/// The ring's color at a given elapsed fraction: green, then amber from two
+/// thirds of the way, then red once the due date has passed.
+pub fn ring_tone_at(progress: f32) -> Tone {
+    if progress >= 1.0 {
+        Tone::Neg
+    } else if progress >= 0.66 {
+        Tone::Accent
+    } else {
+        Tone::Pos
+    }
+}
+
+impl Mark {
+    pub fn view(&self) -> MarkView {
+        let (kind, tone, glyph, inner) = match self {
+            Mark::Skeleton => ("skeleton", "muted", "", None),
+            Mark::Error => ("error", "neg", "alert", None),
+            Mark::Disc { tone, glyph } => ("disc", tone.css(), *glyph, None),
+            Mark::Outline { tone, glyph } => ("outline", tone.css(), *glyph, None),
+            Mark::Ring { tone, glyph, .. } => ("ring", tone.css(), "", *glyph),
+            Mark::Dot { tone, filled } => {
+                ("dot", if *filled { tone.css() } else { "muted" }, "", None)
+            }
+        };
+        let progress = match self {
+            Mark::Ring { progress, .. } => *progress,
+            _ => 0.0,
+        };
+        MarkView {
+            kind,
+            tone,
+            // The mark's glyph is chosen here rather than in the template so
+            // an unmapped name can never reach the page as literal text.
+            glyph: match glyph {
+                "check" => "✓",
+                "alert" => "!",
+                other => {
+                    debug_assert!(other.is_empty(), "unmapped mark glyph: {other}");
+                    ""
+                }
+            },
+            inner: inner.map(|_| "◷"),
+            ring_offset: RING_CIRCUMFERENCE * (1.0 - progress),
+        }
+    }
 }
 
 pub struct FlagView {
@@ -819,23 +884,7 @@ impl LedgerRow {
     pub fn view(&self, t: &Catalog) -> RowView {
         let status = self.status();
         let amount = self.amount();
-        let mark = self.mark();
-
-        let (mark_kind, mark_tone, mark_glyph, mark_inner) = match &mark {
-            Mark::Skeleton => ("skeleton", "muted", "", None),
-            Mark::Error => ("error", "neg", "alert", None),
-            Mark::Disc { tone, glyph } => ("disc", tone.css(), *glyph, None),
-            Mark::Outline { tone, glyph } => ("outline", tone.css(), *glyph, None),
-            Mark::Ring { tone, glyph, .. } => ("ring", tone.css(), "", *glyph),
-            Mark::Dot { tone, filled } => {
-                ("dot", if *filled { tone.css() } else { "muted" }, "", None)
-            }
-        };
-
-        let progress = match &mark {
-            Mark::Ring { progress, .. } => *progress,
-            _ => 0.0,
-        };
+        let mark = self.mark().view();
 
         RowView {
             id: self.id,
@@ -852,20 +901,7 @@ impl LedgerRow {
                 _ => self.title.clone(),
             },
 
-            mark_kind,
-            mark_tone,
-            // The mark's glyph is chosen here rather than in the template so
-            // an unmapped name can never reach the page as literal text.
-            mark_glyph: match mark_glyph {
-                "check" => "✓",
-                "alert" => "!",
-                other => {
-                    debug_assert!(other.is_empty(), "unmapped mark glyph: {other}");
-                    ""
-                }
-            },
-            mark_inner: mark_inner.map(|_| "◷"),
-            ring_offset: RING_CIRCUMFERENCE * (1.0 - progress),
+            mark,
 
             meta_text: self.meta_text(t),
             meta_tone: match status {
@@ -955,7 +991,8 @@ impl LedgerRow {
                 // is missing.
                 receipt: self.receipt_path_preview(),
                 status: self.status_sentence(t),
-                recurring: self.rule_id.is_some(),
+                recurring: self.is_recurring(),
+                rule_deleted: self.rule_deleted_on.map(fmt::date),
             },
 
             error: match &self.state {
@@ -1023,6 +1060,7 @@ mod tests {
             tracked: true,
             instance: None,
             cadence_months: Some(1),
+            rule_deleted_on: None,
             total_installments: None,
             spans_period: false,
             window_size: None,
@@ -1056,6 +1094,28 @@ mod tests {
 
         r.files.receipt = Some("pdf".into());
         assert_eq!(r.status(), RowStatus::Paid);
+    }
+
+    #[test]
+    fn a_deleted_rule_leaves_an_orphaned_bill_not_a_recurring_one() {
+        let mut r = base();
+        r.total_installments = Some(25);
+        r.installments_paid = Some(1);
+        r.files.receipt = Some("pdf".into());
+        r.rule_deleted_on = Some(d(2026, 9, 24));
+
+        // Stops claiming to recur…
+        assert!(!r.is_recurring());
+        assert_eq!(r.flag_pair()[0], ("recurring", false));
+        assert_eq!(r.installments(), None);
+        let v = r.view(&Catalog::new(Lang::En));
+        assert_eq!(v.details.cadence, None);
+        assert_eq!(v.details.rule_deleted.as_deref(), Some("24/09/2026"));
+
+        // …but keeps its files and the status they prove.
+        assert_eq!(r.status(), RowStatus::Paid);
+        assert_eq!(v.files.len(), 1);
+        assert!(v.details.receipt.is_some());
     }
 
     #[test]

@@ -16,7 +16,7 @@ use crate::services::receipts::{self, Slot};
 use crate::state::AppState;
 use crate::web::session::Auth;
 use askama::Template;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
@@ -143,19 +143,27 @@ pub async fn upload(
     }
 }
 
-/// `POST /tx/{id}/file/{kind}/delete` — a soft delete: the file moves into a
-/// sibling `.delete/`, never off disk.
+/// `?in=edit` — the request came from the `e` form's file strip.
+#[derive(serde::Deserialize)]
+pub struct DeleteQuery {
+    #[serde(rename = "in")]
+    from: Option<String>,
+}
+
+/// `POST /tx/{id}/file/{kind}/delete` — a soft delete: the file moves into the
+/// member's trash, `{slug}/.delete/`, never off disk.
 pub async fn delete(
     State(st): State<AppState>,
     auth: Auth,
     Path((tx_id, kind)): Path<(i64, String)>,
+    Query(q): Query<DeleteQuery>,
 ) -> Response {
     let t = auth.catalog();
     let Some(kind) = Kind::parse(&kind) else {
-        return crate::web::tx::say_only(t.error_not_written(), true);
+        return refuse(t.error_not_written(), true);
     };
     let Some((slot, period, member_id)) = slot_for(&st, &auth, tx_id).await else {
-        return crate::web::tx::say_only(t.file_not_tracked(), true);
+        return refuse(t.file_not_tracked(), true);
     };
 
     match receipts::soft_delete(
@@ -169,13 +177,35 @@ pub async fn delete(
     )
     .await
     {
+        // From inside the `e` form, only the form's file strip is answered:
+        // swapping the row would throw away the draft being typed.
+        Ok(true) if q.from.as_deref() == Some("edit") => {
+            crate::web::tx::edit_files_answer(&st, &auth, tx_id, t.file_removed()).await
+        }
         Ok(true) => {
             crate::web::tx::row_fragment(&st, &auth, tx_id, member_id, period, t.file_removed())
                 .await
         }
-        Ok(false) => crate::web::tx::say_only(t.file_none_receipt(), true),
-        Err(e) => crate::web::tx::say_only(&e.to_string(), true),
+        Ok(false) => refuse(
+            match kind {
+                Kind::Barcode => t.file_none_bill(),
+                Kind::Scheduled => t.file_none_scheduled(),
+                Kind::Receipt => t.file_none_receipt(),
+            },
+            true,
+        ),
+        Err(e) => refuse(&e.to_string(), true),
     }
+}
+
+/// A refusal with nothing to swap. The delete targets a row (or the edit
+/// form's file strip) with `outerHTML`, and an empty body swapped there would
+/// remove the very thing that was refused.
+fn refuse(message: &str, bad: bool) -> Response {
+    let mut res = crate::web::tx::say_only(message, bad);
+    res.headers_mut()
+        .insert("HX-Reswap", axum::http::HeaderValue::from_static("none"));
+    res
 }
 
 /// Where one of a row's files is on disk, and its extension — or `None` when

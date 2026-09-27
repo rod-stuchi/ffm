@@ -335,6 +335,22 @@
   {#- `dd` confirms, because deletion READS as destructive even though it is a
       soft delete. Enter deliberately does nothing here: the only yes is an
       explicit `y`, so Enter can never become an accidental way to confirm. -#}
+  {#- Removing one of a row's files, from the `P` carousel. The same shape as
+      the row's own `dd`: only an explicit `y` confirms, Enter does nothing. It
+      sits above the carousel, which stays open behind it. -#}
+  <div class="modal is-over" x-show="removingFile" x-cloak @click.self="removingFile = null">
+    <div class="card" style="max-width:min(460px,100%)">
+      <div class="ch"><h1 x-text="removingFile && removeFileTitle.replace('{file}', removingFile.label)"></h1></div>
+      <div class="cb">
+        <p class="hint" style="margin-top:0">{{ t.carousel_remove_body() }}</p>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="removingFile = null">{{ t.row_cancel() }} <kbd>esc</kbd></button>
+          <button class="btn" type="button" @click="doRemoveFile()">{{ t.carousel_remove_yes() }} <kbd>y</kbd></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" x-show="confirming" x-cloak @click.self="confirming = null">
     <div class="card" style="max-width:min(460px,100%)">
       <div class="ch"><h1>{{ t.row_delete_confirm() }}</h1></div>
@@ -375,6 +391,9 @@
         <template x-if="tip.cadence">
           <div class="tiprow"><b>{{ t.details_cadence() }}</b>
             <span x-text="tip.cadence + ' ' + monthsWord"></span></div>
+        </template>
+        <template x-if="tip.ruleDeleted">
+          <div class="tiprow"><b>{{ t.details_rule() }}</b><span x-text="tip.ruleDeleted"></span></div>
         </template>
         <template x-if="tip.receipt">
           <div class="tiprow"><b>{{ t.details_receipt() }}</b>
@@ -441,6 +460,12 @@
           <a class="btn pri" :href="carousel.current.href" target="_blank" rel="noopener">
             {{ t.carousel_open_tab() }}
           </a>
+          {#- Removing the file on show. It asks first, like `dd` on a row:
+              the gesture reads as destructive even though it is a soft
+              delete into the member's trash, undone with `u`. -#}
+          <button class="btn" type="button" @click="askRemoveFile()">
+            {{ t.carousel_remove() }} <kbd>dd</kbd>
+          </button>
         </div>
       </div>
     </template>
@@ -461,6 +486,27 @@
           {%- endfor %}
         </div>
         {%- endfor %}
+        {#- The marks, drawn by the row's own partial — a legend that
+            re-drew them by hand would be free to disagree with the ledger. -#}
+        <div class="sect">{{ t.legend_title() }}</div>
+        <div class="legend">
+          {%- for item in legend %}
+          <div class="lsamples">
+            {%- for sample in item.samples %}
+            {%- match sample %}
+            {%- when LegendSample::Mark(m) %}{% include "partials/mark.html" %}
+            {%- when LegendSample::Flag(f) %}
+            <span class="mflag flag-{{ f.icon }}{% if f.on %} is-on{% endif %}">{{ f.svg|safe }}</span>
+            {%- when LegendSample::File { number, svg } %}
+            <span class="fbadge"><kbd>{{ number }}</kbd><span class="ficon">{{ svg|safe }}</span></span>
+            {%- when LegendSample::Amount(a) %}
+            <span class="amt"><span class="v is-estimated">{{ a }}</span></span>
+            {%- endmatch %}
+            {%- endfor %}
+          </div>
+          <span>{{ item.text }}</span>
+          {%- endfor %}
+        </div>
       </div>
       <div class="cf">
         <button class="btn" type="button" @click="keymap = false">{{ t.keymap_close() }} <kbd>esc</kbd></button>
@@ -647,6 +693,11 @@ function ledger() {
     pointerAt: null,
     tipStyle: '',
     carousel: null,
+    /// The file the carousel is asking to remove: `{ id, kind, label }`.
+    removingFile: null,
+    /// `d` pressed once inside the carousel, waiting for the second.
+    carouselBuf: '',
+    removeFileTitle: {{ remove_file_title|json|safe }},
     zoom: 1,
     keymap: false,
     monthsWord: {{ months_word|json|safe }},
@@ -696,6 +747,7 @@ function ledger() {
     msgBad: false,
     pending: '',
     notARule: {{ not_a_rule|json|safe }},
+    ruleDeleted: {{ rule_deleted|json|safe }},
     notACommand: {{ not_a_command|json|safe }},
     unsavedTag: {{ unsaved_tag|json|safe }},
     draftsParked: {{ drafts_parked|json|safe }},
@@ -853,6 +905,15 @@ function ledger() {
       // stayed lit beside the cursor's on every j/k. Cleared by `mouseMoved`.
       if (!typing) document.body.classList.add('kbd-nav');
 
+      if (this.removingFile) {
+        // As on the row's own confirm: `y` is the only yes, Enter is unbound.
+        if (e.key === 'y') { e.preventDefault(); this.doRemoveFile(); }
+        if (e.key === 'Escape') { e.preventDefault(); this.removingFile = null; }
+        return;
+      }
+      // A modifier on its own is not a keystroke — it must not clear the
+      // pending `d` of a `dd` (see the Shift gotcha in CLAUDE.md).
+      if (this.carousel && ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
       if (this.carousel) { e.preventDefault(); this.carouselKey(e.key); return; }
       if (this.keymap) {
         if (e.key === 'Escape' || e.key === '?') { e.preventDefault(); this.keymap = false; }
@@ -1094,6 +1155,8 @@ function ledger() {
       // A no-op with a statusline message on a plain row — the same treatment
       // `gd` gets there, rather than a different error path to learn.
       if (!ruleId) { this.say(this.notARule, true); return; }
+      // An orphaned bill: its rule was deleted, so there is nothing to open.
+      if (el.dataset.ruleDeleted) { this.say(this.ruleDeleted, true); return; }
       this.closeSplit();
       this.closeLog();
       this.closeRule();
@@ -1228,6 +1291,7 @@ function ledger() {
         due: row.dataset.due,
         cadence: row.dataset.cadence,
         receipt: row.dataset.receipt,
+        ruleDeleted: row.dataset.ruleDeleted,
       };
       this.tipStyle = 'top:' + (r.bottom + 6) + 'px; left:' + (r.left + 40) + 'px';
       // Dismissed by the very next keypress of ANY kind — the same way any
@@ -1256,7 +1320,9 @@ function ledger() {
       }));
       if (!files.length) { this.say(this.noFiles, true); return; }
       this.zoom = 1;
+      this.carouselBuf = '';
       this.carousel = {
+        id: this.focusedId(),
         files,
         at: 0,
         get current() { return this.files[this.at]; },
@@ -1294,7 +1360,42 @@ function ledger() {
       this.zoom = 1;
     },
 
+    askRemoveFile() {
+      const c = this.carousel;
+      if (!c || !c.current) return;
+      this.removingFile = { id: c.id, kind: c.current.kind, label: c.current.label };
+    },
+
+    /// Soft-deletes the file, then lets the ROW say what happened: the row
+    /// fragment replaces the row, and the carousel drops the file only if its
+    /// badge is really gone — a refusal leaves both exactly as they were.
+    doRemoveFile() {
+      const f = this.removingFile;
+      this.removingFile = null;
+      if (!f) return;
+      htmx.ajax('POST', '/tx/' + f.id + '/file/' + f.kind + '/delete',
+                { target: '#row-' + f.id, swap: 'outerHTML' })
+        .then(() => {
+          const still = document.querySelector('#row-' + f.id + ' .fbadge[href$="/' + f.kind + '"]');
+          if (still || !this.carousel) return;
+          const files = this.carousel.files.filter(x => x.kind !== f.kind);
+          if (!files.length) { this.carousel = null; return; }
+          this.carousel.files = files;
+          this.carousel.at = Math.min(this.carousel.at, files.length - 1);
+          this.zoom = 1;
+        });
+    },
+
     carouselKey(k) {
+      // `dd` removes the file on show — the row's own delete gesture, pointed
+      // at the file. The carousel reads its own keys, so the pending `d` lives
+      // here; any other key drops it, the way `zq` drops the `z`.
+      const armed = this.carouselBuf === 'd';
+      this.carouselBuf = '';
+      if (k === 'd') {
+        if (armed) this.askRemoveFile(); else this.carouselBuf = 'd';
+        return;
+      }
       if (['1', '2', '3'].includes(k)) {
         const i = this.carousel.files.findIndex(f => f.number === k);
         // Pressing a number for a kind that is not on this row is the same
@@ -1636,7 +1737,7 @@ function ledger() {
           row.querySelector('.name b')?.textContent || '',
           row.querySelector('.meta')?.textContent || '',
           row.querySelector('.amt')?.textContent || '',
-          row.dataset.ruleId ? 'recurring' : '',
+          row.dataset.ruleId && !row.dataset.ruleDeleted ? 'recurring' : '',
           row.querySelector('.mflag.flag-private.is-on') ? 'private' : '',
           row.querySelector('.disc.tone-pos') ? 'paid' : '',
         ].join(' ');

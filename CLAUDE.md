@@ -268,9 +268,9 @@ card in plain CSS.
   discarded, and several can be parked at once. In the real app a draft is
   visual state — unsubmitted form values — so it lives in Alpine, never on
   the server; Save is the only thing that sends it.
-- **Still modal:** the `dd` delete confirmation, the private-row
-  re-attribution confirm, the `?` keymap and the `P` file carousel —
-  confirmations and viewers, not forms.
+- **Still modal:** the `dd` delete confirmation (and its twin for removing a
+  file from the `P` carousel), the private-row re-attribution confirm, the
+  `?` keymap and the `P` file carousel — confirmations and viewers, not forms.
 
 ---
 
@@ -711,6 +711,14 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   own `receipts` row (`09_barcode.r42.pdf`): a fixed `09_barcode.pdf` let a
   second delete of the same slot overwrite the first. Restore finds a file in
   any place a delete has ever put one, and refuses to overwrite a live file.
+- **Deleting a rule leaves its occurrences as orphaned bills** — never
+  re-parented, never cleared. They keep `rule_id` (the change log and the
+  files still need it), their files and their tracked status, because the
+  files live at the rule's taxonomy; they stop claiming to recur: `↻` dim, no
+  cadence or `7/12`, the popup says when the rule was deleted, and `E` says
+  there is nothing to open. The ledger query still joins a deleted rule for
+  exactly that reason — filtering it out of the join would orphan the files
+  instead.
 - **An untracked recurring bill gets an optional manual `paid` checkbox** — the
   one manual tick in the whole model, and only because there's no filesystem
   proof to contradict it. A *tracked* rule never gets this checkbox; the rule

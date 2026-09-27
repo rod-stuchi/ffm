@@ -308,7 +308,25 @@ pub async fn new_rule(
 pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
     let t = auth.catalog();
     let Ok(Some(r)) = rules::get(&st.pool, id).await else {
-        return crate::web::tx::say_only(t.rule_none_on_row(), true);
+        // A stale page can still carry the id of a rule deleted since: say
+        // that, rather than claiming the row never had one.
+        let deleted = sqlx::query_scalar!(
+            "SELECT 1 FROM recurring_rules WHERE id = ?1 AND deleted_at IS NOT NULL",
+            id
+        )
+        .fetch_optional(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .is_some();
+        return crate::web::tx::say_only(
+            if deleted {
+                t.rule_deleted_on_row()
+            } else {
+                t.rule_none_on_row()
+            },
+            true,
+        );
     };
     if !auth.viewer.sees_private_of(r.member_id) && r.visibility == Visibility::Private {
         return crate::web::tx::say_only(t.rule_none_on_row(), true);

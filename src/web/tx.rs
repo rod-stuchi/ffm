@@ -22,7 +22,7 @@ use crate::domain::period::Period;
 use crate::domain::status::{RowFlags, RowState, TxKind, Visibility};
 use crate::state::AppState;
 use crate::ui::i18n::Catalog;
-use crate::ui::row::{FilePresence, Gutter, LedgerRow, LineNumbers, RowCtx, RowView};
+use crate::ui::row::{FilePresence, FileView, Gutter, LedgerRow, LineNumbers, RowCtx, RowView};
 use crate::web::form::FieldErrors;
 use crate::web::ledger::{HouseTotals, PaneTotals};
 use crate::web::session::Auth;
@@ -222,12 +222,22 @@ async fn pane_at(
 /// Re-reads one row through the **pane query**, so a fragment is rendered by
 /// exactly the same path as a full page load. A second, simpler "just this row"
 /// query is how a fragment starts quietly disagreeing with the page it lands in.
-async fn render_row(
+/// One live row, read through the same pane query a page load uses — so its
+/// files, status and privacy filtering are exactly what the ledger shows.
+/// `None` for a row the pane does not list (deleted, or not visible).
+pub(crate) async fn live_row(
     st: &AppState,
     auth: &Auth,
     id: i64,
-    oob: bool,
-) -> Result<Fragment, &'static str> {
+) -> Result<
+    (
+        Option<LedgerRow>,
+        i64,
+        Period,
+        crate::domain::money::Currency,
+    ),
+    &'static str,
+> {
     let Ok(Some((member_id, period, _deleted))) = tx::one(&st.pool, id).await else {
         return Err("that row is gone");
     };
@@ -253,11 +263,24 @@ async fn render_row(
     else {
         return Err("cannot read that month");
     };
+    Ok((
+        pane.rows.into_iter().find(|r| r.id == id),
+        member_id,
+        period,
+        currency,
+    ))
+}
 
+async fn render_row(
+    st: &AppState,
+    auth: &Auth,
+    id: i64,
+    oob: bool,
+) -> Result<Fragment, &'static str> {
     // Deleted rows are not in the pane query — the row stays in the database,
     // but the ledger reads live rows. Re-render it from what we know instead of
     // widening the query that every page load runs.
-    let row = pane.rows.into_iter().find(|r| r.id == id);
+    let (row, member_id, period, currency) = live_row(st, auth, id).await?;
     match row {
         Some(r) => {
             let (panes, house) = crate::web::ledger::totals(st, auth, period).await;
@@ -296,8 +319,10 @@ async fn deleted_row(
                   t.amount_cents AS "amount_cents: i64",
                   t.visibility AS "visibility!: String",
                   t.rule_id AS "rule_id: i64",
+                  r.deleted_at AS "rule_deleted_at?: String",
                   m.slug AS "slug!: String"
            FROM transactions t JOIN members m ON m.id = t.member_id
+           LEFT JOIN recurring_rules r ON r.id = t.rule_id
            WHERE t.id = ?1"#,
         id
     )
@@ -334,6 +359,10 @@ async fn deleted_row(
         amount_in_filename: false,
         varies: false,
         cadence_months: None,
+        rule_deleted_on: row
+            .rule_deleted_at
+            .as_deref()
+            .and_then(crate::db::ledger::local_day),
         member_slug: row.slug,
         prev_amount_cents: None,
         estimate_cents: None,
@@ -342,7 +371,7 @@ async fn deleted_row(
         state: RowState::Ok,
         flags: RowFlags {
             deleted: true,
-            recurring: row.rule_id.is_some(),
+            recurring: row.rule_id.is_some() && row.rule_deleted_at.is_none(),
             private: row.visibility == "private",
             ..RowFlags::default()
         },
@@ -760,6 +789,9 @@ async fn may_touch(st: &AppState, auth: &Auth, id: i64) -> bool {
 struct EditRow {
     t: Catalog,
     id: i64,
+    /// The row's files, each with Open and Remove. Removing one swaps only
+    /// this strip, so whatever is being typed in the form survives it.
+    files: Vec<FileView>,
     title: String,
     amount: String,
     /// The stored integer, which the mask seeds from. The formatted `value`
@@ -778,6 +810,56 @@ struct EditRow {
     /// else has changed since refuses instead of silently overwriting them.
     version: i64,
     errors: FieldErrors,
+}
+
+/// The files the edit form lists — the row's own rail, read through the same
+/// pane query, so the form offers exactly the files the ledger shows.
+pub(crate) async fn edit_files(st: &AppState, auth: &Auth, id: i64) -> Vec<FileView> {
+    match live_row(st, auth, id).await {
+        Ok((Some(r), ..)) => r.view(&auth.catalog()).files,
+        _ => Vec::new(),
+    }
+}
+
+/// The answer to a file removed from inside the edit form: the strip alone,
+/// plus the totals it may have moved (a payslip is what turns an estimate
+/// into a fact). The form around the strip is untouched, draft and all.
+#[derive(Template)]
+#[template(path = "partials/edit_files_answer.html")]
+pub(crate) struct EditFilesAnswer {
+    pub t: Catalog,
+    pub id: i64,
+    pub files: Vec<FileView>,
+    pub pane_totals: Option<PaneTotals>,
+    pub house_totals: Option<HouseTotals>,
+}
+
+pub(crate) async fn edit_files_answer(
+    st: &AppState,
+    auth: &Auth,
+    id: i64,
+    message: &str,
+) -> Response {
+    let (row, member_id, period, _) = match live_row(st, auth, id).await {
+        Ok(x) => x,
+        Err(e) => return say_only(e, true),
+    };
+    let files = row
+        .map(|r| r.view(&auth.catalog()).files)
+        .unwrap_or_default();
+    let (panes, house) = crate::web::ledger::totals(st, auth, period).await;
+    say(
+        Html(EditFilesAnswer {
+            t: auth.catalog(),
+            id,
+            files,
+            pane_totals: panes.into_iter().find(|p| p.id == member_id),
+            house_totals: Some(house),
+        })
+        .into_response(),
+        message,
+        false,
+    )
 }
 
 /// Opens the row into its own form. The row is replaced rather than covered —
@@ -805,8 +887,10 @@ pub async fn edit_form(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         return say_only(t.error_not_written(), true);
     };
 
+    let files = edit_files(&st, &auth, id).await;
     Html(EditRow {
         id,
+        files,
         // Shown the way the amount field expects it back, not the way the
         // ledger displays it: the field takes digits and a separator, and
         // round-tripping a rendered "R$ 343,62" through it is how a currency
@@ -1001,9 +1085,11 @@ async fn reopen(
     .unwrap_or_default();
 
     let message = errors.messages().first().unwrap_or(&"").to_string();
+    let files = edit_files(st, auth, id).await;
     let mut res = say(
         Html(EditRow {
             id,
+            files,
             title: form.title.clone(),
             amount: form.amount.clone(),
             amount_cents: Cents::parse(&form.amount)

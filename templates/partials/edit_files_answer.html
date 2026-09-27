@@ -1,0 +1,4 @@
+{#- A file removed from inside the `e` form: the strip, and the totals out
+    of band — the same contract every other mutation keeps. -#}
+{% include "partials/edit_files.html" %}
+{% if let Some(pt) = pane_totals %}{% let house = house_totals.as_ref().unwrap() %}{% include "partials/totals.html" %}{% endif %}

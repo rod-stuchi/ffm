@@ -254,7 +254,8 @@ async fn supersede_scheduled(
         .map(|_| ())
 }
 
-/// Moves a file into `.delete/` beside where it lived and records the move.
+/// Moves a file into the member's trash, `{slug}/.delete/`, under the path it
+/// had, and records the move.
 /// Never removed from disk — the same rule the ledger follows.
 pub async fn soft_delete(
     pool: &SqlitePool,

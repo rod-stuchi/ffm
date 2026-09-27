@@ -604,6 +604,12 @@
   z-index: 40;
 }
 
+/* A confirmation raised from inside the full-viewport carousel sits above it,
+ * so the file being removed stays in view behind the question. */
+.modal.is-over {
+  z-index: 60;
+}
+
 .modal-actions {
   display: flex;
   gap: 8px;
@@ -1497,6 +1503,41 @@
   align-items: center;
 }
 
+/* The row's files inside the form — one line each: slot, name, where it
+ * lives, and Remove. Empty after the last one goes, and takes no space. */
+.editfiles.f {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.editfiles.f:empty {
+  display: none;
+}
+
+.eflist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.efile {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr) max-content;
+  gap: 10px;
+  align-items: center;
+  font-size: 12.5px;
+}
+
+.efpath {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A changed draft left behind when the cursor moved on. The dashed accent
  * border is already the row's `has-draft` state; this is the tag that says how
  * to pick it back up. */
@@ -1715,4 +1756,25 @@
 
 .kmap kbd {
   justify-self: start;
+}
+
+/* The marks legend: samples in the first column, drawn by the row's own
+ * partial, their meaning in the second. Sized to content for the same reason
+ * the key column is. */
+.legend {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) 1fr;
+  gap: 8px 14px;
+  align-items: center;
+  font-size: 12.5px;
+}
+
+.lsamples {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lsamples .fbadge {
+  pointer-events: none;
 }

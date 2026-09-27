@@ -13,7 +13,8 @@ use crate::domain::period::Period;
 use crate::state::AppState;
 use crate::ui::fmt;
 use crate::ui::i18n::Catalog;
-use crate::ui::row::{LineNumbers, RowCtx, RowView};
+use crate::ui::icons;
+use crate::ui::row::{FlagView, LineNumbers, MarkView, RowCtx, RowView};
 use crate::ui::theme;
 use crate::web::session::Auth;
 use crate::web::template::Html;
@@ -312,6 +313,8 @@ struct LedgerPage {
     /// `E` on a row with no rule behind it says so in the statusline rather
     /// than doing nothing at all.
     not_a_rule: String,
+    remove_file_title: String,
+    rule_deleted: String,
     unsaved_tag: String,
     drafts_parked: String,
     no_pane_that_way: String,
@@ -322,6 +325,8 @@ struct LedgerPage {
     /// The `?` modal, built from the same table `design/spec.md` documents —
     /// so a key that exists and a key that is written down stay the same set.
     keymap: Vec<(String, Vec<(&'static str, &'static str)>)>,
+    /// What every mark means, drawn with the row's own mark partial.
+    legend: Vec<LegendItem>,
     /// The three "there is no such file" messages — `g1`/`g2`/`g3` on a row
     /// that has not got one. Three fields rather than a JSON blob, so each is
     /// escaped by the same filter as every other string handed to the page.
@@ -477,6 +482,8 @@ pub async fn ledger(
         max_width: auth.settings.layout_max_width,
         gap: auth.settings.layout_gap,
         not_a_rule: t.rule_none_on_row().to_string(),
+        remove_file_title: t.carousel_remove_title("{file}"),
+        rule_deleted: t.rule_deleted_on_row().to_string(),
         unsaved_tag: t.row_unsaved().to_string(),
         // The count is filled in by the pane, so the catalog keeps the plural
         // and the template keeps the number.
@@ -487,6 +494,7 @@ pub async fn ledger(
         no_files: t.file_no_files().to_string(),
         months_word: t.details_months().to_string(),
         keymap: keymap(&t),
+        legend: legend(&t, currency, show_recurring),
         not_a_command: t.not_a_command("{cmd}"),
         file_not_tracked: t.file_not_tracked().to_string(),
         no_bill: t.file_none_bill().to_string(),
@@ -622,6 +630,142 @@ fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
     ]
 }
 
+/// One line of the `?` legend: one or more samples, and what they mean.
+pub struct LegendItem {
+    pub samples: Vec<LegendSample>,
+    pub text: String,
+}
+
+pub enum LegendSample {
+    /// A status mark, rendered by `partials/mark.html` — the row's own.
+    Mark(MarkView),
+    /// The recurring or private icon, on or dim.
+    Flag(FlagView),
+    /// A file-rail slot: its number and its icon.
+    File { number: u8, svg: &'static str },
+    /// An amount as the row writes it, e.g. a projection.
+    Amount(String),
+}
+
+/// The `?` legend. Every mark is built from the same `Mark` the ledger draws
+/// and rendered by the same partial, so the legend cannot drift from the
+/// rows. The words come from the catalog; the sample amount from `fmt`.
+fn legend(
+    t: &Catalog,
+    currency: crate::domain::money::Currency,
+    show_recurring: bool,
+) -> Vec<LegendItem> {
+    use crate::ui::row::{Mark, Tone, ring_tone_at};
+    let ring = |progress: f32, glyph: Option<&'static str>| {
+        LegendSample::Mark(
+            Mark::Ring {
+                progress,
+                tone: if glyph.is_some() {
+                    Tone::Info
+                } else {
+                    ring_tone_at(progress)
+                },
+                glyph,
+            }
+            .view(),
+        )
+    };
+    let flag = |icon: &'static str, on| {
+        LegendSample::Flag(FlagView {
+            icon,
+            svg: icons::svg(icon),
+            on,
+        })
+    };
+    let mut out = vec![
+        LegendItem {
+            samples: vec![LegendSample::Mark(
+                Mark::Disc {
+                    tone: Tone::Pos,
+                    glyph: "check",
+                }
+                .view(),
+            )],
+            text: t.legend_paid().to_string(),
+        },
+        LegendItem {
+            samples: vec![LegendSample::Mark(
+                Mark::Outline {
+                    tone: Tone::Pos,
+                    glyph: "check",
+                }
+                .view(),
+            )],
+            text: t.legend_manual_paid().to_string(),
+        },
+        LegendItem {
+            samples: vec![ring(0.3, None), ring(0.8, None), ring(1.0, None)],
+            text: t.legend_pending().to_string(),
+        },
+        LegendItem {
+            samples: vec![ring(0.5, Some("clock"))],
+            text: t.legend_scheduled().to_string(),
+        },
+        LegendItem {
+            samples: vec![LegendSample::Mark(
+                Mark::Disc {
+                    tone: Tone::Neg,
+                    glyph: "alert",
+                }
+                .view(),
+            )],
+            text: t.legend_scheduled_overdue().to_string(),
+        },
+        LegendItem {
+            samples: vec![LegendSample::Mark(
+                Mark::Dot {
+                    filled: false,
+                    tone: Tone::Muted,
+                }
+                .view(),
+            )],
+            text: t.legend_plain().to_string(),
+        },
+        LegendItem {
+            samples: vec![LegendSample::Amount(fmt::money_estimated(
+                crate::domain::money::Cents(413_333),
+                currency,
+            ))],
+            text: t.legend_estimated().to_string(),
+        },
+    ];
+    // "We don't use this concept here" removes the icon from every row, so
+    // it has nothing to explain either.
+    if show_recurring {
+        out.push(LegendItem {
+            samples: vec![flag("recurring", true), flag("recurring", false)],
+            text: t.legend_recurring().to_string(),
+        });
+    }
+    out.push(LegendItem {
+        samples: vec![flag("private", true), flag("private", false)],
+        text: t.legend_private().to_string(),
+    });
+    out.push(LegendItem {
+        samples: vec![
+            LegendSample::File {
+                number: 1,
+                svg: icons::svg("bill"),
+            },
+            LegendSample::File {
+                number: 2,
+                svg: icons::svg("scheduled"),
+            },
+            LegendSample::File {
+                number: 3,
+                svg: icons::svg("receipt"),
+            },
+        ],
+        text: t.legend_files().to_string(),
+    });
+    out
+}
+
 /// The twelve cells of the year on screen, each carrying whatever is
 /// unresolved in it. Clicking one jumps to that month — the picker's existing
 /// behavior, so no new command is needed on top of it.
@@ -723,7 +867,11 @@ pub async fn month_pop(
         }
         let net = m_in - m_out;
         let compact = fmt::money_compact(net, currency);
-        cell.net = Some(if m_est { format!("~{compact}") } else { compact });
+        cell.net = Some(if m_est {
+            format!("~{compact}")
+        } else {
+            compact
+        });
         cell.negative = net.is_negative();
         ins += m_in;
         outs += m_out;
@@ -931,7 +1079,17 @@ mod tests {
         assert_eq!(y.avg, "avg −R$ 200,00 / month");
         assert!(y.unresolved.is_empty());
 
-        assert!(year_summary(&t, &months, &[], Cents::ZERO, Cents::ZERO, false, Currency::Brl)
-            .is_none());
+        assert!(
+            year_summary(
+                &t,
+                &months,
+                &[],
+                Cents::ZERO,
+                Cents::ZERO,
+                false,
+                Currency::Brl
+            )
+            .is_none()
+        );
     }
 }

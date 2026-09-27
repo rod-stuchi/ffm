@@ -29,6 +29,13 @@ understood:
 | expected | ring toward the expected day, `+` at its center | income, not yet received — the same elapsed-time arc a bill's due date drives |
 | received | filled positive disc + received date | income that landed |
 | estimated | `~R$ …` in a quieter color, no delta | a varying income's amount is projected from history until confirmed — the mark still carries arrival, the tilde carries "this number isn't a fact yet" |
+| orphaned | the bill's own mark and files, ↻ dim, popup says *rule deleted on {date}* in place of the cadence | its rule was deleted. Deleting a rule stops future periods and never rewrites recorded ones: the row keeps `rule_id`, its files (they live at the rule's taxonomy) and its tracked status, and still counts toward the unresolved badge — it only stops claiming to recur. `E` says there is nothing to open |
+
+**`?` shows every mark beside what it means**, under a *Marks* section in the
+keymap modal. The samples are drawn by `partials/mark.html` — the partial the
+row itself includes — from real `Mark` values, so the legend cannot show a
+mark the ledger does not draw. The words are catalog messages; the `~R$`
+sample goes through `fmt::money`.
 
 ### The add form (`a` / `i`)
 
@@ -341,6 +348,13 @@ receipt — without leaving the ledger behind it.
   did nothing.
 - **A row with zero files refuses outright** — `P` says "no files on this
   row" rather than opening an empty carousel with nothing to look at.
+- **The file on show can be removed from here** — a Remove button beside
+  "Open in tab", and `dd`, the row's own delete gesture pointed at the file.
+  Both ask first, in the same confirmation shape as the row's `dd` (only `y`
+  confirms), raised above the carousel so the file stays in view behind the
+  question. It is the existing soft delete into the member's trash, so `u`
+  puts it back. The carousel drops the file only once the row fragment that
+  comes back no longer shows it, and closes when the last one goes.
 - **A bill whose rule spans several periods (`spans_period`) shows its page
   prominently in the stage**, not just in the file rail's small label —
   "One file, 10 pages — this month is page **4**" sits right under the
@@ -467,6 +481,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | `h` / `l` | inside the carousel — previous / next file |
 | `+` / `-` | inside the carousel — zoom in / out |
 | `0` | inside the carousel — reset zoom to 100% |
+| `dd` | inside the carousel — remove the file on show; confirms with `y`, never `Enter` |
 
 `gu` is "goto upload", a second step of the same `g`-prefix vocabulary rather
 than a new pattern — and it deliberately reuses `g1`/`g2`/`g3`'s numbering, so
@@ -771,6 +786,13 @@ editing. So:
   doesn't close the pane, doesn't touch `tracked`/`bucket`/`billName`, and
   exists specifically for "the wrong file got attached the first time":
   drop a corrected one right after, in the same still-open dropzone.
+- **The `e` form lists the row's files**, each with Open and **Remove** — the
+  one place besides the `P` carousel a file is removed. Remove is its own
+  request targeting only the form's file strip, never part of the form's
+  submit, so the draft typed around it survives the swap. No confirmation:
+  it is a soft delete undone with `u`, and the button says exactly what
+  happens. Removing a file does not bump the row's `version`, so Save still
+  goes through afterwards.
 - **Due date moved from the occurrence form to the rule form.** The
   edit-occurrence form's Day field only renders at all for a non-recurring
   row; a recurring row's due day is edited on the rule (`E`) instead, so

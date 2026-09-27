@@ -74,6 +74,8 @@
         <span>{{ t.edit_private() }}</span>
       </label>
 
+      {% include "partials/edit_files.html" %}
+
       <div class="editactions">
         <button class="btn pri" type="submit">{{ t.row_save() }}<kbd>&#9166;</kbd></button>
         <button class="btn" type="button" @click="cancelEdit({{ id }})">

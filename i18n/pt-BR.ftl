@@ -194,6 +194,7 @@ rule-created = regra criada · { $n } mês(es) gerado(s)
 rule-saved = regra salva
 rule-deleted = regra excluída · as linhas continuam
 rule-none-on-row = não vem de uma regra recorrente
+rule-deleted-on-row = a regra desta linha foi excluída · arquivos e situação continuam valendo
 cadence-monthly = Mensal
 cadence-bimonthly = A cada 2 meses
 cadence-quarterly = A cada 3 meses
@@ -425,6 +426,8 @@ details-due = Vence
 details-cadence = Frequência
 details-receipt = Comprovante
 details-status = Situação
+details-rule = Regra
+details-rule-deleted = excluída em { $date }
 details-none = nada recorrente por trás desta linha
 status-paid = comprovante arquivado
 status-scheduled = agendado, ainda não venceu
@@ -496,3 +499,27 @@ selection-count = { $n } de { $total } { $n ->
    *[other] selecionadas
 }
 selection-no-amount = { $n } sem valor
+
+# --- ? legenda: o que cada marca quer dizer ----------------------------------
+legend-title = Marcas
+legend-paid = Pago — o comprovante está no arquivo. Numa entrada: recebido.
+legend-manual-paid = Marcado como pago à mão — uma conta sem arquivo que prove
+legend-pending = Aguardando — o anel enche do início do mês até o vencimento, muda de cor quando está perto e fica vermelho quando vence. Numa entrada: esperado.
+legend-scheduled = Agendado — o comprovante de agendamento está no arquivo, ainda não venceu
+legend-scheduled-overdue = Agendado, mas vencido — o vencimento passou e o comprovante não chegou
+legend-plain = Sem acompanhamento — nenhum arquivo é esperado, não há o que provar
+legend-estimated = Estimado — uma entrada que varia, projetada pelos últimos meses até chegar
+legend-recurring = Recorrente — criado por uma regra todo mês. Apagado: avulso, ou a regra foi excluída.
+legend-private = Privado — escondido dos outros membros, nunca do admin. Apagado: a casa toda vê.
+legend-files = Arquivos da linha — 1 conta, 2 agendamento, 3 comprovante. g1 g2 g3 abrem, P mostra todos.
+
+# --- e: arquivos da linha, dentro da edição -----------------------------------
+edit-files = Arquivos
+edit-file-open = Abrir em nova aba
+edit-file-remove = Remover
+
+# --- P: remover o arquivo em exibição ------------------------------------------
+carousel-remove = Remover
+carousel-remove-title = Remover este arquivo ({ $file })?
+carousel-remove-body = Ele vai para a lixeira do seu cofre, nunca sai do disco. Aperte u para trazer de volta.
+carousel-remove-yes = Remover

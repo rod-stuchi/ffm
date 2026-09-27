@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT t.kind AS \"kind!: String\", t.title AS \"title!: String\",\n                  t.amount_cents AS \"amount_cents: i64\",\n                  t.visibility AS \"visibility!: String\",\n                  t.rule_id AS \"rule_id: i64\",\n                  m.slug AS \"slug!: String\"\n           FROM transactions t JOIN members m ON m.id = t.member_id\n           WHERE t.id = ?1",
+  "query": "SELECT t.kind AS \"kind!: String\", t.title AS \"title!: String\",\n                  t.amount_cents AS \"amount_cents: i64\",\n                  t.visibility AS \"visibility!: String\",\n                  t.rule_id AS \"rule_id: i64\",\n                  r.deleted_at AS \"rule_deleted_at?: String\",\n                  m.slug AS \"slug!: String\"\n           FROM transactions t JOIN members m ON m.id = t.member_id\n           LEFT JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.id = ?1",
   "describe": {
     "columns": [
       {
@@ -29,8 +29,13 @@
         "type_info": "Integer"
       },
       {
-        "name": "slug!: String",
+        "name": "rule_deleted_at?: String",
         "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "slug!: String",
+        "ordinal": 6,
         "type_info": "Text"
       }
     ],
@@ -43,8 +48,9 @@
       true,
       false,
       true,
+      true,
       false
     ]
   },
-  "hash": "7bba782be3e490fd9d3cfb8af857740d0a736209988e58b68063e45b06f27179"
+  "hash": "40a46a674fd0475354fe1bb10232963db7409104d85c68432caf6d917b7e78dc"
 }

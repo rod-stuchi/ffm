@@ -1,0 +1,37 @@
+{#- The row's files, inside the `e` form. Each can be opened or removed.
+
+    Remove is its own request with its own target — this strip — and never
+    part of the form's submit, so the draft being typed around it survives:
+    an HTMX swap destroys whatever Alpine state is inside its target, and the
+    draft is outside this one. It is a soft delete into the member's trash,
+    undone with `u`, so it asks nothing first — the button says what happens.
+    `hx-params="none"`: a POST from inside a form would otherwise carry the
+    form's fields along, and this request has no business with them. -#}
+<div class="editfiles f" id="editfiles-{{ id }}">
+  {%- if !files.is_empty() %}
+  <span class="k">{{ t.edit_files() }}</span>
+  <div class="eflist">
+    {%- for f in files %}
+    <div class="efile">
+      <a class="fbadge" href="{{ f.href }}" target="_blank" rel="noopener"
+         title="{{ t.edit_file_open() }} — {{ f.path }}">
+        <kbd>{{ f.number }}</kbd>
+        <span class="ficon">{{ f.svg|safe }}</span>
+        {#- Hidden here — the name sits beside the badge — but present, so
+            anything reading a badge's label (`P`) finds one on this row too. -#}
+        <span class="flabel" hidden>{{ f.label }}</span>
+      </a>
+      <span class="eflabel">{{ f.label }}{% if let Some(p) = f.page %} · {{ p }}{% endif %}</span>
+      <span class="efpath">{{ f.path }}</span>
+      {#- The swap takes this button with it, and a focused element that
+          leaves the DOM drops focus to the page — where Esc and Enter no
+          longer reach the form. So focus moves to Save first. -#}
+      <button class="btn sm" type="button" hx-params="none"
+              hx-on::before-request="this.closest('form')?.querySelector('button[type=submit]')?.focus()"
+              hx-post="/tx/{{ id }}/file/{{ f.kind }}/delete?in=edit"
+              hx-target="#editfiles-{{ id }}" hx-swap="outerHTML">{{ t.edit_file_remove() }}</button>
+    </div>
+    {%- endfor %}
+  </div>
+  {%- endif -%}
+</div>

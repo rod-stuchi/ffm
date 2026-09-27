@@ -213,6 +213,10 @@ pub async fn pane_with_vault(
             r.estimate_basis     AS "estimate_basis?: String",
             r.estimate_window    AS "estimate_window?: i64",
             r.amount_cents       AS "rule_amount_cents?: i64",
+            -- A deleted rule still joins: its occurrences keep their files
+            -- and their tracked status, which live at the rule's taxonomy.
+            -- They only stop claiming to recur.
+            r.deleted_at         AS "rule_deleted_at?: String",
 
             -- "The same line" in the previous period: exact title, same member.
             -- Unambiguous for a recurring row (it is the same rule) and the only
@@ -304,7 +308,8 @@ pub async fn pane_with_vault(
             }
         }
 
-        let recurring = r.rule_id.is_some();
+        let rule_deleted_on = r.rule_deleted_at.as_deref().and_then(local_day);
+        let recurring = r.rule_id.is_some() && r.rule_deleted_at.is_none();
         let private = r.visibility == "private";
         basis_of.push(r.estimate_basis.clone());
         window_of.push(r.estimate_window);
@@ -340,6 +345,7 @@ pub async fn pane_with_vault(
             amount_in_filename: r.amount_in_filename.unwrap_or(0) != 0,
             varies: r.varies.unwrap_or(0) != 0,
             cadence_months: r.cadence_months,
+            rule_deleted_on,
 
             member_slug: member.slug.clone(),
 
@@ -530,6 +536,14 @@ async fn confirmed_history(
 /// A value that does not parse came from outside the app.
 fn parse_date(s: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()
+}
+
+/// The household's own day for a stored UTC timestamp — a rule deleted at
+/// 22:00 in São Paulo was deleted that day, not the next.
+pub fn local_day(s: &str) -> Option<NaiveDate> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .ok()
+        .map(|t| t.with_timezone(&chrono::Local).date_naive())
 }
 
 // ---------------------------------------------------------------------------

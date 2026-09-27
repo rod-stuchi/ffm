@@ -224,6 +224,7 @@ rule-created = rule created · { $n } period(s) materialized
 rule-saved = rule saved
 rule-deleted = rule deleted · its rows stay
 rule-none-on-row = not generated from a recurring rule
+rule-deleted-on-row = the rule behind this row was deleted · its files and status still hold
 cadence-monthly = Monthly
 cadence-bimonthly = Every 2 months
 cadence-quarterly = Every 3 months
@@ -457,6 +458,8 @@ details-due = Due
 details-cadence = Cadence
 details-receipt = Receipt
 details-status = Status
+details-rule = Rule
+details-rule-deleted = deleted on { $date }
 details-none = nothing recurring behind this row
 status-paid = receipt on file
 status-scheduled = scheduled, due date not passed yet
@@ -525,3 +528,27 @@ cursor-on-fold = that is a group, not a row
 ## `x` - the selection cell in the statusline
 selection-count = { $n } of { $total } selected
 selection-no-amount = { $n } without amount
+
+# --- ? legend: what each mark means ------------------------------------------
+legend-title = Marks
+legend-paid = Paid — the receipt is on file. On an income: received.
+legend-manual-paid = Marked paid by hand — a bill with no file to prove it
+legend-pending = Waiting — the ring fills from the start of the month to the due date, changes color as it nears, and turns red once it is overdue. On an income: expected.
+legend-scheduled = Scheduled — proof of a scheduled payment is on file, not due yet
+legend-scheduled-overdue = Scheduled but overdue — the due date passed and no receipt came in
+legend-plain = Not tracked — no file is expected, so there is nothing to prove
+legend-estimated = Estimated — an income that varies, projected from recent months until it arrives
+legend-recurring = Recurring — made by a rule each month. Dim: a one-off, or its rule was deleted.
+legend-private = Private — hidden from the other members, never from the admin. Dim: the household sees it.
+legend-files = Files on the row — 1 bill, 2 scheduled payment, 3 receipt. g1 g2 g3 open one, P previews them.
+
+# --- e: the row's files, inside the edit form ---------------------------------
+edit-files = Files
+edit-file-open = Open in a new tab
+edit-file-remove = Remove
+
+# --- P: removing the file on show ----------------------------------------------
+carousel-remove = Remove
+carousel-remove-title = Remove this { $file }?
+carousel-remove-body = It moves to your trash folder in the vault, never off the disk. Press u to put it back.
+carousel-remove-yes = Remove
