@@ -1170,7 +1170,7 @@ function ledger() {
       this.closeRule();
       htmx.ajax('GET', '/rules/new?member_id=' + member + '&kind=' + kind,
                 { target: this.mount(), swap: 'innerHTML' })
-           .then(() => this.aimArrow());
+           .then(() => { this.aimArrow(); this.revealPaneSide(); });
     },
 
     editRule() {
@@ -1188,7 +1188,7 @@ function ledger() {
       this.closeRule();
       htmx.ajax('GET', '/rules/' + ruleId + '/edit',
                 { target: this.mount(), swap: 'innerHTML' })
-           .then(() => this.aimArrow());
+           .then(() => { this.aimArrow(); this.revealPaneSide(); });
     },
 
     closeRule() { this.clearMount('#rulepane'); },
@@ -1916,7 +1916,7 @@ function ledger() {
       this.closeLog();
       this.closeRule();
       htmx.ajax('GET', url, { target: this.mount(), swap: 'innerHTML' })
-           .then(() => { this.aimArrow(); this.revealPaneTop(); });
+           .then(() => { this.aimArrow(); this.revealPaneTop(); this.revealPaneSide(); });
     },
 
     /// Bring a row-anchored pane's own top back into view.
@@ -1935,6 +1935,29 @@ function ledger() {
       if (!pane || !stage) return;
       const above = pane.getBoundingClientRect().top - stage.getBoundingClientRect().top;
       if (above < 0) stage.scrollTop += above;
+    },
+
+    /// Bring a row-anchored pane into view sideways.
+    ///
+    /// The pane opens as a column right after the focused member's pane, so
+    /// beside the LAST member it lands past the stage's right edge — the
+    /// stage scrolls sideways rather than squeezing anybody — and opened
+    /// there, it was simply off screen until scrolled to by hand.
+    ///
+    /// Scrolls only as far as the pane's right edge (plus the stage's own
+    /// padding), and never so far that the pane's left edge — where its arrow
+    /// points back at the row — goes past the stage's left.
+    revealPaneSide() {
+      const pane = document.querySelector('#rulepane, #logpane');
+      const stage = document.querySelector('.stage');
+      if (!pane || !stage) return;
+      const p = pane.getBoundingClientRect();
+      const s = stage.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(stage).paddingRight) || 0;
+      const past = p.right + pad - (s.left + stage.clientWidth);
+      if (past <= 0) return;
+      const room = Math.max(0, p.left - pad - s.left);
+      stage.scrollLeft += Math.min(past, room);
     },
 
     closeSplit() {
