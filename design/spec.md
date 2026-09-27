@@ -52,7 +52,7 @@ a household entering the week's spending types straight into the next one.
   was a flex strip before, lining up with nothing above it.
 - **The frame is dashed**, which is what this ledger already means by "not a
   row yet" — the same language the `A`/`I` placeholder row uses.
-- **Save and Cancel are their own row, at the right edge, a size down.** They
+- **Cancel and Save are their own row, at the right edge, Save last, a size down.** They
   end the gesture rather than being part of the thing being typed, so they do
   not sit in the field strip competing with it for width.
 - **The amount is the live mask**, per Edit fields below: only digits are
@@ -595,8 +595,10 @@ a rename.
 editing. So:
 
 - **`e` edits in place.** The focused row opens up into its own form — the
-  same fields, with Cancel (`Esc`) and Save (`Enter`) at the bottom of the
-  row — and the rest of the ledger stays where it was.
+  same fields, with Cancel (`Esc`) and Save (`Enter`) at the bottom right of
+  the row, Save last — every form's actions follow that one rule (CLAUDE.md,
+  Editing), the rule pane's included, where Delete sits apart at the far
+  left — and the rest of the ledger stays where it was.
 - **`A` / `I` / `E` open the rule pane** — a column of its own in the ledger's
   grid, right after the member pane being edited, pushing any later panes
   further right. *Right after the pane being edited* is load-bearing and was

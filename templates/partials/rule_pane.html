@@ -278,16 +278,18 @@
     <div class="notebox">{{ t.rule_past_note() }}</div>
     {%- endif %}
 
+    {#- Primary last, at the right; Delete apart at the far left, never beside
+        the button Enter would press (see CLAUDE.md, Editing). -#}
     <div class="rp-actions">
-      <button class="btn pri" type="submit">
-        {% if id.is_some() %}{{ t.rule_save() }}{% else %}{{ t.rule_create() }}{% endif %}<kbd>&#9166;</kbd>
-      </button>
       {%- if let Some(rid) = id %}
       <button class="btn rp-del" type="button"
               hx-post="/rules/{{ rid }}/delete" hx-target="#rulepane" hx-swap="delete">
         {{ t.rule_delete() }}
       </button>
       {%- endif %}
+      <button class="btn pri" type="submit">
+        {% if id.is_some() %}{{ t.rule_save() }}{% else %}{{ t.rule_create() }}{% endif %}<kbd>&#9166;</kbd>
+      </button>
     </div>
   </form>
 </aside>

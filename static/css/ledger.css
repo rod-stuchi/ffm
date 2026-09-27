@@ -776,15 +776,19 @@
   color: var(--ink-3);
 }
 
+/* Primary at the right, like every other form's actions. Delete is not the
+ * primary, so it sits apart at the far left — never beside the button Enter
+ * would press. */
 .rp-actions {
   display: flex;
   gap: 8px;
   align-items: center;
+  justify-content: flex-end;
   padding-top: 4px;
 }
 
 .rp-del {
-  margin-left: auto;
+  margin-right: auto;
   color: var(--neg);
   border-color: var(--line-2);
 }
@@ -1493,14 +1497,19 @@
 .editrow .editentry {
   display: flex;
   flex-direction: column;
+  /* `.entry` centers its grid cells; in a column that centers every field
+   * horizontally, so the form floated in the middle of the row. */
+  align-items: stretch;
   gap: 10px;
   padding: 12px;
 }
 
+/* A form's actions end it: their own row, at the right, primary last. */
 .editactions {
   display: flex;
   gap: 8px;
   align-items: center;
+  justify-content: flex-end;
 }
 
 /* The row's files inside the form — one line each: slot, name, where it

@@ -108,7 +108,7 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(ledger::ledger))
         .merge(open)
         .merge(guarded)
-        .nest_service("/static", ServeDir::new("static"));
+        .nest_service("/static", static_files());
 
     // Gated at the module AND at the mount. None of the sandbox exists in a
     // release binary, so there is no auth guard to forget.
@@ -116,4 +116,20 @@ pub fn router(state: AppState) -> Router {
     let app = app.merge(sandbox::router());
 
     app.with_state(state)
+}
+
+/// `/static`. Under `just dev` / `just dev-lan` (the `dev-reload` feature)
+/// every response says `Cache-Control: no-cache`, so the browser revalidates
+/// on each load and a rebuilt `build.css` shows up on a plain reload. Without
+/// it Safari kept serving a stale stylesheet from its heuristic cache, and a
+/// CSS fix looked like it had not landed. A production build leaves caching
+/// alone: there, the files only change on a deploy.
+fn static_files() -> Router {
+    let files = Router::new().fallback_service(ServeDir::new("static"));
+    #[cfg(feature = "dev-reload")]
+    let files = files.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-cache"),
+    ));
+    files
 }

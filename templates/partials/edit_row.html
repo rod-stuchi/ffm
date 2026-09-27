@@ -76,11 +76,13 @@
 
       {% include "partials/edit_files.html" %}
 
+      {#- Cancel before Save, Save last and rightmost — the rule every form's
+          actions follow (see CLAUDE.md, Editing). -#}
       <div class="editactions">
-        <button class="btn pri" type="submit">{{ t.row_save() }}<kbd>&#9166;</kbd></button>
         <button class="btn" type="button" @click="cancelEdit({{ id }})">
           {{ t.row_cancel() }}<kbd>esc</kbd>
         </button>
+        <button class="btn pri" type="submit">{{ t.row_save() }}<kbd>&#9166;</kbd></button>
       </div>
     </div>
   </form>

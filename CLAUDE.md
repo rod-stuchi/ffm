@@ -268,6 +268,15 @@ card in plain CSS.
   discarded, and several can be parked at once. In the real app a draft is
   visual state — unsubmitted form values — so it lives in Alpine, never on
   the server; Save is the only thing that sends it.
+- **A form's actions end it: their own row at the foot, aligned right,
+  primary last.** Cancel before Save, "no" before "yes" — the add form and
+  every confirmation already did this; the `e` row (centered, and only by
+  accident: `.entry`'s `align-items: center` inside a flex column) and the
+  rule pane (Create at the left) did not. A destructive action that is not
+  the primary — the rule pane's Delete — sits apart at the far left, never
+  beside the button Enter would press. The pre-auth pages are the one
+  exception: a single full-width submit on a card, with nothing to put
+  beside it.
 - **Still modal:** the `dd` delete confirmation (and its twin for removing a
   file from the `P` carousel), the private-row re-attribution confirm, the
   `?` keymap and the `P` file carousel — confirmations and viewers, not forms.
@@ -1217,6 +1226,12 @@ that will otherwise be re-proposed.
   what `just dev` turns on) — refreshes the browser once the server restarts.
   Not `#[cfg(debug_assertions)]`, and not a default feature: see the gotcha
   below for why both of those are wrong.
+- **The same feature sends `Cache-Control: no-cache` on `/static`**, so a
+  rebuilt `build.css` lands on a plain reload. Without it Safari reused a
+  stale stylesheet from its heuristic cache and a CSS fix looked like it had
+  not landed, while the template beside it (not cached) had. A production
+  build leaves caching alone on purpose: there the files change only on a
+  deploy.
 - `just db` creates the database and applies every migration with the plain
   `sqlite3` CLI — which exists to break a bootstrap deadlock: `sqlx::query!`
   checks queries against a real schema at **compile** time, but
