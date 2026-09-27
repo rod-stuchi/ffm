@@ -964,6 +964,12 @@ does most of the real work, so the auth layer stays simple on purpose.
   was never really available: `password_hash` is Argon2, so there is no hash a
   person can type into `sqlite3`, and getting back into your own ledger meant
   writing a program.
+- **Another member's ledger is read-only to a non-admin.** They see its shared
+  rows and cannot change them, its rules or its files; the pane header carries
+  a `read-only` tag, it has no add row and no `+` file control, and every write
+  key answers *"read-only: this is Ana's ledger"*. Re-attributing a row is an
+  admin's gesture even on your own row. An admin writes anywhere — until they
+  preview as a non-admin, when the same rule applies to them.
 - **Focused member ≠ logged-in member.** `H`/`L`/`gt` pick which pane is
   focused, which decides who a *new transaction* is attributed to — that stays
   visual/Alpine-adjacent per the existing rule. Login (the session) decides whose

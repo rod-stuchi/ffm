@@ -73,6 +73,9 @@ sort-refuses-reorder = ledger.sort = "{ $sort }" — reordenar exige sort = "man
 group-refuses-reorder = ledger.group = "{ $group }" — reordenar exige group = "none"
 not-a-command = não é um comando: { $name } (tente help)
 no-rule-behind-row = não foi gerado por uma regra recorrente
+read-only-ledger = somente leitura: este é o livro de { $who }
+reattribute-admin-only = só um admin pode passar um lançamento para outro membro
+pane-read-only = somente leitura
 
 rows-moved =
     { $n ->

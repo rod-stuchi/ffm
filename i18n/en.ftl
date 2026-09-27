@@ -81,6 +81,11 @@ sort-refuses-reorder = ledger.sort = "{ $sort }" — reorder needs sort = "manua
 group-refuses-reorder = ledger.group = "{ $group }" — reorder needs group = "none"
 not-a-command = not a command: { $name } (try help)
 no-rule-behind-row = not generated from a recurring rule
+# A non-admin reads the other ledgers and writes only their own.
+read-only-ledger = read-only: this is { $who }'s ledger
+reattribute-admin-only = only an admin can move a row to another member
+# The tag on the header of a pane the viewer can read but not change.
+pane-read-only = read-only
 
 # The one message with a plural selector, which is the only thing that reaches
 # FluentBundle at runtime. `$n` is typed i64 by convention.

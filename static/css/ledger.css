@@ -458,6 +458,20 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* Somebody else's ledger, which this session reads but may not change. Quiet
+ * on purpose — the same ink-3 as every other secondary word in the header —
+ * and not the accent, which means "you are here", nor a semantic color, which
+ * would say something about money. */
+.rotag {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 5px;
+  white-space: nowrap;
+}
+
 .ptotals {
   margin-left: auto;
   font-size: 11px;

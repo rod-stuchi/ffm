@@ -43,6 +43,17 @@ impl Viewer {
     pub fn sees_private_of(self, owner_member_id: i64) -> bool {
         owner_member_id == self.member_id || self.is_admin()
     }
+
+    /// Whether this viewer may change what that member owns: rows, rules and
+    /// files. A non-admin reads the other ledgers (what privacy lets them
+    /// see) and writes only their own — adding to, editing, deleting or
+    /// reordering somebody else's is acting on their behalf, which this app
+    /// lets only an admin do. The same answer as `sees_private_of` today, and
+    /// named apart on purpose: one is about seeing, the other about acting,
+    /// and a later change to either must not silently move the other.
+    pub fn may_write(self, owner_member_id: i64) -> bool {
+        owner_member_id == self.member_id || self.is_admin()
+    }
 }
 
 #[cfg(test)]
@@ -74,6 +85,26 @@ mod tests {
             previewing.sees_private_of(1),
             "ownership grants visibility independent of role — this is what \
              makes preview a view, not an impersonation"
+        );
+    }
+
+    #[test]
+    fn a_member_writes_only_their_own_and_an_admin_writes_anyone() {
+        let admin = Viewer::new(1, true);
+        let member = Viewer::new(2, false);
+
+        assert!(member.may_write(2), "your own ledger is yours");
+        assert!(!member.may_write(1), "somebody else's is read-only");
+        assert!(admin.may_write(2), "an admin acts on anyone's");
+
+        let previewing = Viewer {
+            preview: true,
+            ..admin
+        };
+        assert!(!previewing.may_write(2), "preview is a non-admin's view");
+        assert!(
+            previewing.may_write(1),
+            "and never locks you out of your own"
         );
     }
 }

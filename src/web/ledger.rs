@@ -232,6 +232,11 @@ pub struct PaneView {
     pub groups: Vec<Group>,
     pub grouped: bool,
     pub totals: PaneTotals,
+    /// Whether the session may change this pane's rows — its own, or any when
+    /// admin powers are in effect. A non-admin reads the other ledgers and
+    /// writes only their own; the server refuses regardless, and this is what
+    /// lets the page say so before a key is pressed.
+    pub writable: bool,
 }
 
 #[derive(Template)]
@@ -334,6 +339,7 @@ struct LedgerPage {
     /// fill it without the catalog having to know about JavaScript.
     not_a_command: String,
     file_not_tracked: String,
+    reattribute_admin_only: String,
     no_bill: String,
     no_scheduled: String,
     no_receipt: String,
@@ -403,7 +409,8 @@ pub async fn ledger(
         ins += pane.ins;
         outs += pane.outs;
         any_estimated |= pane.estimated;
-        panes.push(view(pane, &t, currency, grouped));
+        let writable = auth.viewer.may_write(pane.member.id);
+        panes.push(view(pane, &t, currency, grouped, writable));
     }
 
     let unresolved =
@@ -497,6 +504,7 @@ pub async fn ledger(
         legend: legend(&t, currency, show_recurring),
         not_a_command: t.not_a_command("{cmd}"),
         file_not_tracked: t.file_not_tracked().to_string(),
+        reattribute_admin_only: t.reattribute_admin_only().to_string(),
         no_bill: t.file_none_bill().to_string(),
         no_scheduled: t.file_none_scheduled().to_string(),
         no_receipt: t.file_none_receipt().to_string(),
@@ -1009,9 +1017,11 @@ pub(crate) fn view(
     t: &Catalog,
     currency: crate::domain::money::Currency,
     grouped: bool,
+    writable: bool,
 ) -> PaneView {
     let balance = pane.balance();
     PaneView {
+        writable,
         id: pane.member.id,
         name: pane.member.name,
         totals: PaneTotals {

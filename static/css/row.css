@@ -535,6 +535,15 @@ body:not(.kbd-nav) .row:hover .entry {
   display: none;
 }
 
+/* A read-only pane files nothing: no `+`, and no targets while a file is in
+ * the air. Hidden off the pane rather than left out of the row's markup,
+ * because a row fragment is rendered without knowing which pane it lands in —
+ * and the server refuses the upload either way. */
+.ledger-shell .pane.is-readonly .row .fadd,
+.ledger-shell .pane.is-readonly .row .fdrops {
+  display: none;
+}
+
 .fdrop {
   height: 26px;
   min-width: 30px;

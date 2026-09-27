@@ -96,6 +96,9 @@ pub async fn upload(
     let Some((slot, period, member_id)) = slot_for(&st, &auth, tx_id).await else {
         return crate::web::tx::say_only(t.file_not_tracked(), true);
     };
+    if let Err(refused) = crate::web::tx::may_write(&st, &auth, member_id).await {
+        return refused;
+    }
 
     let mut filename = String::new();
     let mut bytes: Vec<u8> = Vec::new();
@@ -165,6 +168,9 @@ pub async fn delete(
     let Some((slot, period, member_id)) = slot_for(&st, &auth, tx_id).await else {
         return refuse(t.file_not_tracked(), true);
     };
+    if let Err(refused) = crate::web::tx::may_write(&st, &auth, member_id).await {
+        return refused;
+    }
 
     match receipts::soft_delete(
         &st.pool,
@@ -198,14 +204,9 @@ pub async fn delete(
     }
 }
 
-/// A refusal with nothing to swap. The delete targets a row (or the edit
-/// form's file strip) with `outerHTML`, and an empty body swapped there would
-/// remove the very thing that was refused.
+/// A refusal with nothing to swap — see `tx::refuse`.
 fn refuse(message: &str, bad: bool) -> Response {
-    let mut res = crate::web::tx::say_only(message, bad);
-    res.headers_mut()
-        .insert("HX-Reswap", axum::http::HeaderValue::from_static("none"));
-    res
+    crate::web::tx::refuse(message, bad)
 }
 
 /// Where one of a row's files is on disk, and its extension — or `None` when

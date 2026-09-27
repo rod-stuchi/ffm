@@ -248,6 +248,9 @@ pub async fn new_rule(
     auth: Auth,
     Query(p): Query<NewParams>,
 ) -> Response {
+    if let Err(refused) = crate::web::tx::may_write(&st, &auth, p.member_id).await {
+        return refused;
+    }
     let kind = TxKind::parse(&p.kind).unwrap_or(TxKind::Out);
     let t = auth.catalog();
     let today = Local::now().date_naive();
@@ -330,6 +333,11 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
     };
     if !auth.viewer.sees_private_of(r.member_id) && r.visibility == Visibility::Private {
         return crate::web::tx::say_only(t.rule_none_on_row(), true);
+    }
+    // `E` opens a form, and a form is for writing: on somebody else's rule
+    // it says whose it is instead. `gd` still reads the details.
+    if let Err(refused) = crate::web::tx::may_write(&st, &auth, r.member_id).await {
+        return refused;
     }
 
     Html(RulePane {
@@ -702,6 +710,9 @@ pub async fn create(
     auth: Auth,
     Form(input): Form<RuleFormInput>,
 ) -> Response {
+    if let Err(refused) = crate::web::tx::may_write(&st, &auth, input.member_id).await {
+        return refused;
+    }
     let t = auth.catalog();
     let form = match input.to_form(&t) {
         Ok(f) => f,
@@ -784,16 +795,24 @@ pub async fn save(
     Form(input): Form<RuleFormInput>,
 ) -> Response {
     let t = auth.catalog();
+    let Ok(Some(rule)) = rules::get(&st.pool, id).await else {
+        return crate::web::tx::refuse(t.error_not_written(), true);
+    };
+    if let Err(refused) = rule_access(&st, &auth, &rule).await {
+        return refused;
+    }
     let form = match input.to_form(&t) {
         Ok(f) => f,
         Err(errors) => return rejected(&st, &auth, &input, Some(id), errors).await,
     };
     match rules::edit(&st.pool, Actor::User(auth.viewer.member_id), id, &form).await {
         Ok(true) => {
+            // The pane to re-render is the rule's owner's, read from the
+            // database — never from a hidden field somebody could change.
             finish(
                 &st,
                 &auth,
-                input.member_id,
+                rule.member_id,
                 &input.period,
                 t.rule_saved().to_string(),
             )
@@ -946,6 +965,9 @@ pub async fn delete(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>)
     let Ok(Some(r)) = rules::get(&st.pool, id).await else {
         return crate::web::tx::say_only(t.error_not_written(), true);
     };
+    if let Err(refused) = rule_access(&st, &auth, &r).await {
+        return refused;
+    }
     let period = Period::of(Local::now().date_naive()).to_string();
     match rules::soft_delete(&st.pool, Actor::User(auth.viewer.member_id), id).await {
         Ok(true) => {
@@ -960,6 +982,26 @@ pub async fn delete(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>)
         }
         _ => crate::web::tx::say_only(t.error_not_written(), true),
     }
+}
+
+/// Whether this viewer may change that rule — or the refusal to send.
+///
+/// A private rule somebody else owns is one this viewer cannot see, so it
+/// refuses as if it were not there; a visible one is still its owner's to
+/// change unless you are an admin. The rule pane's writes, the dropzone and
+/// Unlink all ask this.
+pub(crate) async fn rule_access(
+    st: &AppState,
+    auth: &Auth,
+    rule: &rules::Rule,
+) -> Result<(), Response> {
+    if rule.visibility == Visibility::Private && !auth.viewer.sees_private_of(rule.member_id) {
+        return Err(crate::web::tx::refuse(
+            auth.catalog().error_not_written(),
+            true,
+        ));
+    }
+    crate::web::tx::may_write(st, auth, rule.member_id).await
 }
 
 /// Reconcile, then re-render the pane whose rows just changed.

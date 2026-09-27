@@ -148,8 +148,8 @@ pub async fn attach(
     let Ok(Some(rule)) = rules::get(&st.pool, rule_id).await else {
         return say(t.error_not_written(), true);
     };
-    if !auth.viewer.sees_private_of(rule.member_id) {
-        return say(t.error_not_written(), true);
+    if let Err(refused) = crate::web::rules::rule_access(&st, &auth, &rule).await {
+        return refused;
     }
     let upload = match read_upload(&t, &mut form).await {
         Ok(u) => u,
@@ -626,7 +626,10 @@ impl BarcodeMeta {
 pub async fn meta(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<i64>) -> Response {
     let t = auth.catalog();
     match rules::get(&st.pool, rule_id).await {
-        Ok(Some(rule)) if auth.viewer.sees_private_of(rule.member_id) => {
+        Ok(Some(rule))
+            if rule.visibility != crate::domain::status::Visibility::Private
+                || auth.viewer.sees_private_of(rule.member_id) =>
+        {
             Html(BarcodeMeta::of_rule(&st, t, &rule)).into_response()
         }
         _ => Html(BarcodeMeta::empty(t)).into_response(),
@@ -689,8 +692,8 @@ pub async fn unlink(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<
     let Ok(Some(rule)) = rules::get(&st.pool, rule_id).await else {
         return crate::web::tx::say_only(t.error_not_written(), true);
     };
-    if !auth.viewer.sees_private_of(rule.member_id) {
-        return crate::web::tx::say_only(t.error_not_written(), true);
+    if let Err(refused) = crate::web::rules::rule_access(&st, &auth, &rule).await {
+        return refused;
     }
 
     let Ok(mut tx) = st.pool.begin().await else {

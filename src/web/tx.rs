@@ -166,7 +166,8 @@ pub async fn pane_fragment(
     // this fragment used to render the rows flat, which un-grouped a grouped
     // pane on every answer that re-rendered it.
     let grouped = auth.settings.ledger_group == "bucket";
-    let p = crate::web::ledger::view(pane, &t, currency, grouped);
+    let writable = auth.viewer.may_write(member_id);
+    let p = crate::web::ledger::view(pane, &t, currency, grouped, writable);
     let (panes, totals) = crate::web::ledger::totals(st, auth, period).await;
 
     say(
@@ -458,6 +459,9 @@ pub async fn add(State(st): State<AppState>, auth: Auth, Form(form): Form<AddFor
             true,
         );
     }
+    if let Err(refused) = may_write(&st, &auth, form.member_id).await {
+        return refused;
+    }
 
     let bucket = form.bucket.trim();
     let new = tx::NewTransaction {
@@ -495,12 +499,8 @@ pub async fn add(State(st): State<AppState>, auth: Auth, Form(form): Form<AddFor
 
 pub async fn delete(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
     let t = auth.catalog();
-    if !may_touch(&st, &auth, id).await {
-        return say(
-            error_row(&t, t.error_not_written()),
-            t.error_not_written(),
-            true,
-        );
+    if let Err(refused) = may_touch(&st, &auth, id).await {
+        return refused;
     }
     let actor = Actor::User(auth.viewer.member_id);
     match tx::soft_delete(&st.pool, actor, id).await {
@@ -560,8 +560,8 @@ pub async fn move_row(
     if auth.settings.ledger_group != "none" {
         return say_only(&t.group_refuses_reorder(&auth.settings.ledger_group), true);
     }
-    if !may_touch(&st, &auth, id).await {
-        return say_only(t.error_not_written(), true);
+    if let Err(refused) = may_touch(&st, &auth, id).await {
+        return refused;
     }
 
     match tx::reorder(
@@ -612,6 +612,22 @@ pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
             false,
         );
     };
+
+    // Undo is a write like any other: to a row this viewer may still change,
+    // and a re-attribution only by an admin, exactly as the gesture itself.
+    let target = if u.entity == "file" {
+        file_row(&st, u.entity_id).await
+    } else {
+        Some(u.entity_id)
+    };
+    if let Some(id) = target
+        && let Err(refused) = may_touch(&st, &auth, id).await
+    {
+        return refused;
+    }
+    if u.action == "reattribute" && !auth.viewer.is_admin() {
+        return refuse(t.reattribute_admin_only(), true);
+    }
 
     // A file change is undone by the vault service, which is the only thing
     // that may move a file; a transaction change by the ledger. `u` does not
@@ -760,12 +776,15 @@ async fn undo_file(st: &AppState, auth: &Auth, u: &tx::Undoable) -> bool {
     }
 }
 
-/// Whether this viewer may act on that row at all.
+/// Whether this viewer may act on that row at all — or the refusal to send.
 ///
-/// Privacy is not only a read rule: a row you cannot see is a row you cannot
-/// delete, or its absence from your ledger would be contradicted by its
-/// disappearance from somebody else's.
-async fn may_touch(st: &AppState, auth: &Auth, id: i64) -> bool {
+/// Privacy comes first, and is not only a read rule: a row you cannot see is
+/// a row you cannot delete, or its absence from your ledger would be
+/// contradicted by its disappearance from somebody else's. A row you *can*
+/// see is still somebody else's to change unless it is yours, or you are an
+/// admin — see `Viewer::may_write`.
+async fn may_touch(st: &AppState, auth: &Auth, id: i64) -> Result<(), Response> {
+    let t = auth.catalog();
     let row = sqlx::query!(
         r#"SELECT member_id AS "member_id!: i64", visibility AS "visibility!: String"
            FROM transactions WHERE id = ?1"#,
@@ -775,9 +794,39 @@ async fn may_touch(st: &AppState, auth: &Auth, id: i64) -> bool {
     .await;
 
     match row {
-        Ok(Some(r)) => r.visibility != "private" || auth.viewer.sees_private_of(r.member_id),
-        _ => false,
+        Ok(Some(r)) if r.visibility != "private" || auth.viewer.sees_private_of(r.member_id) => {
+            may_write(st, auth, r.member_id).await
+        }
+        _ => Err(refuse(t.error_not_written(), true)),
     }
+}
+
+/// Whether this viewer may change what `owner` owns — or the refusal, naming
+/// whose ledger it is. The one server-side answer every write asks: rows,
+/// rules and files alike.
+pub(crate) async fn may_write(st: &AppState, auth: &Auth, owner: i64) -> Result<(), Response> {
+    if auth.viewer.may_write(owner) {
+        return Ok(());
+    }
+    let t = auth.catalog();
+    let who = ledger::members(&st.pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .find(|m| m.id == owner)
+        .map(|m| m.name)
+        .unwrap_or_default();
+    Err(refuse(&t.read_only_ledger(&who), true))
+}
+
+/// A refusal with nothing to swap. Most row gestures target the row itself
+/// with `outerHTML`, and an empty body swapped there would remove the very
+/// thing that was refused.
+pub(crate) fn refuse(message: &str, bad: bool) -> Response {
+    let mut res = say_only(message, bad);
+    res.headers_mut()
+        .insert("HX-Reswap", axum::http::HeaderValue::from_static("none"));
+    res
 }
 
 // ---------------------------------------------------------------------------
@@ -866,8 +915,8 @@ pub(crate) async fn edit_files_answer(
 /// the rest of the ledger does not move.
 pub async fn edit_form(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
     let t = auth.catalog();
-    if !may_touch(&st, &auth, id).await {
-        return say_only(t.error_not_written(), true);
+    if let Err(refused) = may_touch(&st, &auth, id).await {
+        return refused;
     }
 
     let row = sqlx::query!(
@@ -947,8 +996,8 @@ pub async fn save_edit(
     Form(form): Form<EditForm>,
 ) -> Response {
     let t = auth.catalog();
-    if !may_touch(&st, &auth, id).await {
-        return say_only(t.error_not_written(), true);
+    if let Err(refused) = may_touch(&st, &auth, id).await {
+        return refused;
     }
     let title = form.title.trim();
     let bucket = form.bucket.trim();
@@ -1126,8 +1175,8 @@ pub async fn one_row(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>
 /// `p` — toggle private.
 pub async fn privacy(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
     let t = auth.catalog();
-    if !may_touch(&st, &auth, id).await {
-        return say_only(t.error_not_written(), true);
+    if let Err(refused) = may_touch(&st, &auth, id).await {
+        return refused;
     }
     match tx::toggle_privacy(&st.pool, Actor::User(auth.viewer.member_id), id, None).await {
         Ok(Some(now_private)) => {
@@ -1165,17 +1214,25 @@ pub async fn reattribute(
     Form(form): Form<MoveMemberForm>,
 ) -> Response {
     let t = auth.catalog();
-    if !may_touch(&st, &auth, id).await {
-        return say_only(t.error_not_written(), true);
+    if let Err(refused) = may_touch(&st, &auth, id).await {
+        return refused;
+    }
+    // Handing a row to somebody writes into *their* ledger, so it is an
+    // admin's gesture even on a row of your own.
+    if !auth.viewer.is_admin() {
+        return refuse(t.reattribute_admin_only(), true);
     }
 
-    let to_name = ledger::members(&st.pool)
+    // `to` is input: it has to name somebody who exists in this household.
+    let Some(to_name) = ledger::members(&st.pool)
         .await
         .unwrap_or_default()
         .into_iter()
         .find(|m| m.id == form.to)
         .map(|m| m.name)
-        .unwrap_or_default();
+    else {
+        return refuse(t.error_not_written(), true);
+    };
 
     match tx::reattribute(
         &st.pool,

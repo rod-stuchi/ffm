@@ -355,6 +355,17 @@ card in plain CSS.
   you can see and edit. `:profile` and privacy checks use the session's member
   id, never the focused pane's — otherwise focusing your spouse's pane would let
   you edit their preferences or expose what `private` hides from them.
+- **A non-admin reads the other ledgers and writes only their own.** Another
+  member's shared rows, rules and files are read-only to them: no add, edit,
+  delete, reorder, privacy toggle or file attach/remove, and no undo that
+  would reach into it. **Re-attribution (`Ctrl-H`/`Ctrl-L`) is admin-only**,
+  even on your own row — handing a row to somebody writes into *their*
+  ledger. The one server-side answer is `Viewer::may_write` (with
+  `tx::may_write`, `tx::may_touch` and `rules::rule_access` built on it), and
+  **every write endpoint added later must ask it** — the manual-paid tick and
+  batch operations included, when they exist. The pane shows `read-only` and
+  the keymap refuses before a request leaves the browser, but that is the page
+  saying so first; the server is the rule.
 - **An admin can preview their own session with admin rights switched off —
   this is not impersonation.** It never changes *who* is logged in: still the
   same member, own pane, own edits, own private rows all fully visible and
