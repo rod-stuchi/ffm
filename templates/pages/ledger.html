@@ -113,7 +113,7 @@
           picker opens — every time, so it is never stale after an edit —
           rather than on every ledger load for a popup that is usually closed.
           Open/closed is Alpine's; the fetch is HTMX's. -#}
-      <div class="mpop" x-show="picking" x-cloak x-ref="pop"
+      <div class="mpop" x-show="picking" x-cloak x-ref="pop" data-busy="none"
            x-init="$watch('picking', v => v && htmx.ajax('GET', '/months?period={{ period_key }}', { target: $refs.pop, swap: 'innerHTML' }))">
         {{ picker|safe }}
       </div>
@@ -590,6 +590,10 @@
     <div class="st">{{ household }} · {{ period }}</div>
     <div class="st stmember">{{ me_name }}{% if me_admin %} (admin){% endif %}</div>
     <div class="st grow msg" :class="{ bad: msgBad }" x-text="msg"></div>
+    {#- A request with no row or side pane to show itself on — a setting, `u`,
+        a settings pane opening. Right after the message, the one cell that
+        grows, so its coming and going moves nothing to its right. -#}
+    <div class="st busy" x-show="busyCount > 0" x-cloak>{% include "partials/loader.html" %}</div>
     {#- `x` — how many of the focused pane's rows are selected, and their sum,
         the way a spreadsheet shows the cells you picked. Rendered by the
         SERVER (`web::selection`): money is formatted in exactly one place,
@@ -608,6 +612,10 @@
     <div class="st right is-click" @click="cycleNu()" x-text="nuLabel"
          title="{{ t.profile_line_numbers() }}">{{ nu_label }}</div>
   </div>
+
+  {#- The loader, cloned onto whatever a request is about (`busyStart`). A
+      <template> so the markup is the server's, not a string in a script. -#}
+  <template id="ffm-loader">{% include "partials/loader.html" %}</template>
 </div>
 
 <script>
@@ -688,6 +696,12 @@ function ffmResetAmounts(form) {
   });
 }
 
+/* The loader's bookkeeping. `next` is the anchor the next `htmx.ajax` should
+   use — set and cleared around the one call, which is safe because htmx
+   fires `beforeRequest` synchronously inside it. `counts` is per element, so
+   two requests on one row do not clear each other's loader. */
+const ffmBusy = { next: null, counts: new WeakMap() };
+
 function ledger() {
   return {
     // Where the server put us: your own pane by default, or whatever `?pane=`
@@ -756,6 +770,11 @@ function ledger() {
     menuStyle: '',
     msg: '',
     msgBad: false,
+    // Requests in flight with nowhere closer to show themselves than the
+    // statusline. Row and pane anchors are counted in `ffmBusy`, outside the
+    // component: they hold DOM elements, which Alpine's reactivity would wrap.
+    busyCount: 0,
+    busyOffline: {{ t.busy_offline()|json|safe }},
     pending: '',
     notARule: {{ not_a_rule|json|safe }},
     ruleDeleted: {{ rule_deleted|json|safe }},
@@ -879,6 +898,72 @@ function ledger() {
       // what every row action already treats as "nothing to act on".
       const wrap = el && el.closest('div[id^="row-"]');
       return wrap ? wrap.id.slice(4) : null;
+    },
+
+    // --- the loader --------------------------------------------------------
+
+    /// `htmx.ajax`, naming where its loader belongs. Most requests find their
+    /// own place (`busyAnchor`); this is for the ones whose target is not
+    /// where you are looking — a side pane opening into an empty mount, a
+    /// move swapped into `body` — and for background requests, which pass
+    /// `'none'`.
+    ajax(method, url, opts, anchor) {
+      ffmBusy.next = anchor || 'status';
+      try { return htmx.ajax(method, url, opts); }
+      finally { ffmBusy.next = null; }
+    },
+
+    /// The focused row's wrapper: the anchor for anything done to the row
+    /// under the cursor. The statusline when there is no row to stand on.
+    focusedRow() {
+      return this.rows()[this.row]?.closest('div[id^="row-"]') || 'status';
+    },
+
+    /// Where a request's loader goes, closest first: the row it is about, the
+    /// side pane it came from, and otherwise the statusline.
+    busyAnchor(elt) {
+      const next = ffmBusy.next;
+      if (next) return next === 'none' ? null : next;
+      if (!elt || !elt.closest) return 'status';
+      if (elt.closest('[data-busy="none"]')) return null;
+      return elt.closest('div[id^="row-"]') || elt.closest('.rulepane') || 'status';
+    },
+
+    busyStart(anchor) {
+      if (!anchor) return;
+      if (anchor === 'status') { this.busyCount++; return; }
+      const n = ffmBusy.counts.get(anchor) || 0;
+      ffmBusy.counts.set(anchor, n + 1);
+      if (n) return;
+      anchor.classList.add('is-busy');
+      const loader = document.getElementById('ffm-loader').content.firstElementChild.cloneNode(true);
+      // A side pane shows it in its header, beside the title; anything else
+      // lays it over itself.
+      const head = anchor.querySelector(':scope > .rp-head');
+      if (head) head.insertBefore(loader, head.querySelector('.rp-close'));
+      else anchor.appendChild(loader);
+    },
+
+    /// Also called on an anchor a swap has already replaced — harmless, and
+    /// the new element never had the class.
+    busyEnd(anchor) {
+      if (!anchor) return;
+      if (anchor === 'status') { this.busyCount = Math.max(0, this.busyCount - 1); return; }
+      const n = (ffmBusy.counts.get(anchor) || 1) - 1;
+      if (n > 0) { ffmBusy.counts.set(anchor, n); return; }
+      ffmBusy.counts.delete(anchor);
+      anchor.classList.remove('is-busy');
+      anchor.querySelectorAll(':scope > .loader, :scope > .rp-head > .loader').forEach(l => l.remove());
+    },
+
+    /// A plain `fetch` fires no htmx events, so the two that exist wrap
+    /// themselves in this — the whole chain, swap included, so the loader
+    /// stays until the answer is on screen.
+    busyFetch(anchor, promise) {
+      this.busyStart(anchor);
+      return promise
+        .catch(() => this.say(this.busyOffline, true))
+        .finally(() => this.busyEnd(anchor));
     },
 
     say(message, bad) { this.msg = message; this.msgBad = !!bad; },
@@ -1168,8 +1253,8 @@ function ledger() {
       this.closeSplit();
       this.closeLog();
       this.closeRule();
-      htmx.ajax('GET', '/rules/new?member_id=' + member + '&kind=' + kind,
-                { target: this.mount(), swap: 'innerHTML' })
+      this.ajax('GET', '/rules/new?member_id=' + member + '&kind=' + kind,
+                { target: this.mount(), swap: 'innerHTML' }, this.focusedRow())
            .then(() => { this.aimArrow(); this.revealPaneSide(); });
     },
 
@@ -1186,8 +1271,8 @@ function ledger() {
       this.closeSplit();
       this.closeLog();
       this.closeRule();
-      htmx.ajax('GET', '/rules/' + ruleId + '/edit',
-                { target: this.mount(), swap: 'innerHTML' })
+      this.ajax('GET', '/rules/' + ruleId + '/edit',
+                { target: this.mount(), swap: 'innerHTML' }, this.focusedRow())
            .then(() => { this.aimArrow(); this.revealPaneSide(); });
     },
 
@@ -1365,8 +1450,8 @@ function ledger() {
       el.dataset.src = f.href;
       el.innerHTML = '';
       const page = (f.page.match(/p\.\s*(\d+)/) || [])[1];
-      htmx.ajax('GET', f.href + '/view' + (page ? '?page=' + page : ''),
-                { target: el, swap: 'innerHTML' })
+      this.ajax('GET', f.href + '/view' + (page ? '?page=' + page : ''),
+                { target: el, swap: 'innerHTML' }, el)
         .then(() => el.querySelector('[data-owed]')?.scrollIntoView({ block: 'start' }));
     },
 
@@ -1399,8 +1484,12 @@ function ledger() {
       const f = this.removingFile;
       this.removingFile = null;
       if (!f) return;
-      htmx.ajax('POST', '/tx/' + f.id + '/file/' + f.kind + '/delete',
-                { target: '#row-' + f.id, swap: 'outerHTML' })
+      // The loader goes on the carousel's stage, not the row: the row is
+      // under the full-viewport carousel, and the file on show is what the
+      // removal is about.
+      this.ajax('POST', '/tx/' + f.id + '/file/' + f.kind + '/delete',
+                { target: '#row-' + f.id, swap: 'outerHTML' },
+                document.querySelector('.cviewin') || document.getElementById('row-' + f.id) || 'status')
         .then(() => {
           const still = document.querySelector('#row-' + f.id + ' .fbadge[href$="/' + f.kind + '"]');
           if (still || !this.carousel) return;
@@ -1635,8 +1724,8 @@ function ledger() {
       this.selAsked = ask;
       if (!ids.length) { cell.innerHTML = ''; return; }
       const period = document.querySelector('.ledger-shell')?.dataset.period || '';
-      htmx.ajax('GET', '/tx/selection?member=' + member + '&period=' + period +
-                '&ids=' + ids.join(','), { target: '#stsel', swap: 'outerHTML' });
+      this.ajax('GET', '/tx/selection?member=' + member + '&period=' + period +
+                '&ids=' + ids.join(','), { target: '#stsel', swap: 'outerHTML' }, 'none');
     },
 
     /// Ctrl-H / Ctrl-L. A private row confirms first: handing a hidden
@@ -1669,9 +1758,10 @@ function ledger() {
     },
 
     doMove(id, to) {
-      htmx.ajax('POST', '/tx/' + id + '/member', {
+      const row = document.getElementById('row-' + id) || 'status';
+      this.ajax('POST', '/tx/' + id + '/member', {
         target: 'body', swap: 'none', values: { to },
-      });
+      }, row);
     },
 
     // --- folds -----------------------------------------------------------
@@ -1797,9 +1887,9 @@ function ledger() {
     move(delta) {
       const id = this.rowUnderCursor();
       if (!id || this.readOnly()) return;
-      htmx.ajax('POST', '/tx/' + id + '/move', {
+      this.ajax('POST', '/tx/' + id + '/move', {
         target: 'body', swap: 'none', values: { delta },
-      }).then(() => this.cursorTo(id));
+      }, this.focusedRow()).then(() => this.cursorTo(id));
     },
 
     /// Put the cursor back on a row by id, wherever the swap left it.
@@ -1915,7 +2005,7 @@ function ledger() {
       this.closeSplit();
       this.closeLog();
       this.closeRule();
-      htmx.ajax('GET', url, { target: this.mount(), swap: 'innerHTML' })
+      this.ajax('GET', url, { target: this.mount(), swap: 'innerHTML' }, this.focusedRow())
            .then(() => { this.aimArrow(); this.revealPaneTop(); this.revealPaneSide(); });
     },
 
@@ -2271,7 +2361,8 @@ function ledger() {
       // htmx.ajax cannot carry a FormData body, so this one request is a plain
       // fetch and the response is swapped by hand. It still speaks the same
       // contract: a row fragment back, and the statusline in HX-Trigger.
-      fetch('/tx/' + id + '/file/' + kind, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
+      const row = document.getElementById('row-' + id) || 'status';
+      this.busyFetch(row, fetch('/tx/' + id + '/file/' + kind, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
         .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
         .then(({ html, trigger }) => {
           // Through htmx's own swap, not `outerHTML`: the answer is the row
@@ -2289,7 +2380,7 @@ function ledger() {
             if (payload) this.say(payload.message, payload.bad);
           }
           this.paint();
-        });
+        }));
     },
 
     openLog() {
@@ -2353,6 +2444,24 @@ function ledger() {
       // amount) names the row it moved; the cursor follows it by id, the same
       // way it follows a row that `J`/`K` moved.
       document.body.addEventListener('ffm:cursor', e => this.cursorTo(String(e.detail.id)));
+      // Every htmx request, declarative or `htmx.ajax`, shows its loader from
+      // here. It ends on the XHR's own `loadend` rather than on
+      // `htmx:afterRequest`: that event is dispatched on the element that
+      // made the request, and a row swapped out by its own answer is no
+      // longer in the document for it to bubble from. `loadend` fires after
+      // the swap, on success, error, abort and timeout alike.
+      document.body.addEventListener('htmx:beforeRequest', (e) => {
+        // `htmx.ajax` without a `source` reports `body` as the element that
+        // asked; what it is about is then its target.
+        const d = e.detail;
+        const anchor = this.busyAnchor(d.elt === document.body ? d.target : d.elt);
+        const xhr = d.xhr;
+        this.busyStart(anchor);
+        xhr.addEventListener('loadend', () => this.busyEnd(anchor), { once: true });
+        // A dropped connection answers nothing, and the loader vanishing with
+        // nothing changed reads exactly like the key that was not pressed.
+        xhr.addEventListener('error', () => this.say(this.busyOffline, true), { once: true });
+      });
       document.body.addEventListener('htmx:afterSwap', () => {
         this.markDrafts();
         this.paintSelection();

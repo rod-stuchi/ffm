@@ -143,7 +143,7 @@
                placeholder="{{ t.months_placeholder() }}" autocomplete="off"
                {% if errors.focus("months") %}autofocus{% endif %}
                hx-get="/rules/months" hx-target="#monthsback" hx-swap="outerHTML"
-               hx-trigger="input changed delay:150ms">
+               hx-trigger="input changed delay:150ms" data-busy="none">
         <span class="hint mono">{{ t.months_help() }}</span>
         {%- if let Some(m) = errors.get("months") %}
         <span class="ferr">{{ m }}</span>
@@ -374,7 +374,10 @@ function rulePane() {
       const rule = {{ id.unwrap_or(0) }};
       const period = document.querySelector('.ledger-shell')?.dataset.period || '';
       const url = rule ? '/rules/' + rule + '/barcode?period=' + period : '/rules/barcode/preview';
-      fetch(url, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
+      // The shell owns the loader; this pane is the anchor, so it shows in
+      // the header beside the title, as every request from here does.
+      const shell = Alpine.$data(document.querySelector('.ledger-shell'));
+      shell.busyFetch(this.$root, fetch(url, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
         .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
         .then(({ html, trigger }) => {
           if (html.trim()) {
@@ -396,10 +399,9 @@ function rulePane() {
           }
           if (trigger) {
             const payload = JSON.parse(trigger)['ffm:say'];
-            const shell = document.querySelector('.ledger-shell');
-            if (payload && shell) Alpine.$data(shell).say(payload.message, payload.bad);
+            if (payload) shell.say(payload.message, payload.bad);
           }
-        });
+        }));
     },
 
     digitsOnly(e) {

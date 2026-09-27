@@ -1,0 +1,13 @@
+{#- The loader: the logo's three houses, lit one after another while a
+    request is in flight (`static/css/busy.css`).
+
+    Only the houses — no line, no wordmark, and no family mask: the mask's id
+    is global, and a second copy of it would collide with the logo's. The
+    colors are the same fixed --logo-* brand values, so it reads the same on
+    all eleven themes. It never blocks anything: it is shown next to the
+    action it answers, on the row, the side pane or the statusline. -#}
+<svg class="loader" viewBox="0 14 120 80" role="status" aria-label="{{ t.busy_label() }}" focusable="false">
+  <polygon class="logo-h1" points="4,90 4,66 20,50 36,66 36,90"/>
+  <polygon class="logo-h2" points="44,90 44,50 60,34 76,50 76,90"/>
+  <polygon class="logo-h3" points="84,90 84,34 100,18 116,34 116,90"/>
+</svg>

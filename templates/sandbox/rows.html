@@ -67,5 +67,21 @@
     <p>{{ spec.why|safe }}</p>
   </div>
   {% endfor %}
+
+  {#- Not a fixture: busy is a class the browser puts on the row's wrapper
+      while a request is in flight (`busyStart`), never something the server
+      renders — so it is written here by hand around a real row. -#}
+  {% if let Some(s) = ledger.first() %}
+  <div class="spec" id="busy">
+    <div class="spec-head"><span class="spec-n">··</span><h2>Busy</h2></div>
+    <div class="spec-stage">
+      <div id="row-busy" class="is-busy">{% let v = s.view %}{% include "partials/row.html" %}{% include "partials/loader.html" %}</div>
+    </div>
+    <p>A request about this row is in flight — <code>e</code>, Save, Cancel, <code>gl</code>,
+      <code>E</code>, <code>J</code>. The row dims and the logo's three houses light in turn over
+      it, 150ms after the request leaves, so a fast answer never flickers. Never a dialog: the
+      rest of the ledger stays readable.</p>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

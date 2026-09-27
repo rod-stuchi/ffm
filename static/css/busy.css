@@ -1,0 +1,175 @@
+/* --- the loader: a request in flight --------------------------------------
+ *
+ * The logo's three houses (partials/loader.html), dim, each lighting up in
+ * turn. It is shown next to the action it answers — on the row, in the side
+ * pane's header, or in the statusline — and never over the screen: nothing
+ * about a request in flight should stop you reading the ledger.
+ *
+ * **It waits 150ms before it shows**, and so does the dimming behind it. On
+ * the household's LAN almost every request is back well before that, and a
+ * loader flashing on every keystroke is noise; on a slow link it is there
+ * almost at once. The wait is a delayed zero-length animation rather than a
+ * JavaScript timer: a request that finishes first removes the class, and the
+ * animation never ran. */
+
+.loader {
+  display: block;
+  height: 16px;
+  width: auto;
+  opacity: 0;
+  animation: busy-in 0s 150ms forwards;
+  pointer-events: none;
+}
+
+.loader polygon {
+  opacity: 0.25;
+  animation: busy-cycle 0.9s ease-in-out infinite;
+}
+
+.loader .logo-h1 {
+  fill: var(--logo-h1);
+}
+
+.loader .logo-h2 {
+  fill: var(--logo-h2);
+  animation-delay: 0.3s;
+}
+
+.loader .logo-h3 {
+  fill: var(--logo-h3);
+  animation-delay: 0.6s;
+}
+
+@keyframes busy-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes busy-dim {
+  to {
+    opacity: 0.45;
+  }
+}
+
+@keyframes busy-cycle {
+  0%,
+  66%,
+  100% {
+    opacity: 0.25;
+  }
+
+  33% {
+    opacity: 1;
+  }
+}
+
+/* On a row: the row dims and the houses sit centered over it. The wrapper
+ * (`#row-{id}`) carries the class, so the edit form — which replaces the row
+ * inside the same wrapper — gets the identical treatment on Save and Cancel. */
+[id^="row-"].is-busy {
+  position: relative;
+}
+
+[id^="row-"].is-busy > .row {
+  animation: busy-dim 0s 150ms forwards;
+}
+
+[id^="row-"].is-busy > .loader {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 22px;
+  transform: translate(-50%, -50%);
+}
+
+/* In a side pane: in its header, beside the title, with the body dimmed. */
+.rulepane.is-busy > .rp-body {
+  animation: busy-dim 0s 150ms forwards;
+}
+
+.rp-head > .loader {
+  height: 14px;
+}
+
+/* The carousel: in the middle of the viewport it fills, whether the stage is
+ * empty (a file loading) or scrolled partway down a long PDF (the file on
+ * show being removed) — which is also why it is fixed rather than placed in
+ * the stage's own flow. */
+.cviewin.is-busy > :not(.loader) {
+  animation: busy-dim 0s 150ms forwards;
+}
+
+.cviewin > .loader {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  height: 28px;
+  transform: translate(-50%, -50%);
+}
+
+/* The statusline's cell. It sits right after the message, which is the one
+ * cell that grows, so appearing and disappearing moves nothing to its right. */
+.st.busy {
+  display: flex;
+  align-items: center;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.st.busy .loader {
+  height: 12px;
+}
+
+/* The pre-auth pages: in the button that was pressed. A plain form post is
+ * answered by a whole new page, so there is no row or pane to dim — the
+ * button is the only thing on screen the action belongs to. A button with a
+ * key-cap trades the cap for the houses; one without (the language and
+ * light/dark switches) fades its label and shows them in its middle. */
+.btn.is-busy {
+  position: relative;
+}
+
+.btn.is-busy > .loader {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 14px;
+  transform: translate(-50%, -50%);
+}
+
+.btn.is-busy:has(> kbd) > .loader {
+  left: auto;
+  right: 14px;
+  transform: translateY(-50%);
+}
+
+.btn.is-busy > kbd,
+.btn.is-busy:not(:has(> kbd)) > :not(.loader) {
+  animation: busy-out 0s 150ms forwards;
+}
+
+/* And the form's fields dim behind it, on the same delay — the row's
+ * treatment, applied to the only thing a sign-in form has instead of a row. */
+form.is-busy .f {
+  animation: busy-dim 0s 150ms forwards;
+}
+
+/* On an accent fill the houses take --paper, like any text there: the brand
+ * colors are chosen against the page ground, not against the accent. */
+.btn.pri > .loader polygon {
+  fill: var(--paper);
+}
+
+@keyframes busy-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader polygon {
+    animation: none;
+    opacity: 0.6;
+  }
+}

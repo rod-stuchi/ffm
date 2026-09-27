@@ -557,3 +557,7 @@ carousel-remove = Remove
 carousel-remove-title = Remove this { $file }?
 carousel-remove-body = It moves to your trash folder in the vault, never off the disk. Press u to put it back.
 carousel-remove-yes = Remove
+
+# --- the loader: a request in flight -------------------------------------------
+busy-label = Working…
+busy-offline = No answer from the server — nothing changed. Try again.

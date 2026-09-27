@@ -21,6 +21,7 @@ understood:
 | private | lock-icon glyph, full color when set, faint when not | hidden from other members, never from admin |
 | deleted | dimmed, strikethrough, deletion date | soft delete, row retained; `u` clears the mark on this same row |
 | skeleton | shimmer bars, **identical geometry** | in flight |
+| busy | dimmed, the logo's three houses lit in turn over it | a request about this row is in flight — see The loader, below |
 | error | red ground, message + **Try Again** | server said no, nothing was written |
 | editing | the row opens into its own form, Cancel / Save at its foot | `e` — see Edit fields |
 | rule open | accent outline, the rule pane's arrow pointing at it | `E` — see Edit fields |
@@ -102,6 +103,7 @@ The statusline carries, left to right:
 | household · period | which ledger, which month |
 | member | the **session's** member and `(admin)` when admin powers are actually in effect, so it reads as a member under preview-as-non-admin |
 | message | the same channel the pre-auth pages use |
+| busy | the loader, while a request with no row or pane to show itself on is in flight — a setting, `u`, a settings pane opening. After the message, the one cell that grows, so its coming and going moves nothing to its right |
 | selection | `x`: `3 of 5 selected · Σ R$ 588,20` — how many of the **focused pane's** rows are selected, and their sum written like the pane header (`Σ + …` for incomes only; `in · out · net` for a mix, `~` on a projection). Rendered by the server from the same pane query as the header; hidden while nothing in the pane is selected |
 | buffer | the pending count and key prefix, so a half-typed `3d` or `g` is visible rather than silently remembered |
 | position | `4/7` in the focused pane |
@@ -130,6 +132,47 @@ than disabling it. `preview` is the exception and follows the *role* rather
 than whether its powers are in effect: it is the toggle itself, the same
 category as the badge, and dropping it while previewing would say there is no
 way back.
+
+### The loader
+
+On a slow link every gesture that asks the server something — `e`, Save,
+Cancel, `gl`, `E`/`A`/`I`, `J`/`K`, `p`, `dd`, `:profile` — used to show
+nothing until the answer landed, which reads as a key that did not work.
+
+- **The logo's three houses, lit one after another** (`partials/loader.html`).
+  Only the houses: the mask behind the middle one has a global id, and a
+  second copy would collide with the logo's.
+- **Next to the action, never over the screen.** A row action dims the row
+  and puts the houses on it; the rule editor and the change log show them in
+  their header — and opening either shows them on the focused row, because
+  the empty column the pane will fill is not where you are looking. The
+  carousel shows them in the middle of its stage. Anything with no closer
+  place — a setting, `u`, a settings pane — uses the statusline. No dialog, no
+  backdrop: a request in flight is no reason to stop reading the ledger.
+- **150ms before it shows**, and the dimming with it — a delayed zero-length
+  CSS animation, not a timer. On the household's LAN almost every answer is
+  back first, so nothing flickers; on a slow link it is there almost at once.
+- **One mechanism.** Every htmx request passes through `htmx:beforeRequest`
+  and ends on its XHR's `loadend` — not `htmx:afterRequest`, which is
+  dispatched on the requesting element, and a row swapped out by its own
+  answer is no longer in the document to bubble from. The two plain `fetch`
+  uploads wrap themselves in `busyFetch`. A background request (the
+  selection sum, the month picker, the months read-back) opts out with
+  `data-busy="none"` or `'none'`.
+- **A dropped connection says so** in the statusline, since a loader that
+  vanishes with nothing changed is the same confusion again.
+- **The pre-auth pages show it in the button that was pressed.** `/login`,
+  `/setup`, `/invite` and the language and light/dark switches are plain
+  form posts answered by a whole new page — no htmx, no row, no pane — so a
+  `submit` listener puts the houses where the key-cap was (or, on a button
+  without one, over its faded label). `--paper` on the accent fill, like any
+  text there. Alt-L and Alt-T use `requestSubmit()` so they show it too, and
+  a page restored from the back/forward cache clears it.
+- **And the form goes `inert` while its post is in flight** — its fields dim
+  and stop taking focus, clicks and keys, and a second Enter cannot post
+  twice. Not `disabled`: a disabled field is left out of the post, an inert
+  one is still sent, and the browser builds that list after the `submit`
+  handler has run.
 
 ### The gutter, and which half of it the server can decide
 

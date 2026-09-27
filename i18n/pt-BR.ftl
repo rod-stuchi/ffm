@@ -526,3 +526,7 @@ carousel-remove = Remover
 carousel-remove-title = Remover este arquivo ({ $file })?
 carousel-remove-body = Ele vai para a lixeira do seu cofre, nunca sai do disco. Aperte u para trazer de volta.
 carousel-remove-yes = Remover
+
+# --- the loader: a request in flight -------------------------------------------
+busy-label = Carregando…
+busy-offline = O servidor não respondeu — nada foi alterado. Tente de novo.

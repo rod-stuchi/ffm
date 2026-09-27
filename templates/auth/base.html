@@ -60,6 +60,7 @@
 
 {#- Alt-combinations, never bare letters: pre-auth is not modal, so a bare key
     would be swallowed the moment somebody types it into a password field. -#}
+<template id="ffm-loader">{% include "partials/loader.html" %}</template>
 <script>
 document.addEventListener('keydown', function (e) {
   if (!e.altKey || e.ctrlKey || e.metaKey) return;
@@ -67,7 +68,48 @@ document.addEventListener('keydown', function (e) {
   var form = k === 'l' ? 'lang' : k === 't' ? 'theme' : null;
   if (!form) return;
   e.preventDefault();
-  document.querySelector('form[action="/' + form + '"]').submit();
+  // `requestSubmit`, not `submit`: only the former fires the submit event,
+  // and that event is what shows the loader below.
+  document.querySelector('form[action="/' + form + '"]').requestSubmit();
+});
+
+// Every form here is a plain post answered by a whole new page, so on a slow
+// link the old one just sat there after Enter, looking like it had not
+// heard. The loader goes in the button that was pressed — the same houses the
+// app shows next to its own actions, after the same 150ms, so a fast answer
+// never flickers.
+document.addEventListener('submit', function (e) {
+  var btn = e.submitter || e.target.querySelector('[type="submit"]');
+  if (!btn || btn.classList.contains('is-busy')) return;
+  // The form too, which dims its fields: what was typed is on its way, and
+  // the fields reading as settled says so. And `inert`, so they ARE settled:
+  // typing into a field whose value has already left is typing into nothing,
+  // and a second Enter would post twice. Not `disabled` — a disabled field
+  // is left out of the post, while an inert one is still sent, and the
+  // browser builds that list after this handler has run.
+  e.target.classList.add('is-busy');
+  e.target.inert = true;
+  // The browser moves focus off an inert field only at its next frame; the
+  // field Enter was pressed in lets go now.
+  if (e.target.contains(document.activeElement)) document.activeElement.blur();
+  btn.classList.add('is-busy');
+  btn.setAttribute('aria-busy', 'true');
+  btn.appendChild(document.getElementById('ffm-loader').content.firstElementChild.cloneNode(true));
+});
+
+// Back to a page the browser kept in its cache: the request it was waiting
+// on is long over, so the button must not still say it is.
+window.addEventListener('pageshow', function (e) {
+  if (!e.persisted) return;
+  document.querySelectorAll('form.is-busy').forEach(function (form) {
+    form.classList.remove('is-busy');
+    form.inert = false;
+  });
+  document.querySelectorAll('.btn.is-busy').forEach(function (btn) {
+    btn.classList.remove('is-busy');
+    btn.removeAttribute('aria-busy');
+    btn.querySelectorAll('.loader').forEach(function (l) { l.remove(); });
+  });
 });
 </script>
 </body>
