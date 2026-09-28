@@ -245,21 +245,27 @@ pub async fn set_member(
             // same palette table the app itself uses, so the preview provably
             // cannot drift from the real thing.
             if key == MemberKey::ThemeName {
-                let css = crate::ui::theme::render(
-                    settings::member_settings(&st.pool, auth.viewer.member_id)
-                        .await
-                        .unwrap_or_default()
-                        .theme,
-                    auth.mode,
-                    &auth.settings.theme_overrides,
-                )
-                .to_css();
+                let palette = settings::member_settings(&st.pool, auth.viewer.member_id)
+                    .await
+                    .unwrap_or_default()
+                    .theme;
+                let css =
+                    crate::ui::theme::render(palette, auth.mode, &auth.settings.theme_overrides)
+                        .to_css();
                 // `hx-swap-oob` is honored even though the form asks for
                 // `hx-swap="none"`: out-of-band content is matched by id and
                 // applied separately from the (absent) main swap.
                 let body = format!(r#"<style id="ffm-theme" hx-swap-oob="true">{css}</style>"#);
+                // And the sign-in page follows: `ffm.palette` is kept in step
+                // with the row here, not only at sign-out, so a session that
+                // simply expires still leaves the right palette behind.
+                let jar =
+                    axum_extra::extract::CookieJar::new().add(crate::web::session::pref_cookie(
+                        crate::web::session::PALETTE,
+                        palette.key().to_string(),
+                    ));
                 return crate::web::tx::say(
-                    axum::response::Html(body).into_response(),
+                    (jar, axum::response::Html(body)).into_response(),
                     &t.settings_saved(&form.key),
                     false,
                 );

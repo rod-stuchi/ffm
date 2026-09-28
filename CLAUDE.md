@@ -172,11 +172,17 @@ property of the **device** — the same person uses a bright laptop and a dark
 phone — so it lives in the `ffm.theme` cookie alongside `system`.
 
 Keeping them separate is what makes a pre-auth page themeable at all: `/login`
-can honor your light/dark without knowing who you are, and falls back to the
-bundled `ffm` palette because an anonymous visitor's palette choice would have
-nowhere to live. `/setup` and `/invite` are the exception that proves it — they
-*do* show the full 11-palette picker, because there it's a form field writing
-`member_settings`, not chrome.
+can honor your light/dark without knowing who you are. **Its palette is the
+last signed-in member's, from an `ffm.palette` cookie** — amended from "always
+the bundled `ffm`", which made signing out look like leaving for another app.
+The cookie is written from `member_settings` at sign-in, on a palette change
+and at sign-out, is never read once signed in (the row decides there), and is
+`ffm` when absent or unknown. A cookie and not `localStorage` for `ffm.lang`'s
+reason: storage reaches the page only after a script runs, which is a flash of
+`ffm` and a repaint. There is still no picker on `/login` — an anonymous
+visitor's own choice would have nowhere to live. `/setup` and `/invite` are the
+exception that proves it — they *do* show the full 11-palette picker, because
+there it's a form field writing `member_settings`, not chrome.
 
 **The picker previews by swapping a server-rendered `<style>` block**, not by
 recomputing colors in JS: the control does an `hx-get` and the server returns

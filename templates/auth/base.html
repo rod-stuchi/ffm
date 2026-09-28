@@ -15,10 +15,10 @@
 <title>{{ chrome.household }}</title>
 <link rel="stylesheet" href="/static/css/build.css">
 {% include "partials/icons.html" %}
-{#- The 11 tokens as the full light/dark triple. An anonymous visitor has
-    nowhere to keep a palette choice, so this is always the bundled `ffm` one —
-    but their light/dark still applies, which is the whole reason the two facts
-    live in different places. -#}
+{#- The 11 tokens as the full light/dark triple, in the palette of whoever
+    last signed in on this device (`ffm.palette`; `ffm` for nobody). Light/dark
+    comes from its own cookie, which is the whole reason the two facts live in
+    different places. -#}
 <style id="ffm-theme">{{ chrome.theme_css|safe }}</style>
 </head>
 <body>
@@ -33,7 +33,7 @@
   <div class="status">
     <div class="st">{{ chrome.where_label }} · {{ chrome.household_slug }}</div>
     <div class="st grow msg{% if chrome.msg_bad %} bad{% endif %}">{{ chrome.msg }}</div>
-    <div class="st right">{{ chrome.lang_code }} · ffm</div>
+    <div class="st right">{{ chrome.lang_code }} · {{ chrome.palette }}</div>
   </div>
 
   <div class="auth-chrome">

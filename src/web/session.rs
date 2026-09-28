@@ -1,6 +1,6 @@
 //! Cookies, and the extractor every authenticated handler asks for.
 //!
-//! Three cookies, and which is which matters:
+//! Four cookies, and which is which matters:
 //!
 //! * **`ffm.sid`** — the session. Opaque, `HttpOnly`, `SameSite=Lax`. It
 //!   carries a random id and nothing else; the member it belongs to is a row.
@@ -12,13 +12,19 @@
 //! * **`ffm.theme`** — light / dark / system. A property of the *device*, not
 //!   of the member, which is exactly what lets `/login` honor it without
 //!   knowing who you are.
+//! * **`ffm.palette`** — the palette of whoever last signed in on this device,
+//!   so the sign-in page after `:logout` looks like the app you just left. A
+//!   cookie for `ffm.lang`'s reason: in `localStorage` it would reach the page
+//!   only after a script ran, as a flash of `ffm` and a repaint. Written from
+//!   `member_settings` at sign-in, on a palette change and at sign-out; read
+//!   only before sign-in, where there is no member row to ask.
 
 use crate::db::auth::{self, Session};
 use crate::db::settings::{self, MemberSettings};
 use crate::domain::viewer::Viewer;
 use crate::state::AppState;
 use crate::ui::i18n::{Catalog, Lang};
-use crate::ui::theme::ModePref;
+use crate::ui::theme::{ModePref, ThemeName};
 use axum::extract::FromRequestParts;
 use axum::http::header::{ACCEPT_LANGUAGE, USER_AGENT};
 use axum::http::request::Parts;
@@ -29,6 +35,7 @@ use axum_extra::extract::cookie::{Cookie, SameSite};
 pub const SID: &str = "ffm.sid";
 pub const LANG: &str = "ffm.lang";
 pub const THEME: &str = "ffm.theme";
+pub const PALETTE: &str = "ffm.palette";
 
 /// A year. Language and light/dark are preferences, not secrets with a
 /// lifetime.
@@ -67,6 +74,14 @@ pub fn mode_of(jar: &CookieJar) -> ModePref {
     jar.get(THEME)
         .map(|c| ModePref::parse(c.value()))
         .unwrap_or(ModePref::System)
+}
+
+/// The pre-auth palette. Anything the cookie does not name — no cookie, a
+/// palette since removed, a hand-edited value — is the bundled `ffm`.
+pub fn palette_of(jar: &CookieJar) -> ThemeName {
+    jar.get(PALETTE)
+        .and_then(|c| ThemeName::parse(c.value()))
+        .unwrap_or_default()
 }
 
 /// Pre-login language resolution, in order: the cookie, then `Accept-Language`
@@ -220,6 +235,18 @@ mod tests {
         // Expiry is the sessions row, not the cookie: two answers would
         // eventually disagree, and the row is the one that can be revoked.
         assert!(c.max_age().is_none());
+    }
+
+    #[test]
+    fn the_palette_cookie_falls_back_to_ffm() {
+        let jar = CookieJar::new();
+        assert_eq!(palette_of(&jar), ThemeName::default());
+        let jar = jar.add(pref_cookie(PALETTE, "nonsense".into()));
+        assert_eq!(palette_of(&jar), ThemeName::default());
+        for name in ThemeName::ALL {
+            let jar = CookieJar::new().add(pref_cookie(PALETTE, name.key().into()));
+            assert_eq!(palette_of(&jar), name);
+        }
     }
 
     #[test]

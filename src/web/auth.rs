@@ -37,6 +37,9 @@ pub struct Chrome {
     pub household: String,
     pub household_slug: String,
     pub theme_css: String,
+    /// The palette's key, for the statusline: `ffm` unless somebody has
+    /// signed in on this device.
+    pub palette: &'static str,
     pub attr: Option<&'static str>,
     pub lang_code: &'static str,
     pub lang_label: &'static str,
@@ -86,6 +89,7 @@ async fn chrome(
     let house = ledger::household(&st.pool).await.ok().flatten();
     let lang = session::pre_auth_lang(jar, parts, house.as_ref().map(|h| h.default_language));
     let mode = session::mode_of(jar);
+    let palette = session::palette_of(jar);
     let t = Catalog::new(lang);
 
     let name = house
@@ -102,11 +106,13 @@ async fn chrome(
     let chrome = Chrome {
         household_slug: crate::domain::slug::slugify(&name),
         household: name,
-        // An anonymous visitor's palette choice would have nowhere to live, so
-        // pre-auth always uses the bundled `ffm` one — but their light/dark
-        // still applies, which is the entire reason those are two facts stored
-        // in two places.
-        theme_css: theme::render(ThemeName::default(), mode, &Overrides::default()).to_css(),
+        // The palette of whoever last signed in on this device, from the
+        // `ffm.palette` cookie their session kept in step — `ffm` for a device
+        // nobody has. Still no picker here: a palette chosen by an anonymous
+        // visitor would have nowhere to live. Light/dark comes from its own
+        // cookie, which is why those are two facts stored in two places.
+        theme_css: theme::render(palette, mode, &Overrides::default()).to_css(),
+        palette: palette.key(),
         attr: mode.attr(),
         lang_code: lang.code(),
         lang_label: match lang {
@@ -262,13 +268,21 @@ pub async fn login(
             // The next visit's sign-in page greets you in your own language:
             // the cookie is refreshed from the member's row at session
             // creation. It is never *read* on an authenticated request.
-            let lang = crate::db::settings::member_settings(&st.pool, member_id)
+            // The palette cookie likewise, so the sign-in page after this
+            // session looks like the app it came from.
+            let prefs = crate::db::settings::member_settings(&st.pool, member_id)
                 .await
-                .map(|s| s.language)
-                .unwrap_or(Lang::En);
+                .unwrap_or_default();
             let jar = jar
                 .add(session::session_cookie(sid))
-                .add(session::pref_cookie(session::LANG, lang.code().to_string()));
+                .add(session::pref_cookie(
+                    session::LANG,
+                    prefs.language.code().to_string(),
+                ))
+                .add(session::pref_cookie(
+                    session::PALETTE,
+                    prefs.theme.key().to_string(),
+                ));
             (jar, Redirect::to("/")).into_response()
         }
         _ => failed_login(&st, &jar, &parts, form.name).await,
@@ -292,8 +306,22 @@ async fn failed_login(st: &AppState, jar: &CookieJar, parts: &Parts, name: Strin
 }
 
 pub async fn logout(State(st): State<AppState>, jar: CookieJar) -> Response {
-    if let Some(sid) = jar.get(session::SID) {
-        let _ = auth::end_session(&st.pool, sid.value()).await;
+    let mut jar = jar;
+    if let Some(sid) = jar.get(session::SID).map(|c| c.value().to_string()) {
+        // Read the palette before the session goes: the sign-in page you land
+        // on should look like the app you just left, including a palette
+        // changed on another device since this one last signed in.
+        if let Ok(Some(s)) = auth::session(&st.pool, &sid).await {
+            let theme = crate::db::settings::member_settings(&st.pool, s.member.id)
+                .await
+                .map(|m| m.theme)
+                .unwrap_or_default();
+            jar = jar.add(session::pref_cookie(
+                session::PALETTE,
+                theme.key().to_string(),
+            ));
+        }
+        let _ = auth::end_session(&st.pool, &sid).await;
     }
     (jar.add(session::clear_session()), Redirect::to("/login")).into_response()
 }
@@ -456,7 +484,11 @@ pub async fn setup(
             // the password you just typed".
             let jar = jar
                 .add(session::session_cookie(sid))
-                .add(session::pref_cookie(session::LANG, lang.code().to_string()));
+                .add(session::pref_cookie(session::LANG, lang.code().to_string()))
+                .add(session::pref_cookie(
+                    session::PALETTE,
+                    theme.key().to_string(),
+                ));
             (jar, Redirect::to("/")).into_response()
         }
         // A failure from the database has no field to point at — it is about
@@ -667,6 +699,10 @@ pub async fn accept(
                 jar
             } else {
                 jar.add(session::pref_cookie(session::LANG, lang.code().to_string()))
+                    .add(session::pref_cookie(
+                        session::PALETTE,
+                        theme.key().to_string(),
+                    ))
             };
             (jar, Redirect::to("/")).into_response()
         }

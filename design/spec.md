@@ -1335,7 +1335,9 @@ The card's heading is the household name and its subtitle says what this is.
 - **No color-scheme picker here.** A palette chosen by an anonymous visitor has
   nowhere to live, and a returning member's real palette is in their settings
   row and would override it three seconds later. Language and light/dark only —
-  both of which genuinely apply to this page. `/setup` and `/invite` *do* get
+  both of which genuinely apply to this page. The page *is* drawn in the
+  palette of whoever last signed in on this device (`ffm.palette`, see Language
+  & copy), so signing out does not look like leaving for another app. `/setup` and `/invite` *do* get
   the full picker, because on those two pages it is a form field writing
   `member_settings`, not chrome.
 - **On a phone the card is not vertically centered.** It sits at `12vh` from the
@@ -2416,6 +2418,10 @@ correct before the first frame, no round trip.
   server ever reads it, so `HttpOnly` is strictly better and costs nothing.
 - `ffm.theme` carries light/dark/system the same way, which is what removes the
   last need for a pre-paint inline script.
+- `ffm.palette` carries the palette of whoever last signed in on this device,
+  so the sign-in page after `:logout` looks like the app it came from. Written
+  from `member_settings.theme_name` at sign-in, on a palette change and at
+  sign-out; read only on the pre-auth pages; `ffm` when absent or unknown.
 - **Pre-login resolution**: `ffm.lang` → `Accept-Language` (parsed with quality
   values, matched against the supported set) → `household_settings.default_language`
   → `en`.
