@@ -161,6 +161,16 @@ nothing until the answer landed, which reads as a key that did not work.
   `data-busy="none"` or `'none'`.
 - **A dropped connection says so** in the statusline, since a loader that
   vanishes with nothing changed is the same confusion again.
+- **The edit row is locked while its Save is in flight** — `inert`, the same
+  as the pre-auth forms: nothing is typed into a value already sent, and a
+  second Enter cannot post twice. Lifted when the answer lands, with focus
+  back where it was if the form is still there.
+- **Esc on the edit row, and parking a draft, ask the server for nothing.**
+  They used to re-fetch the read-only row — a round trip, and on a slow link
+  a visible wait, for markup that had not changed. `e` keeps the row it
+  replaces and those put it back. The kept copy is dropped the moment it stops
+  being true: a save, or a write from inside the form (removing a file), after
+  which they fetch the row as before.
 - **The pre-auth pages show it in the button that was pressed.** `/login`,
   `/setup`, `/invite` and the language and light/dark switches are plain
   form posts answered by a whole new page — no htmx, no row, no pane — so a
@@ -610,10 +620,10 @@ named in the description — `:config` is one, and it is a real command.
 | Key | Action |
 |---|---|
 | `Ctrl-H` / `Ctrl-J` / `Ctrl-K` / `Ctrl-L` | move focus between a form's fields, left / down / up / right — past the form's edge, back to the ledger, keeping the draft |
-| `Ctrl-j` / `Ctrl-k` | into the bottom split / back out of it |
+| `Ctrl-j` / `Ctrl-k` | from the ledger, into the bottom split; inside it, `Ctrl-k` off the top field comes back out |
 | `zz` | zoom the bottom split, half ↔ nearly full |
 | `Enter` | save — the form's primary action |
-| `Esc` | cancel: discard the draft, nothing written |
+| `Esc` | cancel: discard the draft, nothing written — one press in every form, from inside a field too |
 
 **Creation is a two-by-two grid, not four ad-hoc keys.** Lowercase acts on
 the occurrence, uppercase on the rule; `a`/`A` are money out, `i`/`I` money
@@ -680,12 +690,28 @@ editing. So:
   an `unsaved · e to resume` tag) until the draft is saved or discarded, and
   the statusline counts them. Several can be parked at once; `e`/`E` on a
   marked row picks its draft back up exactly as it was left.
-- **`Ctrl-H/J/K/L` past the form's edge is the keyboard way out.** Off the
-  top or bottom of an inline row, the cursor moves to the row above or
-  below (parking the draft); off the left edge of the rule pane, focus
+- **`Ctrl-H/J/K/L` past the form's edge is the keyboard way out — and the
+  way to close a form keeping what was typed.** Esc discards; there is no
+  separate "park" key. Off the top or bottom of an inline row, or of an `E`
+  pane, the cursor moves to the row above or below, which parks the draft:
+  the row is marked `unsaved · e to resume` (or `· E to resume` for a rule)
+  and `e`/`E` picks it back up. Off the left edge of the rule pane, focus
   returns to the ledger with the pane still open until the cursor actually
-  moves. Sideways never jumps rows — with no field left or right on this
-  row, that's the edge.
+  moves — and moving it parks the pane the same way. `A`/`I` have no rule
+  yet to park, so their top and bottom edges do nothing. Sideways never
+  jumps rows — with no field left or right on this row, that's the edge.
+  A park key was considered and dropped: `Ctrl-C` is copy and `Ctrl-Z` is
+  undo on Linux, inside the very fields it would fire from.
+- **Which form a key belongs to is decided by its container, not by whether
+  focus is in a text field.** With focus on Save or a toggle, a "typing"
+  check says no, and `Ctrl-j` fell through to the ledger's own `Ctrl-j`
+  and opened the settings split. These keys had been in this table since
+  the mock, which implemented them; the app never did until the port.
+- **A rule draft is measured against the pane as it loaded**, not against
+  each field's default: a `<select>` has no `defaultValue`, and a field
+  `x-model` rewrites on load would read as edited by nobody. Restoring one
+  fires the events `x-model` listens for, toggles first, so the fields they
+  reveal exist and the path preview follows.
 - **Still modal, on purpose:** the `dd` delete confirmation, the
   private-row re-attribution confirm, the `?` keymap and the `P` file
   carousel. Those are confirmations and full-screen viewers, not forms —
@@ -2129,9 +2155,10 @@ full width, at the bottom, over the ledger — fzf-shaped.
   list, which is what stops its rows truncating.
 - **`zz` zooms** the split between half the ledger area and nearly all of it
   — worth it for `:grep` with forty hits.
-- **`Ctrl-j` drops into the split and `Ctrl-k` comes back out**, the mirror
-  of the rule pane's `Ctrl-h` past its left edge, rotated onto the axis the
-  split sits on. `Esc` closes it in one press **including from inside a
+- **`Ctrl-j` drops into the split and `Ctrl-k` off its top field comes back
+  out**, the mirror of the rule pane's `Ctrl-h` past its left edge, rotated
+  onto the axis the split sits on. Inside it, `Ctrl-h/j/k/l` move between
+  controls by where they sit, the same as in every other form. `Esc` closes it in one press **including from inside a
   field**, which is the one place the `typing` guard yields; everywhere else
   `Esc` still means "cancel this edit".
 

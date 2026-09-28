@@ -59,6 +59,7 @@ row-received-on = received { $date }
 row-manual-paid = marked paid manually
 row-deleted = deleted
 row-unsaved = unsaved · e to resume
+row-unsaved-rule = unsaved · E to resume
 row-try-again = Try Again
 
 ## File rail. Slot numbers never change; only the labels do, by direction.

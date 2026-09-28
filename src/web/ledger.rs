@@ -321,7 +321,9 @@ struct LedgerPage {
     remove_file_title: String,
     rule_deleted: String,
     unsaved_tag: String,
+    unsaved_rule_tag: String,
     drafts_parked: String,
+    drafts_parked_one: String,
     no_pane_that_way: String,
     reattribute_title: String,
     details_none: String,
@@ -492,9 +494,12 @@ pub async fn ledger(
         remove_file_title: t.carousel_remove_title("{file}"),
         rule_deleted: t.rule_deleted_on_row().to_string(),
         unsaved_tag: t.row_unsaved().to_string(),
+        unsaved_rule_tag: t.row_unsaved_rule().to_string(),
         // The count is filled in by the pane, so the catalog keeps the plural
-        // and the template keeps the number.
+        // and the template keeps the number. Both forms: built from 2 alone,
+        // one draft read "1 unsaved drafts".
         drafts_parked: t.drafts_parked(2).replace('2', "{n}"),
+        drafts_parked_one: t.drafts_parked(1),
         no_pane_that_way: t.no_pane_that_way().to_string(),
         reattribute_title: t.reattribute_private_title("{name}"),
         details_none: t.details_none().to_string(),

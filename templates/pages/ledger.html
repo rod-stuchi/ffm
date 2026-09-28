@@ -696,11 +696,85 @@ function ffmResetAmounts(form) {
   });
 }
 
+/* Ctrl-h/j/k/l inside a form: focus moves to the field that sits that way on
+   SCREEN, not the next one in DOM order, so a field grid navigates the way it
+   reads without the markup having to match the layout. Ported from the mock
+   (design/ffm-app-mockup.html, fieldFocusMove), where it was built and never
+   carried over — the spec documented a key the app did not have.
+
+   A plain function, not a method, for the reason the money mask is one: the
+   rule pane is its own Alpine component.
+
+   Returns false when there is no field that way — the form's edge, which the
+   caller turns into "back to the ledger". */
+const FFM_DIRS = { h: 'left', j: 'down', k: 'up', l: 'right' };
+
+/* Not a file input: the dropzone's is visually hidden behind its label, so
+   landing on it shows no focus at all, and its box is a 1px stand-in that
+   would skew every distance. Tab still reaches it. */
+function ffmFields(box) {
+  return [...box.querySelectorAll('input:not([type=hidden]):not([type=file]), select, textarea')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+}
+
+function ffmFieldMove(box, dir) {
+  const els = ffmFields(box);
+  if (!els.length) return false;
+  // From wherever focus is inside the form, field or not — Save, a toggle's
+  // label. From outside it, the first field.
+  const from = box.contains(document.activeElement) ? document.activeElement : null;
+  if (!from) { els[0].focus(); return true; }
+  const a = from.getBoundingClientRect();
+  const horiz = dir === 'left' || dir === 'right';
+  const overlaps = (aMin, aMax, bMin, bMax) => aMin < bMax && bMin < aMax;
+  const inDirection = els.filter(el => el !== from)
+    .map(el => ({ el, r: el.getBoundingClientRect() }))
+    .filter(({ r }) => {
+      if (dir === 'right') return r.left > a.left + 4;
+      if (dir === 'left') return r.right < a.right - 4;
+      if (dir === 'down') return r.top > a.top + 4;
+      return r.bottom < a.bottom - 4;
+    });
+  if (!inDirection.length) return false;
+  const aligned = inDirection.filter(({ r }) => horiz
+    ? overlaps(a.top, a.bottom, r.top, r.bottom)
+    : overlaps(a.left, a.right, r.left, r.right));
+  // Sideways only ever means "same row": with nothing left or right on this
+  // row, that is the form's edge, not a license to jump to a field further
+  // down.
+  if (horiz && !aligned.length) return false;
+  // Within the aligned pool the overlap test already did the real work of
+  // "same row/column", so the cross-axis term only breaks near-ties. Weighted
+  // heavily there, a wide full-row field's far-off center outscored a narrow
+  // field's much smaller primary-axis distance, and down from a 1-of-3
+  // column field jumped clean over the next full-width row. The unaligned
+  // fallback has no such guarantee, so it leans on the cross axis much harder.
+  const pool = aligned.length ? aligned : inDirection;
+  const cross = aligned.length ? 0.2 : 2.2;
+  let best = null;
+  let bestDist = Infinity;
+  for (const { el, r } of pool) {
+    const dx = (r.left + r.width / 2) - (a.left + a.width / 2);
+    const dy = (r.top + r.height / 2) - (a.top + a.height / 2);
+    const dist = horiz ? Math.abs(dx) + Math.abs(dy) * cross : Math.abs(dy) + Math.abs(dx) * cross;
+    if (dist < bestDist) { bestDist = dist; best = el; }
+  }
+  if (best) { best.focus(); if (best.select) best.select(); }
+  return !!best;
+}
+
 /* The loader's bookkeeping. `next` is the anchor the next `htmx.ajax` should
    use — set and cleared around the one call, which is safe because htmx
    fires `beforeRequest` synchronously inside it. `counts` is per element, so
    two requests on one row do not clear each other's loader. */
 const ffmBusy = { next: null, counts: new WeakMap() };
+
+/* The read-only row an open edit form replaced, by id — the server's own
+   markup, kept so Esc and parking a draft can put it back instantly instead
+   of asking for it again. Nothing was written, so it is exactly what the
+   server last rendered. Dropped the moment it stops being that: a save, or
+   anything else inside the form that writes (removing a file). */
+const ffmRowHtml = new Map();
 
 function ledger() {
   return {
@@ -758,6 +832,10 @@ function ledger() {
     // nothing to recover. Several can be parked at once, which is why this is
     // a map rather than one slot.
     drafts: {},
+    // Parked rule-pane drafts, by rule id — `E`'s counterpart of `drafts`.
+    // `ruleFor` is the open `E` pane: which row it points at, which rule.
+    ruleDrafts: {},
+    ruleFor: null,
     editing: null,
     selected: {},
     count: '',
@@ -780,7 +858,9 @@ function ledger() {
     ruleDeleted: {{ rule_deleted|json|safe }},
     notACommand: {{ not_a_command|json|safe }},
     unsavedTag: {{ unsaved_tag|json|safe }},
+    unsavedRuleTag: {{ unsaved_rule_tag|json|safe }},
     draftsParked: {{ drafts_parked|json|safe }},
+    draftsParkedOne: {{ drafts_parked_one|json|safe }},
     noPaneThatWay: {{ no_pane_that_way|json|safe }},
     reattributeTitleTemplate: {{ reattribute_title|json|safe }},
     detailsNone: {{ details_none|json|safe }},
@@ -859,6 +939,11 @@ function ledger() {
       const focused = this.focusedId();
       if (this.editing && this.editing !== focused) {
         this.parkDraft(this.editing);
+      }
+      // The `E` pane is parked the same way: its arrow points at one row,
+      // and a pane about a row the cursor has left is worse than none.
+      if (this.ruleFor && this.ruleFor.row !== focused) {
+        this.parkRule();
       }
       // The log pane closes when the cursor leaves the row it is about — one
       // check in the render loop, the same one that parks a draft. A pane
@@ -1029,15 +1114,30 @@ function ledger() {
         if (e.key === 'Escape') { e.preventDefault(); this.movingPrivate = null; }
         return;
       }
+      // A form — the edit row, the rule pane, a settings pane — answers
+      // Ctrl-h/j/k/l itself: they move between its fields, and past its edge
+      // hand focus back to the ledger (`formEdge`). Decided by the CONTAINER,
+      // not by `typing`: with focus on Save or a toggle `typing` is false, and
+      // Ctrl-j there fell through to the ledger's own Ctrl-j and opened the
+      // settings split instead.
+      const box = el && el.closest('form.editrow, .rulepane, #hsplitmount > *');
+      if (box && e.ctrlKey && !e.metaKey && !e.altKey && FFM_DIRS[e.key]) {
+        e.preventDefault();
+        const dir = FFM_DIRS[e.key];
+        if (!ffmFieldMove(box, dir)) this.formEdge(box, dir);
+        return;
+      }
+      // Esc closes the rule pane in one press, from inside a field too — it
+      // only blurred the field before, and closing took a second Esc. It
+      // discards, as it does on the `e` row; keeping a draft is Ctrl-j/k past
+      // the edge.
+      if (box && box.matches('.rulepane') && e.key === 'Escape') {
+        e.preventDefault();
+        el.blur();
+        this.closeRule();
+        return;
+      }
       if (typing) {
-        // Ctrl-k leaves the split from inside one of its fields — the way
-        // back up, and the mirror of the rule pane's Ctrl-h past its left
-        // edge, rotated onto the axis the split sits on.
-        if (e.ctrlKey && e.key === 'k' && el.closest('#hsplitmount')) {
-          e.preventDefault();
-          el.blur();
-          return;
-        }
         if (e.key === 'Escape') {
           // Esc inside the SPLIT closes it, in one press. Everywhere else it
           // keeps meaning "cancel this edit", which is why this is a case
@@ -1271,12 +1371,117 @@ function ledger() {
       this.closeSplit();
       this.closeLog();
       this.closeRule();
+      this.ruleFor = { row: this.focusedId(), rule: ruleId };
       this.ajax('GET', '/rules/' + ruleId + '/edit',
                 { target: this.mount(), swap: 'innerHTML' }, this.focusedRow())
-           .then(() => { this.aimArrow(); this.revealPaneSide(); });
+           .then(() => {
+             // The cursor left before the pane arrived: it opened for a row
+             // nobody is on any more.
+             if (this.ruleFor?.rule !== ruleId) { if (!this.ruleFor) this.closeRule(); return; }
+             const form = document.querySelector('#rulepane form');
+             if (form) form._ffmStart = this.ruleValues(form);
+             this.restoreRuleDraft(ruleId);
+             this.aimArrow();
+             this.revealPaneSide();
+           });
     },
 
-    closeRule() { this.clearMount('#rulepane'); },
+    /// Ctrl-h/j/k/l past a form's edge. Up or down out of the `e` row, or out
+    /// of an `E` pane, moves the cursor to the row above or below — and a
+    /// cursor leaving the row is what parks the draft (`paint`), so the edit
+    /// is kept, marked on its row, and `e`/`E` picks it back up. Left out of
+    /// the rule pane is back to the ledger with the pane still open, until
+    /// the cursor moves. Up out of a settings pane leaves the split.
+    formEdge(box, dir) {
+      const vertical = dir === 'up' || dir === 'down';
+      const leave = () => document.activeElement?.blur();
+      if (vertical && (box.matches('form.editrow') || (box.matches('.rulepane') && this.ruleFor))) {
+        const to = this.row + (dir === 'down' ? 1 : -1);
+        // At the first or last row there is nowhere to go, and leaving the
+        // form without moving would leave it open with focus nowhere.
+        if (to < 0 || to >= this.rows().length) return;
+        leave();
+        this.row = to;
+        this.paint();
+      } else if (box.matches('.rulepane') && dir === 'left') {
+        leave();
+      } else if (box.closest('#hsplitmount') && dir === 'up') {
+        leave();
+      }
+    },
+
+    /// What the rule form says right now, one entry per field (a radio per
+    /// option), plus each money field's integer — the mask paints from that,
+    /// never from the text.
+    ruleValues(form) {
+      const values = {};
+      form.querySelectorAll('[name]').forEach(el => {
+        if (el.type === 'file') return;
+        const key = el.type === 'radio' ? el.name + '=' + el.value : el.name;
+        values[key] = el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value;
+        if (el.classList.contains('amt-in')) values[key + '#cents'] = el.dataset.cents;
+      });
+      return values;
+    },
+
+    /// The `E` pane's draft, parked when the cursor leaves its row — the rule
+    /// pane's `parkDraft`. An unchanged form just closes.
+    ///
+    /// "Changed" is measured against a snapshot taken when the pane loaded,
+    /// not against each field's `defaultValue`: a <select> has none, and a
+    /// field `x-model` rewrites on load would read as edited by nobody.
+    parkRule() {
+      const at = this.ruleFor;
+      this.ruleFor = null;
+      const form = document.querySelector('#rulepane form');
+      if (at && form) {
+        const values = this.ruleValues(form);
+        const start = form._ffmStart || {};
+        const changed = Object.keys(values).some(k => values[k] !== start[k]);
+        if (changed) this.ruleDrafts[at.rule] = values; else delete this.ruleDrafts[at.rule];
+      }
+      this.closeRule();
+      this.markDrafts();
+    },
+
+    /// `E` on a row whose rule has a parked draft. Toggles first, so the
+    /// fields their `x-show` reveals are there, then the rest in page order —
+    /// each with the event its `x-model` listens for, or Alpine's copy of the
+    /// value (the path preview, the months read-back) would not follow.
+    ///
+    /// The draft is dropped once it is back in the form: leaving again parks
+    /// it again, since it differs from what the server rendered, so a save or
+    /// an Esc needs no cleanup of its own.
+    restoreRuleDraft(ruleId) {
+      const values = this.ruleDrafts[ruleId];
+      const form = document.querySelector('#rulepane form');
+      if (!values || !form) return;
+      delete this.ruleDrafts[ruleId];
+      const fields = [...form.querySelectorAll('[name]')].filter(el => el.type !== 'file');
+      const checkable = el => el.type === 'checkbox' || el.type === 'radio';
+      const keyOf = el => el.type === 'radio' ? el.name + '=' + el.value : el.name;
+      fields.filter(checkable).forEach(el => {
+        const v = values[keyOf(el)];
+        if (v === undefined || el.checked === v) return;
+        el.checked = v;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      this.$nextTick(() => fields.filter(el => !checkable(el)).forEach(el => {
+        const v = values[keyOf(el)];
+        if (v === undefined) return;
+        const cents = values[keyOf(el) + '#cents'];
+        if (cents !== undefined) el.dataset.cents = cents;
+        if (el.value === v && cents === undefined) return;
+        el.value = v;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }));
+      this.markDrafts();
+    },
+
+    closeRule() {
+      this.ruleFor = null;
+      this.clearMount('#rulepane');
+    },
 
     /// Empties the mount a side pane is sitting in, rather than removing the
     /// pane element alone. A swapped-in pane brings its own <script> beside
@@ -1558,6 +1763,8 @@ function ledger() {
       const id = this.rowUnderCursor();
       if (!id || this.readOnly()) return;
       this.editing = id;
+      const wrapper = document.getElementById('row-' + id);
+      if (wrapper) ffmRowHtml.set(id, wrapper.outerHTML);
       htmx.ajax('GET', '/tx/' + id + '/edit', {
         target: '#row-' + id, swap: 'outerHTML',
       }).then(() => this.restoreDraft(id));
@@ -1581,8 +1788,31 @@ function ledger() {
       });
       if (changed) this.drafts[id] = values; else delete this.drafts[id];
       this.editing = null;
-      htmx.ajax('GET', '/tx/' + id, { target: '#row-' + id, swap: 'outerHTML' })
-        .then(() => { this.markDrafts(); this.paint(); });
+      this.restoreRow(id);
+    },
+
+    /// Put the read-only row back where the edit form is. Instant when the
+    /// row `e` replaced is still known and still true (`ffmRowHtml`); a
+    /// request for it otherwise.
+    ///
+    /// Esc used to ask the server every time, which is a whole round trip —
+    /// on a slow link, a visible wait — to get back markup that had not
+    /// changed. Through `htmx.swap`, so the row is processed exactly like
+    /// one that came over the wire.
+    restoreRow(id) {
+      // Always a string: the form's own Esc and Cancel pass the id as the
+      // number the template wrote, and a Map keeps 12 and "12" apart — which
+      // silently missed the kept row and fell back to the request.
+      id = String(id);
+      const html = ffmRowHtml.get(id);
+      ffmRowHtml.delete(id);
+      const done = () => { this.markDrafts(); this.paint(); };
+      if (html && document.getElementById('row-' + id)) {
+        htmx.swap('#row-' + id, html, { swapStyle: 'outerHTML' });
+        done();
+        return;
+      }
+      htmx.ajax('GET', '/tx/' + id, { target: '#row-' + id, swap: 'outerHTML' }).then(done);
     },
 
     /// What becomes of an open edit when its row is swapped out from under
@@ -1604,6 +1834,7 @@ function ledger() {
       // nothing here should act as though it has.
       if (e.detail.xhr && e.detail.xhr.getResponseHeader('FFM-Reopen')) return;
       this.editing = null;
+      ffmRowHtml.delete(id);
       // FFM-Stale means the save was REFUSED — somebody changed the row while
       // this form was open. The response is still a 200 carrying a row, which
       // is this app's error convention, so the header is what tells the two
@@ -1663,16 +1894,29 @@ function ledger() {
           meta.appendChild(tag);
         }
       });
-      const n = Object.keys(this.drafts).length;
-      if (n) this.say(this.draftsParked.replace('{n}', n), false);
+      // A rule's draft marks the row its rule stands behind, with its own
+      // tag — `E` resumes it, not `e`.
+      Object.keys(this.ruleDrafts).forEach(rid => {
+        document.querySelectorAll('.row[data-rule-id="' + rid + '"]').forEach(row => {
+          row.classList.add('has-draft');
+          const meta = row.querySelector('.meta');
+          if (meta && ![...meta.querySelectorAll('.drafttag')].some(t => t.textContent === this.unsavedRuleTag)) {
+            const tag = document.createElement('span');
+            tag.className = 'drafttag';
+            tag.textContent = this.unsavedRuleTag;
+            meta.appendChild(tag);
+          }
+        });
+      });
+      const n = Object.keys(this.drafts).length + Object.keys(this.ruleDrafts).length;
+      if (n) this.say(n === 1 ? this.draftsParkedOne : this.draftsParked.replace('{n}', n), false);
     },
 
     cancelEdit(id) {
       // Esc discards: nothing was written, and nothing is kept.
       delete this.drafts[id];
       this.editing = null;
-      htmx.ajax('GET', '/tx/' + id, { target: '#row-' + id, swap: 'outerHTML' })
-        .then(() => { this.markDrafts(); this.paint(); });
+      this.restoreRow(id);
     },
 
     togglePrivate() {
@@ -2461,6 +2705,31 @@ function ledger() {
         // A dropped connection answers nothing, and the loader vanishing with
         // nothing changed reads exactly like the key that was not pressed.
         xhr.addEventListener('error', () => this.say(this.busyOffline, true), { once: true });
+
+        // A write from inside an open edit form — removing a file — changes
+        // the row on the server, so the copy `restoreRow` would put back is no
+        // longer what the row says.
+        const inEdit = d.elt.closest?.('div[id^="row-"]');
+        if (inEdit && (d.requestConfig?.verb || 'get') !== 'get') ffmRowHtml.delete(inEdit.id.slice(4));
+
+        // Save: the edit form is locked while its post is in flight — typing
+        // into a field whose value has already been sent is typing into
+        // nothing, and a second Enter would post twice. `inert`, not
+        // `disabled`: htmx gathered the values before this event, and a
+        // disabled field is one it would leave out. Lifted when the answer
+        // lands, with focus back where it was, in case the form is still
+        // there (a dropped connection). A refused save answers with a fresh
+        // form, which places its own cursor.
+        if (d.elt.matches?.('form.editrow')) {
+          const form = d.elt;
+          const was = form.contains(document.activeElement) ? document.activeElement : null;
+          form.inert = true;
+          was?.blur();
+          xhr.addEventListener('loadend', () => {
+            form.inert = false;
+            if (was && form.isConnected && !form.contains(document.activeElement)) was.focus();
+          }, { once: true });
+        }
       });
       document.body.addEventListener('htmx:afterSwap', () => {
         this.markDrafts();

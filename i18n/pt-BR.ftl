@@ -52,6 +52,7 @@ row-received-on = recebido em { $date }
 row-manual-paid = marcado como pago
 row-deleted = excluído
 row-unsaved = não salvo · e para retomar
+row-unsaved-rule = não salvo · E para retomar
 row-try-again = Tentar de novo
 
 ## Arquivos
