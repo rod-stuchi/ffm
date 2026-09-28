@@ -80,6 +80,7 @@ file-none-income-scheduled = no scheduled payment on an income row
 
 sort-refuses-reorder = ledger.sort = "{ $sort }" — reorder needs sort = "manual"
 group-refuses-reorder = ledger.group = "{ $group }" — reorder needs group = "none"
+group-order-needs-group = ledger.group = "none" — S orders groups; :group bucket first
 not-a-command = not a command: { $name } (try help)
 no-rule-behind-row = not generated from a recurring rule
 # A non-admin reads the other ledgers and writes only their own.
@@ -289,6 +290,10 @@ profile-show-delta = Show month-over-month change
 profile-fold-default = Groups start
 profile-fold-expanded = Open
 profile-fold-collapsed = Closed
+profile-group-order = Groups ordered
+profile-group-order-appearance = First seen
+profile-group-order-name = A–Z
+profile-group-order-subtotal = By cost
 profile-visibility-inherit = Follow the household ({ $resolved })
 profile-visibility-household = Shared with the household
 profile-visibility-private = Private to me

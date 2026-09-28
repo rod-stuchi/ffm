@@ -165,9 +165,9 @@ pub async fn pane_fragment(
     // Built by the page's own `view`, grouped exactly when the page groups —
     // this fragment used to render the rows flat, which un-grouped a grouped
     // pane on every answer that re-rendered it.
-    let grouped = auth.settings.ledger_group == "bucket";
+    let group = crate::web::ledger::GroupOrder::of(&auth.settings);
     let writable = auth.viewer.may_write(member_id);
-    let p = crate::web::ledger::view(pane, &t, currency, grouped, writable);
+    let p = crate::web::ledger::view(pane, &t, currency, group, writable);
     let (panes, totals) = crate::web::ledger::totals(st, auth, period).await;
 
     say(

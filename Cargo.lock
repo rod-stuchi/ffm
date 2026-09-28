@@ -490,6 +490,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unic-langid",
+ "unicode-normalization",
 ]
 
 [[package]]

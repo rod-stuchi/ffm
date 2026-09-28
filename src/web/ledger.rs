@@ -291,6 +291,11 @@ struct LedgerPage {
     nu_label: &'static str,
     sort: &'static str,
     sort_label: String,
+    /// `S`'s group order, `None` while the pane is flat — the statusline cell
+    /// is shown only when there are groups to order, and `S` refuses without.
+    group_order: Option<&'static str>,
+    group_order_label: String,
+    group_order_needs_group: String,
     /// The signed-in member, for the statusline's own cell. The SESSION's
     /// member, never the focused pane's — focusing somebody else's pane does
     /// not make you them.
@@ -391,7 +396,7 @@ pub async fn ledger(
     let mut any_estimated = false;
     // Grouping is a derived view exactly like sort: the moment rows are
     // re-clustered by category, J/K refuse for the same reason.
-    let grouped = auth.settings.ledger_group == "bucket";
+    let group = GroupOrder::of(&auth.settings);
 
     for m in &members {
         // Privacy is applied inside the query, so the rows and the totals
@@ -412,7 +417,7 @@ pub async fn ledger(
         outs += pane.outs;
         any_estimated |= pane.estimated;
         let writable = auth.viewer.may_write(pane.member.id);
-        panes.push(view(pane, &t, currency, grouped, writable));
+        panes.push(view(pane, &t, currency, group, writable));
     }
 
     let unresolved =
@@ -479,6 +484,11 @@ pub async fn ledger(
         sort_label: ledger::Sort::parse(&auth.settings.ledger_sort)
             .code()
             .to_string(),
+        group_order: GroupOrder::of(&auth.settings).map(GroupOrder::code),
+        group_order_label: GroupOrder::of(&auth.settings)
+            .map(|g| g.label(&t))
+            .unwrap_or_default(),
+        group_order_needs_group: t.group_order_needs_group().to_string(),
         me_name: auth.session.member.name.clone(),
         // Whether admin powers are actually IN EFFECT, not what the row says
         // — an admin previewing as a member should read as a member here, or
@@ -589,6 +599,7 @@ fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
                 ("A / I", "create a recurring bill / income"),
                 ("e / E", "edit this row / its rule"),
                 ("J / K", "move the row down / up"),
+                ("s", "row order: manual · date · amount"),
                 ("Ctrl-H / Ctrl-L", "re-attribute to the pane left / right"),
                 ("x", "select, for a batch operation"),
                 ("p", "toggle private"),
@@ -610,6 +621,7 @@ fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
                 ("za", "toggle the fold under the cursor"),
                 ("zo / zc", "open / close it"),
                 ("zR / zM", "open / close every fold"),
+                ("S", "order the groups: first seen · A–Z · by cost"),
             ],
         ),
         (
@@ -954,9 +966,91 @@ pub(crate) fn year_summary(
     })
 }
 
-/// Clusters a pane's rows by `bucket`, in the order the buckets first appear
-/// — so a grouped pane still reads in something like the order the household
-/// put it in, rather than alphabetically by a word they typed once.
+/// How `:group bucket` orders its groups — `member_settings.group_order`,
+/// cycled with `S`. `Uncategorized` is last in every one of them: it is a
+/// catch-all, not a category, so the order only decides among buckets
+/// somebody actually chose. Before this there was only first-appearance, and
+/// one unfiled income at the top of a pane pulled `Uncategorized` above
+/// everything.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GroupOrder {
+    /// First seen in the pane's own sort — the default, and what grouping
+    /// always did, so nothing moves for a member who never asks.
+    Appearance,
+    /// A–Z by bucket, ignoring case and accents: "Água" files among the A's.
+    Name,
+    /// By what the group costs, the biggest spend first.
+    Subtotal,
+}
+
+impl GroupOrder {
+    pub fn parse(s: &str) -> GroupOrder {
+        match s {
+            "name" => GroupOrder::Name,
+            "subtotal" => GroupOrder::Subtotal,
+            _ => GroupOrder::Appearance,
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            GroupOrder::Appearance => "appearance",
+            GroupOrder::Name => "name",
+            GroupOrder::Subtotal => "subtotal",
+        }
+    }
+
+    /// The member's order when their pane is grouped at all, `None` when it
+    /// is flat — one answer for the page and every fragment that re-renders
+    /// a pane, so the two cannot group differently.
+    pub fn of(settings: &crate::db::settings::MemberSettings) -> Option<GroupOrder> {
+        (settings.ledger_group == "bucket").then(|| GroupOrder::parse(&settings.group_order))
+    }
+
+    pub fn label(self, t: &Catalog) -> String {
+        match self {
+            GroupOrder::Appearance => t.profile_group_order_appearance().to_string(),
+            GroupOrder::Name => t.profile_group_order_name().to_string(),
+            GroupOrder::Subtotal => t.profile_group_order_subtotal().to_string(),
+        }
+    }
+}
+
+/// Puts groups in `order`, `Uncategorized` last. Stable throughout, so a tie
+/// — two buckets with the same subtotal, or names equal once accents and case
+/// are set aside — keeps first-seen order. Generic over what a group carries
+/// so the ordering can be tested without building ledger rows.
+fn order_groups<T>(
+    mut groups: Vec<(String, crate::domain::money::Cents, T)>,
+    order: GroupOrder,
+    uncategorized: &str,
+) -> Vec<(String, crate::domain::money::Cents, T)> {
+    match order {
+        GroupOrder::Appearance => {}
+        GroupOrder::Name => groups.sort_by_cached_key(|g| name_key(&g.0)),
+        // Signed and ascending: a subtotal is spend minus income, negative
+        // when the group costs money, so the most negative is the biggest
+        // cost. A group that nets to income ranks after every cost.
+        GroupOrder::Subtotal => groups.sort_by_key(|g| g.1),
+    }
+    // Stable, so moving the catch-all leaves the others exactly as ordered.
+    groups.sort_by_key(|g| g.0 == uncategorized);
+    groups
+}
+
+/// A–Z the way a Brazilian household reads it: "Água" among the A's rather
+/// than after "Z", which is where a byte comparison puts an accented letter.
+fn name_key(name: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    name.nfd()
+        .filter(|c| !unicode_normalization::char::is_combining_mark(*c))
+        .collect::<String>()
+        .to_lowercase()
+}
+
+/// Clusters a pane's rows by `bucket`, then orders the groups by the member's
+/// `group_order` — first seen by default, so a grouped pane still reads in
+/// something like the order the household put it in.
 ///
 /// Nesting stops at `bucket`: one level is enough for a household-sized
 /// ledger, and a `bill_name` sub-fold would be a second gesture to learn for
@@ -966,6 +1060,7 @@ pub fn group_rows(
     views: Vec<RowView>,
     t: &Catalog,
     currency: crate::domain::money::Currency,
+    group_order: GroupOrder,
 ) -> Vec<Group> {
     let mut order: Vec<String> = Vec::new();
     let mut buckets: std::collections::HashMap<
@@ -1002,17 +1097,21 @@ pub fn group_rows(
         entry.1.push(view);
     }
 
-    order
+    let seen = order
         .into_iter()
         .filter_map(|name| {
             let (total, rows) = buckets.remove(&name)?;
-            Some(Group {
-                count: t.group_rows(rows.len() as i64),
-                subtotal: fmt::money(total.abs(), currency),
-                negative: total.is_negative(),
-                name,
-                rows,
-            })
+            Some((name, total, rows))
+        })
+        .collect();
+    order_groups(seen, group_order, t.group_uncategorized())
+        .into_iter()
+        .map(|(name, total, rows)| Group {
+            count: t.group_rows(rows.len() as i64),
+            subtotal: fmt::money(total.abs(), currency),
+            negative: total.is_negative(),
+            name,
+            rows,
         })
         .collect()
 }
@@ -1021,9 +1120,10 @@ pub(crate) fn view(
     pane: Pane,
     t: &Catalog,
     currency: crate::domain::money::Currency,
-    grouped: bool,
+    group: Option<GroupOrder>,
     writable: bool,
 ) -> PaneView {
+    let grouped = group.is_some();
     let balance = pane.balance();
     PaneView {
         writable,
@@ -1041,9 +1141,9 @@ pub(crate) fn view(
         } else {
             pane.rows.iter().map(|r| r.view(t)).collect()
         },
-        groups: if grouped {
+        groups: if let Some(order) = group {
             let views = pane.rows.iter().map(|r| r.view(t)).collect();
-            group_rows(&pane.rows, views, t, currency)
+            group_rows(&pane.rows, views, t, currency, order)
         } else {
             Vec::new()
         },
@@ -1059,6 +1159,82 @@ mod tests {
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    /// The pane from the report that started this: an unfiled income first,
+    /// which put `Uncategorized` above every real bucket.
+    fn udo() -> Vec<(String, Cents, ())> {
+        [
+            ("Uncategorized", 1_912),
+            ("Mobilidade", -13_145),
+            ("Padaria", -35_780),
+            ("Consumo", 0),
+        ]
+        .into_iter()
+        .map(|(n, c)| (n.to_string(), Cents(c), ()))
+        .collect()
+    }
+
+    fn names(groups: Vec<(String, Cents, ())>) -> Vec<String> {
+        groups.into_iter().map(|g| g.0).collect()
+    }
+
+    #[test]
+    fn uncategorized_is_last_in_every_order() {
+        for order in [
+            GroupOrder::Appearance,
+            GroupOrder::Name,
+            GroupOrder::Subtotal,
+        ] {
+            let got = names(order_groups(udo(), order, "Uncategorized"));
+            assert_eq!(
+                got.last().map(String::as_str),
+                Some("Uncategorized"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_seen_keeps_the_panes_order_for_real_buckets() {
+        assert_eq!(
+            names(order_groups(udo(), GroupOrder::Appearance, "Uncategorized")),
+            ["Mobilidade", "Padaria", "Consumo", "Uncategorized"]
+        );
+    }
+
+    #[test]
+    fn a_to_z_ignores_accents_and_case() {
+        let groups = ["Zelador", "Água", "mercado", "Aluguel"]
+            .into_iter()
+            .map(|n| (n.to_string(), Cents(0), ()))
+            .collect();
+        assert_eq!(
+            names(order_groups(groups, GroupOrder::Name, "Uncategorized")),
+            ["Água", "Aluguel", "mercado", "Zelador"]
+        );
+    }
+
+    #[test]
+    fn by_cost_puts_the_biggest_spend_first_and_income_after_every_cost() {
+        let mut groups = udo();
+        groups.push(("Renda".into(), Cents(90_000), ()));
+        assert_eq!(
+            names(order_groups(groups, GroupOrder::Subtotal, "Uncategorized")),
+            ["Padaria", "Mobilidade", "Consumo", "Renda", "Uncategorized"]
+        );
+    }
+
+    #[test]
+    fn a_tie_keeps_first_seen_order() {
+        let groups = ["B", "A", "C"]
+            .into_iter()
+            .map(|n| (n.to_string(), Cents(-500), ()))
+            .collect();
+        assert_eq!(
+            names(order_groups(groups, GroupOrder::Subtotal, "Uncategorized")),
+            ["B", "A", "C"]
+        );
     }
 
     #[test]

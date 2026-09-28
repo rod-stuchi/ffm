@@ -609,6 +609,12 @@
         row, which is the whole single-source rule. -#}
     <div class="st right is-click" @click="cycleSort()" x-text="sortLabel"
          title="{{ t.profile_sort() }}">{{ sort_label }}</div>
+    {#- How the groups are ordered — only while there are groups. The same row
+        `S` and the :profile radio write. -#}
+    {%- if group_order.is_some() %}
+    <div class="st right is-click" @click="cycleGroupOrder()"
+         title="{{ t.profile_group_order() }} · S">{{ group_order_label }}</div>
+    {%- endif %}
     <div class="st right is-click" @click="cycleNu()" x-text="nuLabel"
          title="{{ t.profile_line_numbers() }}">{{ nu_label }}</div>
   </div>
@@ -857,6 +863,8 @@ function ledger() {
     notARule: {{ not_a_rule|json|safe }},
     ruleDeleted: {{ rule_deleted|json|safe }},
     notACommand: {{ not_a_command|json|safe }},
+    groupOrder: {{ group_order|json|safe }},
+    groupOrderNeedsGroup: {{ group_order_needs_group|json|safe }},
     unsavedTag: {{ unsaved_tag|json|safe }},
     unsavedRuleTag: {{ unsaved_rule_tag|json|safe }},
     draftsParked: {{ drafts_parked|json|safe }},
@@ -1269,6 +1277,10 @@ function ledger() {
       else if (k === '/') { this.openSearch(); }
       else if (k === 'n') { this.step(1); }
       else if (k === 'N') { this.step(-1); }
+      // `s` orders the rows, `S` the groups: manual → date → amount, the
+      // same row the statusline's sort cell, `:sort` and :profile write.
+      else if (k === 's') { this.cycleSort(); }
+      else if (k === 'S') { this.cycleGroupOrder(); }
       else if (k === 'J') { this.move(n); }
       else if (k === 'K') { this.move(-n); }
       else if (k === 'Escape') {
@@ -1501,6 +1513,15 @@ function ledger() {
     cycleSort() {
       const next = { manual: 'date', date: 'amount', amount: 'manual' }[this.sort] || 'manual';
       this.setting('/settings/member', 'ledger_sort', next);
+    },
+
+    /// `S`, and the statusline cell beside sort: first seen → A–Z → by cost.
+    /// The order is decided when the server renders the pane, so the write
+    /// answers with a refresh, like every other setting that moves rows.
+    cycleGroupOrder() {
+      if (!this.groupOrder) { this.say(this.groupOrderNeedsGroup, true); return; }
+      const next = { appearance: 'name', name: 'subtotal', subtotal: 'appearance' }[this.groupOrder] || 'appearance';
+      this.setting('/settings/member', 'group_order', next);
     },
 
     cycleNu() {

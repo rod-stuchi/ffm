@@ -336,7 +336,13 @@ async fn grouping_subtotals_are_the_report() {
 
     let t = Catalog::new(Lang::En);
     let views = pane.rows.iter().map(|r| r.view(&t)).collect();
-    let groups = ffm::web::ledger::group_rows(&pane.rows, views, &t, Currency::Brl);
+    let groups = ffm::web::ledger::group_rows(
+        &pane.rows,
+        views,
+        &t,
+        Currency::Brl,
+        ffm::web::ledger::GroupOrder::Appearance,
+    );
 
     assert_eq!(
         groups.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(),

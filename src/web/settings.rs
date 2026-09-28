@@ -87,6 +87,7 @@ struct ProfilePane {
     sorts: Vec<Choice>,
     scopes: Vec<Choice>,
     folds: Vec<Choice>,
+    orders: Vec<Choice>,
     visibilities: Vec<Choice>,
     min_split: i64,
     min_width: i64,
@@ -161,6 +162,14 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
                 ("collapsed", t.profile_fold_collapsed().to_string()),
             ],
             &s.group_fold_default,
+        ),
+        orders: choices(
+            &[
+                ("appearance", t.profile_group_order_appearance().to_string()),
+                ("name", t.profile_group_order_name().to_string()),
+                ("subtotal", t.profile_group_order_subtotal().to_string()),
+            ],
+            &s.group_order,
         ),
         // The nullable tri-state, rendered honestly: the first option means
         // NULL and is labeled with what it currently resolves to, so nobody
@@ -268,6 +277,7 @@ pub async fn set_member(
                     | MemberKey::LedgerSort
                     | MemberKey::LedgerShowDelta
                     | MemberKey::LedgerGroup
+                    | MemberKey::GroupOrder
             );
             let mut res = crate::web::tx::say_only(&t.settings_saved(&form.key), false);
             if whole_page {

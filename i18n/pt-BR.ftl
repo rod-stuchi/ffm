@@ -72,6 +72,7 @@ file-none-income-scheduled = agendamento não se aplica a uma entrada
 
 sort-refuses-reorder = ledger.sort = "{ $sort }" — reordenar exige sort = "manual"
 group-refuses-reorder = ledger.group = "{ $group }" — reordenar exige group = "none"
+group-order-needs-group = ledger.group = "none" — S ordena os grupos; use :group bucket antes
 not-a-command = não é um comando: { $name } (tente help)
 no-rule-behind-row = não foi gerado por uma regra recorrente
 read-only-ledger = somente leitura: este é o livro de { $who }
@@ -257,6 +258,10 @@ profile-show-delta = Mostrar variação em relação ao mês anterior
 profile-fold-default = Grupos começam
 profile-fold-expanded = Abertos
 profile-fold-collapsed = Fechados
+profile-group-order = Grupos ordenados
+profile-group-order-appearance = Ordem de aparição
+profile-group-order-name = A–Z
+profile-group-order-subtotal = Por custo
 profile-visibility-inherit = Seguir a casa ({ $resolved })
 profile-visibility-household = Compartilhado com a casa
 profile-visibility-private = Só meu

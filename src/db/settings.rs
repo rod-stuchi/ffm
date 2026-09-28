@@ -34,6 +34,7 @@ pub enum MemberKey {
     LedgerShowDelta,
     LedgerGroup,
     GroupFoldDefault,
+    GroupOrder,
     DefaultVisibility,
 }
 
@@ -53,6 +54,7 @@ impl MemberKey {
             "ledger_show_delta" => MemberKey::LedgerShowDelta,
             "ledger_group" => MemberKey::LedgerGroup,
             "group_fold_default" => MemberKey::GroupFoldDefault,
+            "group_order" => MemberKey::GroupOrder,
             "default_visibility" => MemberKey::DefaultVisibility,
             _ => return None,
         })
@@ -82,6 +84,9 @@ pub struct MemberSettings {
     pub ledger_show_delta: bool,
     pub ledger_group: String,
     pub group_fold_default: String,
+    /// How `:group bucket` orders its groups: `appearance` | `name` |
+    /// `subtotal`. `Uncategorized` is last in all three.
+    pub group_order: String,
     /// `None` = follow the household's policy, which is a real third state and
     /// is rendered as one: three radios, the first labeled with what it
     /// currently resolves to.
@@ -105,6 +110,7 @@ impl Default for MemberSettings {
             ledger_show_delta: true,
             ledger_group: "none".into(),
             group_fold_default: "expanded".into(),
+            group_order: "appearance".into(),
             default_visibility: None,
         }
     }
@@ -126,6 +132,7 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
                   ledger_show_delta AS "ledger_show_delta!: i64",
                   ledger_group AS "ledger_group!: String",
                   group_fold_default AS "group_fold_default!: String",
+                  group_order AS "group_order!: String",
                   default_visibility AS "default_visibility: String"
            FROM member_settings WHERE member_id = ?1"#,
         member_id
@@ -153,6 +160,7 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
             ledger_show_delta: r.ledger_show_delta != 0,
             ledger_group: r.ledger_group,
             group_fold_default: r.group_fold_default,
+            group_order: r.group_order,
             default_visibility: r.default_visibility,
         })
         .unwrap_or_default())
@@ -364,6 +372,17 @@ pub async fn set_member(
             .await
             .map_err(db)?;
         }
+        MemberKey::GroupOrder => {
+            let v = one_of("group_order", value, &["appearance", "name", "subtotal"])?;
+            sqlx::query!(
+                "UPDATE member_settings SET group_order = ?2 WHERE member_id = ?1",
+                member_id,
+                v
+            )
+            .execute(pool)
+            .await
+            .map_err(db)?;
+        }
         MemberKey::DefaultVisibility => {
             // The empty string is the third state, not a missing one: NULL
             // means "follow the household", which is a choice a member makes.
@@ -526,6 +545,7 @@ mod tests {
             "ledger_show_delta",
             "ledger_group",
             "group_fold_default",
+            "group_order",
             "default_visibility",
         ] {
             assert!(MemberKey::parse(k).is_some(), "{k}");

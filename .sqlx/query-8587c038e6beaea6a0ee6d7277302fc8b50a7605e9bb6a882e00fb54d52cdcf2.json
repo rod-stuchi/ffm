@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT language AS \"language!: String\",\n                  theme_name AS \"theme_name!: String\",\n                  theme_overrides AS \"theme_overrides!: String\",\n                  line_numbers AS \"line_numbers!: String\",\n                  layout_panes AS \"layout_panes!: String\",\n                  layout_min_split_width AS \"layout_min_split_width!: i64\",\n                  layout_min_width AS \"layout_min_width!: i64\",\n                  layout_max_width AS \"layout_max_width!: i64\",\n                  layout_gap AS \"layout_gap!: i64\",\n                  ledger_sort AS \"ledger_sort!: String\",\n                  ledger_search_scope AS \"ledger_search_scope!: String\",\n                  ledger_show_delta AS \"ledger_show_delta!: i64\",\n                  ledger_group AS \"ledger_group!: String\",\n                  group_fold_default AS \"group_fold_default!: String\",\n                  default_visibility AS \"default_visibility: String\"\n           FROM member_settings WHERE member_id = ?1",
+  "query": "SELECT language AS \"language!: String\",\n                  theme_name AS \"theme_name!: String\",\n                  theme_overrides AS \"theme_overrides!: String\",\n                  line_numbers AS \"line_numbers!: String\",\n                  layout_panes AS \"layout_panes!: String\",\n                  layout_min_split_width AS \"layout_min_split_width!: i64\",\n                  layout_min_width AS \"layout_min_width!: i64\",\n                  layout_max_width AS \"layout_max_width!: i64\",\n                  layout_gap AS \"layout_gap!: i64\",\n                  ledger_sort AS \"ledger_sort!: String\",\n                  ledger_search_scope AS \"ledger_search_scope!: String\",\n                  ledger_show_delta AS \"ledger_show_delta!: i64\",\n                  ledger_group AS \"ledger_group!: String\",\n                  group_fold_default AS \"group_fold_default!: String\",\n                  group_order AS \"group_order!: String\",\n                  default_visibility AS \"default_visibility: String\"\n           FROM member_settings WHERE member_id = ?1",
   "describe": {
     "columns": [
       {
@@ -74,8 +74,13 @@
         "type_info": "Text"
       },
       {
-        "name": "default_visibility: String",
+        "name": "group_order!: String",
         "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "default_visibility: String",
+        "ordinal": 15,
         "type_info": "Text"
       }
     ],
@@ -97,8 +102,9 @@
       false,
       false,
       false,
+      false,
       true
     ]
   },
-  "hash": "e967b9336d56354636f71389d9e0f12bb8e1eb1bff857b084d8458fe8fe2dff5"
+  "hash": "8587c038e6beaea6a0ee6d7277302fc8b50a7605e9bb6a882e00fb54d52cdcf2"
 }

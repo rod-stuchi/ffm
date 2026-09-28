@@ -70,6 +70,9 @@ toml = "0.8"
 # than a recompile. This is the only place a regex reaches the money path, and
 # only ever for the holes the BARCODE leaves open.
 regex = "1"
+# A–Z group order ignoring accents: "Água" among the A's, not after "Z". Already
+# in the tree through url/idna, so naming it adds nothing to the build.
+unicode-normalization = "0.1"
 # chrono over time, and WITHOUT "unstable-locales" on purpose:
 #   * "today" must be household-local, and time's current_local_offset() errors
 #     in a multithreaded process by design — which would mean giving up

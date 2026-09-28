@@ -109,6 +109,19 @@
           </div>
         </div>
       </form>
+      {#- The same row `S` and the statusline cell write — three gestures,
+          one setting. -#}
+      <form class="setting" hx-post="/settings/member" hx-trigger="change" hx-swap="none">
+        <input type="hidden" name="key" value="group_order">
+        <div class="f">
+          <span class="k" id="k-gorder">{{ t.profile_group_order() }}</span>
+          <div class="radios" role="radiogroup" aria-labelledby="k-gorder">
+            {%- for c in orders %}
+            <label><input type="radio" name="value" value="{{ c.code }}"{% if c.selected %} checked{% endif %}> {{ c.label }}</label>
+            {%- endfor %}
+          </div>
+        </div>
+      </form>
     </div>
 
     {#- The toggle stays outside the band: it has no label of its own to put

@@ -922,7 +922,14 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 - **Scoped to each member's own panel** — no household-wide, cross-member
   category view. Grouping only reorganizes the rows already in front of you.
 - **An `Uncategorized` group catches rows with no `bucket` set** — grouping
-  never silently drops a row.
+  never silently drops a row. **It is always the last group**, whatever the
+  order.
+- **Groups have three orders, cycled with `S`** — first seen (the default),
+  A–Z ignoring accents, and by cost, biggest spend first. A per-member
+  setting (`member_settings.group_order`), like sort, and written by `S`, a
+  statusline cell and a `:profile` radio alike. `s` beside it orders the
+  rows, inside the groups as much as in a flat pane. See `design/spec.md`'s
+  Categorization & grouping.
 - **A group header always shows its subtotal, open or closed.** This is why
   there is no separate `:budget`/report screen: `zM` (fold everything) on the
   real ledger already reads as a per-category summary. Browsing and
@@ -980,6 +987,9 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   `ledger.sort = "date" — reorder needs sort = "manual"`. You cannot reorder a
   derived view; the app says so instead of pretending. Default is `manual`
   because this replaces a spreadsheet where rows *were* arranged by hand.
+- **`s` cycles the row sort** (`manual` → `date` → `amount`) — the fourth
+  gesture writing `ledger_sort`, beside `:sort`, the statusline cell and
+  `:profile`. It pairs with `S`: `s` orders the rows, `S` the groups.
 - **An unpaid row sorts by its due day**, since it has no paid-on date yet.
 - **`/` is client-side and scoped to the visible month.** It filters rows already
   rendered — an Alpine highlight over the DOM, no round-trip, which is what makes

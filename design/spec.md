@@ -107,7 +107,8 @@ The statusline carries, left to right:
 | selection | `x`: `3 of 5 selected · Σ R$ 588,20` — how many of the **focused pane's** rows are selected, and their sum written like the pane header (`Σ + …` for incomes only; `in · out · net` for a mix, `~` on a projection). Rendered by the server from the same pane query as the header; hidden while nothing in the pane is selected |
 | buffer | the pending count and key prefix, so a half-typed `3d` or `g` is visible rather than silently remembered |
 | position | `4/7` in the focused pane |
-| sort | `manual` · `date` · `amount` — **clickable, cycles** |
+| sort | `manual` · `date` · `amount` — **clickable, cycles**, the same as `s` |
+| group order | `First seen` · `A–Z` · `By cost` — only while the pane is grouped; **clickable, cycles**, the same as `S` |
 | line numbers | `rnu` · `nu` · `nonu` — **clickable, cycles** |
 
 The last two are the single-source rule made visible: a command, a form
@@ -449,6 +450,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | Key | Action |
 |---|---|
 | `J` / `K` | move the row — or every selected row — down / up |
+| `s` | row order: `manual` → `date` → `amount`, and round again — `S` does the same for groups |
 | `3J` | move it three places — a count past the end lands on the end |
 | `Ctrl-H` / `Ctrl-L` | **re-attribute** the row to the member pane left / right |
 | `a` | add a one-off spend |
@@ -521,6 +523,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | `za` | toggle the fold under the cursor |
 | `zo` / `zc` | open / close it explicitly |
 | `zR` / `zM` | open / close every fold in the panel |
+| `S` | order the groups: first seen → A–Z → by cost, and round again |
 
 ### Files
 | Key | Action |
@@ -1904,6 +1907,27 @@ collision or inventing a hash-based color scheme for marginal gain.
 Rows with no `bucket` set land in an **`Uncategorized`** group — grouping never
 silently drops a row. Nesting stops at `bucket` — no nested `bill_name`
 sub-folds.
+
+### Which group comes first — `S`
+
+Three orders, cycled with `S`, per member (`member_settings.group_order`):
+
+| order | groups by |
+|---|---|
+| **First seen** (default) | where each bucket's first row sits in the pane's own sort — what grouping always did |
+| **A–Z** | bucket name, ignoring case and accents, so *Água* and *Dívidas* file where a Brazilian household expects |
+| **By cost** | the subtotal, biggest spend first; a group that nets to income comes after every cost |
+
+- **`Uncategorized` is last in all three.** It is a catch-all, not a
+  category, so the order only ever decides among buckets somebody chose.
+  First seen alone used to put it first whenever an unfiled row led the
+  pane — one income at the top pulled it above everything.
+- **A tie keeps first-seen order** — every sort is stable.
+- **Three gestures, one row:** `S`, the statusline cell beside sort, and the
+  *Groups ordered* radio in `:profile`. The order is decided when the server
+  renders the pane, so writing it refreshes the page, like sort.
+- **`S` on a flat pane refuses**, in the sort refusal's shape:
+  `ledger.group = "none" — S orders groups; :group bucket first`.
 
 ### This is the report, not a separate screen
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE member_settings SET group_order = ?2 WHERE member_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "566e7fe8f8382ed20048ad9e989c0cea2f4a058e3773ec7e1a4be15f04b46e34"
+}
