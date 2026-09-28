@@ -233,7 +233,10 @@
         is the page saying so first, not the rule. -#}
     <section class="pane{% if !p.writable %} is-readonly{% endif %}"
              {%- if !p.writable %} data-readonly="{{ t.read_only_ledger(p.name) }}"{% endif %}
-             :class="{ 'is-focus': pane === {{ loop.index0 }} }" @click="clickPane($event, {{ loop.index0 }})">
+             :class="{ 'is-focus': pane === {{ loop.index0 }} }" @click="clickPane($event, {{ loop.index0 }})"
+             @contextmenu="rowMenuAt($event, {{ loop.index0 }}, $event.clientX, $event.clientY)"
+             @pointerdown="pressStart($event, {{ loop.index0 }})" @pointermove="pressMove($event)"
+             @pointerup="pressCancel()" @pointercancel="pressCancel()">
       <header class="pane-head">
         <b>{{ p.name }}</b>
         {%- if !p.writable %}
@@ -385,6 +388,19 @@
     <button class="btn" type="button" @click="pick('barcode')">{{ t.file_add_bill() }}</button>
     <button class="btn" type="button" @click="pick('scheduled')">{{ t.file_add_scheduled() }}</button>
     <button class="btn" type="button" @click="pick('receipt')">{{ t.file_add_receipt() }}</button>
+  </div>
+  {#- The row menu — a long press on a phone, a right-click with a mouse.
+      Each item runs what its key runs, with the cursor already on the row,
+      and wears that key, so the menu teaches the keymap. An item that does
+      not apply is absent, not disabled. The click that lifts a long press
+      lands outside this menu, so `pressFired` keeps it from closing the
+      menu it just opened. -#}
+  <div class="filemenu rowmenu" x-show="rowMenu" x-cloak :style="rowMenuStyle" role="menu"
+       @click.outside="if (!pressFired) rowMenu = null">
+    <button class="btn" type="button" role="menuitem"
+            @click="rowMenu = null; editRow()">{{ t.row_menu_edit() }} <kbd>e</kbd></button>
+    <button class="btn" type="button" role="menuitem" x-show="rowMenu?.rule"
+            @click="rowMenu = null; editRule()">{{ t.row_menu_edit_rule() }} <kbd>E</kbd></button>
   </div>
   <input type="file" x-ref="picker" class="hidden-input"
          accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()">
@@ -852,6 +868,13 @@ function ledger() {
     command: '',
     kind_: 'receipt',
     menuStyle: '',
+    // The row menu (long press / right-click): `{ id, rule }` while open.
+    rowMenu: null,
+    rowMenuStyle: '',
+    // A long press in progress, and whether one just opened the menu — the
+    // click its lift sends is not a tap.
+    press: null,
+    pressFired: false,
     msg: '',
     msgBad: false,
     // Requests in flight with nowhere closer to show themselves than the
@@ -959,6 +982,8 @@ function ledger() {
       if (this.logFor && this.logFor !== focused) {
         this.closeLog();
       }
+      // The row menu is about one row, too.
+      if (this.rowMenu && this.rowMenu.id !== focused) this.rowMenu = null;
 
       // ABOVE the empty-pane return below, and deliberately: which member is
       // focused has nothing to do with whether they have rows this month. In
@@ -1089,6 +1114,13 @@ function ledger() {
       // Any keypress dismisses a details popup — the same way any hover
       // artifact goes away — before that key does whatever else it does.
       if (this.tip) { this.tip = null; }
+      // The row menu goes the same way. Esc only closes it; any other key
+      // closes it and then does its own job, so `e` straight from the open
+      // menu is still `e`.
+      if (this.rowMenu) {
+        this.rowMenu = null;
+        if (e.key === 'Escape') { e.preventDefault(); return; }
+      }
       // Keyboard motion wins over a stale hover: the row the resting mouse
       // happens to be over stops painting its highlight, so only the real
       // cursor is lit. The CSS half (`body:not(.kbd-nav) .row:hover`) was
@@ -2203,6 +2235,10 @@ function ledger() {
     /// header that toggled on its own left the index pointing into the fold
     /// it had just hidden.
     clickPane(e, i) {
+      // The press that opened the row menu ends in a click when the finger
+      // lifts. It has already put the cursor on the row; taken as a tap it
+      // would do nothing worse than repaint, but it is not a second gesture.
+      if (this.pressFired) return;
       // The mouse is the thing acting now, so hover comes back.
       document.body.classList.remove('kbd-nav');
       const was = this.pane;
@@ -2224,6 +2260,80 @@ function ledger() {
       this.tip = null;
       if (head) this.fold('a');  // fold() paints
       else this.paint();
+    },
+
+    /// The row menu: a long press on a touch screen, a right-click with a
+    /// mouse. The touch half of the keymap — each item runs the method its
+    /// key runs and shows that key, so the menu teaches the keys rather than
+    /// standing in for them.
+    ///
+    /// Only on a row. A fold header, the pane's chrome and the open edit
+    /// form keep the browser's own menu, which is what a right-click in a
+    /// text field is for.
+    ///
+    /// Returns whether it took the gesture, so a long press knows to swallow
+    /// the click that follows it.
+    rowMenuAt(e, i, x, y) {
+      const hit = e.target.closest('div[id^="row-"] .row');
+      if (!hit || hit.classList.contains('is-editing')) return false;
+      e.preventDefault();
+      document.body.classList.remove('kbd-nav');
+      this.pane = i;
+      const at = this.rows().indexOf(hit);
+      if (at < 0) return false;
+      this.row = at;
+      this.tip = null;
+      this.paint();
+      // Every item this phase writes, so on somebody else's ledger there is
+      // nothing to offer — the statusline says why, as the keys would.
+      if (this.readOnly(hit)) return true;
+      this.rowMenu = {
+        id: this.focusedId(),
+        // `editRule()`'s own test, so the item and the key cannot disagree:
+        // absent on a plain row, and on an orphan whose rule was deleted.
+        rule: !!hit.dataset.ruleId && !hit.dataset.ruleDeleted,
+      };
+      // Beside the press rather than under it, so a finger does not cover
+      // what it just opened; clamped to the viewport with the menu's rough
+      // size, since `x-show` has not laid it out yet to be measured.
+      const left = Math.max(8, Math.min(x + 8, innerWidth - 200));
+      const top = Math.max(8, Math.min(y + 8, innerHeight - 120));
+      this.rowMenuStyle = 'top:' + top + 'px; left:' + left + 'px';
+      return true;
+    },
+
+    /// A long press, timed by hand: iOS Safari never fires `contextmenu` for
+    /// one, only its own text-selection callout. Touch and pen only — a
+    /// mouse has a right button for this.
+    ///
+    /// Any real movement cancels it, and so does the browser taking the
+    /// gesture for a scroll (`pointercancel`), so a finger dragging the
+    /// ledger never opens a menu on the row it started from.
+    pressStart(e, i) {
+      this.pressFired = false;
+      this.pressCancel();
+      if (e.pointerType === 'mouse' || !e.isPrimary) return;
+      const { target, clientX: x, clientY: y } = e;
+      this.press = {
+        x, y,
+        timer: setTimeout(() => {
+          this.press = null;
+          const fake = { target, preventDefault() {} };
+          if (this.rowMenuAt(fake, i, x, y)) this.pressFired = true;
+        }, 500),
+      };
+    },
+
+    pressMove(e) {
+      if (this.press && Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y) > 10) {
+        this.pressCancel();
+      }
+    },
+
+    pressCancel() {
+      if (!this.press) return;
+      clearTimeout(this.press.timer);
+      this.press = null;
     },
 
     // --- commands --------------------------------------------------------

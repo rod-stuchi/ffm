@@ -471,9 +471,34 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | Click a row | focus it — the same cursor `j`/`k` move, just placed by pointing instead |
 | Tap a row (phone) | the same as a click — a tap is a click, nothing separate to learn |
 | Click a fold header | put the cursor on it **and** toggle the fold — `za` from the header, so closing a fold by mouse never leaves the cursor inside it |
-| Double-click a row | `e` — edit this occurrence |
+| Long-press a row (touch) · right-click (mouse) | the row menu — **Edit** `e`, and **Edit rule** `E` when the row has a rule |
 | Hover a recurring row | show its due/cadence/receipt details — the same info `gd` shows for the focused row, keyboard-only |
 | Click a file control | open that file, new tab — the same action as `g1`/`g2`/`g3` |
+
+- **The row menu is the touch half of the keymap, and it replaced
+  double-click.** Double-click was the promise here, and on a phone it cannot
+  keep it: double-tap is the browser's zoom, `dblclick` does not fire
+  reliably, and nothing on screen says it exists. A menu can say what is on
+  offer, and it grows with the phases to come — delete, private, files, the
+  log — by adding a line. Each item runs the method its key runs, with the
+  cursor already on the row, and wears that key as a `<kbd>`: the menu
+  teaches the keys rather than replacing them, the way the profile menu
+  teaches the command bar. An item that does not apply is **absent**, not
+  disabled — no *Edit rule* on a plain row or on an orphan — and on somebody
+  else's read-only ledger there is no menu at all, only the statusline's
+  read-only message, since every item so far writes.
+  - **The long press is timed by hand** (500ms, touch and pen only), because
+    iOS Safari never fires `contextmenu` for one — it opens its own text
+    selection instead, which `-webkit-touch-callout` and `user-select` turn
+    off on rows, on touch screens only. Moving the finger more than a few
+    pixels, or the browser taking the gesture as a scroll, cancels it, so
+    dragging the ledger never opens a menu. The click the lift sends is
+    swallowed: the press has already done its work.
+  - **Only on a row.** A fold header, the pane's chrome and the open edit
+    form keep the browser's own right-click menu — in a text field that is
+    where copy and paste live.
+  - Esc closes it; any other key closes it and then does its own job, and a
+    cursor move off the row closes it too.
 
 - **`gd` is that same details popup with no mouse involved.** Hovering was
   the only way to see a row's due date, cadence and receipt path before this

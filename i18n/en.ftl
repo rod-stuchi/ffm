@@ -61,6 +61,10 @@ row-deleted = deleted
 row-unsaved = unsaved · e to resume
 row-unsaved-rule = unsaved · E to resume
 row-try-again = Try Again
+# The row menu: a long press on a phone, a right-click with a mouse. The key
+# each item runs is shown beside it, outside the message.
+row-menu-edit = Edit
+row-menu-edit-rule = Edit rule
 
 ## File rail. Slot numbers never change; only the labels do, by direction.
 

@@ -834,6 +834,30 @@
   padding: 6px 10px;
 }
 
+/* --- the row menu -------------------------------------------------------- */
+
+/* A long press or a right-click on a row. The attach menu's shape, with the
+ * key each item runs pushed to the right edge — the menu teaches the keymap
+ * rather than standing in for it. */
+.rowmenu {
+  min-width: 170px;
+}
+
+.rowmenu .btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+/* A finger is not a pointer: an item has to be big enough to hit. */
+@media (pointer: coarse) {
+  .rowmenu .btn {
+    min-height: 40px;
+    font-size: 14px;
+  }
+}
+
 .hidden-input {
   position: absolute;
   width: 1px;

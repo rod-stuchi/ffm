@@ -54,6 +54,8 @@ row-deleted = excluído
 row-unsaved = não salvo · e para retomar
 row-unsaved-rule = não salvo · E para retomar
 row-try-again = Tentar de novo
+row-menu-edit = Editar
+row-menu-edit-rule = Editar regra
 
 ## Arquivos
 

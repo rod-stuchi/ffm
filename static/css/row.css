@@ -21,6 +21,19 @@
   position: relative;
 }
 
+/* A long press on a row opens the row menu, and iOS would open its own text
+ * selection and callout on the same press. Touch screens only, so a mouse can
+ * still select a row's text. */
+@media (pointer: coarse) {
+  /* Never the edit form: an input under `user-select: none` can refuse to
+   * take typing in iOS Safari. */
+  .row:not(.is-editing) {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
 .row.is-focus {
   border-left-color: var(--accent);
   background: var(--accent-soft);
