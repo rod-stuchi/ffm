@@ -187,6 +187,38 @@
             difference, and it is why this is not a second palette picker. -#}
         <button class="btn" type="button" title="{{ t.profile_theme() }}"
                 @click="open = false; openColors()">:theme</button>
+        {#- On a phone the bar has no room for the admin badge or the
+            light/dark button, so they move in here. `.ppop-narrow` is shown
+            by the SAME media query that hides them from the bar, so there is
+            never a width with both copies, or neither.
+
+            `:preview` is a real command whose bare form toggles, so it earns
+            a command name like the items above. Light/dark has no command: it
+            is a setting's three values under a heading, not an item named
+            after something to type — so its words come from the catalog. And
+            three direct choices rather than the bar's cycle, because through
+            a menu a cycle is up to three rounds of open-and-tap. -#}
+        <div class="ppop-narrow">
+          {%- if admin || previewing %}
+          <form method="post" action="/preview">
+            <button class="btn{% if previewing %} is-on{% endif %}" type="submit"
+                    title="{{ t.menu_preview() }}">:preview</button>
+          </form>
+          {%- endif %}
+          <form method="post" action="/theme" class="pmode"
+                @submit="$el.next.value = location.pathname + location.search">
+            <input type="hidden" name="next" value="{{ back_to }}">
+            <span class="pmode-head">{{ t.menu_mode() }}</span>
+            <div class="pmode-opts">
+              {%- for m in modes %}
+              <button class="btn{% if m.on %} is-on{% endif %}" type="submit"
+                      name="mode" value="{{ m.code }}" aria-pressed="{{ m.on }}">
+                {{ m.svg|safe }}<span>{{ m.label }}</span>
+              </button>
+              {%- endfor %}
+            </div>
+          </form>
+        </div>
         <hr class="psep">
         <form method="post" action="/logout">
           <button class="btn" type="submit" title="{{ t.sign_out() }}">:logout</button>

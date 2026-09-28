@@ -239,6 +239,15 @@ pub struct PaneView {
     pub writable: bool,
 }
 
+/// One light/dark choice in the profile menu: the value `/theme` takes, its
+/// word and icon, and whether it is the state this device is in.
+struct ModeChoice {
+    code: &'static str,
+    label: &'static str,
+    svg: &'static str,
+    on: bool,
+}
+
 #[derive(Template)]
 #[template(path = "pages/ledger.html")]
 struct LedgerPage {
@@ -260,6 +269,11 @@ struct LedgerPage {
     mode_label: &'static str,
     mode_next: &'static str,
     mode_svg: &'static str,
+    /// The same control as three direct choices, for the profile menu on a
+    /// phone, where the bar has no room for the button above. Three choices
+    /// rather than the button's cycle: through a menu, a cycle is up to three
+    /// rounds of open-and-tap to land on the one you wanted.
+    modes: Vec<ModeChoice>,
     /// Where `/theme` sends you back to. Rebuilt rather than read off the
     /// request, so it is a local path by construction; the form restamps it
     /// from `location` on submit, because `?pane=` is rewritten client-side.
@@ -446,6 +460,15 @@ pub async fn ledger(
         mode_label: crate::web::auth::mode_label(&t, auth.mode),
         mode_next: auth.mode.next(),
         mode_svg: crate::ui::icons::svg(auth.mode.icon()),
+        modes: [theme::ModePref::Light, theme::ModePref::Dark, theme::ModePref::System]
+            .into_iter()
+            .map(|m| ModeChoice {
+                code: m.code(),
+                label: crate::web::auth::mode_label(&t, m),
+                svg: icons::svg(m.icon()),
+                on: m == auth.mode,
+            })
+            .collect(),
         person_svg: crate::ui::icons::svg("person"),
         back_to,
         focused,

@@ -191,6 +191,181 @@
   color: var(--neg);
 }
 
+/* --- the bar on a phone -------------------------------------------------- */
+
+/* The menu's copies of the admin badge and the light/dark button. Hidden
+ * here and shown by the same media query that takes the originals out of
+ * the bar, so no width has both, or neither. */
+.ppop-narrow {
+  display: none;
+}
+
+.ppop .btn.is-on {
+  color: var(--neg);
+}
+
+/* `.ppop .pmode`, not `.pmode`: `.ppop form` is `display: contents`, and a
+ * lone class loses to it. */
+.ppop .pmode {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 2px 2px;
+}
+
+.pmode-head {
+  font-size: 11px;
+  color: var(--ink-3);
+  padding: 0 8px;
+}
+
+/* Three direct choices, side by side: the state you are in wears the
+ * accent — "you are here" — rather than a money color. */
+.pmode-opts {
+  display: flex;
+  gap: 4px;
+}
+
+.ppop .pmode-opts .btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  text-align: center;
+  padding: 7px 4px;
+}
+
+.ppop .pmode-opts .btn.is-on {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.pmode-opts svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Two rows, in two tiers. One row needs about 1070px — more with a long
+ * household name — and squeezed below that, the household wrapped to three
+ * lines, IN/OUT/NET stacked into six, and on a phone the light/dark and
+ * profile buttons ran off the edge and scrolled the page sideways.
+ *
+ *   ≤ 1100px   logo | household ……… ADMIN  System  profile
+ *              ‹ 09/2026 ›                IN …  OUT …  NET …
+ *
+ *   ≤ 720px    logo | household ………………………… profile
+ *              09/2026            IN     OUT     NET
+ *
+ * The first tier only breaks the line; nothing leaves. The second is the
+ * phone: the arrows go, the badge and light/dark move into the profile menu,
+ * and each total puts its label over its figure.
+ *
+ * A wrapping flex row, not a grid: the two rows share no columns, and a grid
+ * would make the month button and the logo agree on a width. `order` places
+ * each item, and a zero-height `::after` with a full basis is the line break.
+ * `.htotals` is `display: contents` so the badge (row 1) and the figures
+ * (row 2) can be ordered apart.
+ *
+ * Fixed widths, like the tab and command hints' breakpoints, not `layout_*`
+ * values: those decide how panes share a screen, and this is only whether
+ * the bar's own chrome fits. CSS alone, so it is right before the first
+ * frame. */
+@media (max-width: 1100px) {
+  .ledger-bar {
+    flex-wrap: wrap;
+    column-gap: 14px;
+    row-gap: 4px;
+    padding: 8px 16px;
+  }
+
+  .ledger-bar::after {
+    content: "";
+    order: 7;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .bar-logo { order: 1; }
+  .bar-sep { order: 2; }
+  .htotals { display: contents; }
+  .htotals .badge { order: 4; }
+  .ledger-bar .modebtn { order: 5; }
+  .profmenu { order: 6; }
+  .mnav { order: 8; }
+
+  /* The one flexible thing on row 1: a long name gets an ellipsis rather
+   * than wrapping the bar taller. */
+  .ledger-bar > b {
+    order: 3;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .htot {
+    order: 9;
+    margin-left: auto;
+    display: flex;
+    gap: 16px;
+  }
+
+  /* A figure is one thing: `R$` on a line above its digits reads as two. */
+  .htot b {
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 720px) {
+  /* The picker and Ctrl-P / Ctrl-N still move between months; the arrows
+   * are the width row 2 needs for the totals. */
+  .mnav > a.btn {
+    display: none;
+  }
+
+  /* Out of the bar and into the profile menu. Each sits in a `.barform`,
+   * which is `display: contents`, so the button is hidden directly. */
+  .ledger-bar .modebtn,
+  .htotals .badge {
+    display: none;
+  }
+
+  .ppop-narrow {
+    display: contents;
+  }
+
+  /* Label over figure: three of these fit beside the month button at phone
+   * width, where label-beside-figure does not. CSS only, because `#htot` is
+   * swapped out of band after every write, and the swapped copy has to wear
+   * this too. */
+  .htot {
+    gap: 10px;
+    font-size: 11px;
+  }
+
+  .htot > span {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    line-height: 1.25;
+  }
+
+  .htot i {
+    margin-right: 0;
+    font-size: 10px;
+  }
+}
+
 .pos {
   color: var(--pos);
 }

@@ -61,6 +61,9 @@ row-deleted = deleted
 row-unsaved = unsaved · e to resume
 row-unsaved-rule = unsaved · E to resume
 row-try-again = Try Again
+# The profile menu on a phone, where the bar has no room for these.
+menu-mode = Light or dark
+menu-preview = See the app as a member without admin rights
 # The row menu: a long press on a phone, a right-click with a mouse. The key
 # each item runs is shown beside it, outside the message.
 row-menu-edit = Edit

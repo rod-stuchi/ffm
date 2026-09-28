@@ -1108,6 +1108,22 @@ that will otherwise be re-proposed.
   `.filemenu` computes `position: fixed` coordinates only because it is
   anchored to a row in a stage that scrolls sideways; a bar control has no
   such problem. It anchors right, because it sits at the end of the bar.
+- **Narrower than one row, the bar is two, in two tiers.** One row needs
+  about 1070px, and squeezed below it the household name wrapped to three
+  lines, IN/OUT/NET stacked into six, and on a phone the light/dark and
+  profile buttons ran off the edge and scrolled the page sideways.
+  **≤ 1100px** only breaks the line: row 1 is logo · household · badge ·
+  light/dark · profile, row 2 the month and the totals; nothing leaves.
+  **≤ 720px** is the phone: the month arrows go (the picker and
+  `Ctrl-P`/`Ctrl-N` remain), the badge and light/dark move into the profile
+  menu, and each total puts its label over its figure. The menu's copies are
+  shown by the **same** media query that hides the originals, so no width
+  has both or neither; there light/dark is three direct choices rather than
+  the bar's cycle, because through a menu a cycle is up to three rounds of
+  open-and-tap. Both breakpoints are fixed CSS, not `layout_*` values: those
+  decide how panes share a screen, and this is only whether the bar fits.
+  A wrapping flex row with `order` and a zero-height `::after` as the line
+  break, not a grid — the two rows share no columns.
 - **The member's name is on the profile button and nowhere else in the bar.**
   It used to sit in `.htotals` as well, which printed it twice within 200px.
 - **`:theme` and `:profile` both open `:profile`** — the difference is that
