@@ -469,6 +469,8 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | Action | Result |
 |---|---|
 | Click a row | focus it — the same cursor `j`/`k` move, just placed by pointing instead |
+| Tap a row (phone) | the same as a click — a tap is a click, nothing separate to learn |
+| Click a fold header | put the cursor on it **and** toggle the fold — `za` from the header, so closing a fold by mouse never leaves the cursor inside it |
 | Double-click a row | `e` — edit this occurrence |
 | Hover a recurring row | show its due/cadence/receipt details — the same info `gd` shows for the focused row, keyboard-only |
 | Click a file control | open that file, new tab — the same action as `g1`/`g2`/`g3` |

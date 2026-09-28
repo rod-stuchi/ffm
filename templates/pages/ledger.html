@@ -233,7 +233,7 @@
         is the page saying so first, not the rule. -#}
     <section class="pane{% if !p.writable %} is-readonly{% endif %}"
              {%- if !p.writable %} data-readonly="{{ t.read_only_ledger(p.name) }}"{% endif %}
-             :class="{ 'is-focus': pane === {{ loop.index0 }} }" @click="pane = {{ loop.index0 }}">
+             :class="{ 'is-focus': pane === {{ loop.index0 }} }" @click="clickPane($event, {{ loop.index0 }})">
       <header class="pane-head">
         <b>{{ p.name }}</b>
         {%- if !p.writable %}
@@ -2182,6 +2182,48 @@ function ledger() {
         if (i >= 0) this.row = i;
         this.paint();
       });
+    },
+
+    /// A click puts the cursor where it landed — the same cursor `j`/`k`
+    /// move, placed by pointing instead. A tap on a phone is the same click.
+    ///
+    /// Delegated from the pane rather than bound on each row: rows are
+    /// swapped in and out by HTMX all the time, and a listener on the section
+    /// survives every one of those swaps.
+    ///
+    /// The index comes from `rows()`, so a click can only land on a real
+    /// cursor position — a fold header or a visible row. The skeleton, the
+    /// add form and the pane's own header are not positions and move nothing
+    /// (except which pane is focused). Everything a cursor move implies —
+    /// parking a draft, closing `E`/`gl`, `?pane=`, relative numbers — comes
+    /// from `paint()`, exactly as it does for `j`.
+    ///
+    /// A fold header toggles as well, and it goes through `fold('a')` so the
+    /// cursor is already standing on the header when the fold closes. A
+    /// header that toggled on its own left the index pointing into the fold
+    /// it had just hidden.
+    clickPane(e, i) {
+      // The mouse is the thing acting now, so hover comes back.
+      document.body.classList.remove('kbd-nav');
+      const was = this.pane;
+      this.pane = i;
+      const hit = e.target.closest('.foldhead, div[id^="row-"] .row');
+      const at = hit ? this.rows().indexOf(hit) : -1;
+      const head = at >= 0 && hit.classList.contains('foldhead');
+      if (at >= 0) {
+        // Already there — a click inside the open edit form, say. Nothing
+        // moved, so nothing repaints.
+        if (!head && was === i && at === this.row) return;
+        this.row = at;
+      } else if (was !== i) {
+        this.row = 0;            // the pane's chrome: the same as H/L
+      } else {
+        return;
+      }
+      // A `gd` popup belongs to the row it was opened on, like a hover.
+      this.tip = null;
+      if (head) this.fold('a');  // fold() paints
+      else this.paint();
     },
 
     // --- commands --------------------------------------------------------

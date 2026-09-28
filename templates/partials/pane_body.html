@@ -16,7 +16,9 @@
     per-category summary with nothing else built. -#}
 {%- for g in p.groups %}
 <section class="fold" :class="{ 'is-closed': closed('{{ p.id }}-{{ loop.index0 }}') }">
-  <header class="foldhead" @click="toggle('{{ p.id }}-{{ loop.index0 }}')">
+  {#- No click handler of its own: the pane's `clickPane` puts the cursor on
+      the header and then toggles it, so the index cannot go stale. -#}
+  <header class="foldhead">
     <span class="fmark" x-text="closed('{{ p.id }}-{{ loop.index0 }}') ? '▸' : '▾'">▾</span>
     <b>{{ g.name }}</b>
     <span class="fcount">{{ g.count }}</span>
