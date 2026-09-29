@@ -10,7 +10,7 @@
 //! the wrong thing last Tuesday", not archival: the ledger already keeps
 //! everything, since nothing is ever hard-deleted.
 
-use chrono::{Local, NaiveDate};
+use chrono::NaiveDate;
 use sqlx::SqlitePool;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -79,7 +79,7 @@ fn prune(dir: &Path, today: NaiveDate) -> anyhow::Result<()> {
 pub fn spawn(pool: SqlitePool, dir: PathBuf) {
     tokio::spawn(async move {
         loop {
-            match run(&pool, &dir, Local::now().date_naive()).await {
+            match run(&pool, &dir, crate::clock::today()).await {
                 Ok(path) => tracing::info!("backup · {}", path.display()),
                 // Not fatal: the ledger is still working, and the next tick
                 // tries again. A household that cannot back up should know,

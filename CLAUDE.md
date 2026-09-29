@@ -915,6 +915,14 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   place. So read `chrono::Local` at startup and **log it at boot** —
   `ffm · timezone America/Sao_Paulo · today 21/09/2026` — because a household
   watching a bill go overdue at 21:00 otherwise has no way to find out why.
+  - **`clock::today()` / `clock::now()` are the only readers** (`src/clock.rs`)
+    — never `chrono::Local::now()` or `Utc::now()` at a call site. That is what
+    lets a dev server run **as of another date**: `FFM_TODAY=2026-10-15`, set
+    by `just dev 2026-10-15`, moves the clock by whole days in a **debug build
+    only** (a release binary logs that it is ignoring it). It is an offset, not
+    a frozen date, and it moves the UTC stamps too: faked alone, the date would
+    disagree with the change log's `at`, and every `u` would ask "from before
+    today?" about a change made a minute ago.
 
 ### Categorization & grouping
 
@@ -1288,6 +1296,25 @@ that will otherwise be re-proposed.
   poppler`) and Safari's `safaridriver`.
 - `just dev` — Tailwind build, then `cargo watch` recompiling and restarting on
   save. `just css` in a second pane for CSS-only iteration.
+- **`just dev` and `just dev-lan` first stop an earlier dev loop on their
+  port** (`_free-port`), printing each step. A forgotten server in another
+  pane once answered every request while the new one died on bind, so a
+  `just dev 2026-10-15` looked like it worked and showed the real today.
+  - **The port alone is not enough to look at.** An old cargo watch whose
+    server had already exited held nothing, then restarted that server the
+    instant the new loop's startup wrote a file, and won the port a second
+    before the new server bound. So every cargo watch running `-x run` in
+    this checkout with the same `FFM_ADDR` port is stopped too — **paused
+    (SIGSTOP) first**, so it cannot restart anything mid-cleanup.
+  - The server gets SIGTERM, which it answers by checkpointing the WAL, and
+    SIGKILL only if it still holds the port after 8 seconds.
+  - Anything on the port that is not an ffm binary is refused, never killed;
+    a watcher on another port, or a `cargo watch -x test`, is left alone.
+- `just dev 2026-10-15` (and `just dev-lan 2026-10-15`) — the same loop as of
+  that date, on a **fresh copy** of `ffm.db` and the vault in `./demo`
+  (gitignored), made once per invocation. The demo materializes that month's
+  rows and stamps its edits with that date, which must never reach the real
+  database — so it never runs on it.
 - `tower-livereload` **0.10+**, behind the opt-in `dev-reload` feature (which is
   what `just dev` turns on) — refreshes the browser once the server restarts.
   Not `#[cfg(debug_assertions)]`, and not a default feature: see the gotcha

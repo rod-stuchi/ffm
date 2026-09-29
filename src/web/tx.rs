@@ -31,7 +31,6 @@ use askama::Template;
 use axum::extract::{Form, Path, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use chrono::Local;
 use serde::Deserialize;
 
 /// The fragment every mutation returns.
@@ -85,7 +84,7 @@ pub fn ascii_json(s: &str) -> String {
 
 fn ctx(auth: &Auth, currency: crate::domain::money::Currency, show_recurring: bool) -> RowCtx {
     RowCtx {
-        today: Local::now().date_naive(),
+        today: crate::clock::today(),
         // A fragment is rendered by the same path a page load uses, including
         // the order the member chose — otherwise a row swapped into a
         // date-sorted pane would land where manual order would have put it.
@@ -473,7 +472,7 @@ pub async fn add(State(st): State<AppState>, auth: Auth, Form(form): Form<AddFor
         kind,
         title,
         amount: Cents::parse(&form.amount),
-        date: Some(Local::now().date_naive()),
+        date: Some(crate::clock::today()),
         bucket: (!bucket.is_empty()).then_some(bucket),
         visibility: Visibility::Household,
     };
@@ -676,7 +675,7 @@ async fn apply(st: &AppState, auth: &Auth, f: UndoForm, dir: tx::Direction) -> R
     // one key, next to `i`, and last week's edit is not what anybody expects
     // it to reach — so the first press says what it would do and when, and
     // only the same key again, about the same change, does it.
-    let today = Local::now().date_naive();
+    let today = crate::clock::today();
     let day = crate::ui::log::local_date(&u.at).unwrap_or(today);
     if day < today && f.confirm != Some(u.change_id) {
         let date = crate::ui::fmt::date(day);

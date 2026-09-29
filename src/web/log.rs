@@ -17,7 +17,6 @@ use crate::web::template::Html;
 use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Response};
-use chrono::Local;
 use serde::Deserialize;
 
 #[derive(Template)]
@@ -96,7 +95,7 @@ pub async fn log(
         period: crate::domain::period::Period::parse(&row.period)
             .map(crate::ui::fmt::period)
             .unwrap_or(row.period),
-        days: render::render(&entries, &t, currency, Local::now().date_naive()),
+        days: render::render(&entries, &t, currency, crate::clock::today()),
         filter: filter.code(),
         has_rule: row.rule_id.is_some(),
         row_id: id,

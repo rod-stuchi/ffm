@@ -26,7 +26,7 @@ use crate::domain::money::Cents;
 use crate::domain::months::Months;
 use crate::domain::period::Period;
 use crate::domain::sortkey;
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate};
 use sqlx::SqlitePool;
 use std::time::Duration;
 
@@ -276,7 +276,7 @@ async fn insert_occurrence(pool: &SqlitePool, o: Occurrence<'_>) -> sqlx::Result
         .and_then(|d| o.period.due_date(d))
         .map(|d| d.format("%Y-%m-%d").to_string());
 
-    let at = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let at = crate::clock::stamp();
     let amount = o.amount.map(|c| c.get());
 
     let inserted = sqlx::query!(
@@ -332,7 +332,7 @@ async fn insert_occurrence(pool: &SqlitePool, o: Occurrence<'_>) -> sqlx::Result
 pub fn spawn(pool: SqlitePool) {
     tokio::spawn(async move {
         loop {
-            let today = chrono::Local::now().date_naive();
+            let today = crate::clock::today();
             match reconcile(&pool, today).await {
                 Ok(r) if r.created > 0 => {
                     tracing::info!(

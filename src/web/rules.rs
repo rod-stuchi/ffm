@@ -30,7 +30,7 @@ use crate::web::template::Html;
 use askama::Template;
 use axum::extract::{Form, Path, Query, State};
 use axum::response::{IntoResponse, Response};
-use chrono::{Local, NaiveDate};
+use chrono::NaiveDate;
 use serde::Deserialize;
 
 /// The cadences the form offers. Only the list is real so far: the
@@ -253,7 +253,7 @@ pub async fn new_rule(
     }
     let kind = TxKind::parse(&p.kind).unwrap_or(TxKind::Out);
     let t = auth.catalog();
-    let today = Local::now().date_naive();
+    let today = crate::clock::today();
 
     Html(RulePane {
         id: None,
@@ -422,7 +422,7 @@ async fn estimates_of(
     let house = ledger::household(&st.pool).await.ok().flatten();
     let currency = house.map(|h| h.currency).unwrap_or_default();
 
-    let today = Local::now().date_naive();
+    let today = crate::clock::today();
     let mut history: Vec<crate::domain::estimate::Confirmed> = Vec::new();
     let mut labels: Vec<String> = Vec::new();
     // A year back is enough to fill any window the form offers, and bounded —
@@ -731,7 +731,7 @@ pub async fn create(
     // Create brings into being. `finish` reconciles again, which is a no-op
     // by then — `UNIQUE(rule_id, period)` makes it idempotent — so the count
     // is taken here, where the rows are actually made.
-    let created = materializer::reconcile(&st.pool, Local::now().date_naive())
+    let created = materializer::reconcile(&st.pool, crate::clock::today())
         .await
         .map(|r| r.created)
         .unwrap_or(0);
@@ -770,7 +770,7 @@ async fn attach_parked(
     let Ok(Some(rule)) = rules::get(&st.pool, rule_id).await else {
         return (t.error_not_written().to_string(), true);
     };
-    let period = Period::parse(period).unwrap_or_else(|| Period::of(Local::now().date_naive()));
+    let period = Period::parse(period).unwrap_or_else(|| Period::of(crate::clock::today()));
     let Some(tx_id) = crate::web::import::occurrence_of(st, rule_id, period).await else {
         return (t.import_no_occurrence_new_rule().to_string(), true);
     };
@@ -968,7 +968,7 @@ pub async fn delete(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>)
     if let Err(refused) = rule_access(&st, &auth, &r).await {
         return refused;
     }
-    let period = Period::of(Local::now().date_naive()).to_string();
+    let period = Period::of(crate::clock::today()).to_string();
     match rules::soft_delete(&st.pool, Actor::User(auth.viewer.member_id), id).await {
         Ok(true) => {
             finish(
@@ -1017,7 +1017,7 @@ async fn finish(
     period: &str,
     message: String,
 ) -> Response {
-    let today = Local::now().date_naive();
+    let today = crate::clock::today();
     let created = materializer::reconcile(&st.pool, today)
         .await
         .map(|r| r.created)

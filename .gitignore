@@ -24,6 +24,10 @@
 # It holds real bills — it must never be committed by accident.
 /receipts
 
+# `just dev <date>`'s throwaway copy of the database and the vault — real
+# bills, same as above.
+/demo
+
 # Issuer profiles are shipped as an example with placeholder CNPJs; a household
 # replacing them with the real ones is editing its own copy, not the repo's.
 # The example IS committed — see config/issuers.toml.

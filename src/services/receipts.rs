@@ -23,12 +23,11 @@ use crate::domain::money::{Cents, Currency};
 use crate::domain::period::Period;
 use crate::domain::receipt_path::{self, Kind, Taxonomy};
 use crate::ui::row::FilePresence;
-use chrono::Utc;
 use sqlx::SqlitePool;
 use std::path::{Path, PathBuf};
 
 fn now() -> String {
-    Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+    crate::clock::stamp()
 }
 
 /// Everything about one occurrence that a path depends on.

@@ -14,11 +14,11 @@ use crate::domain::money::Cents;
 use crate::domain::period::Period;
 use crate::domain::sortkey;
 use crate::domain::status::{TxKind, Visibility};
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate};
 use sqlx::SqlitePool;
 
 fn now() -> String {
-    Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+    crate::clock::stamp()
 }
 
 pub struct NewTransaction<'a> {

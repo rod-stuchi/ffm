@@ -36,7 +36,7 @@ pub const MIN_PASSWORD: usize = 8;
 pub const LINK_DAYS: i64 = 7;
 
 fn now() -> String {
-    Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+    crate::clock::stamp()
 }
 
 // ---------------------------------------------------------------------------
@@ -458,7 +458,7 @@ pub async fn issue_link(
     );
     let token = random_token();
     let hash = token_hash(&token);
-    let created = Utc::now();
+    let created = crate::clock::now();
     let created_s = created.format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let expires_s = (created + Duration::days(LINK_DAYS))
         .format("%Y-%m-%dT%H:%M:%SZ")
@@ -581,7 +581,7 @@ pub async fn read_link(pool: &SqlitePool, token: &str) -> sqlx::Result<Link> {
 }
 
 fn expired(at: &str) -> bool {
-    DateTime::parse_from_rfc3339(at).is_ok_and(|d| d.with_timezone(&Utc) < Utc::now())
+    DateTime::parse_from_rfc3339(at).is_ok_and(|d| d.with_timezone(&Utc) < crate::clock::now())
 }
 
 /// Why an accept did not go through. Each one is copy the page already has.

@@ -5,6 +5,7 @@
 set dotenv-load := true
 
 db_path := env_var_or_default("FFM_DB_PATH", "./ffm.db")
+receipts_root := env_var_or_default("FFM_RECEIPTS_ROOT", "./receipts")
 
 default:
     @just --list
@@ -14,8 +15,19 @@ default:
 # Rebuild + restart on save. Pair with `just css` in a second pane.
 # dev-reload is opt-in here rather than a default feature, so a release build
 # cannot pick it up by forgetting a flag.
-dev: css-build
-    cargo watch -x 'run --features dev-reload'
+#
+# With a date, the same loop AS OF that date: the clock is moved by whole days
+# and keeps running from there (FFM_TODAY, see src/clock.rs), against a fresh
+# copy of the database and the vault in ./demo — the demo materializes that
+# month's rows and stamps its edits with that date, and none of it may land in
+# the real ffm.db. The copy is made once per `just dev`, not on every
+# cargo-watch restart, so what you do in the demo survives a save.
+#
+# An earlier dev server still on the port is stopped first (`_free-port`).
+#
+# `just dev` · `just dev 2026-10-15` runs as of that date, on a copy in ./demo
+dev today="": _free-port css-build (_demo today)
+    {{ if today == "" { "" } else { "FFM_TODAY=" + today + " FFM_DB_PATH=./demo/ffm.db FFM_RECEIPTS_ROOT=./demo/receipts FFM_BACKUP_DIR=./demo/backups" } }} cargo watch -x 'run --features dev-reload'
 
 # Same loop, reachable from the rest of the house. Binds every interface instead
 # of loopback, so a phone or a second laptop on the same LAN/Tailscale can open
@@ -24,8 +36,108 @@ dev: css-build
 #
 # There is no auth layer yet, so only run this on a network you trust — which is
 # the same deployment assumption the auth design makes (see design/spec.md).
-dev-lan: css-build
-    FFM_ADDR=0.0.0.0:3000 cargo watch -x 'run --features dev-reload'
+#
+# `just dev-lan` · `just dev-lan 2026-10-15` runs as of that date, on a copy in ./demo
+dev-lan today="":
+    FFM_ADDR=0.0.0.0:3000 just dev {{today}}
+
+# Stop an earlier dev loop — its server and its cargo watch — before this one
+# starts.
+#
+# Left running, the old server answers every request while the new one dies on
+# bind, so a `just dev 2026-10-15` looks like it worked while showing the real
+# database's today, which is how this was found. And the port alone is not
+# enough to look at: an old cargo watch whose server has already exited holds
+# nothing, then restarts its server the moment this one's startup writes a file
+# — and wins the port a second before the new server binds. So every cargo
+# watch running `-x run` in THIS checkout on THIS port goes too, paused first
+# so it cannot restart anything while its server is being stopped.
+#
+# The server gets SIGTERM, which it answers by checkpointing the WAL (see
+# main.rs's shutdown) — its chance to leave ffm.db whole. Only if it still
+# holds the port after 8 seconds is it killed outright. Anything on the port
+# that is NOT an ffm binary is left alone: that is somebody else's program.
+_free-port:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    addr="${FFM_ADDR:-127.0.0.1:3000}"; port="${addr##*:}"
+    repo=$(pwd -P)
+    held() { lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -1; }
+    alive() { kill -0 "$1" 2>/dev/null; }
+
+    # Refuse before touching anything if the port is somebody else's.
+    pid=$(held || true)
+    if [ -n "$pid" ]; then
+        cmd=$(ps -o command= -p "$pid" || true)
+        case "$cmd" in
+            */ffm|*/ffm\ *) ;;
+            *) echo "✗ port $port is held by pid $pid ($cmd) — not an ffm server, so it is left alone; stop it yourself" >&2
+               exit 1 ;;
+        esac
+    fi
+
+    # This checkout's dev loops FOR THIS PORT: a cargo watch running `-x run`,
+    # working here, whose FFM_ADDR names the same port. A `cargo watch -x test`
+    # is not a server, and a loop on another port is not in the way; both stay.
+    watchers=""
+    for w in $(pgrep -f cargo-watch || true); do
+        case "$(ps -o command= -p "$w" || true)" in *" -x run"*) ;; *) continue ;; esac
+        cwd=$(lsof -a -p "$w" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+        [ "$cwd" = "$repo" ] || continue
+        theirs=$(ps eww -o command= -p "$w" | tr ' ' '\n' | sed -n 's/^FFM_ADDR=//p' | head -1)
+        theirs="${theirs:-127.0.0.1:3000}"
+        [ "${theirs##*:}" = "$port" ] && watchers="$watchers $w"
+    done
+
+    [ -z "$pid" ] && [ -z "$watchers" ] && exit 0
+
+    for w in $watchers; do
+        echo "→ pausing an earlier cargo watch (pid $w), so it cannot restart a server meanwhile"
+        kill -STOP "$w" 2>/dev/null || true
+    done
+
+    if [ -n "$pid" ]; then
+        echo "→ port $port is held by an earlier ffm (pid $pid) · asking it to stop (SIGTERM), up to 8s"
+        kill -TERM "$pid" 2>/dev/null || true
+        for _ in $(seq 16); do [ -z "$(held || true)" ] && break; sleep 0.5; done
+        if [ -n "$(held || true)" ]; then
+            echo "→ pid $pid still holds port $port after 8s · killing it (SIGKILL)"
+            kill -KILL "$pid" 2>/dev/null || true
+            sleep 0.5
+        else
+            echo "✓ pid $pid stopped on its own"
+        fi
+    fi
+
+    for w in $watchers; do
+        echo "→ stopping that cargo watch (pid $w)"
+        kill -TERM "$w" 2>/dev/null || true
+        kill -CONT "$w" 2>/dev/null || true
+        for _ in $(seq 6); do alive "$w" || break; sleep 0.5; done
+        if alive "$w"; then
+            echo "→ cargo watch pid $w is still running after 3s · killing it (SIGKILL)"
+            kill -KILL "$w" 2>/dev/null || true
+        fi
+    done
+
+    if [ -n "$(held || true)" ]; then
+        echo "✗ port $port is still held (pid $(held)) — stop it yourself" >&2
+        exit 1
+    fi
+    echo "✓ port $port is free"
+
+# The throwaway copy `just dev <date>` runs on. `.backup` rather than `cp`,
+# because the dev server may have ffm.db open in WAL mode, and a plain copy of
+# the main file alone is not the whole database. No date, nothing to do.
+_demo today:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -z "{{today}}" ] && exit 0
+    rm -rf ./demo
+    mkdir -p ./demo/backups
+    sqlite3 "{{db_path}}" ".backup ./demo/ffm.db"
+    if [ -d "{{receipts_root}}" ]; then cp -R "{{receipts_root}}" ./demo/receipts; else mkdir -p ./demo/receipts; fi
+    echo "demo · ./demo is a fresh copy of {{db_path}} and {{receipts_root}} · today is {{today}}"
 
 # Tailwind in watch mode. v4 is CSS-first — the tokens live in an @theme block
 # in static/css/app.css, so there is deliberately no tailwind.config.js.

@@ -447,7 +447,7 @@ pub async fn set_household(
         key: "setting",
         problem: e.to_string(),
     };
-    let at = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let at = crate::clock::stamp();
 
     match key {
         HouseholdKey::Name => {

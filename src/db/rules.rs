@@ -12,11 +12,11 @@ use crate::domain::money::Cents;
 use crate::domain::months::Months;
 use crate::domain::period::Period;
 use crate::domain::status::{TxKind, Visibility};
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 fn now() -> String {
-    Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+    crate::clock::stamp()
 }
 
 fn iso(d: NaiveDate) -> String {

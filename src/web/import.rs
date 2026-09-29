@@ -35,7 +35,7 @@ use askama::Template;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::response::IntoResponse;
 use axum::response::Response;
-use chrono::{Local, NaiveDate};
+use chrono::NaiveDate;
 use serde::Deserialize;
 
 const MAX_BYTES: usize = 20 * 1024 * 1024;
@@ -97,7 +97,7 @@ pub fn parse(st: &AppState, upload: &Upload) -> Result<Parsed, Refused> {
         return Err(Refused("could not read the file".into()));
     }
     let profiles = Profiles::load(&st.cfg.issuers_path()).unwrap_or_default();
-    let parsed = import::import(&scratch, &profiles, Local::now().date_naive());
+    let parsed = import::import(&scratch, &profiles, crate::clock::today());
     let _ = std::fs::remove_file(&scratch);
     // A misread is reported, never worked around: a number that failed its
     // own checksum is not a number to fall back from.
@@ -155,7 +155,7 @@ pub async fn attach(
         Ok(u) => u,
         Err(Refused(m)) => return say(&m, true),
     };
-    let period = Period::parse(&p.period).unwrap_or_else(|| Period::of(Local::now().date_naive()));
+    let period = Period::parse(&p.period).unwrap_or_else(|| Period::of(crate::clock::today()));
     let Some(tx_id) = occurrence_of(&st, rule_id, period).await else {
         return say(t.import_no_occurrence(), true);
     };

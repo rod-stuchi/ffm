@@ -20,7 +20,7 @@
 
 use crate::domain::money::Cents;
 use crate::domain::period::Period;
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 // ---------------------------------------------------------------------------
@@ -370,7 +370,7 @@ impl Change {
     /// row it describes must commit together, or the log is a record of things
     /// that may or may not have happened.
     pub async fn write(self, tx: &mut Transaction<'_, Sqlite>) -> sqlx::Result<i64> {
-        let at = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let at = crate::clock::stamp();
         let source = self.actor.source();
         let member_id = self.actor.member_id();
         let period = self.period.map(|p| p.to_string());

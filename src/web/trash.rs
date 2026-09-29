@@ -21,7 +21,6 @@ use crate::web::tx::{files_follow_row, pane_rows, say, say_only};
 use askama::Template;
 use axum::extract::{Form, Query, State};
 use axum::response::{IntoResponse, Response};
-use chrono::Local;
 use serde::Deserialize;
 
 /// How much of the trash one opening shows. A household deletes a handful of
@@ -111,7 +110,7 @@ async fn pane(st: &AppState, auth: &Auth, period: &str) -> Option<TrashPane> {
         auth.viewer.member_id,
         period,
         currency,
-        Local::now().date_naive(),
+        crate::clock::today(),
     ))
 }
 

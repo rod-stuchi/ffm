@@ -41,6 +41,31 @@ async fn main() {
         }
     };
 
+    // `FFM_TODAY` runs a dev server as of another date — `just dev 2026-10-15`
+    // sets it, against a throwaway copy of the database in ./demo. Debug
+    // builds only: a release binary says it is ignoring it and keeps today.
+    match ffm::clock::demo_from_env() {
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+        Ok(None) => {}
+        #[cfg(debug_assertions)]
+        Ok(Some(date)) => {
+            let real = chrono::Local::now().date_naive();
+            ffm::clock::pretend(date);
+            tracing::warn!(
+                "ffm · DEMO · today {} (really {}) · the clock runs from there",
+                ffm::ui::fmt::date(date),
+                ffm::ui::fmt::date(real)
+            );
+        }
+        #[cfg(not(debug_assertions))]
+        Ok(Some(_)) => {
+            tracing::warn!("FFM_TODAY is a dev-only setting — ignored in a release build");
+        }
+    }
+
     // "Today" is the process's LOCAL date, and every date-shaped decision in
     // the app reads it: the due ring, `scheduled overdue`, the unresolved
     // badge, and the materializer's current month. ffm.toml has no timezone key
@@ -50,7 +75,7 @@ async fn main() {
     tracing::info!(
         "ffm · timezone {} · today {}",
         timezone_name(),
-        ffm::ui::fmt::date(chrono::Local::now().date_naive())
+        ffm::ui::fmt::date(ffm::clock::today())
     );
     tracing::info!(
         "db {} · receipts {} · backups {}",
@@ -302,7 +327,7 @@ async fn reset_link(pool: &sqlx::SqlitePool, name: &str) -> i32 {
         }
     };
 
-    let expires = (chrono::Utc::now() + chrono::Duration::days(auth::LINK_DAYS)).date_naive();
+    let expires = (ffm::clock::now() + chrono::Duration::days(auth::LINK_DAYS)).date_naive();
 
     println!();
     println!(

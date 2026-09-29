@@ -9,6 +9,7 @@
 //!
 //! It also means the test suite exercises the same surface a caller would.
 
+pub mod clock;
 pub mod config;
 pub mod db;
 pub mod domain;

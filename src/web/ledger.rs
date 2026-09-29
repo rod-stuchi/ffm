@@ -21,7 +21,7 @@ use crate::web::template::Html;
 use askama::Template;
 use axum::extract::{Query, State};
 use axum::response::IntoResponse;
-use chrono::{Local, NaiveDate};
+use chrono::NaiveDate;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -171,7 +171,7 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
 async fn session_ctx(st: &AppState, auth: &Auth) -> RowCtx {
     let house = ledger::household(&st.pool).await.ok().flatten();
     RowCtx {
-        today: Local::now().date_naive(),
+        today: crate::clock::today(),
         sort: ledger::Sort::parse(&auth.settings.ledger_sort),
         currency: house.as_ref().map(|h| h.currency).unwrap_or_default(),
         show_recurring: house.as_ref().is_none_or(|h| h.show_recurring),
@@ -373,7 +373,7 @@ pub async fn ledger(
     auth: Auth,
     Query(p): Query<Params>,
 ) -> impl IntoResponse {
-    let today = Local::now().date_naive();
+    let today = crate::clock::today();
     let period = p
         .period
         .as_deref()
@@ -894,7 +894,7 @@ pub async fn month_pop(
 ) -> impl IntoResponse {
     use crate::domain::money::Cents;
 
-    let today = Local::now().date_naive();
+    let today = crate::clock::today();
     let showing = p
         .period
         .as_deref()

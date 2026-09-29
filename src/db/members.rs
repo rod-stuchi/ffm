@@ -88,7 +88,7 @@ pub async fn pending_invites(pool: &SqlitePool) -> sqlx::Result<Vec<PendingInvit
             label: r.label,
             for_member: r.for_member,
             expired: DateTime::parse_from_rfc3339(&r.expires_at)
-                .is_ok_and(|d| d.with_timezone(&Utc) < Utc::now()),
+                .is_ok_and(|d| d.with_timezone(&Utc) < crate::clock::now()),
             expires: NaiveDate::parse_from_str(&r.expires_at[..10], "%Y-%m-%d")
                 .map(fmt::date)
                 .unwrap_or(r.expires_at),
@@ -97,7 +97,7 @@ pub async fn pending_invites(pool: &SqlitePool) -> sqlx::Result<Vec<PendingInvit
 }
 
 pub async fn revoke_invite(pool: &SqlitePool, id: i64) -> sqlx::Result<bool> {
-    let at = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let at = crate::clock::stamp();
     let n = sqlx::query!(
         r#"UPDATE member_invites SET revoked_at = ?2
            WHERE id = ?1 AND accepted_at IS NULL AND revoked_at IS NULL"#,

@@ -28,7 +28,6 @@ use crate::web::template::Html;
 use askama::Template;
 use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
-use chrono::Local;
 use serde::Deserialize;
 use std::collections::HashSet;
 
@@ -199,7 +198,7 @@ pub async fn cell(State(st): State<AppState>, auth: Auth, Query(p): Query<Params
     let house = ledger::household(&st.pool).await.ok().flatten();
     let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
     let ctx = RowCtx {
-        today: Local::now().date_naive(),
+        today: crate::clock::today(),
         sort: ledger::Sort::parse(&auth.settings.ledger_sort),
         currency,
         show_recurring: house.as_ref().is_none_or(|h| h.show_recurring),
