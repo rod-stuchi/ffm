@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT period AS \"period!: String\", title AS \"title!: String\",\n                  amount_cents AS \"amount_cents: i64\", member_id AS \"member_id!: i64\",\n                  visibility AS \"visibility!: String\"\n           FROM transactions\n           WHERE barcode_raw = ?1 AND id <> ?2 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "period!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "07bd3df942e70f637adcdb8cda5a5c3cb4a4edb176899d0fadb57c1b35693447"
+}

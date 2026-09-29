@@ -295,8 +295,11 @@ pub async fn attach_to(
     // `barcode_raw` is the natural idempotency key, with a unique index behind
     // it: the same bill cannot end up on two rows.
     let raw = parsed.barcode.raw.clone();
-    let already: Option<String> = sqlx::query_scalar!(
-        r#"SELECT period AS "p!: String" FROM transactions
+    let already = sqlx::query!(
+        r#"SELECT period AS "period!: String", title AS "title!: String",
+                  amount_cents AS "amount_cents: i64", member_id AS "member_id!: i64",
+                  visibility AS "visibility!: String"
+           FROM transactions
            WHERE barcode_raw = ?1 AND id <> ?2 AND deleted_at IS NULL"#,
         raw,
         tx_id
@@ -305,9 +308,30 @@ pub async fn attach_to(
     .await
     .ok()
     .flatten();
-    if let Some(period) = already {
-        let label = Period::parse(&period).map(fmt::period).unwrap_or(period);
-        return Err(Refused(t.import_already_attached(&label)));
+    if let Some(row) = already {
+        let label = Period::parse(&row.period)
+            .map(fmt::period)
+            .unwrap_or(row.period);
+        // Naming the row that holds it is what makes the refusal useful —
+        // unless that row is private to somebody else, when its title and
+        // amount are exactly what `private` hides. The month alone says no
+        // more than the refusal itself already does.
+        if row.visibility == "private" && !auth.viewer.sees_private_of(row.member_id) {
+            return Err(Refused(t.import_already_attached_hidden(&label)));
+        }
+        let currency = crate::db::ledger::household(&st.pool)
+            .await
+            .ok()
+            .flatten()
+            .map(|h| h.currency)
+            .unwrap_or_default();
+        let amount = row
+            .amount_cents
+            .map(|c| fmt::money(Cents(c), currency))
+            .unwrap_or_else(|| fmt::money_placeholder(currency));
+        return Err(Refused(
+            t.import_already_attached(&label, &row.title, &amount),
+        ));
     }
 
     // The file itself is kept, under the deterministic name every other
