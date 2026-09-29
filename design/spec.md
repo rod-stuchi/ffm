@@ -585,8 +585,9 @@ for this row"*.
 |---|---|
 | `dd` | delete — opens a confirmation |
 | `y` | confirm in the delete modal |
-| `u` | undo the last change |
-| `U` | the trash — every deleted row and removed file, each restorable on its own · `:trash` opens it too |
+| `u` | undo your last change — in the focused pane, in the month on screen |
+| `U` | redo — put back what `u` just took |
+| `Ctrl-u` | the trash — every deleted row and removed file, each restorable on its own · `:trash` opens it too |
 | `Esc` | clear count, buffer, selection and search |
 
 - **Undo restores the deleted row in place.** There is no second,
@@ -595,7 +596,53 @@ for this row"*.
   row in the ledger, undeleted and focused. Both the delete and the restore
   are entries in the change log, which is where the chain lives now.
 
-#### The trash (`U` / `:trash`)
+#### Undo and redo (`u` / `U`)
+
+`u` used to reach your last change *anywhere*: another month, another pane,
+last week — and said only `undone`, so finding out what a stray press had
+done meant opening `gl`. It was also the one gesture that could overwrite
+somebody else: undoing my 10:00 edit put my old amount back over Ana's 11:00
+one. And there was no redo.
+
+- **Scoped to what is in front of you.** `u` and `U` reach only the viewer's
+  **own** changes, to rows in the **focused pane**, in the **month on
+  screen**. To undo something in August, go to August. A non-admin in another
+  member's pane is refused as read-only, like every other write key; an admin
+  in Ana's pane reaches the admin's own changes there and never Ana's — `u`
+  means "undo what I did", in whoever's pane it is pressed. A re-attribution
+  is reachable from the pane the row left as well as the one it went to.
+- **Redo is an undo of an undo.** Every undo is already its own entry, with
+  `undo_of` and the full diff, and reversing it re-applies what it undid
+  through the same code — so there is no second implementation of any verb.
+  Depth along the `undo_of` chain says what an entry is: 0 an original, odd
+  an undo, even a redo. `u` takes the newest at even depth, `U` the newest at
+  odd depth, and only one newer than your newest original here: **a fresh
+  change clears the redo stack**, as it does in Vim. A trash restore is a
+  fresh change.
+- **A change somebody else has changed since is skipped, and named.** A later
+  change still in effect, by another member, to the same row (or the same
+  file slot) means yours is no longer the row's state to reverse: `u` leaves
+  it as they made it, says so — *Ana changed "Padaria" since — left as they
+  made it* — and reverses your change before it. Skipping rather than
+  refusing is also what keeps `u` from getting stuck on one change forever.
+  The materializer and the system are nobody's work and never overtake.
+- **A change from before today asks first.** The first `u` says what it would
+  undo and from when — *u again to undo: edited "Mercado", from 12/09/2026* —
+  and only the very next key, `u` again, about the same change, does it. The
+  server re-checks the id, so a stale confirmation cannot reverse something
+  else.
+- **It says what it did, where you are looking.** *undone: edited "Mercado" ·
+  amount R$ 12,00 → R$ 10,00 · U redoes* — read off the entry the step just
+  wrote, formatted as the log pane formats it, two fields at most. The cursor
+  goes to the row and it blinks once.
+- **Parts of another step never stand alone.** A row's files moved with it,
+  and a live file a swap moved aside (`swapped aside`), follow the entry they
+  belong to in both directions and are never picked on their own.
+- **Not Ctrl-R.** Vim's redo reloads the page on Linux, and a reload drops
+  every parked draft. `U` is free on every platform and pairs with `u` the
+  way the rest of this keymap pairs lowercase with uppercase.
+
+#### The trash (`Ctrl-u` / `:trash`)
 
 `u` is a stack: it walks back through *your* last actions, in order. Getting
 back a row deleted three actions ago meant undoing the two newer, unrelated
@@ -621,7 +668,11 @@ checkbox each, restored in any combination.
   the row is the person's call, not the server's.
 - **A restore from here is an ordinary action, not an undo.** It is logged
   as `restore` / `file_upload` with no `undo_of`, so `u` right afterwards puts
-  back what was just restored, and then keeps walking back through history.
+  back what was just restored, and then keeps walking back through history
+  — within the pane and month on screen, like any `u`.
+- **`Ctrl-u`, not `U`.** It opened on `U` first; `U` became redo. On Linux
+  and Windows Ctrl-U is the browser's view-source, which the keymap takes
+  over — and if it ever slips past, a source tab opens and nothing is lost.
 - **`u` swaps too.** Reaching a file delete whose slot has since been filled
   used to fail with "occupied" — and since `u` never skips a change it could
   not undo, every `u` after it failed the same way. It now swaps, and the file
@@ -631,7 +682,7 @@ checkbox each, restored in any combination.
   the deletion, newest first, the newest 200. Not remembered in `?split=`:
   like `:grep`, it is a list for a moment, not a setting being watched.
 - **A real form.** The checked boxes are unsubmitted form values, like a
-  draft; the server re-checks every pick. `U` opens it with the keyboard on
+  draft; the server re-checks every pick. `Ctrl-u` opens it with the keyboard on
   the first entry: `j`/`k`, `gg`/`G`, `x` or Space checks, `Enter` restores
   what is checked, `Esc` closes. No confirmation — a restore is undone by `u`,
   so the consequence is obvious from the action.
@@ -645,7 +696,7 @@ checkbox each, restored in any combination.
 |---|---|
 | `:` | open the command bar |
 | `:grep vinho` | search every month — a result list, not a filter over this one |
-| `:trash` | deleted rows and removed files, to bring back — the same pane `U` opens |
+| `:trash` | deleted rows and removed files, to bring back — the same pane `Ctrl-u` opens |
 | `:sort date` | row order: manual · date · amount |
 | `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |

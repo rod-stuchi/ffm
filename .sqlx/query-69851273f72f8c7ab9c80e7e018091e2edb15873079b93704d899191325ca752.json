@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\" FROM change WHERE undo_of = ?1\n           ORDER BY id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "69851273f72f8c7ab9c80e7e018091e2edb15873079b93704d899191325ca752"
+}

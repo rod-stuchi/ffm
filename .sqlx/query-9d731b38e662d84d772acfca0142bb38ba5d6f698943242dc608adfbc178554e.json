@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.id AS \"id!: i64\", p.entity_id AS \"receipt_id!: i64\"\n           FROM change p JOIN change r ON r.id = ?1\n           WHERE p.undo_of = r.undo_of AND p.id <> r.id\n             AND p.entity = 'file' AND p.action = 'file_delete' AND p.note = ?2\n             AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = p.id)",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "receipt_id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "9d731b38e662d84d772acfca0142bb38ba5d6f698943242dc608adfbc178554e"
+}

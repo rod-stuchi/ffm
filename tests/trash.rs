@@ -476,3 +476,157 @@ async fn a_swap_with_nothing_on_disk_leaves_the_live_file_alone() {
     .unwrap();
     assert_eq!(live_rows, 1);
 }
+
+fn here(me: i64) -> tx::Scope {
+    tx::Scope {
+        me,
+        owner: Some(me),
+        period: Some(sep()),
+    }
+}
+
+/// A deleted row's files follow it through `u` AND `U` — and no file move is
+/// ever a step of its own for either key.
+#[tokio::test]
+async fn a_rows_files_follow_it_through_undo_and_redo() {
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (id, slot) = tracked_occurrence(&pool, me).await;
+    store(&pool, &root, me, &slot, Kind::Barcode, b"bill").await;
+    let live = root.join(format!(
+        "{}/consumo/energia/2026/09_barcode.pdf",
+        slot.vault
+    ));
+
+    tx::soft_delete(&pool, Actor::User(me), id).await.unwrap();
+    receipts::retire_with_row(&pool, &root, Actor::User(me), id)
+        .await
+        .unwrap();
+    assert!(!live.exists());
+
+    // `u`: the row, then its files — what the handler does.
+    let u = tx::next(&pool, here(me), tx::Direction::Undo)
+        .await
+        .unwrap()
+        .pick
+        .unwrap();
+    assert_eq!(
+        (u.entity.as_str(), u.action.as_str()),
+        ("transaction", "delete")
+    );
+    assert!(tx::undo(&pool, Actor::User(me), &u).await.unwrap());
+    receipts::restore_with_row(&pool, &root, Actor::User(me), id)
+        .await
+        .unwrap();
+    assert!(live.exists());
+
+    // `U`: the undo's `restore` is picked, never the file restores it caused.
+    let r = tx::next(&pool, here(me), tx::Direction::Redo)
+        .await
+        .unwrap()
+        .pick
+        .unwrap();
+    assert_eq!(
+        (r.entity.as_str(), r.action.as_str()),
+        ("transaction", "restore")
+    );
+    assert!(tx::undo(&pool, Actor::User(me), &r).await.unwrap());
+    receipts::retire_with_row(&pool, &root, Actor::User(me), id)
+        .await
+        .unwrap();
+    assert!(!live.exists());
+
+    // And `u` again reaches the redo, not a file move.
+    let u = tx::next(&pool, here(me), tx::Direction::Undo)
+        .await
+        .unwrap()
+        .pick
+        .unwrap();
+    assert_eq!(
+        (u.entity.as_str(), u.action.as_str()),
+        ("transaction", "delete")
+    );
+}
+
+/// `U` after a `u` that swapped: the restored file goes back to the trash and
+/// the file it had moved aside comes back — the swap is part of the step.
+#[tokio::test]
+async fn redo_of_a_swap_brings_the_displaced_file_back() {
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (_, slot) = tracked_occurrence(&pool, me).await;
+    store(&pool, &root, me, &slot, Kind::Barcode, b"first").await;
+    receipts::soft_delete(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Barcode,
+        "manual",
+        None,
+    )
+    .await
+    .unwrap();
+    let first = receipt_id(&pool, "barcode", 0).await;
+    let removed: i64 = sqlx::query_scalar(
+        "SELECT id FROM change WHERE action = 'file_delete' AND entity_id = ? ORDER BY id DESC",
+    )
+    .bind(first)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    store(&pool, &root, me, &slot, Kind::Barcode, b"second").await;
+    let live = root.join(format!(
+        "{}/consumo/energia/2026/09_barcode.pdf",
+        slot.vault
+    ));
+
+    // What `u` does on reaching that delete with the slot taken.
+    receipts::restore_swapping(
+        &pool,
+        &root,
+        Actor::User(me),
+        first,
+        Some(removed),
+        Some(&slot),
+    )
+    .await
+    .unwrap();
+    assert_eq!(std::fs::read(&live).unwrap(), b"first");
+
+    // `U`: picks the restore, never the swap.
+    let r = tx::next(&pool, here(me), tx::Direction::Redo)
+        .await
+        .unwrap()
+        .pick
+        .unwrap();
+    assert_eq!((r.action.as_str(), r.entity_id), ("file_upload", first));
+    // What the handler does for it.
+    receipts::soft_delete(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Barcode,
+        "manual",
+        Some(r.change_id),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        receipts::restore_swapped_with(&pool, &root, Actor::User(me), r.change_id)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(std::fs::read(&live).unwrap(), b"second");
+    let live_rows: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM receipts WHERE kind = 'barcode' AND deleted_at IS NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(live_rows, 1);
+}

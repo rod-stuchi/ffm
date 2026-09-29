@@ -1,4 +1,4 @@
-//! `U` / `:trash` — everything deleted, each one restorable on its own.
+//! `Ctrl-u` / `:trash` — everything deleted, each one restorable on its own.
 //!
 //! `u` walks back through your own last actions in order; this is the other
 //! shape, a list of what is gone with a checkbox each. See `db::trash` for

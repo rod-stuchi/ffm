@@ -198,8 +198,20 @@ row-deleted-say = deleted · u to undo
 row-delete-confirm = Delete this row?
 row-delete-body = It stays in the database and `u` puts it back. Press y to confirm.
 row-delete-yes = Delete
-nothing-to-undo = nothing to undo
+nothing-to-undo = nothing of yours to undo in this ledger this month
+nothing-to-redo = nothing to redo
 undone = undone
+undo-did = undone: { $verb } "{ $title }"
+redo-did = redone: { $verb } "{ $title }"
+undo-redo-hint = U redoes
+redo-undo-hint = u undoes
+undo-more = { $n ->
+        [one] + 1 more field
+       *[other] + { $n } more fields
+    }
+undo-confirm = u again to undo: { $verb } "{ $title }", from { $date }
+redo-confirm = U again to redo: { $verb } "{ $title }", from { $date }
+undo-skipped = { $who } changed "{ $title }" since — left as they made it
 error-not-written = That didn't go through — nothing was written.
 
 ## The rule pane — A / I create, E edits
@@ -404,7 +416,7 @@ grep-count = { $n ->
        *[other] { $n } rows
     }
 
-## The trash — U / :trash
+## The trash — Ctrl-u / :trash
 
 trash-title = Trash
 trash-empty = Nothing has been deleted. Rows you delete with dd and files you remove land here.

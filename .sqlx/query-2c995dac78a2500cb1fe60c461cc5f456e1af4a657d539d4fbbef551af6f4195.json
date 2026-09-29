@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.action AS \"action!: String\"\n           FROM change c JOIN change p ON p.id = c.undo_of WHERE c.id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "action!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2c995dac78a2500cb1fe60c461cc5f456e1af4a657d539d4fbbef551af6f4195"
+}

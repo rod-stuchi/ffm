@@ -1455,7 +1455,7 @@
   white-space: nowrap;
 }
 
-/* --- the trash (`U` / `:trash`) ----------------------------------------- */
+/* --- the trash (`Ctrl-u` / `:trash`) ------------------------------------ */
 
 /* The form is only there to carry the picks; `contents` lets the pane's
  * flex column see the scrolling body and the actions row directly, so the

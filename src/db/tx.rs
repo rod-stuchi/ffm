@@ -212,8 +212,7 @@ pub async fn restore(
     Ok(Some(change_id))
 }
 
-/// What `u` would undo: this member's most recent action that has not already
-/// been undone.
+/// What `u` or `U` would reverse next.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Undoable {
     pub change_id: i64,
@@ -222,43 +221,231 @@ pub struct Undoable {
     pub entity: String,
     pub entity_id: i64,
     pub action: String,
+    /// When the change was made, ISO UTC — a change from before today asks
+    /// for a second `u` first.
+    pub at: String,
+    /// The row the change is about (for a file, the row it belongs to), and
+    /// its title — what the statusline names.
+    pub tx_id: i64,
+    pub title: String,
 }
 
-/// Scoped to the asking member on purpose. `u` means "undo what *I* just did" —
-/// reaching into somebody else's last action would be a different, much more
-/// surprising gesture, and this is a shared ledger.
-pub async fn last_undoable(pool: &SqlitePool, member_id: i64) -> sqlx::Result<Option<Undoable>> {
-    let row = sqlx::query!(
-        r#"SELECT c.id AS "id!: i64", c.entity_id AS "entity_id!: i64",
-                  c.entity AS "entity!: String", c.action AS "action!: String"
+/// Which way through the stack.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    /// `u`: reverse my newest change still in effect.
+    Undo,
+    /// `U`: reverse my newest undo — which re-applies what it undid.
+    Redo,
+}
+
+/// Where `u` and `U` reach: **my own** changes, to rows in one member's
+/// ledger for one month — the pane and the month on screen. `None` widens
+/// that axis, which only tests and the console want.
+#[derive(Clone, Copy, Debug)]
+pub struct Scope {
+    pub me: i64,
+    pub owner: Option<i64>,
+    pub period: Option<Period>,
+}
+
+impl Scope {
+    /// Everything this member did, anywhere — the old, unscoped `u`.
+    pub fn anywhere(me: i64) -> Scope {
+        Scope {
+            me,
+            owner: None,
+            period: None,
+        }
+    }
+}
+
+/// A change of mine that somebody else has changed since — skipped rather
+/// than reversed over their work.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Skipped {
+    pub who: String,
+    pub title: String,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Next {
+    pub pick: Option<Undoable>,
+    /// Skipped on the way to `pick`, newest first — only those newer than my
+    /// last undo or redo here, so each is reported once rather than on every
+    /// press after it.
+    pub skipped: Vec<Skipped>,
+}
+
+/// Notes on file entries that are part of ANOTHER entry: the files moved
+/// because their row was deleted, and the live file a swap moved aside. They
+/// follow the entry they belong to and are never a step of their own.
+const SATELLITES: [&str; 2] = [
+    crate::services::receipts::WITH_ROW,
+    crate::services::receipts::SWAPPED,
+];
+
+/// What `u` (or `U`) would reverse next, in `scope`.
+///
+/// **Redo is an undo of an undo.** Every undo is its own entry, carrying
+/// `undo_of` and the full diff, and reversing it re-applies what it undid
+/// through the same code — so the depth along the `undo_of` chain says what
+/// an entry is: 0 an original action, odd an undo, even (above 0) a redo.
+/// `u` takes the newest entry at even depth, `U` the newest at odd depth —
+/// and only one newer than my newest original here, because a fresh change
+/// clears the redo stack, as it does in Vim.
+///
+/// **A change somebody else has changed since is skipped**, not reversed over
+/// their work: undoing my 10:00 edit must not put my old amount back over
+/// Ana's 11:00 one. Skipping rather than refusing is also what keeps `u`
+/// from getting stuck on one change forever.
+pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Result<Next> {
+    let period = scope.period.map(|p| p.to_string());
+    let rows = sqlx::query!(
+        r#"WITH RECURSIVE depth(id, d) AS (
+               SELECT id, 0 FROM change WHERE member_id = ?1 AND undo_of IS NULL
+               UNION ALL
+               SELECT c.id, depth.d + 1 FROM change c JOIN depth ON c.undo_of = depth.id
+           )
+           SELECT c.id AS "id!: i64", c.entity AS "entity!: String",
+                  c.entity_id AS "entity_id!: i64", c.action AS "action!: String",
+                  c.at AS "at!: String", depth.d AS "depth!: i64",
+                  t.id AS "tx_id!: i64", t.title AS "title!: String",
+                  EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id) AS "reversed!: bool"
            FROM change c
+           JOIN depth ON depth.id = c.id
+           LEFT JOIN receipts r ON c.entity = 'file' AND r.id = c.entity_id
+           JOIN transactions t
+             ON t.id = CASE WHEN c.entity = 'file' THEN r.transaction_id ELSE c.entity_id END
            WHERE c.member_id = ?1
              AND ((c.entity = 'transaction'
                    AND c.action IN ('create', 'delete', 'restore', 'edit',
                                     'privacy', 'reorder', 'reattribute'))
                   OR (c.entity = 'file' AND c.action IN ('file_upload', 'file_delete')))
-             AND c.undo_of IS NULL
-             -- A file moved because its ROW was deleted is part of that
-             -- delete, not a step of its own: `u` on the row brings it back
-             -- (services::receipts::WITH_ROW).
-             AND NOT (c.entity = 'file' AND c.note IS 'moved with its row')
-             -- Already undone: its reversal points back at it. Without this,
-             -- `u` twice in a row would toggle the same change forever instead
-             -- of walking back through history.
-             AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id)
-           ORDER BY c.id DESC
-           LIMIT 1"#,
-        member_id
+             -- Part of another entry, and never a step of its own.
+             AND NOT (c.entity = 'file' AND c.note IS NOT NULL AND c.note IN (?4, ?5))
+             AND NOT EXISTS (SELECT 1 FROM change p
+                             WHERE p.id = c.undo_of AND p.note IS NOT NULL AND p.note IN (?4, ?5))
+             -- The pane: rows in this member's ledger, or a row this pane
+             -- handed to somebody else, which is still this pane's change.
+             AND (?2 IS NULL OR t.member_id = ?2
+                  OR (c.action = 'reattribute'
+                      AND EXISTS (SELECT 1 FROM change_field f JOIN members m ON m.name = f.old_value
+                                  WHERE f.change_id = c.id AND f.field = 'member' AND m.id = ?2)))
+             -- The month on screen.
+             AND (?3 IS NULL OR t.period = ?3)
+           ORDER BY c.id DESC"#,
+        scope.me,
+        scope.owner,
+        period,
+        SATELLITES[0],
+        SATELLITES[1],
     )
-    .fetch_optional(pool)
+    .fetch_all(pool)
     .await?;
 
-    Ok(row.map(|r| Undoable {
-        change_id: r.id,
-        entity: r.entity,
-        entity_id: r.entity_id,
-        action: r.action,
-    }))
+    let newest_fresh = rows
+        .iter()
+        .filter(|r| r.depth == 0)
+        .map(|r| r.id)
+        .max()
+        .unwrap_or(0);
+    let last_reversal = rows
+        .iter()
+        .filter(|r| r.depth > 0)
+        .map(|r| r.id)
+        .max()
+        .unwrap_or(0);
+
+    let mut out = Next::default();
+    for r in rows {
+        let wanted = match dir {
+            Direction::Undo => r.depth % 2 == 0,
+            Direction::Redo => r.depth % 2 == 1 && r.id > newest_fresh,
+        };
+        if r.reversed || !wanted {
+            continue;
+        }
+        if let Some(who) = overtaken(pool, scope.me, r.id, &r.entity, r.entity_id, r.tx_id).await? {
+            if r.id > last_reversal {
+                out.skipped.push(Skipped {
+                    who,
+                    title: r.title.clone(),
+                });
+            }
+            continue;
+        }
+        out.pick = Some(Undoable {
+            change_id: r.id,
+            entity: r.entity,
+            entity_id: r.entity_id,
+            action: r.action,
+            at: r.at,
+            tx_id: r.tx_id,
+            title: r.title,
+        });
+        break;
+    }
+    Ok(out)
+}
+
+/// Who has changed this since `change_id`, if anybody else has — a later
+/// change still in effect, by another member, to the same row (or, for a
+/// file, the same slot, or the row it lives on). The materializer and the
+/// system have no member and never count: they are not somebody's work.
+async fn overtaken(
+    pool: &SqlitePool,
+    me: i64,
+    change_id: i64,
+    entity: &str,
+    entity_id: i64,
+    tx_id: i64,
+) -> sqlx::Result<Option<String>> {
+    if entity == "file" {
+        sqlx::query_scalar!(
+            r#"SELECT m.name AS "name!: String"
+               FROM change o JOIN members m ON m.id = o.member_id
+               LEFT JOIN receipts r ON o.entity = 'file' AND r.id = o.entity_id
+               WHERE o.id > ?1 AND o.member_id <> ?2
+                 AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = o.id)
+                 AND ((o.entity = 'file' AND o.action IN ('file_upload', 'file_delete')
+                       AND r.transaction_id = ?4
+                       AND r.kind = (SELECT kind FROM receipts WHERE id = ?3))
+                      OR (o.entity = 'transaction' AND o.entity_id = ?4
+                          AND o.action IN ('delete', 'restore', 'reattribute')))
+               ORDER BY o.id DESC LIMIT 1"#,
+            change_id,
+            me,
+            entity_id,
+            tx_id,
+        )
+        .fetch_optional(pool)
+        .await
+    } else {
+        sqlx::query_scalar!(
+            r#"SELECT m.name AS "name!: String"
+               FROM change o JOIN members m ON m.id = o.member_id
+               WHERE o.id > ?1 AND o.member_id <> ?2
+                 AND o.entity = 'transaction' AND o.entity_id = ?3
+                 AND o.action IN ('create', 'delete', 'restore', 'edit', 'import',
+                                  'privacy', 'reorder', 'reattribute')
+                 AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = o.id)
+               ORDER BY o.id DESC LIMIT 1"#,
+            change_id,
+            me,
+            entity_id,
+        )
+        .fetch_optional(pool)
+        .await
+    }
+}
+
+/// What `u` would undo for this member, anywhere — the unscoped form, kept
+/// for the tests that walk one member's whole history.
+pub async fn last_undoable(pool: &SqlitePool, member_id: i64) -> sqlx::Result<Option<Undoable>> {
+    Ok(next(pool, Scope::anywhere(member_id), Direction::Undo)
+        .await?
+        .pick)
 }
 
 /// Applies the reverse of `undoable`, writing the reversal as its own entry.
@@ -365,7 +552,9 @@ pub async fn undo(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Result
             }
             done
         }
-        "edit" => undo_edit(pool, actor, u).await?,
+        // An amount read from a bill is an edit made by the bill: undoing it
+        // puts back the recorded field, and nothing else.
+        "edit" | "import" => undo_edit(pool, actor, u).await?,
         _ => false,
     };
     Ok(done)

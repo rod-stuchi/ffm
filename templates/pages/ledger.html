@@ -859,6 +859,9 @@ function ledger() {
     attaching: null,
     dragging: false,
     splitZoom: false,
+    // `{ id, dir }` while a `u`/`U` on a change from before today waits for
+    // its second press. A confirmation, like `confirming` — never data.
+    undoConfirm: null,
     nu: {{ nu|json|safe }},
     cursorOnFold: {{ cursor_on_fold|json|safe }},
     grepNeedsTerm: {{ t.grep_needs_a_term()|json|safe }},
@@ -1136,6 +1139,10 @@ function ledger() {
       if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) {
         return;
       }
+      // A `u` that asked "u again to undo …" is answered only by the very
+      // next key. Anything else in between and the question lapses — the
+      // server re-checks the change it names either way.
+      if (e.key !== 'u' && e.key !== 'U') this.undoConfirm = null;
 
       // A form takes literal text, so motions stop being motions inside one.
       // This is the same rule the pre-auth pages follow, not an exception.
@@ -1252,6 +1259,15 @@ function ledger() {
         this.reattribute(e.key === 'l' ? 1 : -1);
         return;
       }
+      // Ctrl-u opens the trash: `u` undoes one change, `U` redoes it, and
+      // Ctrl-u is the whole list. On Linux and Windows Ctrl-U is the
+      // browser's view-source, which this takes over; if it ever slips past
+      // (focus in the address bar), a source tab opens and nothing is lost.
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'u') {
+        e.preventDefault();
+        this.openTrash();
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       const k = e.key;
@@ -1339,10 +1355,11 @@ function ledger() {
       else if (k === 'p') { this.togglePrivate(); }
       else if (k === 'x') { this.toggleSelected(); }
       else if (k === 'd') { this.pending = 'd'; }
-      else if (k === 'u') { this.undo(); }
-      // Lowercase undoes the last change; uppercase opens the whole trash,
-      // where any deleted row or removed file comes back on its own.
-      else if (k === 'U') { this.openTrash(); }
+      // `u` undoes your last change in this pane and this month; `U` redoes
+      // it. Not Ctrl-R, Vim's redo: on Linux that reloads the page, and a
+      // reload drops every parked draft.
+      else if (k === 'u') { this.undoStep('undo'); }
+      else if (k === 'U') { this.undoStep('redo'); }
       else if (k === ':') { this.openCommand(); }
       else if (k === '/') { this.openSearch(); }
       else if (k === 'n') { this.step(1); }
@@ -2241,6 +2258,20 @@ function ledger() {
     ///
     /// The swap re-renders the whole pane, so the element the cursor used to
     /// point at is gone; the id is the only thing that survives it.
+    /// One blink on the row a `u`/`U` just changed, so the eye lands where the
+    /// statusline is talking about. Restarted rather than stacked when two
+    /// steps land on the same row in a row.
+    flashRow(id) {
+      this.$nextTick(() => {
+        const el = document.getElementById('row-' + id)?.querySelector('.row');
+        if (!el) return;
+        el.classList.remove('is-flash');
+        void el.offsetWidth;
+        el.classList.add('is-flash');
+        el.addEventListener('animationend', () => el.classList.remove('is-flash'), { once: true });
+      });
+    },
+
     cursorTo(id) {
       this.$nextTick(() => {
         const i = this.rows().findIndex(
@@ -2453,7 +2484,7 @@ function ledger() {
       this.showSplit('/profile').then(() => this.focusSplit());
     },
 
-    /// `U` / `:trash`. Opened with the keyboard already on the first item,
+    /// `Ctrl-u` / `:trash`. Opened with the keyboard already on the first item,
     /// because the only thing to do there is pick one — and the month on
     /// screen rides along, so a restore can swap the panes it lands in.
     openTrash() {
@@ -2886,7 +2917,19 @@ function ledger() {
       htmx.ajax('POST', '/tx/' + id + '/delete', { target: '#row-' + id, swap: 'outerHTML' });
     },
 
-    undo() { htmx.ajax('POST', '/undo', { target: 'body', swap: 'none' }); },
+    /// `u` / `U`. Scoped to the pane and the month on screen, which the
+    /// server needs told: the focused pane is the page's, not the session's.
+    undoStep(dir) {
+      const member = this.paneMemberId();
+      if (!member || this.readOnly()) return;
+      const period = document.querySelector('.ledger-shell')?.dataset.period || '';
+      const values = { member, period };
+      // The second press of a "u again to undo …" names the change it is
+      // agreeing to; the server acts only if that is still the one.
+      if (this.undoConfirm && this.undoConfirm.dir === dir) values.confirm = this.undoConfirm.id;
+      this.undoConfirm = null;
+      htmx.ajax('POST', '/' + dir, { target: 'body', swap: 'none', values });
+    },
 
     reattributeTitle() {
       return this.movingPrivate
@@ -2908,7 +2951,11 @@ function ledger() {
       // A change that re-rendered a derived pane (grouped, or sorted by date or
       // amount) names the row it moved; the cursor follows it by id, the same
       // way it follows a row that `J`/`K` moved.
-      document.body.addEventListener('ffm:cursor', e => this.cursorTo(String(e.detail.id)));
+      document.body.addEventListener('ffm:cursor', e => {
+        this.cursorTo(String(e.detail.id));
+        if (e.detail.flash) this.flashRow(String(e.detail.id));
+      });
+      document.body.addEventListener('ffm:undo-confirm', e => { this.undoConfirm = e.detail; });
       // Every htmx request, declarative or `htmx.ajax`, shows its loader from
       // here. It ends on the XHR's own `loadend` rather than on
       // `htmx:afterRequest`: that event is dispatched on the element that

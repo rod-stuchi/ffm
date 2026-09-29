@@ -602,30 +602,104 @@ pub struct MoveForm {
     delta: i64,
 }
 
-/// `u`. Undoes this member's most recent action, and says which one — an undo
-/// that silently changes something off screen is worse than no undo.
-pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
+/// What `u` and `U` send: the pane and the month on screen — which is the
+/// whole of what they may reach — and, for a change from before today, the
+/// id the first press asked about.
+#[derive(Deserialize)]
+pub struct UndoForm {
+    member: i64,
+    period: String,
+    #[serde(default)]
+    confirm: Option<i64>,
+}
+
+/// `u`.
+pub async fn undo(State(st): State<AppState>, auth: Auth, Form(f): Form<UndoForm>) -> Response {
+    apply(&st, &auth, f, tx::Direction::Undo).await
+}
+
+/// `U` — redo, which is an undo of the last undo.
+pub async fn redo(State(st): State<AppState>, auth: Auth, Form(f): Form<UndoForm>) -> Response {
+    apply(&st, &auth, f, tx::Direction::Redo).await
+}
+
+/// One step through the stack, either way, and a statusline that says what
+/// it did — an undo that silently changes something is worse than no undo.
+///
+/// **Scoped to the pane and the month on screen**, and to the viewer's own
+/// changes: what `u` touches is always in front of you, so a stray press is
+/// seen, and `U` puts it back.
+async fn apply(st: &AppState, auth: &Auth, f: UndoForm, dir: tx::Direction) -> Response {
     let t = auth.catalog();
-    let Ok(Some(u)) = tx::last_undoable(&st.pool, auth.viewer.member_id).await else {
-        // Nothing to undo is an answer, not an error: say so and change
-        // nothing.
-        return say(
-            (StatusCode::OK, HeaderMap::new(), String::new()).into_response(),
-            t.nothing_to_undo(),
-            false,
-        );
+    let Some(period) = Period::parse(&f.period) else {
+        return say_only(t.error_not_written(), true);
+    };
+    // Somebody else's ledger is read-only to a non-admin, `u` included.
+    if let Err(refused) = may_write(st, auth, f.member).await {
+        return refused;
+    }
+    let me = auth.viewer.member_id;
+    let scope = tx::Scope {
+        me,
+        owner: Some(f.member),
+        period: Some(period),
+    };
+    let Ok(next) = tx::next(&st.pool, scope, dir).await else {
+        return say_only(t.error_not_written(), true);
+    };
+    let skipped: Vec<String> = next
+        .skipped
+        .iter()
+        .map(|s| t.undo_skipped(&s.who, &s.title))
+        .collect();
+
+    let Some(u) = next.pick else {
+        let none = match dir {
+            tx::Direction::Undo => t.nothing_to_undo(),
+            tx::Direction::Redo => t.nothing_to_redo(),
+        };
+        return say_only(&join(none, &skipped), !skipped.is_empty());
     };
 
-    // Undo is a write like any other: to a row this viewer may still change,
-    // and a re-attribution only by an admin, exactly as the gesture itself.
-    let target = if u.entity == "file" {
-        file_row(&st, u.entity_id).await
-    } else {
-        Some(u.entity_id)
+    // What the step re-applies or takes back — the verb the person did.
+    let action = match dir {
+        tx::Direction::Undo => u.action.clone(),
+        tx::Direction::Redo => crate::db::changes::reversed_action(&st.pool, u.change_id)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| u.action.clone()),
     };
-    if let Some(id) = target
-        && let Err(refused) = may_touch(&st, &auth, id).await
-    {
+    let verb = crate::ui::log::verb(&action, &t);
+
+    // A change from before today is not reversed on the first press. `u` is
+    // one key, next to `i`, and last week's edit is not what anybody expects
+    // it to reach — so the first press says what it would do and when, and
+    // only the same key again, about the same change, does it.
+    let today = Local::now().date_naive();
+    let day = crate::ui::log::local_date(&u.at).unwrap_or(today);
+    if day < today && f.confirm != Some(u.change_id) {
+        let date = crate::ui::fmt::date(day);
+        let ask = match dir {
+            tx::Direction::Undo => t.undo_confirm(&verb, &u.title, &date),
+            tx::Direction::Redo => t.redo_confirm(&verb, &u.title, &date),
+        };
+        let res = (StatusCode::OK, HeaderMap::new(), String::new()).into_response();
+        return trigger(
+            res,
+            serde_json::json!({
+                "ffm:say": { "message": join(&ask, &skipped), "bad": false },
+                "ffm:undo-confirm": {
+                    "id": u.change_id,
+                    "dir": if dir == tx::Direction::Undo { "undo" } else { "redo" },
+                },
+            }),
+        );
+    }
+
+    // A write like any other: to a row this viewer may still change, and a
+    // re-attribution only by an admin, exactly as the gesture itself.
+    if let Err(refused) = may_touch(st, auth, u.tx_id).await {
         return refused;
     }
     if u.action == "reattribute" && !auth.viewer.is_admin() {
@@ -635,31 +709,38 @@ pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
     // A file change is undone by the vault service, which is the only thing
     // that may move a file; a transaction change by the ledger. `u` does not
     // care which it was, and neither should the person pressing it.
-    let (ok, row_id) = if u.entity == "file" {
-        (
-            undo_file(&st, &auth, &u).await,
-            file_row(&st, u.entity_id).await,
-        )
+    let ok = if u.entity == "file" {
+        undo_file(st, auth, &u).await
     } else {
-        let actor = Actor::User(auth.viewer.member_id);
+        let actor = Actor::User(me);
         let ok = tx::undo(&st.pool, actor, &u).await.unwrap_or(false);
-        // The row's files come and go with it: undoing a delete restores
-        // them, undoing an add (or a restore) deletes the row, so they move.
+        // The row's files come and go with it: reversing a delete restores
+        // them, reversing an add (or a restore) deletes the row, so they move
+        // — whichever direction the step is going.
         match u.action.as_str() {
-            "delete" if ok => files_follow_row(&st, actor, u.entity_id, true).await,
-            "create" | "restore" if ok => files_follow_row(&st, actor, u.entity_id, false).await,
+            "delete" if ok => files_follow_row(st, actor, u.entity_id, true).await,
+            "create" | "restore" if ok => files_follow_row(st, actor, u.entity_id, false).await,
             _ => {}
         }
-        (ok, Some(u.entity_id))
+        ok
     };
+    if !ok {
+        return say(
+            error_row(&t, t.error_not_written()),
+            &join(t.error_not_written(), &skipped),
+            true,
+        );
+    }
+
+    let message = join(&describe(st, &t, &u, dir, &verb).await, &skipped);
 
     // Undoing a re-attribution moves the row between two panes, and a single
     // row fragment could only ever tell half of that — the same reason the
     // re-attribution itself answers with a refresh rather than a row.
-    if ok && u.action == "reattribute" {
+    if u.action == "reattribute" {
         let mut res = say(
             (StatusCode::OK, HeaderMap::new(), String::new()).into_response(),
-            t.undone(),
+            &message,
             false,
         );
         res.headers_mut()
@@ -667,38 +748,95 @@ pub async fn undo(State(st): State<AppState>, auth: Auth) -> Response {
         return res;
     }
 
-    // Undoing a reorder changes where a row sits among its neighbors, which
-    // no single-row fragment can express — the whole pane comes back, exactly
-    // as `J`/`K` themselves answer.
-    if ok
-        && u.action == "reorder"
-        && let Ok(Some((member_id, period, _))) = tx::one(&st.pool, u.entity_id).await
-    {
-        return pane_fragment(&st, &auth, member_id, period, t.undone()).await;
-    }
+    // A reorder changes where a row sits among its neighbors, which no
+    // single-row fragment can express — the whole pane comes back, exactly as
+    // `J`/`K` themselves answer. An edit in a derived view can move the row
+    // too (a bucket, an amount, a date).
+    let moves_row = u.action == "reorder"
+        || (u.entity == "transaction"
+            && (u.action == "edit" || u.action == "import")
+            && derived_view(auth));
+    let res =
+        if moves_row && let Ok(Some((member_id, period, _))) = tx::one(&st.pool, u.tx_id).await {
+            let mut res = pane_fragment(st, auth, member_id, period, &message).await;
+            res.headers_mut()
+                .insert("HX-Reswap", HeaderValue::from_static("none"));
+            res
+        } else {
+            match render_row(st, auth, u.tx_id, true).await {
+                Ok(f) => say(Html(f).into_response(), &message, false),
+                Err(e) => return say(error_row(&t, e), e, true),
+            }
+        };
+    // The cursor goes to what changed, and the row blinks once — the eye
+    // lands where the statusline is talking about.
+    point_at(res, u.tx_id)
+}
 
-    // Undoing an edit puts back a bucket, amount or date — which, in a derived
-    // view, can put the row back somewhere else.
-    if ok
-        && u.entity == "transaction"
-        && u.action == "edit"
-        && derived_view(&auth)
-        && let Ok(Some((member_id, period, _))) = tx::one(&st.pool, u.entity_id).await
-    {
-        return pane_at(&st, &auth, u.entity_id, member_id, period, t.undone()).await;
-    }
+/// `a · b · c` — the step's own message, then anything skipped on the way.
+fn join(first: &str, rest: &[String]) -> String {
+    std::iter::once(first.to_string())
+        .chain(rest.iter().cloned())
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
 
-    match (ok, row_id) {
-        (true, Some(id)) => match render_row(&st, &auth, id, true).await {
-            Ok(f) => say(Html(f).into_response(), t.undone(), false),
-            Err(e) => say(error_row(&t, e), e, true),
-        },
-        _ => say(
-            error_row(&t, t.error_not_written()),
-            t.error_not_written(),
-            true,
-        ),
+/// `undone: edited "Mercado" · amount R$ 12,00 → R$ 10,00 · U redoes` —
+/// read off the entry the step just wrote, so it says exactly what moved.
+async fn describe(
+    st: &AppState,
+    t: &Catalog,
+    u: &tx::Undoable,
+    dir: tx::Direction,
+    verb: &str,
+) -> String {
+    let currency = ledger::household(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|h| h.currency)
+        .unwrap_or_default();
+    let fields = match crate::db::changes::reversal_of(&st.pool, u.change_id).await {
+        Ok(Some(id)) => crate::db::changes::fields(&st.pool, id)
+            .await
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    let mut parts = vec![match dir {
+        tx::Direction::Undo => t.undo_did(verb, &u.title),
+        tx::Direction::Redo => t.redo_did(verb, &u.title),
+    }];
+    let changes = crate::ui::log::field_changes(&fields, currency, t);
+    let shown = changes.len().min(2);
+    parts.extend(changes.iter().take(shown).cloned());
+    if changes.len() > shown {
+        parts.push(t.undo_more((changes.len() - shown) as i64));
     }
+    parts.push(
+        match dir {
+            tx::Direction::Undo => t.undo_redo_hint(),
+            tx::Direction::Redo => t.redo_undo_hint(),
+        }
+        .to_string(),
+    );
+    parts.join(" · ")
+}
+
+/// Puts the cursor on the row once the answer has settled, and blinks it.
+fn point_at(mut res: Response, id: i64) -> Response {
+    let payload = serde_json::json!({ "ffm:cursor": { "id": id, "flash": true } }).to_string();
+    if let Ok(v) = HeaderValue::from_str(&payload) {
+        res.headers_mut().insert("HX-Trigger-After-Settle", v);
+    }
+    res
+}
+
+/// `HX-Trigger` with more than the statusline in it.
+fn trigger(mut res: Response, payload: serde_json::Value) -> Response {
+    if let Ok(v) = HeaderValue::from_str(&ascii_json(&payload.to_string())) {
+        res.headers_mut().insert("HX-Trigger", v);
+    }
+    res
 }
 
 /// Which row a `receipts` entry belongs to, so an undone file change can be
@@ -757,7 +895,7 @@ async fn undo_file(st: &AppState, auth: &Auth, u: &tx::Undoable) -> bool {
             else {
                 return false;
             };
-            crate::services::receipts::soft_delete(
+            let removed = crate::services::receipts::soft_delete(
                 &st.pool,
                 &st.cfg.receipts_root,
                 actor,
@@ -766,7 +904,21 @@ async fn undo_file(st: &AppState, auth: &Auth, u: &tx::Undoable) -> bool {
                 "manual",
                 Some(u.change_id),
             )
-            .await
+            .await;
+            // If putting this file back had moved a live one aside, that one
+            // returns now — the swap is part of the step being reversed.
+            if let Ok(true) = removed
+                && let Err(e) = crate::services::receipts::restore_swapped_with(
+                    &st.pool,
+                    &st.cfg.receipts_root,
+                    actor,
+                    u.change_id,
+                )
+                .await
+            {
+                tracing::error!("undo: the file swapped aside did not come back: {e}");
+            }
+            removed
         }
         _ => return false,
     };

@@ -666,9 +666,9 @@ fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
             vec![
                 ("dd", "delete — opens a confirmation"),
                 ("y", "confirm in a modal"),
-                ("u", "undo the last change"),
+                ("u / U", "undo · redo — your changes, this pane, this month"),
                 (
-                    "U · :trash",
+                    "Ctrl-u · :trash",
                     "the trash — bring back any deleted row or file",
                 ),
                 ("Esc", "clear count, buffer, selection and search"),

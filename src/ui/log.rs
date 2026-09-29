@@ -147,7 +147,7 @@ fn value(f: &FieldEntry, raw: Option<&str>, currency: Currency, t: &Catalog) -> 
     }
 }
 
-fn verb(action: &str, t: &Catalog) -> String {
+pub(crate) fn verb(action: &str, t: &Catalog) -> String {
     match action {
         "create" => t.log_action_create(),
         "edit" => t.log_action_edit(),
@@ -206,6 +206,24 @@ fn actor_label(e: &Entry, t: &Catalog) -> String {
 /// `today` / `yesterday` / the date. Relative labels only where they are
 /// unambiguous — two days back is a date, because "two days ago" makes a
 /// reader count.
+/// A change's fields as the statusline says them — `amount R$ 12,00 →
+/// R$ 10,00` — formatted exactly as the log pane formats them. A stored path
+/// is left out: a vault path is a line of its own, not a clause.
+pub(crate) fn field_changes(fields: &[FieldEntry], currency: Currency, t: &Catalog) -> Vec<String> {
+    fields
+        .iter()
+        .filter(|f| f.kind != "path")
+        .map(|f| {
+            format!(
+                "{} {} → {}",
+                field_label(&f.field, t),
+                value(f, f.old.as_deref(), currency, t),
+                value(f, f.new.as_deref(), currency, t),
+            )
+        })
+        .collect()
+}
+
 pub(crate) fn day_label(day: NaiveDate, today: NaiveDate, t: &Catalog) -> String {
     if day == today {
         t.log_today().to_string()

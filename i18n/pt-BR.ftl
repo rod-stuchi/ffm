@@ -163,8 +163,20 @@ row-deleted-say = excluído · u para desfazer
 row-delete-confirm = Excluir esta linha?
 row-delete-body = Ela continua no banco e `u` traz de volta. Aperte y para confirmar.
 row-delete-yes = Excluir
-nothing-to-undo = nada para desfazer
+nothing-to-undo = nada seu para desfazer neste livro, neste mês
+nothing-to-redo = nada para refazer
 undone = desfeito
+undo-did = desfeito: { $verb } "{ $title }"
+redo-did = refeito: { $verb } "{ $title }"
+undo-redo-hint = U refaz
+redo-undo-hint = u desfaz
+undo-more = { $n ->
+        [one] + 1 campo
+       *[other] + { $n } campos
+    }
+undo-confirm = u de novo para desfazer: { $verb } "{ $title }", de { $date }
+redo-confirm = U de novo para refazer: { $verb } "{ $title }", de { $date }
+undo-skipped = { $who } mudou "{ $title }" depois — ficou como deixou
 error-not-written = Não deu certo — nada foi salvo.
 
 ## Regras recorrentes
@@ -367,7 +379,7 @@ grep-count = { $n ->
        *[other] { $n } linhas
     }
 
-## A lixeira — U / :trash
+## A lixeira — Ctrl-u / :trash
 
 trash-title = Lixeira
 trash-empty = Nada foi excluído. Linhas excluídas com dd e arquivos removidos vêm parar aqui.

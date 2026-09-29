@@ -266,8 +266,24 @@ pub async fn soft_delete(
     reason: &str,
     // The change this reverses, when it is an undo. Without it `u` would
     // oscillate between the same two entries forever instead of walking back
-    // through history: `last_undoable` skips a change something points at, and
+    // through history: `db::tx::next` skips a change something points at, and
     // that pointer is this.
+    undo_of: Option<i64>,
+) -> Result<bool, StoreError> {
+    soft_delete_noted(pool, root, actor, slot, kind, reason, reason, undo_of).await
+}
+
+/// [`soft_delete`], with a log note of its own rather than the reason — for
+/// a move that is part of another entry ([`SWAPPED`]).
+#[allow(clippy::too_many_arguments)]
+async fn soft_delete_noted(
+    pool: &SqlitePool,
+    root: &Path,
+    actor: Actor,
+    slot: &Slot,
+    kind: Kind,
+    reason: &str,
+    note: &str,
     undo_of: Option<i64>,
 ) -> Result<bool, StoreError> {
     let present = presence(pool, root, slot).await.map_err(db)?;
@@ -359,7 +375,7 @@ pub async fn soft_delete(
 
     let mut entry = Change::file(actor, FileAction::Delete, id)
         .in_period(slot.period)
-        .note(reason)
+        .note(note)
         .diff("path", Value::path(&rel), Value::Path(None));
     if let Some(of) = undo_of {
         entry = entry.undoing(of);
@@ -487,7 +503,16 @@ pub async fn restore_swapping(
         .is_some_and(|rel| deleted_copy(root, rel, receipt_id).is_some());
 
     if has_copy && let (Some(slot), Some(kind)) = (slot, Kind::parse(&row.kind)) {
-        soft_delete(pool, root, actor, slot, kind, "superseded", undo_of).await?;
+        // From `u` or `U` the move is part of that step — noted so neither
+        // key ever picks it on its own, and so the reverse step can find it
+        // and bring it back ([`restore_swapped_with`]). From the trash it is
+        // an ordinary replace, and `u` walks back through it as one.
+        let note = if undo_of.is_some() {
+            SWAPPED
+        } else {
+            "superseded"
+        };
+        soft_delete_noted(pool, root, actor, slot, kind, "superseded", note, undo_of).await?;
         // A live row whose file vanished by hand has nothing on disk for the
         // soft delete to move, and would still hold the one live place of its
         // kind — retire it the way `store` does, or the restore below breaks
@@ -512,6 +537,41 @@ pub async fn restore_swapping(
     }
 
     restore(pool, root, actor, receipt_id, undo_of).await
+}
+
+/// The note on the delete of a live file that `u` or `U` moved aside to put
+/// another version back. Part of that step, never one of its own.
+pub const SWAPPED: &str = "swapped aside";
+
+/// Brings back the file a swap moved aside, because the restore that caused
+/// the swap has just been reversed (`change_id` is that restore). The swap
+/// and its restore both point `undo_of` at the same change, which is how
+/// they are paired — the same way a row's files follow the row.
+pub async fn restore_swapped_with(
+    pool: &SqlitePool,
+    root: &Path,
+    actor: Actor,
+    change_id: i64,
+) -> Result<usize, StoreError> {
+    let partners = sqlx::query!(
+        r#"SELECT p.id AS "id!: i64", p.entity_id AS "receipt_id!: i64"
+           FROM change p JOIN change r ON r.id = ?1
+           WHERE p.undo_of = r.undo_of AND p.id <> r.id
+             AND p.entity = 'file' AND p.action = 'file_delete' AND p.note = ?2
+             AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = p.id)"#,
+        change_id,
+        SWAPPED
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(db)?;
+    let mut n = 0;
+    for p in partners {
+        if restore(pool, root, actor, p.receipt_id, Some(p.id)).await? {
+            n += 1;
+        }
+    }
+    Ok(n)
 }
 
 /// Where the vault lives, as an absolute path.
@@ -595,7 +655,7 @@ async fn restore_row_only(
 /// The note on a file delete that happened because its ROW was deleted.
 ///
 /// It is how `u` knows those moves are part of the row's delete rather than
-/// separate steps: `db::tx::last_undoable` skips them, and restoring the row
+/// separate steps: `db::tx::next` skips them, and restoring the row
 /// brings them back — one keystroke for the whole thing, not one per file.
 pub const WITH_ROW: &str = "moved with its row";
 

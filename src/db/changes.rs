@@ -21,7 +21,7 @@
 use crate::domain::money::Cents;
 use crate::domain::period::Period;
 use chrono::{NaiveDate, Utc};
-use sqlx::{Sqlite, Transaction};
+use sqlx::{Sqlite, SqlitePool, Transaction};
 
 // ---------------------------------------------------------------------------
 // who, and in what capacity
@@ -618,4 +618,49 @@ pub async fn history(
         });
     }
     Ok(out)
+}
+
+/// One change's fields, as the log pane reads them — `sort_key` left out for
+/// the same reason it is there.
+pub async fn fields(pool: &SqlitePool, change_id: i64) -> sqlx::Result<Vec<FieldEntry>> {
+    let rows = sqlx::query!(
+        r#"SELECT field AS "field!: String", old_value AS "old: String",
+                  new_value AS "new: String", kind AS "kind!: String"
+           FROM change_field WHERE change_id = ?1 AND field <> 'sort_key'
+           ORDER BY id"#,
+        change_id
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|f| FieldEntry {
+            field: f.field,
+            old: f.old,
+            new: f.new,
+            kind: f.kind,
+        })
+        .collect())
+}
+
+/// The entry that reversed `change_id` — what an undo or a redo just wrote.
+pub async fn reversal_of(pool: &SqlitePool, change_id: i64) -> sqlx::Result<Option<i64>> {
+    sqlx::query_scalar!(
+        r#"SELECT id AS "id!: i64" FROM change WHERE undo_of = ?1
+           ORDER BY id DESC LIMIT 1"#,
+        change_id
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+/// The action an entry reversed: what a redo re-applies.
+pub async fn reversed_action(pool: &SqlitePool, change_id: i64) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar!(
+        r#"SELECT p.action AS "action!: String"
+           FROM change c JOIN change p ON p.id = c.undo_of WHERE c.id = ?1"#,
+        change_id
+    )
+    .fetch_optional(pool)
+    .await
 }

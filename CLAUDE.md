@@ -420,7 +420,7 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   soft-delete record (`old_path`, `deleted_at`, `deleted_by`, `reason`) and
   the upload metadata row (uploader, timestamp, kind, original filename)
   are `file_*` changes with fields, not a second parallel audit mechanism.
-- **The trash (`U` / `:trash`) restores deletions out of `u`'s order.** A
+- **The trash (`Ctrl-u` / `:trash`) restores deletions out of `u`'s order.** A
   bottom-split list of every deleted row and removed file in the ledgers the
   viewer may write, each with a checkbox. Only deletions, because only they
   are independent — undoing an older edit out of order would overwrite a
@@ -429,6 +429,15 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   file into a taken slot **swaps** — the live one goes to the trash as
   `superseded` — and `u` does the same, instead of refusing "occupied" and
   blocking every `u` behind it. See `design/spec.md`'s Undo section.
+- **`u` undoes, `U` redoes — your own changes, in the focused pane, in the
+  month on screen.** Redo is an undo of an undo: depth along the `undo_of`
+  chain says what an entry is (0 original, odd undo, even redo), so there is
+  no schema change and no second implementation of any verb, and a fresh
+  change clears the redo stack. A change somebody else has changed since is
+  **skipped and named**, never reversed over their work; one from before
+  today needs a second `u`; every step says what it did and blinks the row.
+  Not Ctrl-R: it reloads on Linux, and a reload drops parked drafts. `r`/`R`
+  stay unbound.
 - **One entry per save, expandable to its fields.** The pane groups by day,
   newest first, and filters to `this row` / `rule` / `all`. It is read-only:
   `Esc` closes, `Ctrl-h` hands focus back to the ledger, `j`/`k` walk the

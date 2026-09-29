@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT m.name AS \"name!: String\"\n               FROM change o JOIN members m ON m.id = o.member_id\n               LEFT JOIN receipts r ON o.entity = 'file' AND r.id = o.entity_id\n               WHERE o.id > ?1 AND o.member_id <> ?2\n                 AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = o.id)\n                 AND ((o.entity = 'file' AND o.action IN ('file_upload', 'file_delete')\n                       AND r.transaction_id = ?4\n                       AND r.kind = (SELECT kind FROM receipts WHERE id = ?3))\n                      OR (o.entity = 'transaction' AND o.entity_id = ?4\n                          AND o.action IN ('delete', 'restore', 'reattribute')))\n               ORDER BY o.id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "name!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8fc1fb8888063a679f4df8afdb2a04444c3dac828da316b5eb5d182884293c06"
+}
