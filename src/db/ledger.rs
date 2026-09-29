@@ -555,6 +555,8 @@ pub fn local_day(s: &str) -> Option<NaiveDate> {
 pub struct Hit {
     pub id: i64,
     pub period: Period,
+    /// Whose pane the row sits in, so picking the hit can land there.
+    pub member_id: i64,
     pub member: String,
     pub title: String,
     pub amount: Option<Cents>,
@@ -583,6 +585,7 @@ pub async fn grep(pool: &SqlitePool, viewer: Viewer, term: &str) -> sqlx::Result
         r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
                   t.title AS "title!: String", t.kind AS "kind!: String",
                   t.amount_cents AS "amount_cents: i64",
+                  t.member_id AS "member_id!: i64",
                   m.name AS "member!: String"
            FROM transactions_fts f
            JOIN transactions t ON t.id = f.rowid
@@ -605,6 +608,7 @@ pub async fn grep(pool: &SqlitePool, viewer: Viewer, term: &str) -> sqlx::Result
             Some(Hit {
                 id: r.id,
                 period: Period::parse(&r.period)?,
+                member_id: r.member_id,
                 member: r.member,
                 title: r.title,
                 amount: r.amount_cents.map(Cents),

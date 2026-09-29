@@ -411,6 +411,8 @@ async fn grep_reaches_every_month_and_respects_privacy() {
     assert_eq!(mine.len(), 3, "every month, and my own private row");
     assert_eq!(mine[0].period.to_string(), "2026-09", "newest first");
     assert!(mine.iter().any(|h| h.period.to_string() == "2026-03"));
+    // Picking a hit lands on its member's pane, so every hit says whose it is.
+    assert!(mine.iter().all(|h| h.member_id == me));
 
     // A row you cannot see is a row you cannot find, or the search leaks the
     // existence of something the ledger carefully hides.

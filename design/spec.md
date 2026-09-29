@@ -695,7 +695,7 @@ checkbox each, restored in any combination.
 | Key | Action |
 |---|---|
 | `:` | open the command bar |
-| `:grep vinho` | search every month — a result list, not a filter over this one |
+| `:grep vinho` | search every month — a result list, not a filter over this one · bare `:grep` reopens the last search |
 | `:trash` | deleted rows and removed files, to bring back — the same pane `Ctrl-u` opens |
 | `:sort date` | row order: manual · date · amount |
 | `:group bucket` | group by category · `:group none` to flatten |
@@ -2311,6 +2311,22 @@ full width, at the bottom, over the ledger — fzf-shaped.
 - **`:grep` is deliberately not columned.** It is a result list; columns
   would make the reading order zigzag. It gets the full width as one wide
   list, which is what stops its rows truncating.
+- **`:grep` opens with the keyboard on the first hit, and picking one goes
+  there.** `j`/`k`/`gg`/`G` walk the hits, `Esc` closes, and `Enter` (or a
+  click) lands on the hit's month, its member's pane and the row itself —
+  cursor on it, one blink, fold opened if it was closed — and closes the
+  list. In the month on screen that is a cursor move; elsewhere it is a page
+  load carrying `?row=`, which `init()` lands on and then drops from the URL
+  so a refresh does not blink again. Each hit stays a real link, so a
+  Cmd-click still opens it in a tab of its own. While a hit has focus the
+  list owns the keys, as a field would — otherwise `j` walked the ledger
+  cursor behind it too.
+- **A bare `:grep` reopens the last search**, re-run so the hits are fresh,
+  with the keyboard on the hit picked last. With none, it says it needs a
+  term, as before. The term lives in `sessionStorage`: it has to survive the
+  page load picking a hit in another month causes, and it is per window for
+  the reason `?pane=` is — two windows are two searches. That is still not
+  `?split=`: a refresh does not reopen the list.
 - **`zz` zooms** the split between half the ledger area and nearly all of it
   — worth it for `:grep` with forty hits.
 - **`Ctrl-j` drops into the split and `Ctrl-k` off its top field comes back

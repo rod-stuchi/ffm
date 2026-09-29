@@ -1435,6 +1435,14 @@
   background: var(--surface-2);
 }
 
+/* The cursor while `j`/`k` walk the hits — the same accent rail and tinted
+ * ground as the trash's cursor and a focused row. */
+.hit:focus {
+  outline: none;
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
 .hit .hp,
 .hit .hm,
 .hit .ha {

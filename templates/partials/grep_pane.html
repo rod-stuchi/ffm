@@ -2,9 +2,37 @@
 
     Searching every month is a different verb from `/`: one can answer without
     a round trip and the other cannot, so overloading them would make the fast
-    one slow. Clicking a hit jumps to its month, which is just the navigation
-    that already exists. -#}
-<aside class="rulepane logpane" id="settingspane">
+    one slow.
+
+    It opens with the keyboard on the first hit: `j`/`k`/`gg`/`G` walk the
+    list, Enter (or a click) goes to the hit — its month, its member's pane,
+    the row itself — and closes the split. Each hit is still a real link
+    carrying all three, so a Cmd-click opens it in a tab of its own.
+
+    The methods are `gp`-prefixed because this scope chains onto the shell's,
+    and Alpine merges data and methods into one namespace. -#}
+<aside class="rulepane logpane greppane" id="settingspane"
+  x-data="{
+    gpg: false,
+    gpHits() { return [...this.$root.querySelectorAll('a.hit')]; },
+    gpGo(i) {
+      const h = this.gpHits(); if (!h.length) return;
+      const el = h[Math.max(0, Math.min(h.length - 1, i))];
+      el.focus(); el.scrollIntoView({ block: 'nearest' });
+    },
+    gpKey(e) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (['Shift','Control','Alt','Meta','CapsLock','AltGraph'].includes(e.key)) return;
+      const h = this.gpHits(); const i = h.indexOf(document.activeElement); if (i < 0) return;
+      const g = this.gpg; this.gpg = false;
+      if (e.key === 'j') { e.preventDefault(); this.gpGo(i + 1); }
+      else if (e.key === 'k') { e.preventDefault(); this.gpGo(i - 1); }
+      else if (e.key === 'G') { e.preventDefault(); this.gpGo(h.length - 1); }
+      else if (e.key === 'g') { e.preventDefault(); if (g) this.gpGo(0); else this.gpg = true; }
+      else if (e.key === 'Enter') { e.preventDefault(); this.gotoHit(h[i]); }
+    }
+  }"
+  @keydown="gpKey($event)">
   <header class="rp-head">
     <b>{{ t.grep_title(term.as_str()) }}</b>
     {#- Closes through the shell, not `$root.remove()`. Three of these panes
@@ -21,7 +49,9 @@
     {%- else %}
     <p class="hint">{{ count }}</p>
     {%- for h in hits %}
-    <a class="hit" href="/?period={{ h.period }}">
+    <a class="hit" href="/?period={{ h.period }}&amp;pane={{ h.member_id }}&amp;row={{ h.id }}"
+       data-period="{{ h.period }}" data-pane="{{ h.member_id }}" data-id="{{ h.id }}"
+       @click="if (!($event.metaKey || $event.ctrlKey || $event.shiftKey || $event.altKey || $event.button)) { $event.preventDefault(); gotoHit($el); }">
       <span class="hp">{{ h.label }}</span>
       <span class="hm">{{ h.member }}</span>
       <b class="ht">{{ h.title }}</b>

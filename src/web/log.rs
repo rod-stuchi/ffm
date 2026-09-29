@@ -110,6 +110,8 @@ pub async fn log(
 // ---------------------------------------------------------------------------
 
 pub struct HitView {
+    pub id: i64,
+    pub member_id: i64,
     pub period: String,
     pub label: String,
     pub member: String,
@@ -151,6 +153,8 @@ pub async fn grep(State(st): State<AppState>, auth: Auth, Query(p): Query<GrepPa
         hits: hits
             .into_iter()
             .map(|h| HitView {
+                id: h.id,
+                member_id: h.member_id,
                 period: h.period.to_string(),
                 label: crate::ui::fmt::period(h.period),
                 member: h.member,

@@ -1152,6 +1152,12 @@ function ledger() {
       // it, or the whole keymap dies silently on the first such event.
       const el = e.target instanceof Element ? e.target : null;
       const typing = !!el && el.matches('input, textarea, select');
+      // The `:grep` list owns its keys the way a field does — decided by the
+      // container, as Ctrl-h/j/k/l below are. Its hits are links, so `typing`
+      // is false there, and `j` walked the ledger cursor behind the list as
+      // well as the list's own (the trash escapes this only because its rows
+      // are checkboxes).
+      const listing = !!el && !!el.closest('#hsplitmount .greppane a.hit');
       // Any keypress dismisses a details popup — the same way any hover
       // artifact goes away — before that key does whatever else it does.
       if (this.tip) { this.tip = null; }
@@ -1217,6 +1223,15 @@ function ledger() {
         e.preventDefault();
         el.blur();
         this.closeRule();
+        return;
+      }
+      // `:` still opens the command bar, so a second search is one key away.
+      if (listing && !e.ctrlKey && !e.metaKey && e.key !== ':') {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          el.blur();
+          this.closeSplit();
+        }
         return;
       }
       if (typing) {
@@ -2493,6 +2508,68 @@ function ledger() {
         .then(() => this.focusSplit());
     },
 
+    /// `:grep` — opened with the keyboard already on a hit (the `at`th), since
+    /// the only thing to do in a result list is pick one.
+    openGrep(q, at) {
+      return this.showSplit('/grep?q=' + encodeURIComponent(q)).then(() => {
+        const hits = [...document.querySelectorAll('#hsplitmount a.hit')];
+        const el = hits[Math.max(0, Math.min(hits.length - 1, at || 0))];
+        if (!el) return this.focusSplit();
+        el.focus();
+        el.scrollIntoView({ block: 'nearest' });
+      });
+    },
+
+    /// The last search, per TAB. `sessionStorage` rather than Alpine because
+    /// picking a hit in another month is a page load, which is exactly when a
+    /// bare `:grep` gets asked for; and per tab for the reason `?pane=` is in
+    /// the URL — two windows are two searches. Storage can be refused (a
+    /// private window), and then a bare `:grep` just says what it always said.
+    lastGrep() {
+      try {
+        const v = JSON.parse(sessionStorage.getItem('ffm.grep') || 'null');
+        return v && typeof v.q === 'string' && v.q ? v : null;
+      } catch (_) { return null; }
+    },
+
+    keepGrep(q, at) {
+      try { sessionStorage.setItem('ffm.grep', JSON.stringify({ q, at })); } catch (_) {}
+    },
+
+    /// Go to a `:grep` hit: its month, its member's pane, the row itself —
+    /// and close the list. In the month on screen that is a cursor move with
+    /// no round trip; anywhere else it is the hit's own link, whose `?row=`
+    /// `init()` lands on after the load.
+    gotoHit(el) {
+      const hits = [...document.querySelectorAll('#hsplitmount a.hit')];
+      const last = this.lastGrep();
+      if (last) this.keepGrep(last.q, Math.max(0, hits.indexOf(el)));
+      const period = document.querySelector('.ledger-shell')?.dataset.period;
+      if (el.dataset.period !== period) {
+        location.assign(el.href);
+        return;
+      }
+      this.closeSplit();
+      const i = [...document.querySelectorAll('.pane')]
+        .findIndex(p => p.querySelector('.rows')?.id === 'rows-' + el.dataset.pane);
+      if (i >= 0 && i !== this.pane) { this.pane = i; this.row = 0; }
+      this.landOn(el.dataset.id);
+    },
+
+    /// Put the cursor on a row by id, and blink it once so the eye finds it.
+    /// A row inside a closed fold is not a cursor position (`rows()` leaves it
+    /// out), so its fold opens first — landing on the fold's header instead
+    /// would answer a question nobody asked.
+    landOn(id) {
+      const section = document.getElementById('row-' + id)?.closest('.fold');
+      if (section) {
+        const f = this.foldIdOf(section);
+        if (f && this.closed(f)) this.folds[f] = false;
+      }
+      this.cursorTo(String(id));
+      this.flashRow(String(id));
+    },
+
     /// A surface about ONE ROW — the change log. It keeps the rule editor's
     /// shape: a column beside the member pane it belongs to, closed when the
     /// cursor leaves the row.
@@ -2735,8 +2812,17 @@ function ledger() {
           // A bare `:grep` is a command MISSING ITS ARGUMENT, not an unknown
           // one. Saying "not a command: grep" was the one thing that is not
           // true about it, and it is why `:grep` read as unimplemented.
-          if (!arg) return this.say(this.grepNeedsTerm, true);
-          return this.showSplit('/grep?q=' + encodeURIComponent(arg));
+          //
+          // And bare, with a search already run in this tab, it is that
+          // search again — re-run, so the hits are fresh, with the keyboard
+          // on the hit picked last time.
+          if (!arg) {
+            const last = this.lastGrep();
+            if (!last) return this.say(this.grepNeedsTerm, true);
+            return this.openGrep(last.q, last.at);
+          }
+          this.keepGrep(arg, 0);
+          return this.openGrep(arg, 0);
         case 'invite':
           this.showSplit('/members');
           return;
@@ -2938,7 +3024,19 @@ function ledger() {
     },
 
     init() {
-      this.$nextTick(() => this.paint());
+      // `?row=` is a `:grep` hit landing from another month. Read once and
+      // dropped from the URL, so a refresh does not blink the row again;
+      // `?pane=` has already put the right member in focus server-side.
+      const land = new URLSearchParams(location.search).get('row');
+      if (land) {
+        const u = new URL(location.href);
+        u.searchParams.delete('row');
+        history.replaceState(null, '', u);
+      }
+      this.$nextTick(() => {
+        this.paint();
+        if (/^\d+$/.test(land || '')) this.landOn(land);
+      });
       // Reopen the settings pane a refresh just closed. `showSplit` rewrites
       // the same parameter it reads, so this is idempotent.
       const split = new URLSearchParams(location.search).get('split');
