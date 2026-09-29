@@ -629,15 +629,20 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     a utility bill, even though it carries no company code to compare. A file
     with no readable barcode is refused on a bound rule — nothing could
     confirm it — and filed as a plain document on an unbound one.
-  - **A bill's amount replaces a seeded one, and only a seeded one.** An
-    occurrence's amount starts as whatever the materializer copied in — the
-    rule's figure or last period's — which is a placeholder waiting for the
-    bill, not anybody's decision about this period. The checksummed barcode
-    replaces it and the statusline says what it replaced. An amount a person
-    set on the row with `e` (`amount_source = 'user'`) is kept and the
-    difference flagged. This amends "fill what is empty, never overwrite",
-    which read a seed as a choice: a rule created at R$ 883,34 kept that
-    figure against its own bill for R$ 131,45.
+  - **A bill's amount replaces the row's amount, whoever set it.** The
+    checksummed barcode is the evidence of what is owed, so it wins over a
+    seed from the materializer *and* over a figure somebody typed with `e` —
+    reversing "replaces a seeded one, and only a seeded one", which kept a
+    typed amount and only flagged the difference. What makes the overwrite
+    acceptable is that it is never silent: it is **its own entry in the
+    change log** (`entity = transaction`, `action = import`, source
+    `import`, read *"read from a bill · amount R$ 883,34 → R$ 131,45"*),
+    not one field folded inside the attach entry's "3 fields"; it bumps the
+    row's `version`, so an `e` form open on the row is refused rather than
+    writing the old figure back; and it is written after the upload's
+    entry, so `u` puts the old amount back first and takes the file away
+    second. **The due date keeps the older rule**: a date set with `e`
+    (`due_date_source = 'user'`) is kept and the difference flagged.
   - **`A` takes the bill too, not only `E`.** The rule does not exist yet, so
     the drop is read and parked (`services::pending`) and the pane shows what
     it will bind to; Create carries a token and attaches it to the occurrence

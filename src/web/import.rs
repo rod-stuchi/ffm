@@ -16,7 +16,7 @@
 //! because the one thing worse than failing to import is replacing a right
 //! answer with a wrong one.
 
-use crate::db::changes::{Actor, Change, FileAction, Value};
+use crate::db::changes::{Actor, Change, FileAction, TxAction, Value};
 use crate::db::rules;
 use crate::domain::money::Cents;
 use crate::domain::period::Period;
@@ -388,14 +388,15 @@ pub async fn attach_to(
     // than re-derived in each handler that imports something.
     use crate::services::import::{Fill, reconcile};
 
-    // Only a value a person set on this row with `e` is protected; a seed
-    // from the materializer, or an earlier bill's figure, gives way to this
-    // bill's.
+    // The amount always follows the bill, whoever set the row's figure: the
+    // checksummed barcode is the evidence of what is owed, and the change is
+    // its own entry in the log (`import`, "read from a bill") that `u` puts
+    // back. The due date keeps the older rule — a date a person set with `e`
+    // is kept and the difference flagged.
     let typed = |source: Option<&str>| source == Some("user");
-    let amount_typed = typed(row.as_ref().and_then(|r| r.amount_source.as_deref()));
     let due_typed = typed(row.as_ref().and_then(|r| r.due_date_source.as_deref()));
 
-    let amount_fill = reconcile(barcode_amount, existing_amount, amount_typed);
+    let amount_fill = reconcile(barcode_amount, existing_amount, false);
     match amount_fill {
         Fill::Differs { found, kept } => notes.push(
             t.import_amount_differs(&fmt::money(found, currency), &fmt::money(kept, currency)),
@@ -435,7 +436,11 @@ pub async fn attach_to(
                amount_cents = coalesce(?5, amount_cents),
                due_date = coalesce(?6, due_date),
                amount_source = coalesce(?7, amount_source),
-               due_date_source = coalesce(?8, due_date_source)
+               due_date_source = coalesce(?8, due_date_source),
+               -- A new amount moved under any `e` form open on this row, so
+               -- its Save must be refused rather than write the old figure
+               -- back: the lost-update guard, doing its job.
+               version = version + (?5 IS NOT NULL AND ?5 IS NOT amount_cents)
            WHERE id = ?1"#,
         tx_id,
         raw,
@@ -495,11 +500,6 @@ pub async fn attach_to(
     .in_period(period)
     .diff("barcode", Value::Text(None), Value::text(&raw))
     .diff(
-        "amount",
-        Value::Money(existing_amount),
-        Value::Money(write_amount.or(existing_amount)),
-    )
-    .diff(
         "client_code",
         Value::Text(rule.client_code.clone()),
         Value::Text(client_code),
@@ -510,6 +510,26 @@ pub async fn attach_to(
         Value::Text(company),
     );
     let _ = entry.write(&mut tx).await;
+
+    // The amount, as an entry of its own rather than one field folded inside
+    // "file attached · 3 fields": the one change a person needs to see is that
+    // the row's figure moved, and why. Written after the upload's entry, so
+    // `u` puts the old amount back before it takes the file away.
+    let amount_entry = Change::transaction(
+        Actor::Import(Some(auth.viewer.member_id)),
+        TxAction::Import,
+        tx_id,
+    )
+    .from_rule(Some(rule.id))
+    .in_period(period)
+    .diff(
+        "amount",
+        Value::Money(existing_amount),
+        Value::Money(write_amount.or(existing_amount)),
+    );
+    if !amount_entry.is_empty() && amount_entry.write(&mut tx).await.is_err() {
+        return Err(not_written());
+    }
     if tx.commit().await.is_err() {
         return Err(not_written());
     }

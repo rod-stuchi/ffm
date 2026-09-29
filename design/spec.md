@@ -1677,6 +1677,13 @@ yesterday
   `all`. A file entry (attach, unlink, upload, delete) counts as the row's
   own history — it belongs to that occurrence, it just isn't the transaction
   record itself.
+- **A bill that moves the row's amount says so in its own entry** —
+  `import`, read *"read from a bill · amount R$ 883,34 → R$ 131,45"* — next
+  to the attach entry rather than folded inside it, because the amount is the
+  one change a person needs to see. It is undoable like an edit, and the
+  first `u` after a drop puts the old amount back before the second takes
+  the bill away. (See CLAUDE.md's Recurring rules for why the bill wins even
+  over a typed amount.)
 - **Expanding an entry** shows `old -> new` per field, formatted by `kind`,
   with an em dash for empty.
 - **One field is shown inline; only two or more fold.** Expanding to reveal
