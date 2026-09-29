@@ -6,6 +6,7 @@ pub mod ledger;
 pub mod members;
 pub mod rules;
 pub mod settings;
+pub mod trash;
 pub mod tx;
 
 use crate::config::Config;

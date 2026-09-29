@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT member_id AS \"member_id!: i64\", visibility AS \"visibility!: String\",\n                  period AS \"period!: String\"\n           FROM transactions WHERE id = ?1 AND deleted_at IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "member_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9b22e55eaf775eb0b49b150cd9f039cdc06b3366e1ff80507163dae48236b357"
+}

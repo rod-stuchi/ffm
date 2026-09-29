@@ -9,6 +9,7 @@
   <a href="/__sandbox/themes">themes</a>
   <a href="/__sandbox/catalog">catalog</a>
   <a href="/__sandbox/picker">picker</a>
+  <a href="/__sandbox/trash">trash</a>
 
   <span class="sb-group"><span class="sb-k">lang</span>
     {% for (k, label, on) in langs %}<a href="{{ ctx.with("lang", k) }}"{% if on %} class="is-on"{% endif %}>{{ label }}</a>{% endfor %}

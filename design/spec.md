@@ -439,7 +439,7 @@ Nothing destructive fires from a single keystroke.
 | `2gT` | go **back** two tabs — `gT`'s count is a distance, not a destination |
 
 Every **uppercase** binding here (`G`, `J`/`K`, `gT`, `zR`/`zM`, `A`/`I`/`E`,
-`H`/`L`, `N`, `P`) is reached by holding Shift, which fires a keydown of its
+`H`/`L`, `N`, `P`, `U`) is reached by holding Shift, which fires a keydown of its
 own before the letter. A keymap that resets its pending prefix and count on
 every key it sees will therefore eat the keystroke *before* the one it meant
 to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
@@ -586,6 +586,7 @@ for this row"*.
 | `dd` | delete — opens a confirmation |
 | `y` | confirm in the delete modal |
 | `u` | undo the last change |
+| `U` | the trash — every deleted row and removed file, each restorable on its own · `:trash` opens it too |
 | `Esc` | clear count, buffer, selection and search |
 
 - **Undo restores the deleted row in place.** There is no second,
@@ -594,11 +595,57 @@ for this row"*.
   row in the ledger, undeleted and focused. Both the delete and the restore
   are entries in the change log, which is where the chain lives now.
 
+#### The trash (`U` / `:trash`)
+
+`u` is a stack: it walks back through *your* last actions, in order. Getting
+back a row deleted three actions ago meant undoing the two newer, unrelated
+ones first. The trash is the other shape — everything that is gone, a
+checkbox each, restored in any combination.
+
+- **Only deletions.** Deleted rows and removed files are independent of one
+  another, so restoring any subset in any order is well defined. An older
+  *edit* is not: undoing it out of order would overwrite whatever was edited
+  since. Edits, reorders, privacy and re-attribution stay on `u`'s stack.
+- **Read by ledger, not by who deleted.** Everything gone from a ledger the
+  viewer may write (`Viewer::may_write`) — a member's own, every ledger for an
+  admin, their own again under preview. A row an admin deleted from Ana's
+  ledger is Ana's to bring back.
+- **A deleted row stands for its files.** The files that went with it are not
+  listed on their own; the row says `+ 2 files`, and restoring it brings them
+  back, exactly as `u` on the delete does. A file removed *before* the row was
+  deleted reappears as its own entry once the row is live again.
+- **An older file swaps with the current one.** Restoring a replaced bill
+  into a slot that holds a newer file moves the newer one into the trash as
+  `superseded` — the same thing replacing a file does — rather than refusing.
+  Two versions of one slot checked at once are refused: which one belongs on
+  the row is the person's call, not the server's.
+- **A restore from here is an ordinary action, not an undo.** It is logged
+  as `restore` / `file_upload` with no `undo_of`, so `u` right afterwards puts
+  back what was just restored, and then keeps walking back through history.
+- **`u` swaps too.** Reaching a file delete whose slot has since been filled
+  used to fail with "occupied" — and since `u` never skips a change it could
+  not undo, every `u` after it failed the same way. It now swaps, and the file
+  it moves aside points `undo_of` at the same change, so the next `u` does not
+  swap them back.
+- **The bottom split, the `:grep` shape** — one list, grouped by the day of
+  the deletion, newest first, the newest 200. Not remembered in `?split=`:
+  like `:grep`, it is a list for a moment, not a setting being watched.
+- **A real form.** The checked boxes are unsubmitted form values, like a
+  draft; the server re-checks every pick. `U` opens it with the keyboard on
+  the first entry: `j`/`k`, `gg`/`G`, `x` or Space checks, `Enter` restores
+  what is checked, `Esc` closes. No confirmation — a restore is undone by `u`,
+  so the consequence is obvious from the action.
+- **The answer** is the trash again without what left it, every pane of the
+  month on screen that a restored row or file landed in, with its totals, and
+  a statusline naming how many rows and files came back — and how many landed
+  in other months, where there is nothing on screen to show it.
+
 ### Type
 | Key | Action |
 |---|---|
 | `:` | open the command bar |
 | `:grep vinho` | search every month — a result list, not a filter over this one |
+| `:trash` | deleted rows and removed files, to bring back — the same pane `U` opens |
 | `:sort date` | row order: manual · date · amount |
 | `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |

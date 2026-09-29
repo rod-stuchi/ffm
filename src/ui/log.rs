@@ -206,7 +206,7 @@ fn actor_label(e: &Entry, t: &Catalog) -> String {
 /// `today` / `yesterday` / the date. Relative labels only where they are
 /// unambiguous — two days back is a date, because "two days ago" makes a
 /// reader count.
-fn day_label(day: NaiveDate, today: NaiveDate, t: &Catalog) -> String {
+pub(crate) fn day_label(day: NaiveDate, today: NaiveDate, t: &Catalog) -> String {
     if day == today {
         t.log_today().to_string()
     } else if Some(day) == today.pred_opt() {
@@ -233,13 +233,13 @@ fn local(at: &str) -> Option<NaiveDateTime> {
         })
 }
 
-fn local_time(at: &str) -> String {
+pub(crate) fn local_time(at: &str) -> String {
     local(at)
         .map(|d| d.format("%H:%M").to_string())
         .unwrap_or_else(|| at.to_string())
 }
 
-fn local_date(at: &str) -> Option<NaiveDate> {
+pub(crate) fn local_date(at: &str) -> Option<NaiveDate> {
     local(at).map(|d| d.date())
 }
 

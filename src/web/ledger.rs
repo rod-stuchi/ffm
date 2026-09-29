@@ -460,15 +460,19 @@ pub async fn ledger(
         mode_label: crate::web::auth::mode_label(&t, auth.mode),
         mode_next: auth.mode.next(),
         mode_svg: crate::ui::icons::svg(auth.mode.icon()),
-        modes: [theme::ModePref::Light, theme::ModePref::Dark, theme::ModePref::System]
-            .into_iter()
-            .map(|m| ModeChoice {
-                code: m.code(),
-                label: crate::web::auth::mode_label(&t, m),
-                svg: icons::svg(m.icon()),
-                on: m == auth.mode,
-            })
-            .collect(),
+        modes: [
+            theme::ModePref::Light,
+            theme::ModePref::Dark,
+            theme::ModePref::System,
+        ]
+        .into_iter()
+        .map(|m| ModeChoice {
+            code: m.code(),
+            label: crate::web::auth::mode_label(&t, m),
+            svg: icons::svg(m.icon()),
+            on: m == auth.mode,
+        })
+        .collect(),
         person_svg: crate::ui::icons::svg("person"),
         back_to,
         focused,
@@ -580,7 +584,7 @@ fn money_format(currency: crate::domain::money::Currency) -> String {
 /// hint listing both spellings of one thing is noise.
 fn command_hint(admin: bool, holds_admin_role: bool) -> String {
     let mut names = vec![
-        "help", "profile", "sort", "group", "set", "theme", "lang", "grep",
+        "help", "profile", "sort", "group", "set", "theme", "lang", "grep", "trash",
     ];
     if admin {
         names.extend(["household", "members", "invite", "currency"]);
@@ -663,6 +667,10 @@ fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
                 ("dd", "delete — opens a confirmation"),
                 ("y", "confirm in a modal"),
                 ("u", "undo the last change"),
+                (
+                    "U · :trash",
+                    "the trash — bring back any deleted row or file",
+                ),
                 ("Esc", "clear count, buffer, selection and search"),
             ],
         ),

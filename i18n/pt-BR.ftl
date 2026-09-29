@@ -367,6 +367,47 @@ grep-count = { $n ->
        *[other] { $n } linhas
     }
 
+## A lixeira — U / :trash
+
+trash-title = Lixeira
+trash-empty = Nada foi excluído. Linhas excluídas com dd e arquivos removidos vêm parar aqui.
+trash-count = { $n ->
+        [one] 1 item
+       *[other] { $n } itens
+    }
+trash-more = só os mais recentes aparecem
+trash-deleted = excluído { $time }
+trash-deleted-by = excluído { $time } · { $who }
+trash-replaced = substituído { $time }
+trash-with-files = { $n ->
+        [one] + 1 arquivo
+       *[other] + { $n } arquivos
+    }
+trash-restore = Restaurar
+trash-hint = x ou clique para marcar · Enter restaura o que está marcado
+trash-note = A linha volta para onde estava, com os arquivos dela. Um arquivo antigo troca de lugar com o atual, que vai para a lixeira no lugar dele.
+trash-menu = Linhas excluídas e arquivos removidos, para trazer de volta
+trash-nothing-picked = nada marcado — marque um item com x ou um clique
+trash-slot-twice = Duas versões do mesmo arquivo estão marcadas. Escolha uma — só uma pode ficar na linha.
+trash-rows = { $n ->
+        [one] 1 linha
+       *[other] { $n } linhas
+    }
+trash-files = { $n ->
+        [one] 1 arquivo
+       *[other] { $n } arquivos
+    }
+trash-restored = restaurado: { $what }
+trash-elsewhere = { $n ->
+        [one] 1 em outro mês
+       *[other] { $n } em outros meses
+    }
+trash-failed = { $n ->
+        [one] 1 não pôde ser restaurado
+       *[other] { $n } não puderam ser restaurados
+    }
+trash-bill-elsewhere = "{ $title }" já está com a mesma conta, e uma conta só pode estar em uma linha
+
 ## Importação de contas
 
 import-dropzone = Solte a conta aqui, ou escolha um arquivo

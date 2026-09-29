@@ -41,6 +41,7 @@ where
         .route("/__sandbox/themes", get(themes))
         .route("/__sandbox/catalog", get(catalog))
         .route("/__sandbox/picker", get(picker))
+        .route("/__sandbox/trash", get(trash))
 }
 
 // ---------------------------------------------------------------------------
@@ -426,6 +427,43 @@ async fn picker(Query(ctx): Query<Ctx>) -> impl IntoResponse {
         theme_css: ctx.theme_css(),
         attr: ctx.attr(),
         pops,
+    })
+}
+
+#[derive(Template)]
+#[template(path = "sandbox/trash.html")]
+struct TrashPage {
+    theme_css: String,
+    attr: Option<&'static str>,
+    /// `(label, rendered pane)` — the real `partials/trash_pane.html`.
+    panes: Vec<(String, String)>,
+}
+
+/// The trash drawer, full and empty, in each language.
+async fn trash(Query(ctx): Query<Ctx>) -> impl IntoResponse {
+    let today = ctx.today();
+    let items = fixtures::trash_items(today);
+    let period = crate::domain::period::Period::of(today).to_string();
+    let mut panes = Vec::new();
+    for lang in ctx.lang.langs() {
+        let code = if lang == Lang::En { "en" } else { "pt-BR" };
+        for (label, list) in [("", &items[..]), (" · empty", &[][..])] {
+            let pane = crate::web::trash::build(
+                Catalog::new(lang),
+                list,
+                false,
+                1,
+                &period,
+                ctx.currency(),
+                today,
+            );
+            panes.push((format!("{code}{label}"), pane.render().unwrap_or_default()));
+        }
+    }
+    Html(TrashPage {
+        theme_css: ctx.theme_css(),
+        attr: ctx.attr(),
+        panes,
     })
 }
 

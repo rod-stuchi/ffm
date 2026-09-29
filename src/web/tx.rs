@@ -138,17 +138,27 @@ pub async fn pane_fragment(
     period: Period,
     message: &str,
 ) -> Response {
-    let Ok(members) = ledger::members(&st.pool).await else {
-        return say_only(auth.catalog().error_not_written(), true);
-    };
-    let Some(member) = members.into_iter().find(|m| m.id == member_id) else {
-        return say_only(auth.catalog().error_not_written(), true);
-    };
+    match pane_rows(st, auth, member_id, period).await {
+        Some(rows) => say(Html(rows).into_response(), message, false),
+        None => say_only(auth.catalog().error_not_written(), true),
+    }
+}
+
+/// The body [`pane_fragment`] answers with, unwrapped — for an answer that
+/// carries more than one pane (the trash restoring rows into several).
+pub(crate) async fn pane_rows(
+    st: &AppState,
+    auth: &Auth,
+    member_id: i64,
+    period: Period,
+) -> Option<crate::web::rules::PaneRows> {
+    let members = ledger::members(&st.pool).await.ok()?;
+    let member = members.into_iter().find(|m| m.id == member_id)?;
     let house = ledger::household(&st.pool).await.ok().flatten();
     let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
     let show_recurring = house.as_ref().is_none_or(|h| h.show_recurring);
 
-    let Ok(pane) = ledger::pane_with_vault(
+    let pane = ledger::pane_with_vault(
         &st.pool,
         &member,
         period,
@@ -157,9 +167,7 @@ pub async fn pane_fragment(
         Some(&st.cfg.receipts_root),
     )
     .await
-    else {
-        return say_only(auth.catalog().error_not_written(), true);
-    };
+    .ok()?;
 
     let t = auth.catalog();
     // Built by the page's own `view`, grouped exactly when the page groups —
@@ -170,17 +178,12 @@ pub async fn pane_fragment(
     let p = crate::web::ledger::view(pane, &t, currency, group, writable);
     let (panes, totals) = crate::web::ledger::totals(st, auth, period).await;
 
-    say(
-        Html(crate::web::rules::PaneRows {
-            t,
-            p,
-            pane_totals: panes.into_iter().find(|p| p.id == member_id),
-            house_totals: Some(totals),
-        })
-        .into_response(),
-        message,
-        false,
-    )
+    Some(crate::web::rules::PaneRows {
+        t,
+        p,
+        pane_totals: panes.into_iter().find(|p| p.id == member_id),
+        house_totals: Some(totals),
+    })
 }
 
 /// Whether the focused ordering is one the SERVER derives — grouped by
@@ -528,7 +531,7 @@ pub async fn delete(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>)
 /// A failure here is logged, not reported as the row failing: the row change
 /// is already committed and correct, and the disk still decides what the row
 /// shows.
-async fn files_follow_row(st: &AppState, actor: Actor, id: i64, restored: bool) {
+pub(crate) async fn files_follow_row(st: &AppState, actor: Actor, id: i64, restored: bool) {
     let root = &st.cfg.receipts_root;
     let done = if restored {
         crate::services::receipts::restore_with_row(&st.pool, root, actor, id).await
@@ -725,13 +728,17 @@ async fn undo_file(st: &AppState, auth: &Auth, u: &tx::Undoable) -> bool {
     };
 
     let result = match u.action.as_str() {
+        // Swapping, not refusing: a restore into a taken slot used to fail
+        // with "occupied" — and since `u` never skips a change it could not
+        // undo, every `u` after it failed the same way.
         "file_delete" => {
-            crate::services::receipts::restore(
+            crate::services::receipts::restore_swapping(
                 &st.pool,
                 &st.cfg.receipts_root,
                 actor,
                 u.entity_id,
                 Some(u.change_id),
+                Some(&slot),
             )
             .await
         }
@@ -783,7 +790,7 @@ async fn undo_file(st: &AppState, auth: &Auth, u: &tx::Undoable) -> bool {
 /// contradicted by its disappearance from somebody else's. A row you *can*
 /// see is still somebody else's to change unless it is yours, or you are an
 /// admin — see `Viewer::may_write`.
-async fn may_touch(st: &AppState, auth: &Auth, id: i64) -> Result<(), Response> {
+pub(crate) async fn may_touch(st: &AppState, auth: &Auth, id: i64) -> Result<(), Response> {
     let t = auth.catalog();
     let row = sqlx::query!(
         r#"SELECT member_id AS "member_id!: i64", visibility AS "visibility!: String"

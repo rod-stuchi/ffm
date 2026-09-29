@@ -187,6 +187,8 @@
             difference, and it is why this is not a second palette picker. -#}
         <button class="btn" type="button" title="{{ t.profile_theme() }}"
                 @click="open = false; openColors()">:theme</button>
+        <button class="btn" type="button" title="{{ t.trash_menu() }}"
+                @click="open = false; openTrash()">:trash</button>
         {#- On a phone the bar has no room for the admin badge or the
             light/dark button, so they move in here. `.ppop-narrow` is shown
             by the SAME media query that hides them from the bar, so there is
@@ -1202,8 +1204,9 @@ function ledger() {
       // Esc closes the rule pane in one press, from inside a field too — it
       // only blurred the field before, and closing took a second Esc. It
       // discards, as it does on the `e` row; keeping a draft is Ctrl-j/k past
-      // the edge.
-      if (box && box.matches('.rulepane') && e.key === 'Escape') {
+      // the edge. Not in the bottom split: its panes wear `.rulepane` too, and
+      // this arm closed a rule pane that was not there and left the split up.
+      if (box && box.matches('.rulepane') && !box.closest('#hsplitmount') && e.key === 'Escape') {
         e.preventDefault();
         el.blur();
         this.closeRule();
@@ -1337,6 +1340,9 @@ function ledger() {
       else if (k === 'x') { this.toggleSelected(); }
       else if (k === 'd') { this.pending = 'd'; }
       else if (k === 'u') { this.undo(); }
+      // Lowercase undoes the last change; uppercase opens the whole trash,
+      // where any deleted row or removed file comes back on its own.
+      else if (k === 'U') { this.openTrash(); }
       else if (k === ':') { this.openCommand(); }
       else if (k === '/') { this.openSearch(); }
       else if (k === 'n') { this.step(1); }
@@ -2447,6 +2453,15 @@ function ledger() {
       this.showSplit('/profile').then(() => this.focusSplit());
     },
 
+    /// `U` / `:trash`. Opened with the keyboard already on the first item,
+    /// because the only thing to do there is pick one — and the month on
+    /// screen rides along, so a restore can swap the panes it lands in.
+    openTrash() {
+      const period = document.querySelector('.ledger-shell')?.dataset.period || '';
+      this.showSplit('/trash?period=' + encodeURIComponent(period))
+        .then(() => this.focusSplit());
+    },
+
     /// A surface about ONE ROW — the change log. It keeps the rule editor's
     /// shape: a column beside the member pane it belongs to, closed when the
     /// cursor leaves the row.
@@ -2674,6 +2689,7 @@ function ledger() {
         case 'profile': case 'me':        return this.showSplit('/profile');
         case 'household': case 'config':  return this.showSplit('/household');
         case 'members':                   return this.showSplit('/members');
+        case 'trash':                     return this.openTrash();
         // Every month, as opposed to `/`, which filters what is on screen.
         // `:help` opens the keymap — the same modal `?` does. It is not a
         // nicety: `not-a-command` literally tells people to "try help", so

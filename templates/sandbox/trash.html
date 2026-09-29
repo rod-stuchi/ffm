@@ -1,0 +1,23 @@
+{% extends "sandbox/base.html" %}
+{% block title %}Trash · FFM sandbox{% endblock %}
+{% block body %}
+<div class="sb-bar"><span class="sb-k">sandbox</span>
+  <a href="/__sandbox/rows">rows</a>
+  <a href="/__sandbox/themes">themes</a>
+  <a href="/__sandbox/catalog">catalog</a>
+  <a href="/__sandbox/picker">picker</a>
+  <a href="/__sandbox/trash" class="is-on">trash</a>
+</div>
+<div class="sb-wrap">
+  <h1>Trash</h1>
+  <p class="sb-lede">
+    <code>U</code> / <code>:trash</code>, rendered by the same partial <code>GET /trash</code>
+    answers with: a deleted row that took its files with it, an income row, a replaced bill,
+    a removed file, another member's row (so the member column shows) — and the empty trash.
+  </p>
+  {%- for (label, pane) in panes %}
+  <div class="sb-k">{{ label }}</div>
+  <div class="hsplitmount" style="position:static;height:auto;margin-bottom:24px">{{ pane|safe }}</div>
+  {%- endfor %}
+</div>
+{% endblock %}

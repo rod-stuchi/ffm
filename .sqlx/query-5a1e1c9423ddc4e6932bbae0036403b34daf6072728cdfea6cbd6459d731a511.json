@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                  t.title AS \"title!: String\", t.kind AS \"kind!: String\",\n                  t.amount_cents AS \"amount_cents: i64\",\n                  t.member_id AS \"member_id!: i64\", m.name AS \"member!: String\",\n                  t.deleted_at AS \"deleted_at!: String\", d.name AS \"deleted_by?: String\",\n                  (SELECT count(*) FROM change c JOIN receipts r ON r.id = c.entity_id\n                   WHERE c.entity = 'file' AND c.action = 'file_delete'\n                     AND c.note = 'moved with its row'\n                     AND r.transaction_id = t.id AND r.deleted_at IS NOT NULL\n                     AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id)\n                  ) AS \"files!: i64\"\n           FROM transactions t\n           JOIN members m ON m.id = t.member_id\n           LEFT JOIN members d ON d.id = t.deleted_by\n           WHERE t.deleted_at IS NOT NULL\n             AND (t.member_id = ?1 OR ?2)\n           ORDER BY t.deleted_at DESC, t.id DESC\n           LIMIT ?3",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member!: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "deleted_at!: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "deleted_by?: String",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "files!: i64",
+        "ordinal": 9,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "5a1e1c9423ddc4e6932bbae0036403b34daf6072728cdfea6cbd6459d731a511"
+}

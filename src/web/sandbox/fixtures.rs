@@ -520,3 +520,79 @@ pub fn ledger(ctx: RowCtx) -> Vec<LedgerRow> {
     })
     .collect()
 }
+
+/// What the trash holds, for its sandbox page: one of each kind of entry,
+/// across two days and two members.
+pub fn trash_items(today: NaiveDate) -> Vec<crate::db::trash::Item> {
+    use crate::db::trash::{Item, What};
+    let at = |days: u64, hm: &str| {
+        let day = today - chrono::Days::new(days);
+        format!("{}T{hm}:00Z", day.format("%Y-%m-%d"))
+    };
+    let period = Period::of(today);
+    let item = |id, what, title: &str, cents: Option<i64>, member: (i64, &str), deleted_at| Item {
+        id,
+        what,
+        tx_id: id,
+        member_id: member.0,
+        member: member.1.to_string(),
+        title: title.to_string(),
+        period,
+        amount: cents.map(Cents),
+        is_income: false,
+        deleted_at,
+        deleted_by: Some("Rodrigo".into()),
+        path: None,
+    };
+    vec![
+        item(
+            1,
+            What::Row { files: 2 },
+            "Energia · Enel SP",
+            Some(34_362),
+            (1, "Rodrigo"),
+            at(0, "18:39"),
+        ),
+        item(
+            2,
+            What::File {
+                kind: "barcode".into(),
+                replaced: true,
+            },
+            "Água · Sabesp",
+            Some(10_840),
+            (1, "Rodrigo"),
+            at(0, "14:05"),
+        ),
+        Item {
+            is_income: true,
+            ..item(
+                3,
+                What::Row { files: 0 },
+                "Freelance",
+                Some(240_000),
+                (1, "Rodrigo"),
+                at(1, "20:12"),
+            )
+        },
+        item(
+            4,
+            What::File {
+                kind: "receipt".into(),
+                replaced: false,
+            },
+            "Internet · Vivo",
+            None,
+            (1, "Rodrigo"),
+            at(1, "09:30"),
+        ),
+        item(
+            5,
+            What::Row { files: 0 },
+            "Mesada",
+            Some(5_000),
+            (2, "Natália"),
+            at(1, "08:02"),
+        ),
+    ]
+}

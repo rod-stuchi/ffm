@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"tx_id!: i64\", t.member_id AS \"member_id!: i64\",\n                  t.visibility AS \"visibility!: String\", t.period AS \"period!: String\",\n                  r.kind AS \"kind!: String\"\n           FROM receipts r JOIN transactions t ON t.id = r.transaction_id\n           WHERE r.id = ?1 AND r.deleted_at IS NOT NULL AND t.deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "tx_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9c12f02373877a09e529682e6fb349fa80f66ce82c3a80b05be07276d1217a83"
+}

@@ -12,6 +12,7 @@ pub mod selection;
 pub mod session;
 pub mod settings;
 pub mod template;
+pub mod trash;
 pub mod tx;
 
 #[cfg(debug_assertions)]
@@ -47,6 +48,10 @@ pub fn router(state: AppState) -> Router {
         .route("/tx", post(tx::add))
         .route("/tx/{id}/delete", post(tx::delete))
         .route("/undo", post(tx::undo))
+        // `U` / `:trash` — every deleted row and removed file, each one
+        // restorable on its own rather than in `u`'s order.
+        .route("/trash", get(trash::view))
+        .route("/trash/restore", post(trash::restore))
         .route("/tx/{id}/move", post(tx::move_row))
         // `e` — the row opens into its own form, in place.
         .route("/tx/{id}", get(tx::one_row).post(tx::save_edit))

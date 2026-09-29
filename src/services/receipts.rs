@@ -441,6 +441,79 @@ pub async fn restore(
     Ok(true)
 }
 
+/// Puts a deleted file back even when its slot is taken, by moving the live
+/// file aside first — tagged `superseded`, exactly as replacing a file does.
+///
+/// This is what restoring an older version *means*: somebody picking last
+/// month's bill out of the trash wants that bill on the row, not a refusal
+/// telling them to remove the current one by hand first. Nothing is lost —
+/// the displaced file is in the trash, one pick away.
+///
+/// The displaced file's delete carries the same `undo_of` as the restore.
+/// From the trash that is `None`, so `u` walks back through both steps like
+/// any replace. From `u` it points at the change being undone, so the
+/// displacement is part of that undo rather than a new step `u` would then
+/// reverse — which would swap the two files back and forth forever.
+///
+/// `slot` is what the live file is found through; without one (an untracked
+/// row) there is nothing to move aside and this is a plain [`restore`].
+pub async fn restore_swapping(
+    pool: &SqlitePool,
+    root: &Path,
+    actor: Actor,
+    receipt_id: i64,
+    undo_of: Option<i64>,
+    slot: Option<&Slot>,
+) -> Result<bool, StoreError> {
+    let row = sqlx::query!(
+        r#"SELECT transaction_id AS "tx!: i64", kind AS "kind!: String",
+                  deleted_from_path AS "from: String"
+           FROM receipts WHERE id = ?1 AND deleted_at IS NOT NULL"#,
+        receipt_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(db)?;
+    let Some(row) = row else { return Ok(false) };
+
+    // Only with something to put in its place. A deleted copy that is gone
+    // from the trash — moved or renamed by hand, which the vault allows —
+    // would otherwise cost the row its live file for nothing: the swap moved
+    // a real receipt aside and brought back a row with no bytes behind it.
+    // Without a copy, the plain restore below refuses a taken slot instead.
+    let has_copy = row
+        .from
+        .as_deref()
+        .is_some_and(|rel| deleted_copy(root, rel, receipt_id).is_some());
+
+    if has_copy && let (Some(slot), Some(kind)) = (slot, Kind::parse(&row.kind)) {
+        soft_delete(pool, root, actor, slot, kind, "superseded", undo_of).await?;
+        // A live row whose file vanished by hand has nothing on disk for the
+        // soft delete to move, and would still hold the one live place of its
+        // kind — retire it the way `store` does, or the restore below breaks
+        // the one-live-file index after its file has already moved.
+        let by = match actor {
+            Actor::User(id) | Actor::Import(Some(id)) => Some(id),
+            _ => None,
+        };
+        let at = now();
+        sqlx::query!(
+            r#"UPDATE receipts SET deleted_at = ?3, deleted_by = ?4,
+                                   delete_reason = 'manual', deleted_from_path = path
+               WHERE transaction_id = ?1 AND kind = ?2 AND deleted_at IS NULL"#,
+            row.tx,
+            row.kind,
+            at,
+            by,
+        )
+        .execute(pool)
+        .await
+        .map_err(db)?;
+    }
+
+    restore(pool, root, actor, receipt_id, undo_of).await
+}
+
 /// Where the vault lives, as an absolute path.
 pub fn root(cfg: &crate::config::Config) -> PathBuf {
     cfg.receipts_root.clone()

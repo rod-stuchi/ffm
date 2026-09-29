@@ -404,6 +404,47 @@ grep-count = { $n ->
        *[other] { $n } rows
     }
 
+## The trash — U / :trash
+
+trash-title = Trash
+trash-empty = Nothing has been deleted. Rows you delete with dd and files you remove land here.
+trash-count = { $n ->
+        [one] 1 item
+       *[other] { $n } items
+    }
+trash-more = only the newest are listed
+trash-deleted = deleted { $time }
+trash-deleted-by = deleted { $time } · { $who }
+trash-replaced = replaced { $time }
+trash-with-files = { $n ->
+        [one] + 1 file
+       *[other] + { $n } files
+    }
+trash-restore = Restore
+trash-hint = x or click to check · Enter restores what is checked
+trash-note = A row comes back where it was, with its files. An older file swaps places with the current one, which goes to the trash in its stead.
+trash-menu = Deleted rows and removed files, to bring back
+trash-nothing-picked = nothing checked — x or click an item first
+trash-slot-twice = Two versions of the same file are checked. Pick one — only one can be on the row.
+trash-rows = { $n ->
+        [one] 1 row
+       *[other] { $n } rows
+    }
+trash-files = { $n ->
+        [one] 1 file
+       *[other] { $n } files
+    }
+trash-restored = restored { $what }
+trash-elsewhere = { $n ->
+        [one] 1 in another month
+       *[other] { $n } in other months
+    }
+trash-failed = { $n ->
+        [one] 1 could not be restored
+       *[other] { $n } could not be restored
+    }
+trash-bill-elsewhere = "{ $title }" already holds the same bill, and a bill can be on one row only
+
 ## Bill import
 
 import-dropzone = Drop the bill here, or choose a file

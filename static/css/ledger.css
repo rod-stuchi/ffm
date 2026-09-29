@@ -1455,6 +1455,116 @@
   white-space: nowrap;
 }
 
+/* --- the trash (`U` / `:trash`) ----------------------------------------- */
+
+/* The form is only there to carry the picks; `contents` lets the pane's
+ * flex column see the scrolling body and the actions row directly, so the
+ * actions stay at the foot while the list scrolls. */
+.trashform {
+  display: contents;
+}
+
+/* A `.hit` with a checkbox in front and the "when" before the amount. One
+ * row, one line: a trash is scanned for the thing you lost, not read. */
+.trow {
+  display: grid;
+  grid-template-columns: max-content 9ch max-content 1fr max-content max-content;
+  gap: 9px;
+  align-items: baseline;
+  padding: 6px 7px;
+  border-radius: 7px;
+  color: var(--ink);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.trow.has-member {
+  grid-template-columns: max-content 9ch max-content max-content 1fr max-content max-content;
+}
+
+.trow:hover {
+  background: var(--surface-2);
+}
+
+/* The cursor while `j`/`k` walk the list: the same accent rail and tinted
+ * ground a focused row and a focused log entry use. */
+.trow:focus-within {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Checked is "what I picked", which is `--info`'s channel everywhere else
+ * (`x` selection). */
+.trow:has(input:checked) .ht {
+  color: var(--info);
+}
+
+.trow input[type="checkbox"] {
+  accent-color: var(--info);
+  margin: 0;
+  align-self: center;
+}
+
+.trow input[type="checkbox"]:focus-visible {
+  outline: none;
+}
+
+.trow .tk,
+.trow .hp,
+.trow .hm,
+.trow .tw,
+.trow .ha {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.trow .tk,
+.trow .hp,
+.trow .hm,
+.trow .tw {
+  color: var(--ink-3);
+}
+
+.trow .ht {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trow .tf {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.trashpane .rp-actions {
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.trashpane .tcount {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Narrow: the kind and the "when" give way to what the row is. */
+@media (max-width: 720px) {
+  .trow,
+  .trow.has-member {
+    grid-template-columns: max-content max-content 1fr max-content;
+  }
+
+  .trow .tk,
+  .trow .hm,
+  .trow .tw {
+    display: none;
+  }
+}
+
 /* --- the barcode dropzone ------------------------------------------------ */
 
 .dropwrap {
