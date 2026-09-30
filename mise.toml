@@ -16,3 +16,9 @@ just = "1.58.0"
 "cargo:sqlx-cli" = { version = "0.8.6", features = "sqlite", default-features = "false" }
 # The js-check, cmd-check and fonts recipes run python3.
 python = "3.13.15"
+# `just release` cross-compiles the Linux builds from this Mac: zig is the C
+# compiler and linker for the bundled SQLite, and the targets are musl, so the
+# binaries are fully static and run on any distro whatever its glibc — no
+# container, no old-LTS build image.
+zig = "0.15.2"
+"cargo:cargo-zigbuild" = "0.23.4"

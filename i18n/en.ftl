@@ -657,3 +657,9 @@ carousel-remove-yes = Remove
 # --- the loader: a request in flight -------------------------------------------
 busy-label = Working…
 busy-offline = No answer from the server — nothing changed. Try again.
+
+## Which kind of server this is — the badge a dev build wears (`crate::run`)
+
+run-dev-title = A development build — not the household's server. What you change here is not the real ledger's.
+run-dev-lan-title = A development build, open to the local network — not the household's server.
+run-demo-title = A development build running as of { $date }, on a copy of the database — nothing here reaches the real ledger.

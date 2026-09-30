@@ -258,6 +258,8 @@ struct LedgerPage {
     previewing: bool,
     t: Catalog,
     household: String,
+    /// A dev build's badge and tab prefix — `None` on PROD (`crate::run`).
+    run: Option<crate::run::Badge>,
     period: String,
     prev: String,
     next: String,
@@ -496,6 +498,7 @@ pub async fn ledger(
         admin: auth.viewer.is_admin(),
         previewing: auth.session.preview,
         household: name,
+        run: crate::run::badge(&t),
         period: fmt::period(period),
         period_key: period.to_string(),
         picker: MonthPop {

@@ -623,3 +623,9 @@ carousel-remove-yes = Remover
 # --- the loader: a request in flight -------------------------------------------
 busy-label = Carregando…
 busy-offline = O servidor não respondeu — nada foi alterado. Tente de novo.
+
+## Que tipo de servidor é este — o selo de um build de desenvolvimento (`crate::run`)
+
+run-dev-title = Um build de desenvolvimento — não é o servidor da casa. O que você muda aqui não é o livro de verdade.
+run-dev-lan-title = Um build de desenvolvimento, aberto à rede local — não é o servidor da casa.
+run-demo-title = Um build de desenvolvimento rodando como se fosse { $date }, numa cópia do banco — nada aqui chega ao livro de verdade.

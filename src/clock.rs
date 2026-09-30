@@ -33,6 +33,12 @@ pub fn local() -> DateTime<Local> {
     Local::now() + offset()
 }
 
+/// Whether the clock has been moved — a dev server running as of another
+/// date, which the app must say on every screen (`crate::run`).
+pub fn shifted() -> bool {
+    offset() != Duration::zero()
+}
+
 /// Today's local date.
 pub fn today() -> NaiveDate {
     local().date_naive()

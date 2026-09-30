@@ -21,6 +21,10 @@
       setting is also what the pane actually is: a list of independent writes,
       which is why there is no Save button to pair with it. -#}
   <div class="rp-body">
+    {#- The version and which kind of server this is, first line —
+        `v0.0.3 · PROD`, `v0.0.3-dev · dev-lan · 15/10/2026`. Identifiers and
+        a date, not copy, so they never pass through the catalog. -#}
+    <p class="version">ffm {{ version }} · {{ run }}</p>
 
     <div class="sect">{{ t.profile_appearance() }}</div>
 

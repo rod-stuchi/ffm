@@ -1,3 +1,5 @@
 [toolchain]
 channel = "stable"
 components = ["rustfmt", "clippy", "rust-analyzer", "rust-src"]
+# The Linux builds `just release` makes — static musl, so they run on any distro.
+targets = ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]

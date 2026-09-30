@@ -21,3 +21,10 @@
 # If anyone ever enables `unstable-locales`, re-add the entry — at that point the
 # path becomes reachable and the lint starts doing real work.
 disallowed-methods = []
+
+# `result_large_err` (on since Rust 1.98) flags `Result<(), Response>`: an axum
+# `Response` is 128 bytes, over the default 128-byte threshold. Returning a
+# ready-made response as the error — `may_write(...)?` refusing with the
+# read-only message — is axum's own early-return idiom, on cold paths, once per
+# request. Boxing every one of them would be churn with nothing to show for it.
+large-error-threshold = 256

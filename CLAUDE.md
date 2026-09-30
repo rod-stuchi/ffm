@@ -1310,11 +1310,50 @@ that will otherwise be re-proposed.
 ## Development workflow
 
 - **`mise install` sets up the toolchain** from `mise.toml`: the standalone
-  `tailwindcss` binary, `just`, `cargo-watch`, `sqlx-cli` and `python`. There is
-  no Node — it was only ever there to run Tailwind. Rust is pinned by
-  `rust-toolchain.toml` (rustup), including `rust-analyzer`, not by mise. Left to
-  the system: `sqlite3`, `poppler` (`pdftoppm`/`pdftotext`, `brew install
-  poppler`) and Safari's `safaridriver`.
+  `tailwindcss` binary, `just`, `cargo-watch`, `sqlx-cli`, `python`, and `zig`
+  with `cargo-zigbuild` for the Linux releases. There is no Node — it was only
+  ever there to run Tailwind. Rust is pinned by `rust-toolchain.toml` (rustup),
+  including `rust-analyzer` and the two musl targets, not by mise. Left to the
+  system: `sqlite3`, `poppler` (`pdftoppm`/`pdftotext`, `brew install poppler`)
+  and Safari's `safaridriver`.
+- **A dev server says it is one, on every screen** (`crate::run`). The
+  modes look identical otherwise, and a dev server on a copy of the database —
+  or one three weeks in the future — is exactly where a real bill gets typed
+  into the wrong ledger.
+  - **PROD** is a release build; **dev** a debug build on loopback;
+    **dev-lan** one bound to an interface the house can reach — decided by
+    what the listener actually bound, not the flag that asked. A moved clock
+    (`just dev 2026-10-15`) adds its date.
+  - A non-PROD build wears a hazard-striped `DEV` / `DEV-LAN` /
+    `DEV · 15/10/2026` badge beside the household's name — row 1 at every
+    width, never moved into the profile menu the way the admin badge is —
+    on `/login` too, and prefixes the tab title (`[dev 15/10] …`). A phone
+    drops the badge's year.
+  - **PROD wears nothing**, and says so only in `:profile`'s first line and
+    the boot log (`ffm v0.0.1 · PROD`): a badge that is always there stops
+    being read, and the danger runs one way.
+  - The badge speaks in ink, not a semantic color: the accent, pos/neg and
+    info all already mean something.
+- **`just release` builds a release; `just release-approve` tags it.**
+  - `just release` writes `dist/v0.0.N/`: one folder and `.tar.gz` per
+    platform — macOS arm64, Linux x86_64, Linux arm64 — each holding the
+    binary, `static/` (only what a page loads), `config/issuers.toml`,
+    `ffm.example.toml`, and `start.sh` + `README.md` from `release/`. Plus
+    `SHA256SUMS` and the `COMMIT` it was built from.
+  - **The Linux builds are static musl, cross-compiled from the Mac** with
+    cargo-zigbuild — zig is the C compiler for the bundled SQLite. That was
+    chosen over a container building against an old LTS glibc: a static
+    binary has no glibc to match at all, and nothing needs a Linux VM here.
+    The one runtime dependency left is poppler, run as a program, not linked.
+  - **The number is the last `v0.0.*` tag + 1**, written into Cargo.toml
+    before the build so the binary reports it (`crate::version()` — the boot
+    log and `:profile`'s first line; `-dev` on a `cargo run` build). Running
+    `just release` again before approving **reuses** the number, so tags
+    stay gapless.
+  - **Both refuse a dirty tree** (the version bump aside), and
+    `release-approve` refuses when HEAD has moved since the build: the tag
+    must name exactly the code the tested binary was built from. It commits
+    `release: v0.0.N` and tags; nothing is pushed.
 - `just dev` — Tailwind build, then `cargo watch` recompiling and restarting on
   save. `just css` in a second pane for CSS-only iteration.
 - **`just dev` and `just dev-lan` first stop an earlier dev loop on their

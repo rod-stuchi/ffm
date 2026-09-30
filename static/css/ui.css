@@ -619,3 +619,44 @@ input.i.mono {
   font-weight: 700;
   font-size: 98.6px;
 }
+
+/* --- which server this is (`crate::run`) --------------------------------- */
+
+/* A dev build's badge, beside the household's name and on /login. It must not
+ * borrow a color that already means something — the accent is "you are here"
+ * (the ADMIN badge), pos/neg are money, info is a selection — so it speaks in
+ * ink instead, with the one pattern nothing else in the app wears: hazard
+ * stripes. Loud in every palette, colliding with none. */
+.runbadge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--ink-2);
+  border-radius: 6px;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--ink) 16%, transparent) 0 5px,
+    transparent 5px 10px
+  );
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* On a phone the year goes — `DEV · 15/10` — because the badge shares row 1
+ * with the household's name, and the whole date squeezed that name to "No…".
+ * The tab title already says `[dev 15/10]`; the year is in the badge's title. */
+@media (max-width: 720px) {
+  .runbadge {
+    letter-spacing: 0.06em;
+  }
+
+  .runbadge .rb-year {
+    display: none;
+  }
+}

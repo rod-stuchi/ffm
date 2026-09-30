@@ -28,6 +28,9 @@
 # bills, same as above.
 /demo
 
+# `just release`'s output — binaries and tarballs, rebuilt from a tag.
+/dist
+
 # Issuer profiles are shipped as an example with placeholder CNPJs; a household
 # replacing them with the real ones is editing its own copy, not the repo's.
 # The example IS committed — see config/issuers.toml.

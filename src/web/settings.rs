@@ -80,6 +80,11 @@ fn swatches(selected: ThemeName) -> Vec<Swatch> {
 #[template(path = "partials/profile_pane.html")]
 struct ProfilePane {
     t: Catalog,
+    /// `v0.0.3` — the pane's first line, so "which version is this?" has an
+    /// answer without a new page.
+    version: &'static str,
+    /// `PROD` · `dev` · `dev-lan · 15/10/2026` (`crate::run::line`).
+    run: String,
     themes: Vec<Swatch>,
     languages: Vec<Choice>,
     line_numbers: Vec<Choice>,
@@ -117,6 +122,8 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
         .unwrap_or_default();
 
     Html(ProfilePane {
+        version: crate::version(),
+        run: crate::run::line(),
         themes: swatches(s.theme),
         languages: choices(
             &[

@@ -54,6 +54,9 @@ pub struct Chrome {
     pub path: String,
     pub msg: String,
     pub msg_bad: bool,
+    /// A dev build's badge — shown before you sign in too, since `/login`
+    /// is where you would first mistake one server for another.
+    pub run: Option<crate::run::Badge>,
 }
 
 pub struct Choice {
@@ -104,6 +107,7 @@ async fn chrome(
     let next_mode = mode.next();
 
     let chrome = Chrome {
+        run: crate::run::badge(&t),
         household_slug: crate::domain::slug::slugify(&name),
         household: name,
         // The palette of whoever last signed in on this device, from the

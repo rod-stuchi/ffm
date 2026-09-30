@@ -13,7 +13,21 @@ pub mod clock;
 pub mod config;
 pub mod db;
 pub mod domain;
+pub mod run;
 pub mod services;
 pub mod state;
 pub mod ui;
 pub mod web;
+
+/// The version, as `:profile` shows it and the boot log prints it:
+/// `v0.0.3` for a release build, `v0.0.3-dev` for anything `cargo run`
+/// built — which is the last release plus whatever has changed since, and
+/// must not be mistaken for it. The number itself is Cargo.toml's, which
+/// `just release` bumps and `just release-approve` tags.
+pub fn version() -> &'static str {
+    if cfg!(debug_assertions) {
+        concat!("v", env!("CARGO_PKG_VERSION"), "-dev")
+    } else {
+        concat!("v", env!("CARGO_PKG_VERSION"))
+    }
+}

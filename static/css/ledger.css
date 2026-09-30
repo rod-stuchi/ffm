@@ -296,6 +296,9 @@
 
   .bar-logo { order: 1; }
   .bar-sep { order: 2; }
+  /* Right after the name, on row 1 — the name's `flex: 1` pushes it to the
+   * end of the name's space, never onto row 2 or into the menu. */
+  .ledger-bar .runbadge { order: 3; }
   .htotals { display: contents; }
   .htotals .badge { order: 4; }
   .ledger-bar .modebtn { order: 5; }
@@ -597,6 +600,16 @@
  * would stack them instead. */
 .hsplitmount .settingspane .rp-body > .band {
   grid-column: 1 / -1;
+}
+
+/* `:profile`'s first line — which build this is. Mono, because a version is
+ * read character by character, and quiet, because it is rarely the question. */
+.settingspane .rp-body > .version {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
 }
 
 .hsplitmount .settingspane .rp-body > * {

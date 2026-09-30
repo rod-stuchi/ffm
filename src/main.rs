@@ -138,6 +138,11 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .unwrap_or_else(|e| panic!("cannot bind {addr}: {e}"));
+    // dev or dev-lan is decided by what was actually bound, not by the flag
+    // that asked for it — the badge must say what the house can reach.
+    if let Ok(local) = listener.local_addr() {
+        ffm::run::bound(local.ip());
+    }
 
     // Bound to a wildcard, "http://0.0.0.0:3000" is not something anybody can
     // type into a phone. Resolve the address this machine actually answers on
@@ -149,7 +154,11 @@ async fn main() {
         _ => addr.clone(),
     };
 
-    tracing::info!("ffm · http://{shown}");
+    tracing::info!(
+        "ffm {} · {} · http://{shown}",
+        ffm::version(),
+        ffm::run::line()
+    );
     #[cfg(debug_assertions)]
     tracing::info!("sandbox · http://{shown}/__sandbox/rows");
 

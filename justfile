@@ -422,3 +422,115 @@ check: fmt-check lint test offline-check db-check css-check tpl-check js-check c
 
 md:
     mdserve -p 8080 .
+
+# --- release -----------------------------------------------------------------
+
+# Build a release into dist/v0.0.N/ — one folder and one .tar.gz per platform,
+# each holding the binary, static/, config/issuers.toml, ffm.example.toml,
+# start.sh and README.md (from release/): everything a fresh machine needs
+# besides poppler.
+#
+# - macOS arm64 is built natively. Linux x86_64 and arm64 are cross-compiled
+#   from this Mac with cargo-zigbuild (mise installs it and zig), for musl:
+#   fully static binaries that run on any distro whatever its glibc, with no
+#   container and no old-LTS build image.
+# - The number is the last `v0.0.*` tag + 1, written into Cargo.toml before
+#   the build so the binary reports it. Running this again before approving
+#   reuses that number rather than skipping one, so tags stay gapless.
+# - It refuses a dirty tree (Cargo.toml/Cargo.lock aside, which it bumps
+#   itself): the tag `release-approve` makes must name the code the tested
+#   binary was built from.
+#
+# Build dist/v0.0.N for macOS arm64 and Linux x86_64/arm64 · test it · then `just release-approve`
+release:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dirty=$(git status --porcelain --untracked-files=no -- . ':!Cargo.toml' ':!Cargo.lock')
+    if [ -n "$dirty" ]; then
+        echo "✗ uncommitted changes — a release is built from a commit, or its tag would name code the binary does not contain:" >&2
+        echo "$dirty" >&2
+        exit 1
+    fi
+    last=$(git tag --list 'v0.0.*' | sed 's/^v0\.0\.//' | grep -E '^[0-9]+$' | sort -n | tail -1 || true)
+    v="0.0.$(( ${last:-0} + 1 ))"
+    tag="v$v"
+    perl -0pi -e 's/(\[package\][^\[]*?\nversion = ")[^"]*(")/${1}'"$v"'${2}/' Cargo.toml
+    prev="${last:+v0.0.$last}"
+    echo "→ $tag (last tag: ${prev:-none})"
+
+    just css-build
+    export SQLX_OFFLINE=true
+    tdir="${CARGO_TARGET_DIR:-target}"
+    out="dist/$tag"
+    rm -rf "$out"
+    mkdir -p "$out"
+    for t in aarch64-apple-darwin x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+        case "$t" in
+            aarch64-apple-darwin)       plat=macos-arm64 ;;
+            x86_64-unknown-linux-musl)  plat=linux-x86_64 ;;
+            aarch64-unknown-linux-musl) plat=linux-arm64 ;;
+        esac
+        echo "→ building $plat ($t)"
+        if [[ "$t" == *linux* ]]; then
+            mise exec -- cargo zigbuild --release --quiet --target "$t"
+        else
+            cargo build --release --quiet --target "$t"
+        fi
+        name="ffm-$tag-$plat"
+        dir="$out/$name"
+        mkdir -p "$dir/static/css" "$dir/static/fonts" "$dir/config"
+        cp "$tdir/$t/release/ffm" "$dir/ffm"
+        # Only what a page loads: build.css already inlines every source
+        # stylesheet, and the sandbox's does not exist in a release build.
+        cp static/css/build.css "$dir/static/css/"
+        cp -R static/js static/icons "$dir/static/"
+        cp static/fonts/*.woff2 static/fonts/OFL-*.txt "$dir/static/fonts/"
+        cp config/issuers.toml "$dir/config/"
+        cp ffm.example.toml release/start.sh release/README.md "$dir/"
+        echo "$tag" > "$dir/VERSION"
+        tar -czf "$out/$name.tar.gz" -C "$out" "$name"
+    done
+    git rev-parse HEAD > "$out/COMMIT"
+    (cd "$out" && shasum -a 256 ./*.tar.gz > SHA256SUMS)
+    echo "✓ $tag built from $(git rev-parse --short HEAD) — $out:"
+    (cd "$out" && ls -1 ./*.tar.gz | sed 's|^\./|    |')
+    echo "  test it, then \`just release-approve\` commits the version and tags $tag"
+
+# Approve the release `just release` built: commit Cargo.toml's version and
+# tag it `v0.0.N`. Nothing is pushed — `git push && git push origin v0.0.N`
+# when you want it on the remote.
+#
+# It refuses when HEAD has moved since the build: the tag would then name code
+# the tested binary does not contain.
+#
+# After testing what `just release` built: commit the version and tag v0.0.N (nothing pushed)
+release-approve:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    v=$(perl -0ne 'print $1 if /\[package\][^\[]*?\nversion = "([^"]*)"/' Cargo.toml)
+    tag="v$v"
+    out="dist/$tag"
+    if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+        echo "✗ $tag is already tagged — \`just release\` builds the next one" >&2
+        exit 1
+    fi
+    if [ ! -f "$out/COMMIT" ]; then
+        echo "✗ nothing built for $tag — run \`just release\` first" >&2
+        exit 1
+    fi
+    if [ "$(cat "$out/COMMIT")" != "$(git rev-parse HEAD)" ]; then
+        echo "✗ HEAD has moved since $tag was built — run \`just release\` again and test that" >&2
+        exit 1
+    fi
+    dirty=$(git status --porcelain --untracked-files=no -- . ':!Cargo.toml' ':!Cargo.lock')
+    if [ -n "$dirty" ]; then
+        echo "✗ uncommitted changes besides the version — the tag must name exactly what was built:" >&2
+        echo "$dirty" >&2
+        exit 1
+    fi
+    git add Cargo.toml Cargo.lock
+    if ! git diff --cached --quiet; then
+        git commit -q -m "release: $tag"
+    fi
+    git tag -a "$tag" -m "ffm $tag"
+    echo "✓ tagged $tag at $(git rev-parse --short HEAD) · not pushed — git push && git push origin $tag"

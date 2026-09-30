@@ -12,7 +12,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ chrome.household }}</title>
+<title>{% if let Some(r) = chrome.run %}{{ r.tab }}{% endif %}{{ chrome.household }}</title>
 <link rel="stylesheet" href="/static/css/build.css">
 {% include "partials/icons.html" %}
 {#- The 11 tokens as the full light/dark triple, in the palette of whoever
@@ -38,6 +38,9 @@
 
   <div class="auth-chrome">
     <span class="brand">ffm</span>
+    {%- if let Some(r) = chrome.run %}
+    <span class="runbadge" title="{{ r.title }}">{{ r.kind }}{% if let Some(d) = r.day %} · {{ d }}<span class="rb-year">{{ r.year }}</span>{% endif %}</span>
+    {%- endif %}
     <div class="ctl">
       {#- Plain forms, not fetch(): they set a cookie and redirect, so the next
           page's first byte is already right. Works with JS off and with HTMX

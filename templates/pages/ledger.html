@@ -15,7 +15,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ household }} · {{ period }}</title>
+<title>{% if let Some(r) = run %}{{ r.tab }}{% endif %}{{ household }} · {{ period }}</title>
 <link rel="stylesheet" href="/static/css/build.css">
 {% include "partials/icons.html" %}
 <style id="ffm-theme">{{ theme_css|safe }}</style>
@@ -96,6 +96,12 @@
     <span class="bar-logo">{% include "partials/logo.html" %}</span>
     <span class="bar-sep" aria-hidden="true"></span>
     <b>{{ household }}</b>
+    {#- Which server this is, when it is not the household's: beside its name,
+        on row 1 at every width — nothing moves it into the profile menu the
+        way the admin badge goes on a phone. PROD wears nothing (`crate::run`). -#}
+    {%- if let Some(r) = run %}
+    <span class="runbadge" title="{{ r.title }}">{{ r.kind }}{% if let Some(d) = r.day %} · {{ d }}<span class="rb-year">{{ r.year }}</span>{% endif %}</span>
+    {%- endif %}
     <nav class="mnav" x-data="{ picking: false }" @click.outside="picking = false"
          @keydown.escape.window="picking = false">
       <a class="btn" href="?period={{ prev }}" title="previous month">‹</a>
