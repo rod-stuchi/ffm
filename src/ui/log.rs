@@ -176,6 +176,7 @@ pub(crate) fn verb(action: &str, t: &Catalog) -> String {
 fn field_label(field: &str, t: &Catalog) -> String {
     match field {
         "amount" => t.log_field_amount(),
+        "paid" => t.log_field_paid(),
         "title" => t.log_field_title(),
         "date" => t.log_field_date(),
         "due_day" => t.log_field_due_day(),

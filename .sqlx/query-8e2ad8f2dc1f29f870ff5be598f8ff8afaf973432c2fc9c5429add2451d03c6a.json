@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.rule_id AS \"rule_id: i64\", r.tracked AS \"tracked: i64\"\n           FROM transactions t LEFT JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.id = ?1 AND t.deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "rule_id: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tracked: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "8e2ad8f2dc1f29f870ff5be598f8ff8afaf973432c2fc9c5429add2451d03c6a"
+}

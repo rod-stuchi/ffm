@@ -73,6 +73,15 @@
         <input type="checkbox" name="private"{% if private %} checked{% endif %}>
         <span>{{ t.edit_private() }}</span>
       </label>
+      {#- The manual paid tick — only on an untracked recurring row, where no
+          file on disk could prove it either way. Absent everywhere else,
+          rather than disabled: a tracked row is paid by its receipt. -#}
+      {%- if let Some(p) = paid %}
+      <label class="tog">
+        <input type="checkbox" name="paid"{% if p %} checked{% endif %}>
+        <span>{% if income %}{{ t.edit_received() }}{% else %}{{ t.edit_paid() }}{% endif %}</span>
+      </label>
+      {%- endif %}
 
       {% include "partials/edit_files.html" %}
 

@@ -1012,6 +1012,10 @@ struct EditRow {
     private: bool,
     /// A recurring row gets no Day field: its due day lives on the rule.
     recurring: bool,
+    /// The manual paid tick — `Some(current)` only for an untracked recurring
+    /// row, `None` hides the toggle. Worded "received" on an income.
+    paid: Option<bool>,
+    income: bool,
     /// What the row said when this form was rendered. Goes back with the save
     /// as a hidden field, and the UPDATE matches on it — so a row somebody
     /// else has changed since refuses instead of silently overwriting them.
@@ -1081,7 +1085,8 @@ pub async fn edit_form(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         r#"SELECT title AS "title!: String", amount_cents AS "amount_cents: i64",
                   date AS "date: String", bucket AS "bucket: String",
                   visibility AS "visibility!: String", rule_id AS "rule_id: i64",
-                  version AS "version!: i64"
+                  version AS "version!: i64", manual_paid AS "manual_paid!: i64",
+                  kind AS "kind!: String"
            FROM transactions WHERE id = ?1 AND deleted_at IS NULL"#,
         id
     )
@@ -1121,6 +1126,8 @@ pub async fn edit_form(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
             .unwrap_or_default(),
         private: row.visibility == "private",
         recurring: row.rule_id.is_some(),
+        paid: paid_applies(&st, id).await.then_some(row.manual_paid != 0),
+        income: row.kind == "in",
         version: row.version,
         errors: FieldErrors::new(),
         t,
@@ -1139,6 +1146,10 @@ pub struct EditForm {
     bucket: String,
     #[serde(default)]
     private: Option<String>,
+    /// The manual paid toggle. Read only for a row it applies to — whatever
+    /// the form sent for any other row is ignored.
+    #[serde(default)]
+    paid: Option<String>,
     /// The version the form was rendered with. Absent or unparseable means
     /// "do not check" rather than "check against zero" — a form that lost its
     /// hidden field should behave like the old unguarded save, not refuse
@@ -1196,6 +1207,7 @@ pub async fn save_edit(
             } else {
                 Visibility::Household
             },
+            paid: paid_applies(&st, id).await.then(|| form.paid.is_some()),
         },
         None,
         form.version.trim().parse::<i64>().ok(),
@@ -1309,6 +1321,16 @@ async fn reopen(
                 .unwrap_or_default(),
             private: form.private.is_some(),
             recurring: form.day.trim().is_empty(),
+            paid: paid_applies(st, id).await.then(|| form.paid.is_some()),
+            income: sqlx::query_scalar!(
+                r#"SELECT kind = 'in' AS "income!: bool" FROM transactions WHERE id = ?1"#,
+                id
+            )
+            .fetch_optional(&st.pool)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(false),
             version,
             errors,
             t,
@@ -1342,6 +1364,55 @@ pub async fn privacy(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>
                 t.row_now_private()
             } else {
                 t.row_now_shared()
+            };
+            match tx::one(&st.pool, id).await {
+                Ok(Some((member_id, period, _))) => {
+                    row_fragment(&st, &auth, id, member_id, period, msg).await
+                }
+                _ => say_only(t.error_not_written(), true),
+            }
+        }
+        _ => say_only(t.error_not_written(), true),
+    }
+}
+
+/// Whether the manual paid tick applies to this row — the one server-side
+/// answer every path that writes it asks (`tx::manual_paid_applies`).
+async fn paid_applies(st: &AppState, id: i64) -> bool {
+    matches!(
+        tx::manual_paid_applies(&st.pool, id).await,
+        Ok(tx::Applies::Yes)
+    )
+}
+
+/// `m` — toggle the manual paid tick on an untracked recurring row.
+pub async fn paid(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
+    let t = auth.catalog();
+    if let Err(refused) = may_touch(&st, &auth, id).await {
+        return refused;
+    }
+    match tx::manual_paid_applies(&st.pool, id).await {
+        Ok(tx::Applies::Yes) => {}
+        Ok(tx::Applies::Tracked) => return say_only(t.paid_refused_tracked(), true),
+        Ok(tx::Applies::OneOff) => return say_only(t.paid_refused_one_off(), true),
+        _ => return say_only(t.error_not_written(), true),
+    }
+    match tx::toggle_paid(&st.pool, Actor::User(auth.viewer.member_id), id, None).await {
+        Ok(Some(now)) => {
+            let income = sqlx::query_scalar!(
+                r#"SELECT kind = 'in' AS "income!: bool" FROM transactions WHERE id = ?1"#,
+                id
+            )
+            .fetch_optional(&st.pool)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(false);
+            let msg = match (now, income) {
+                (true, false) => t.paid_marked(),
+                (false, false) => t.paid_unmarked(),
+                (true, true) => t.received_marked(),
+                (false, true) => t.received_unmarked(),
             };
             match tx::one(&st.pool, id).await {
                 Ok(Some((member_id, period, _))) => {

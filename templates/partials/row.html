@@ -12,7 +12,8 @@
      {%- if let Some(d) = v.details.due %} data-due="{{ d }}"{% endif %}
      {%- if let Some(c) = v.details.cadence %} data-cadence="{{ c }}"{% endif %}
      {%- if let Some(p) = v.details.receipt %} data-receipt="{{ p }}"{% endif %}
-     {%- if let Some(d) = v.details.rule_deleted %} data-rule-deleted="{{ t.details_rule_deleted(d) }}"{% endif %}>
+     {%- if let Some(d) = v.details.rule_deleted %} data-rule-deleted="{{ t.details_rule_deleted(d) }}"{% endif %}
+     {%- if let Some(p) = v.paid_toggle %} data-paid="{% if p %}1{% else %}0{% endif %}"{% endif %}>
   <div class="gut">{{ v.gutter }}</div>
 
   {%- if v.is_skeleton -%}

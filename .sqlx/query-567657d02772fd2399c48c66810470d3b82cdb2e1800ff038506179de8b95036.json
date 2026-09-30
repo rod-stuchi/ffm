@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT title AS \"title!: String\", amount_cents AS \"amount_cents: i64\",\n                  date AS \"date: String\", bucket AS \"bucket: String\",\n                  visibility AS \"visibility!: String\", rule_id AS \"rule_id: i64\",\n                  version AS \"version!: i64\"\n           FROM transactions WHERE id = ?1 AND deleted_at IS NULL",
+  "query": "SELECT title AS \"title!: String\", amount_cents AS \"amount_cents: i64\",\n                  date AS \"date: String\", bucket AS \"bucket: String\",\n                  visibility AS \"visibility!: String\", rule_id AS \"rule_id: i64\",\n                  version AS \"version!: i64\", manual_paid AS \"manual_paid!: i64\",\n                  kind AS \"kind!: String\"\n           FROM transactions WHERE id = ?1 AND deleted_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -37,6 +37,16 @@
         "name": "version!: i64",
         "ordinal": 6,
         "type_info": "Integer"
+      },
+      {
+        "name": "manual_paid!: i64",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 8,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -49,8 +59,10 @@
       true,
       false,
       true,
+      false,
+      false,
       false
     ]
   },
-  "hash": "f76cefda1a6078136bffeab61db23be311058a41c5018c352f82a0542e775128"
+  "hash": "567657d02772fd2399c48c66810470d3b82cdb2e1800ff038506179de8b95036"
 }

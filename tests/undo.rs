@@ -85,6 +85,7 @@ async fn set_amount(pool: &SqlitePool, who: i64, id: i64, cents: i64) {
             day: None,
             bucket: None,
             visibility: Visibility::Household,
+            paid: None,
         },
         None,
         None,
@@ -357,4 +358,176 @@ async fn the_materializer_never_overtakes() {
         .unwrap();
     assert!(next.skipped.is_empty());
     assert_eq!(next.pick.unwrap().action, "edit");
+}
+
+// ---------------------------------------------------------------------------
+// the manual paid tick (`m`), and a bill's amount under `u`
+// ---------------------------------------------------------------------------
+
+/// A rule-backed row in `me`'s September: a recurring bill, tracked or not.
+async fn recurring(pool: &SqlitePool, me: i64, tracked: bool) -> i64 {
+    use ffm::db::rules::{self, RuleForm};
+    let rule = rules::create(
+        pool,
+        Actor::User(me),
+        &RuleForm {
+            member_id: me,
+            kind: TxKind::Out,
+            title: "Internet".into(),
+            amount: Some(Cents(9990)),
+            cadence_months: 1,
+            due_day: Some(10),
+            start_date: chrono::NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
+            end_date: None,
+            total_installments: None,
+            carry_forward_amount: true,
+            tracked,
+            bucket: Some("Casa".into()),
+            bill_name: Some("Internet".into()),
+            instance: None,
+            no_barcode: false,
+            spans_period: false,
+            window_size: None,
+            window_start: None,
+            varies: false,
+            estimate_basis: "lowest".into(),
+            estimate_window: 3,
+            amount_in_filename: false,
+            months: None,
+            visibility: Visibility::Household,
+        },
+    )
+    .await
+    .unwrap();
+    // The row the materializer would have made — a one-off tied to the rule
+    // is the same row as far as the tick is concerned.
+    let row = add(pool, me, me, sep(), "Internet").await;
+    sqlx::query("UPDATE transactions SET rule_id = ? WHERE id = ?")
+        .bind(rule)
+        .bind(row)
+        .execute(pool)
+        .await
+        .unwrap();
+    row
+}
+
+async fn manual_paid(pool: &SqlitePool, id: i64) -> bool {
+    sqlx::query_scalar::<_, i64>("SELECT manual_paid FROM transactions WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        != 0
+}
+
+#[tokio::test]
+async fn the_manual_tick_applies_only_to_an_untracked_recurring_row() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let one_off = add(&pool, me, me, sep(), "Padaria").await;
+    let tracked = recurring(&pool, me, true).await;
+
+    assert_eq!(
+        tx::manual_paid_applies(&pool, one_off).await.unwrap(),
+        tx::Applies::OneOff
+    );
+    assert_eq!(
+        tx::manual_paid_applies(&pool, tracked).await.unwrap(),
+        tx::Applies::Tracked,
+        "a tracked bill is paid by its receipt on disk"
+    );
+
+    let pool = common::pool().await;
+    let me = household(&pool).await;
+    let untracked = recurring(&pool, me, false).await;
+    assert_eq!(
+        tx::manual_paid_applies(&pool, untracked).await.unwrap(),
+        tx::Applies::Yes
+    );
+}
+
+#[tokio::test]
+async fn the_manual_tick_is_logged_as_an_edit_and_u_takes_it_back() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let row = recurring(&pool, me, false).await;
+
+    assert_eq!(
+        tx::toggle_paid(&pool, Actor::User(me), row, None)
+            .await
+            .unwrap(),
+        Some(true)
+    );
+    assert!(manual_paid(&pool, row).await);
+
+    let (action, field, old, new): (String, String, String, String) = sqlx::query_as(
+        "SELECT c.action, f.field, f.old_value, f.new_value
+           FROM change c JOIN change_field f ON f.change_id = c.id
+          WHERE c.entity = 'transaction' AND c.entity_id = ?
+          ORDER BY c.id DESC LIMIT 1",
+    )
+    .bind(row)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (action.as_str(), field.as_str(), old.as_str(), new.as_str()),
+        ("edit", "paid", "0", "1")
+    );
+
+    assert_eq!(
+        step(&pool, pane(me, me, sep()), Direction::Undo).await,
+        Some(("edit".into(), row))
+    );
+    assert!(!manual_paid(&pool, row).await, "u took the tick back");
+
+    step(&pool, pane(me, me, sep()), Direction::Redo).await;
+    assert!(manual_paid(&pool, row).await, "U put it back");
+}
+
+#[tokio::test]
+async fn an_edit_leaves_the_tick_alone_unless_it_says_otherwise() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let row = recurring(&pool, me, false).await;
+    tx::toggle_paid(&pool, Actor::User(me), row, None)
+        .await
+        .unwrap();
+
+    // Every caller but the edit form passes `None`.
+    set_amount(&pool, me, row, 5000).await;
+    assert!(manual_paid(&pool, row).await);
+}
+
+#[tokio::test]
+async fn u_after_a_bill_drop_puts_the_amount_back() {
+    use ffm::db::changes::{Change, TxAction, Value};
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let row = add(&pool, me, me, sep(), "Energia").await;
+
+    // What `attach_to` writes when the bill's amount replaces the row's.
+    let mut t = pool.begin().await.unwrap();
+    sqlx::query("UPDATE transactions SET amount_cents = 13145 WHERE id = ?")
+        .bind(row)
+        .execute(&mut *t)
+        .await
+        .unwrap();
+    Change::transaction(Actor::Import(Some(me)), TxAction::Import, row)
+        .in_period(sep())
+        .diff(
+            "amount",
+            Value::Money(Some(Cents(1000))),
+            Value::Money(Some(Cents(13145))),
+        )
+        .write(&mut t)
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+
+    assert_eq!(
+        step(&pool, pane(me, me, sep()), Direction::Undo).await,
+        Some(("import".into(), row))
+    );
+    assert_eq!(amount(&pool, row).await, 1000);
 }

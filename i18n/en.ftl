@@ -68,6 +68,10 @@ menu-preview = See the app as a member without admin rights
 # each item runs is shown beside it, outside the message.
 row-menu-edit = Edit
 row-menu-edit-rule = Edit rule
+row-menu-paid = Mark paid
+row-menu-unpaid = Unmark paid
+row-menu-received = Mark received
+row-menu-unreceived = Unmark received
 
 ## File rail. Slot numbers never change; only the labels do, by direction.
 
@@ -387,6 +391,7 @@ log-action-password-reset = password reset
 log-action-sessions-revoked = signed out everywhere
 
 log-field-amount = amount
+log-field-paid = paid by hand
 log-field-title = description
 log-field-date = date
 log-field-due-day = due day
@@ -512,9 +517,17 @@ year-unresolved = { $n ->
 
 edit-day = Day
 edit-private = Hidden from other members
+edit-paid = Paid — marked by hand
+edit-received = Received — marked by hand
 edit-saved = saved
 row-reattributed = moved to { $name }
 row-now-private = hidden from the others
+paid-marked = marked paid by hand · u to undo
+paid-unmarked = no longer marked paid
+received-marked = marked received by hand · u to undo
+received-unmarked = no longer marked received
+paid-refused-tracked = a tracked bill is paid by its receipt on disk, not by hand — gu3 attaches it
+paid-refused-one-off = only a recurring bill is marked paid by hand
 row-now-shared = shared with the household
 reattribute-private-title = Move a hidden row to { $name }?
 reattribute-private-body = They become its owner, so you stop seeing it. Press y to confirm.

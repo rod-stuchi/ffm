@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE transactions SET manual_paid = ?2, version = version + 1 WHERE id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "7c4dd5b59aa91ad4fc53a82080d1ad746555bce95b3a3e3726a11b2253ed1fc3"
+}

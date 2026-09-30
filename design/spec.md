@@ -463,6 +463,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | `gd` | show due/cadence/receipt details for the focused row *(proposal, not in the original spec)* |
 | `gl` | change log for the focused row — who changed what, when — in a side pane *(proposal, not in the original spec)* |
 | `p` | toggle private *(proposal, not in the original spec)* |
+| `m` | mark paid by hand — an untracked recurring bill only; "received" on an income. Refused, with the reason, on a tracked row (its receipt proves it) and on a one-off |
 | `P` | preview the row's files in a carousel — see Files below *(proposal, not in the original spec)* |
 
 ### Mouse
@@ -471,7 +472,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | Click a row | focus it — the same cursor `j`/`k` move, just placed by pointing instead |
 | Tap a row (phone) | the same as a click — a tap is a click, nothing separate to learn |
 | Click a fold header | put the cursor on it **and** toggle the fold — `za` from the header, so closing a fold by mouse never leaves the cursor inside it |
-| Long-press a row (touch) · right-click (mouse) | the row menu — **Edit** `e`, and **Edit rule** `E` when the row has a rule |
+| Long-press a row (touch) · right-click (mouse) | the row menu — **Edit** `e`, **Edit rule** `E` when the row has a rule, and **Mark paid** `m` when the row takes the manual tick |
 | Hover a recurring row | show its due/cadence/receipt details — the same info `gd` shows for the focused row, keyboard-only |
 | Click a file control | open that file, new tab — the same action as `g1`/`g2`/`g3` |
 
@@ -1965,6 +1966,12 @@ UI-facing:
 - Visually distinguish the two "paid" marks — file-verified vs. manually
   asserted — with different colors/shades of the same glyph, never the same
   mark (see the row-state table above).
+- **Setting it**: the *Paid — marked by hand* toggle in the `e` form, `m` on
+  the focused row, or *Mark paid* in the row menu — three gestures, one
+  column, each asking `tx::manual_paid_applies` on the server. The toggle and
+  the menu item are **absent** on a row the tick does not apply to, not
+  disabled; `m` there says why. Logged as an `edit` of the `paid` field
+  ("edited · paid by hand · no → yes"), undone by `u` like any edit.
 
 ### Not modeled yet
 

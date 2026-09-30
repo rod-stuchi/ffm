@@ -435,6 +435,13 @@
             @click="rowMenu = null; editRow()">{{ t.row_menu_edit() }} <kbd>e</kbd></button>
     <button class="btn" type="button" role="menuitem" x-show="rowMenu?.rule"
             @click="rowMenu = null; editRule()">{{ t.row_menu_edit_rule() }} <kbd>E</kbd></button>
+    <button class="btn" type="button" role="menuitem" x-show="rowMenu && rowMenu.paid !== null"
+            @click="rowMenu = null; togglePaid()">
+      <span x-show="rowMenu && !rowMenu.income && !rowMenu.paid">{{ t.row_menu_paid() }}</span>
+      <span x-show="rowMenu && !rowMenu.income && rowMenu.paid">{{ t.row_menu_unpaid() }}</span>
+      <span x-show="rowMenu && rowMenu.income && !rowMenu.paid">{{ t.row_menu_received() }}</span>
+      <span x-show="rowMenu && rowMenu.income && rowMenu.paid">{{ t.row_menu_unreceived() }}</span>
+      <kbd>m</kbd></button>
   </div>
   <input type="file" x-ref="picker" class="hidden-input"
          accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()">
@@ -922,6 +929,8 @@ function ledger() {
     pending: '',
     notARule: {{ not_a_rule|json|safe }},
     ruleDeleted: {{ rule_deleted|json|safe }},
+    paidRefusedTracked: {{ paid_refused_tracked|json|safe }},
+    paidRefusedOneOff: {{ paid_refused_one_off|json|safe }},
     notACommand: {{ not_a_command|json|safe }},
     groupOrder: {{ group_order|json|safe }},
     groupOrderNeedsGroup: {{ group_order_needs_group|json|safe }},
@@ -1368,6 +1377,7 @@ function ledger() {
       else if (k === 'E') { this.editRule(); }
       else if (k === 'e') { this.editRow(); }
       else if (k === 'p') { this.togglePrivate(); }
+      else if (k === 'm') { this.togglePaid(); }
       else if (k === 'x') { this.toggleSelected(); }
       else if (k === 'd') { this.pending = 'd'; }
       // `u` undoes your last change in this pane and this month; `U` redoes
@@ -2050,6 +2060,21 @@ function ledger() {
       });
     },
 
+    /// `m` — the manual paid tick, on an untracked recurring row only. The
+    /// row says whether it applies (`data-paid`); the server decides again.
+    togglePaid() {
+      const id = this.rowUnderCursor();
+      if (!id || this.readOnly()) return;
+      const el = this.rows()[this.row];
+      if (!el || el.dataset.paid === undefined) {
+        this.say(el && el.dataset.ruleId ? this.paidRefusedTracked : this.paidRefusedOneOff, true);
+        return;
+      }
+      htmx.ajax('POST', '/tx/' + id + '/paid', {
+        target: '#row-' + id, swap: 'outerHTML',
+      });
+    },
+
     /// `x` — a marker for a batch operation, never a delete.
     toggleSelected() {
       const id = this.rowUnderCursor();
@@ -2376,6 +2401,9 @@ function ledger() {
         // `editRule()`'s own test, so the item and the key cannot disagree:
         // absent on a plain row, and on an orphan whose rule was deleted.
         rule: !!hit.dataset.ruleId && !hit.dataset.ruleDeleted,
+        // `togglePaid()`'s own test: absent where the tick does not apply.
+        paid: hit.dataset.paid === undefined ? null : hit.dataset.paid === '1',
+        income: !!hit.querySelector('.amt .v.is-income'),
       };
       // Beside the press rather than under it, so a finger does not cover
       // what it just opened; clamped to the viewport with the menu's rough

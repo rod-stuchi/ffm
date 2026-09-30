@@ -753,6 +753,10 @@ pub struct RowView {
     /// "not generated from a recurring rule" a fact the row already knows
     /// rather than a round trip to find out.
     pub rule_id: Option<i64>,
+    /// The manual paid tick, `Some(current)` only where it applies: an
+    /// untracked recurring row. What `m` and the row menu read before asking
+    /// the server, which decides again (`tx::manual_paid_applies`).
+    pub paid_toggle: Option<bool>,
     pub classes: String,
     pub gutter: String,
     pub title: String,
@@ -889,6 +893,11 @@ impl LedgerRow {
         RowView {
             id: self.id,
             rule_id: self.rule_id,
+            paid_toggle: (self.rule_id.is_some()
+                && !self.tracked
+                && matches!(self.state, RowState::Ok)
+                && !self.flags.deleted)
+                .then_some(self.manual_paid),
             classes: self.classes().join(" "),
             gutter: self.gutter.text(),
             // A placeholder's label is the app talking, not the household:

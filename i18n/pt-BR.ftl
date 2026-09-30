@@ -58,6 +58,10 @@ menu-mode = Claro ou escuro
 menu-preview = Ver o app como um membro sem poderes de admin
 row-menu-edit = Editar
 row-menu-edit-rule = Editar regra
+row-menu-paid = Marcar como pago
+row-menu-unpaid = Desmarcar pago
+row-menu-received = Marcar como recebido
+row-menu-unreceived = Desmarcar recebido
 
 ## Arquivos
 
@@ -350,6 +354,7 @@ log-action-password-reset = redefiniu a senha
 log-action-sessions-revoked = desconectou de tudo
 
 log-field-amount = valor
+log-field-paid = pago à mão
 log-field-title = descrição
 log-field-date = data
 log-field-due-day = dia de vencimento
@@ -475,9 +480,17 @@ year-unresolved = { $n ->
 
 edit-day = Dia
 edit-private = Escondido dos outros membros
+edit-paid = Pago — marcado à mão
+edit-received = Recebido — marcado à mão
 edit-saved = salvo
 row-reattributed = passou para { $name }
 row-now-private = escondido dos outros
+paid-marked = marcado como pago à mão · u desfaz
+paid-unmarked = não está mais marcado como pago
+received-marked = marcado como recebido à mão · u desfaz
+received-unmarked = não está mais marcado como recebido
+paid-refused-tracked = uma conta acompanhada é paga pelo comprovante no disco, não à mão — gu3 anexa
+paid-refused-one-off = só uma conta recorrente é marcada como paga à mão
 row-now-shared = compartilhado com a casa
 reattribute-private-title = Passar uma linha escondida para { $name }?
 reattribute-private-body = A linha passa a ser dela, então você deixa de vê-la. Aperte y para confirmar.
