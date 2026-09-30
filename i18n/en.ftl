@@ -181,6 +181,10 @@ reset-submit = Set the password
 field-required = { $field } cannot be empty.
 password-too-short = Use at least { $n } characters.
 password-mismatch = The two passwords do not match.
+password-strength-weak = Weak
+password-strength-medium = Medium
+password-strength-strong = Strong
+password-match = The passwords match.
 name-taken = Somebody already uses that name.
 name-taken-body = Pick another — names are how everyone signs in, so they have to be unique.
 

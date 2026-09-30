@@ -31,6 +31,12 @@ use serde::Deserialize;
 // chrome
 // ---------------------------------------------------------------------------
 
+/// The one thing the server refuses about a new password, in the words the
+/// live meter (`auth/pwmeter.html`) shows before the server has to.
+pub fn too_short(t: &Catalog) -> String {
+    t.password_too_short(MIN_PASSWORD as i64)
+}
+
 /// Everything the pre-auth shell needs, so each page's struct carries one field
 /// instead of twelve.
 pub struct Chrome {

@@ -519,6 +519,75 @@ legend {
   margin-top: 3px;
 }
 
+/* A new password's strength, live (`auth/pwmeter.html`): a bar that grows
+ * and a word beside it. The colors are the due ring's — neg, then the accent
+ * as its amber, then pos — so "not enough yet / getting there / fine" reads
+ * the way it already does on every bill. */
+.pwmeter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.pwmeter[hidden],
+.pwmatch[hidden] {
+  display: none;
+}
+
+.pwbar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.pwbar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--pwtone, var(--neg));
+  transition: width 0.18s ease, background-color 0.18s ease;
+}
+
+.pwlbl {
+  flex: none;
+  min-width: 6ch;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--pwtone, var(--neg));
+}
+
+.pwmeter[data-level="short"],
+.pwmeter[data-level="weak"] { --pwtone: var(--neg); }
+.pwmeter[data-level="medium"] { --pwtone: var(--accent); }
+.pwmeter[data-level="strong"] { --pwtone: var(--pos); }
+
+/* "too short" is a sentence, not a level: it takes the room it needs. */
+.pwmeter[data-level="short"] .pwlbl {
+  min-width: 0;
+  font-family: inherit;
+  font-size: 11.5px;
+}
+
+.pwmatch {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+}
+
+.pwmatch[data-ok="yes"] { color: var(--pos); }
+.pwmatch[data-ok="no"] { color: var(--neg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pwbar i {
+    transition: none;
+  }
+}
+
 /* --- the seasonal months read-back --------------------------------------
  *
  * Server-rendered on every keystroke, so it cannot disagree with the parser

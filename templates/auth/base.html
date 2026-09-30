@@ -100,6 +100,74 @@ document.addEventListener('submit', function (e) {
   btn.appendChild(document.getElementById('ffm-loader').content.firstElementChild.cloneNode(true));
 });
 
+// A new password's strength, and whether Confirm matches it, as they are
+// typed (`auth/pwmeter.html`, `auth/pwmatch.html`). Advice only: the server
+// refuses nothing but "too short", and `data-min` is its own constant.
+//
+// The estimate is length times the bits a character can carry, given the
+// kinds of characters used — with a repeat or a run (`aaaa`, `1234`, `abcd`)
+// counted as a quarter of a character, because it is one idea rather than
+// four. It cannot know that `password1` is famous; it does know that eight
+// lowercase letters are not much.
+function ffmStrength(pw, min) {
+  var cs = Array.from(pw);
+  if (!cs.length) return null;
+  if (cs.length < min) return { level: 'short', frac: 0.08 + 0.22 * cs.length / min };
+  var pool = 0;
+  if (/[a-z]/.test(pw)) pool += 26;
+  if (/[A-Z]/.test(pw)) pool += 26;
+  if (/[0-9]/.test(pw)) pool += 10;
+  if (/[^A-Za-z0-9]/.test(pw)) pool += 33;
+  var eff = 0;
+  for (var i = 0; i < cs.length; i++) {
+    var d = i ? cs[i].codePointAt(0) - cs[i - 1].codePointAt(0) : 99;
+    eff += (d === 0 || d === 1 || d === -1) ? 0.25 : 1;
+  }
+  var bits = eff * Math.log2(pool);
+  var level = bits < 45 ? 'weak' : bits < 65 ? 'medium' : 'strong';
+  return { level: level, frac: Math.max(0.34, Math.min(1, bits / 80)) };
+}
+document.querySelectorAll('.pwmeter').forEach(function (m) {
+  var input = m.closest('label').querySelector('input[name="password"]');
+  var form = input.form;
+  var confirm = form.querySelector('input[name="confirm"]');
+  var match = form.querySelector('.pwmatch');
+  var min = Number(m.dataset.min);
+  // A server error under a field answers the LAST submission; once the
+  // field is edited it is stale, and it would sit there contradicting the
+  // live line beside it.
+  function clearServerError(field) {
+    var l = field.closest('label');
+    l.classList.remove('is-bad');
+    var e = l.querySelector('.ferr');
+    if (e) e.remove();
+  }
+  function paint() {
+    var s = ffmStrength(input.value, min);
+    m.hidden = !s;
+    if (s) {
+      m.dataset.level = s.level;
+      m.querySelector('.pwbar i').style.width = Math.round(s.frac * 100) + '%';
+      m.querySelector('.pwlbl').textContent = m.dataset[s.level];
+    }
+    if (!confirm || !match) return;
+    var a = input.value, b = confirm.value;
+    // Nothing while Confirm is still on its way to matching.
+    var say = b && !(b.length < a.length && a.indexOf(b) === 0);
+    match.hidden = !say;
+    if (say) {
+      match.dataset.ok = a === b ? 'yes' : 'no';
+      match.textContent = a === b ? match.dataset.yes : match.dataset.no;
+      clearServerError(confirm);
+    }
+  }
+  input.addEventListener('input', function () { clearServerError(input); paint(); });
+  if (confirm) confirm.addEventListener('input', paint);
+  // A refused form comes back with the passwords cleared, but a browser that
+  // restores fields on Back does not — paint whatever is there.
+  paint();
+});
+
 // Back to a page the browser kept in its cache: the request it was waiting
 // on is long over, so the button must not still say it is.
 window.addEventListener('pageshow', function (e) {

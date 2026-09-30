@@ -1301,6 +1301,28 @@ Two copy decisions worth keeping:
   always dd/mm/yyyy. Money follows the currency you pick. Language only changes
   the words."*
 
+**A new password is judged as it is typed** — on `/setup` and on the invite
+and reset page, the same two partials (`auth/pwmeter.html`,
+`auth/pwmatch.html`):
+
+- **Under Password, a bar and a word** — *Weak*, *Medium*, *Strong* — that
+  grows and changes color as you type, in the due ring's colors: `--neg`,
+  the accent as its amber, `--pos`. Below the minimum it says the server's
+  own sentence instead, *Use at least 8 characters.*
+- **Under Confirm, whether the two match** — silent while Confirm is still
+  a prefix of the password, since "do not match" three characters in is
+  nagging, not news.
+- **It is advice, not a rule.** The server refuses exactly one thing, fewer
+  than `MIN_PASSWORD` characters, and the meter's "too short" reads that
+  same constant, so the two cannot disagree about it. Weak / medium / strong
+  past that is an estimate — length times the bits each character can carry,
+  with a repeat or a run (`aaaa`, `1234`) counted as a quarter of one — and
+  nothing refuses a weak password. It is computed in the page because the
+  alternative, sending each keystroke of a password to the server, is worse.
+  With JS off the fields work exactly as before.
+- **Editing a field clears its server error**, which answered the last
+  submission and would otherwise sit there contradicting the live line.
+
 Success sets the session cookie and lands on the ledger. It never says "now
 sign in with the password you just typed".
 

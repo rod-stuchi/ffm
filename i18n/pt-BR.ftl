@@ -148,6 +148,10 @@ reset-submit = Definir a senha
 field-required = { $field } não pode ficar vazio.
 password-too-short = Use pelo menos { $n } caracteres.
 password-mismatch = As duas senhas não são iguais.
+password-strength-weak = Fraca
+password-strength-medium = Média
+password-strength-strong = Forte
+password-match = As senhas são iguais.
 name-taken = Alguém já usa esse nome.
 name-taken-body = Escolha outro — o nome é como cada um entra, então precisa ser único.
 

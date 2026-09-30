@@ -1,0 +1,19 @@
+{#- Live feedback under a new password: how strong it is, as a word and a bar
+    that grows and changes color as you type. The script in `auth/base.html`
+    fills it in; with JS off it stays hidden and the form works as before.
+
+    It is ADVICE, not a rule. The server refuses exactly one thing — fewer
+    than `MIN_PASSWORD` characters — and the meter's "too short" reads that
+    same constant from here, so the two cannot disagree about it. Weak,
+    medium and strong past that are an estimate, and nothing refuses a weak
+    one. It runs in the page because the only alternative, sending each
+    keystroke of a password to the server, is worse than a second opinion. -#}
+<span class="pwmeter" hidden
+      data-min="{{ crate::db::auth::MIN_PASSWORD }}"
+      data-short="{{ crate::web::auth::too_short(t) }}"
+      data-weak="{{ t.password_strength_weak() }}"
+      data-medium="{{ t.password_strength_medium() }}"
+      data-strong="{{ t.password_strength_strong() }}">
+  <span class="pwbar"><i></i></span>
+  <span class="pwlbl" aria-live="polite"></span>
+</span>

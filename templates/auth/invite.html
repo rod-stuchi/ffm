@@ -39,12 +39,14 @@
           <span class="k">{{ t.login_password() }}</span>
           <input class="i" type="password" name="password" autocomplete="new-password"
                  {% if errors.focus("password") || (is_reset && errors.none()) %}autofocus{% endif %}>
+          {%- include "auth/pwmeter.html" %}
           {%- if let Some(m) = errors.get("password") %}<span class="ferr">{{ m }}</span>{% endif %}
         </label>
         <label class="f{% if errors.has("confirm") %} is-bad{% endif %}">
           <span class="k">{{ t.setup_password_confirm() }}</span>
           <input class="i" type="password" name="confirm" autocomplete="new-password"
                  {% if errors.focus("confirm") %}autofocus{% endif %}>
+          {%- include "auth/pwmatch.html" %}
           {%- if let Some(m) = errors.get("confirm") %}<span class="ferr">{{ m }}</span>{% endif %}
         </label>
       </div>

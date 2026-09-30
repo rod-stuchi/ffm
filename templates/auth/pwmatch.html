@@ -1,0 +1,7 @@
+{#- Under Confirm: whether the two passwords match, as they are typed. Silent
+    while Confirm is still a prefix of the password — "do not match" three
+    characters into typing it would be nagging, not news. The server checks
+    again on submit, and its message lands on this same field. -#}
+<span class="pwmatch" hidden aria-live="polite"
+      data-yes="{{ t.password_match() }}"
+      data-no="{{ t.password_mismatch() }}"></span>
