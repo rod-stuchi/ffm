@@ -441,6 +441,7 @@ import-no-occurrence = não há linha deste mês para anexar
 import-unlinked = conta desvinculada desta regra — solte a correta
 import-already-attached = esta conta já está em { $period } ({ $title } — { $amount }) — nada foi salvo
 import-already-attached-hidden = esta conta já está em { $period }, numa linha que você não vê — nada foi salvo
+import-bill-moved = movida de { $title } { $period }
 rule-path-missing-bucket = ‹categoria›
 import-wrong-row = linha errada? esta conta é de { $found }, mas { $rule } está vinculada a { $known } — nada foi salvo
 import-id-account = conta { $code }

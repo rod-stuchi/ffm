@@ -444,7 +444,7 @@
       <kbd>m</kbd></button>
   </div>
   <input type="file" x-ref="picker" class="hidden-input"
-         accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()">
+         accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()" @cancel="pickFor = null">
 
   {#- `gd`, and the hover tooltip: one panel over one set of facts, anchored
       to the focused row when there is no pointer to anchor to. Dismissed by
@@ -864,6 +864,12 @@ function ledger() {
     keymap: false,
     monthsWord: {{ months_word|json|safe }},
     attaching: null,
+    /// The row the file picker is for. NOT `attaching`, which is whether the
+    /// `+` menu is open: that menu closes on `@click.outside`, and the picker
+    /// is opened with a synthetic click on an input outside it — so one flag
+    /// for both was emptied before the dialog even appeared, and the file
+    /// picked afterwards was dropped without a request or a word.
+    pickFor: null,
     dragging: false,
     splitZoom: false,
     // `{ id, dir }` while a `u`/`U` on a change from before today waits for
@@ -931,6 +937,7 @@ function ledger() {
     ruleDeleted: {{ rule_deleted|json|safe }},
     paidRefusedTracked: {{ paid_refused_tracked|json|safe }},
     paidRefusedOneOff: {{ paid_refused_one_off|json|safe }},
+    errorNotWritten: {{ error_not_written|json|safe }},
     notACommand: {{ not_a_command|json|safe }},
     groupOrder: {{ group_order|json|safe }},
     groupOrderNeedsGroup: {{ group_order_needs_group|json|safe }},
@@ -2907,6 +2914,10 @@ function ledger() {
 
     pick(kind) {
       this.kind_ = kind;
+      // From the menu: its row becomes the picker's, and the menu closes
+      // BEFORE the picker's own click could close it with the row in it.
+      if (this.attaching) this.pickFor = this.attaching;
+      this.attaching = null;
       this.$refs.picker.click();
     },
 
@@ -2931,7 +2942,9 @@ function ledger() {
         this.say(this.noFile.scheduled, true);
         return;
       }
-      this.attaching = id;
+      // Straight to the picker: `gu1` never opens the `+` menu, which is
+      // what setting `attaching` here used to do, at a stale position.
+      this.pickFor = id;
       this.pick(kind);
     },
 
@@ -2957,9 +2970,12 @@ function ledger() {
 
     send() {
       const input = this.$refs.picker;
-      if (!input.files.length || !this.attaching) return;
-      const id = this.attaching;
-      this.attaching = null;
+      const id = this.pickFor;
+      this.pickFor = null;
+      if (!input.files.length) return;
+      // A file with nowhere to go is said, never swallowed — silence is what
+      // this path did for every pick from the `+` menu.
+      if (!id) { input.value = ''; this.say(this.errorNotWritten, true); return; }
       this.upload(id, this.kind_, input.files[0]);
       input.value = '';
     },

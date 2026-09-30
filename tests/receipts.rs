@@ -1010,3 +1010,104 @@ async fn the_startup_step_tidies_the_trash_once() {
         0
     );
 }
+
+// ---------------------------------------------------------------------------
+// a removed bill, attached to another row, is retired from the trash
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_removed_bill_gives_its_barcode_up_and_its_trashed_copy_is_retired() {
+    use ffm::db::tx::{self, Direction, Scope};
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (id, slot) = tracked_occurrence(&pool, me).await;
+
+    // The bill on the row, as `attach_to` leaves it: the file and its barcode.
+    receipts::store(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Barcode,
+        "bill.pdf",
+        b"%PDF-1.4",
+    )
+    .await
+    .unwrap();
+    let raw = "83650000001314500403157368061800310128719865";
+    sqlx::query(
+        "UPDATE transactions SET barcode_raw = ?, barcode_kind = 'consumo',
+                amount_source = 'barcode' WHERE id = ?",
+    )
+    .bind(raw)
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Removed: the file goes to the trash, the barcode stays on the row.
+    assert!(
+        receipts::soft_delete(
+            &pool,
+            &root,
+            Actor::User(me),
+            &slot,
+            Kind::Barcode,
+            "manual",
+            None
+        )
+        .await
+        .unwrap()
+    );
+    let copy: i64 = sqlx::query_scalar("SELECT id FROM receipts WHERE kind = 'barcode'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    // The same bill is attached elsewhere: this row gives it up.
+    let mut t = pool.begin().await.unwrap();
+    tx::release_bill(&mut t, Actor::User(me), id, raw)
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+
+    let (barcode, source): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT barcode_raw, amount_source FROM transactions WHERE id = ?")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(barcode, None, "free for the row that has the bill now");
+    assert_eq!(
+        source, None,
+        "nothing claims to come from a barcode it no longer has"
+    );
+
+    // Retired: not in the trash, not a step for `u`, and no restore.
+    let viewer = ffm::domain::viewer::Viewer::new(me, true);
+    let (items, _) = ffm::db::trash::list(&pool, viewer, 50).await.unwrap();
+    assert!(items.iter().all(|i| i.id != copy), "U no longer offers it");
+
+    let scope = Scope {
+        me,
+        owner: Some(me),
+        period: Some(Period::parse("2026-09").unwrap()),
+    };
+    let next = tx::next(&pool, scope, Direction::Undo).await.unwrap();
+    assert!(
+        next.pick
+            .as_ref()
+            .is_none_or(|u| !(u.entity == "file" && u.entity_id == copy)),
+        "u skips its delete"
+    );
+    assert!(
+        !receipts::restore(&pool, &root, Actor::User(me), copy, None)
+            .await
+            .unwrap(),
+        "and a restore refuses it"
+    );
+
+    // The file itself is still on disk: nothing is destroyed.
+    assert!(deleted_copy(&root, &slot.vault, "09_barcode").is_some());
+}

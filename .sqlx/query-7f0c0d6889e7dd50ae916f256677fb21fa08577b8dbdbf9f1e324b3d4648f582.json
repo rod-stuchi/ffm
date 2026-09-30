@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT deleted_from_path AS \"p: String\" FROM receipts\n           WHERE id = ?1 AND deleted_at IS NOT NULL\n             -- A retired bill (`MOVED`) is never put back.\n             AND NOT EXISTS (SELECT 1 FROM change x\n                             WHERE x.entity = 'file' AND x.entity_id = receipts.id\n                               AND x.action = 'file_unlink' AND x.note = ?2)",
+  "describe": {
+    "columns": [
+      {
+        "name": "p: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "7f0c0d6889e7dd50ae916f256677fb21fa08577b8dbdbf9f1e324b3d4648f582"
+}

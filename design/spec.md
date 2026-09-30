@@ -1906,6 +1906,9 @@ three, and they all end in the same request:
   one control rather than three empty slots pretending to be files. Clicking
   it opens a menu of the three kinds, anchored to the control itself because
   the ledger scrolls sideways and a centered menu would point at nothing.
+  Picking a kind closes the menu and opens the file picker for that row; the
+  row the picker is for is kept apart from whether the menu is open (see
+  CLAUDE.md's gotchas for how sharing one flag dropped every pick silently).
 - **Dropping a file on the row.** A row drop infers nothing: the row is
   identified by where you let go. What a drop cannot say by itself is *which
   of the three kinds* it is, and guessing that from the filename is exactly
@@ -1950,6 +1953,11 @@ UI-facing:
   focused, same as `a`/`i`/`:add`) — it just never decides which rule a
   dropped file belongs to, because a drop no longer resolves to a rule at
   all.
+- **A bill removed from one row can go on another.** A row holds a bill
+  only while it holds the file: attaching the same PDF elsewhere takes it
+  over, and the statusline says *moved from Moto CG 09/2026*. The old row's
+  copy in the trash is retired — no longer offered by `U` or `u`, kept on
+  disk. See CLAUDE.md's Recurring rules.
 - **A successfully-attached file may carry a `client_code`** — the
   subscriber's own account number, read from the bill's text (never the
   barcode). It shows up read-only in the rule editor once a rule has one;

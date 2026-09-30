@@ -478,6 +478,7 @@ import-no-occurrence = there is no row for this month to attach it to
 import-unlinked = bill unlinked from this rule — drop the right one
 import-already-attached = this bill is already on { $period } ({ $title } — { $amount }) — nothing was saved
 import-already-attached-hidden = this bill is already on { $period }, on a row you cannot see — nothing was saved
+import-bill-moved = moved from { $title } { $period }
 rule-path-missing-bucket = ‹bucket›
 import-wrong-row = wrong row? this bill is for { $found }, but { $rule } is bound to { $known } — nothing was saved
 import-id-account = account { $code }

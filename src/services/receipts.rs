@@ -401,8 +401,13 @@ pub async fn restore(
 ) -> Result<bool, StoreError> {
     let rel: Option<String> = sqlx::query_scalar!(
         r#"SELECT deleted_from_path AS "p: String" FROM receipts
-           WHERE id = ?1 AND deleted_at IS NOT NULL"#,
-        receipt_id
+           WHERE id = ?1 AND deleted_at IS NOT NULL
+             -- A retired bill (`MOVED`) is never put back.
+             AND NOT EXISTS (SELECT 1 FROM change x
+                             WHERE x.entity = 'file' AND x.entity_id = receipts.id
+                               AND x.action = 'file_unlink' AND x.note = ?2)"#,
+        receipt_id,
+        MOVED
     )
     .fetch_optional(pool)
     .await
@@ -483,8 +488,13 @@ pub async fn restore_swapping(
     let row = sqlx::query!(
         r#"SELECT transaction_id AS "tx!: i64", kind AS "kind!: String",
                   deleted_from_path AS "from: String"
-           FROM receipts WHERE id = ?1 AND deleted_at IS NOT NULL"#,
-        receipt_id
+           FROM receipts WHERE id = ?1 AND deleted_at IS NOT NULL
+             -- A retired bill (`MOVED`) is never put back.
+             AND NOT EXISTS (SELECT 1 FROM change x
+                             WHERE x.entity = 'file' AND x.entity_id = receipts.id
+                               AND x.action = 'file_unlink' AND x.note = ?2)"#,
+        receipt_id,
+        MOVED
     )
     .fetch_optional(pool)
     .await
@@ -657,6 +667,15 @@ async fn restore_row_only(
 /// separate steps: `db::tx::next` skips them, and restoring the row
 /// brings them back — one keystroke for the whole thing, not one per file.
 pub const WITH_ROW: &str = "moved with its row";
+
+/// The note on a `file_unlink` entry that **retires** a bill in the trash:
+/// the same bill has since been attached to another row, so this copy can
+/// never come back — a bill is on one row only. `U` stops listing it, `u`
+/// skips its delete, and a restore refuses it. The file itself stays in
+/// `.delete/`, like everything else there: nothing is destroyed. It lives in
+/// the append-only log rather than in `receipts.delete_reason`, whose `CHECK`
+/// allows only `manual` and `superseded`.
+pub const MOVED: &str = "its bill is on another row";
 
 /// Moves every live file of a row into the member's trash, because the row
 /// was deleted. A deleted row's bill left standing in the vault reads as

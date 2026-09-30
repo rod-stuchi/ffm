@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT period AS \"period!: String\", rule_id AS \"rule_id: i64\"\n           FROM transactions WHERE id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "period!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "41364d793e4e2a15cf43ebc00461d43c2c6d6691ce235d426b0c0e333ecf80ef"
+}

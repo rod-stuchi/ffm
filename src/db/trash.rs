@@ -108,11 +108,18 @@ pub async fn list(
            WHERE r.deleted_at IS NOT NULL
              AND t.deleted_at IS NULL
              AND (t.member_id = ?1 OR ?2)
+             -- A bill now on another row can never come back here
+             -- (`receipts::MOVED`). The file stays in `.delete/`; it is just
+             -- no longer offered.
+             AND NOT EXISTS (SELECT 1 FROM change x
+                             WHERE x.entity = 'file' AND x.entity_id = r.id
+                               AND x.action = 'file_unlink' AND x.note = ?4)
            ORDER BY r.deleted_at DESC, r.id DESC
            LIMIT ?3"#,
         me,
         all,
         fetch,
+        crate::services::receipts::MOVED,
     )
     .fetch_all(pool)
     .await?;

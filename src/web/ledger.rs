@@ -341,6 +341,7 @@ struct LedgerPage {
     rule_deleted: String,
     paid_refused_tracked: String,
     paid_refused_one_off: String,
+    error_not_written: String,
     unsaved_tag: String,
     unsaved_rule_tag: String,
     drafts_parked: String,
@@ -534,6 +535,7 @@ pub async fn ledger(
         rule_deleted: t.rule_deleted_on_row().to_string(),
         paid_refused_tracked: t.paid_refused_tracked().to_string(),
         paid_refused_one_off: t.paid_refused_one_off().to_string(),
+        error_not_written: t.error_not_written().to_string(),
         unsaved_tag: t.row_unsaved().to_string(),
         unsaved_rule_tag: t.row_unsaved_rule().to_string(),
         // The count is filled in by the pane, so the catalog keeps the plural

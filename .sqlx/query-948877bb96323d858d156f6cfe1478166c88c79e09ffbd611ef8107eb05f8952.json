@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                  t.title AS \"title!: String\", t.rule_id AS \"rule_id: i64\",\n                  t.amount_cents AS \"amount_cents: i64\", t.member_id AS \"member_id!: i64\",\n                  t.visibility AS \"visibility!: String\",\n                  EXISTS (SELECT 1 FROM receipts r\n                          WHERE r.transaction_id = t.id AND r.kind = 'barcode'\n                            AND r.deleted_at IS NULL) AS \"holds!: bool\"\n           FROM transactions t\n           WHERE t.barcode_raw = ?1 AND t.id <> ?2 AND t.deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "holds!: bool",
+        "ordinal": 7,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "948877bb96323d858d156f6cfe1478166c88c79e09ffbd611ef8107eb05f8952"
+}

@@ -294,13 +294,23 @@ pub async fn attach_to(
     // --- is it already filed somewhere? -------------------------------------
     // `barcode_raw` is the natural idempotency key, with a unique index behind
     // it: the same bill cannot end up on two rows.
+    //
+    // **A row holds a bill only while it holds the file.** One whose bill was
+    // removed still carries the barcode, and used to refuse every other row
+    // the same bill — "already on Moto CG", about a row showing no bill at
+    // all. Such a row gives the bill up to this one (`takeover`, below),
+    // provided the viewer may write to it.
     let raw = parsed.barcode.raw.clone();
     let already = sqlx::query!(
-        r#"SELECT period AS "period!: String", title AS "title!: String",
-                  amount_cents AS "amount_cents: i64", member_id AS "member_id!: i64",
-                  visibility AS "visibility!: String"
-           FROM transactions
-           WHERE barcode_raw = ?1 AND id <> ?2 AND deleted_at IS NULL"#,
+        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+                  t.title AS "title!: String", t.rule_id AS "rule_id: i64",
+                  t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
+                  t.visibility AS "visibility!: String",
+                  EXISTS (SELECT 1 FROM receipts r
+                          WHERE r.transaction_id = t.id AND r.kind = 'barcode'
+                            AND r.deleted_at IS NULL) AS "holds!: bool"
+           FROM transactions t
+           WHERE t.barcode_raw = ?1 AND t.id <> ?2 AND t.deleted_at IS NULL"#,
         raw,
         tx_id
     )
@@ -308,7 +318,11 @@ pub async fn attach_to(
     .await
     .ok()
     .flatten();
-    if let Some(row) = already {
+    let (refuse, takeover) = match already {
+        Some(r) if r.holds || !auth.viewer.may_write(r.member_id) => (Some(r), None),
+        other => (None, other),
+    };
+    if let Some(row) = refuse {
         let label = Period::parse(&row.period)
             .map(fmt::period)
             .unwrap_or(row.period);
@@ -419,6 +433,29 @@ pub async fn attach_to(
     let Ok(mut tx) = st.pool.begin().await else {
         return Err(not_written());
     };
+
+    // --- a row whose bill was removed gives it up -------------------------
+    // Its barcode is cleared first, so this row can take `idx_tx_barcode`;
+    // what claimed to come from that barcode goes with it, since the schema
+    // ties those sources to one. And its copy in the trash is retired
+    // (`receipts::MOVED`): a bill is on one row only, so that copy can never
+    // come back. The file stays in `.delete/` — nothing is destroyed.
+    if let Some(old) = &takeover {
+        let released =
+            crate::db::tx::release_bill(&mut tx, Actor::User(auth.viewer.member_id), old.id, &raw)
+                .await;
+        if released.is_err() {
+            return Err(not_written());
+        }
+        notes.push(
+            t.import_bill_moved(
+                &old.title,
+                &Period::parse(&old.period)
+                    .map(fmt::period)
+                    .unwrap_or_else(|| old.period.clone()),
+            ),
+        );
+    }
 
     let kind = parsed.barcode.kind.code();
     // A source is stamped only with the value it describes. It used to be

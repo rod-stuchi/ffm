@@ -629,6 +629,17 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     a utility bill, even though it carries no company code to compare. A file
     with no readable barcode is refused on a bound rule — nothing could
     confirm it — and filed as a plain document on an unbound one.
+  - **A row holds a bill only while it holds the file.** Removing the bill
+    leaves its barcode on the row, and that used to refuse the same PDF on
+    every other row — "already on Moto CG", about a row showing no bill.
+    Now attaching it elsewhere **takes it over** (`tx::release_bill`, inside
+    the attach's transaction): the old row's barcode is cleared, and its
+    trashed copy is **retired** — a `file_unlink` noted `receipts::MOVED`,
+    which the trash (`U`), `u` and every restore leave alone, because a bill
+    is on one row only and that copy can never come back. The file stays in
+    `.delete/`; nothing is destroyed. A holder that still has the file, or
+    one the viewer may not write to, refuses as before. A row deleted with
+    `dd` is untouched: it is outside the unique index and the check alike.
   - **A bill's amount replaces the row's amount, whoever set it.** The
     checksummed barcode is the evidence of what is owed, so it wins over a
     seed from the materializer *and* over a figure somebody typed with `e` —
@@ -1554,6 +1565,15 @@ These cost real debugging time in the prototype. Do not re-introduce them.
 - **A quote-blind TOML comment stripper eats hex colors.** `line.replace(/#.*$/, '')`
   cuts `accent = "#c4a7e7"` in half at the color's own `#`. The real `toml` crate
   handles this — which is a reason not to hand-roll a config reader.
+- **`@click.outside` fires for the click that opens a file picker.** The
+  `+` menu was `x-show="attaching" @click.outside="attaching = null"`, and
+  `attaching` was also the row the picker was for — so *Add bill*'s
+  `$refs.picker.click()`, a click on an input outside the menu, emptied it
+  before the dialog opened, and the file picked afterwards was dropped with no
+  request and no message. Every pick from the `+` menu, on every row, for as
+  long as it existed; a drop on the row calls `upload()` directly, which is
+  why nothing looked broken. One flag must not mean both "a popup is open"
+  and "what the next event is for": the picker's row is `pickFor` now.
 - **Watch class-name collisions.** An `app.cfg` state class silently matched a
   leftover `.cfg { display: grid; align-items: start }` rule and broke the whole
   shell width. Namespace state classes (`is-`/`has-` prefix) and delete dead CSS.
