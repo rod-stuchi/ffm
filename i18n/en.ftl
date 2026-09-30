@@ -350,7 +350,22 @@ members-no-sessions = not signed in anywhere
 
 ## The command bar
 
-command-placeholder = command
+command-placeholder = command · Tab completes · Ctrl-p recalls
+command-about-help = the keymap — the same as ?
+command-about-profile = your own settings
+command-about-sort = the order of the rows
+command-about-group = group the rows by bucket, or flatten them
+command-about-set = line numbers: relative · absolute · off
+command-about-theme = your color palette — bare, it opens the picker
+command-about-lang = your language — words only, never dates or money
+command-about-grep = search every month — bare, the last search again
+command-about-trash = deleted rows and removed files, to bring back
+command-about-household = the household's settings
+command-about-members = members and invite links
+command-about-invite = a new invite link
+command-about-currency = the household's currency and number format
+command-about-preview = see the app as a member without admin rights, and back
+command-about-logout = end this session
 members-self-note = This is you. Change a password you know in :profile; recover one you have lost with `ffm reset-link` at the console.
 
 ## The change log — `gl`. Verbs are what HAPPENED, in the past tense.

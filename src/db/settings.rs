@@ -183,6 +183,13 @@ impl std::fmt::Display for Invalid {
     }
 }
 
+/// The closed sets a setting accepts. Public because the `:` bar completes
+/// against the same lists (`web::commands`) — a completion offering a value
+/// the write then refuses would be the hint lying all over again.
+pub const LANGUAGES: [&str; 2] = ["en", "pt-BR"];
+pub const LEDGER_SORTS: [&str; 3] = ["manual", "date", "amount"];
+pub const LEDGER_GROUPS: [&str; 2] = ["none", "bucket"];
+
 fn one_of(key: &'static str, value: &str, allowed: &[&str]) -> Result<String, Invalid> {
     if allowed.contains(&value) {
         Ok(value.to_string())
@@ -222,7 +229,7 @@ pub async fn set_member(
 
     match key {
         MemberKey::Language => {
-            let v = one_of("language", value, &["en", "pt-BR"])?;
+            let v = one_of("language", value, &LANGUAGES)?;
             sqlx::query!(
                 "UPDATE member_settings SET language = ?2 WHERE member_id = ?1",
                 member_id,
@@ -318,7 +325,7 @@ pub async fn set_member(
             .map_err(db)?;
         }
         MemberKey::LedgerSort => {
-            let v = one_of("ledger.sort", value, &["manual", "date", "amount"])?;
+            let v = one_of("ledger.sort", value, &LEDGER_SORTS)?;
             sqlx::query!(
                 "UPDATE member_settings SET ledger_sort = ?2 WHERE member_id = ?1",
                 member_id,
@@ -351,7 +358,7 @@ pub async fn set_member(
             .map_err(db)?;
         }
         MemberKey::LedgerGroup => {
-            let v = one_of("ledger.group", value, &["none", "bucket"])?;
+            let v = one_of("ledger.group", value, &LEDGER_GROUPS)?;
             sqlx::query!(
                 "UPDATE member_settings SET ledger_group = ?2 WHERE member_id = ?1",
                 member_id,
@@ -484,7 +491,7 @@ pub async fn set_household(
             .map_err(db)?;
         }
         HouseholdKey::DefaultLanguage => {
-            let v = one_of("default_language", value, &["en", "pt-BR"])?;
+            let v = one_of("default_language", value, &LANGUAGES)?;
             sqlx::query!(
                 "UPDATE household_settings SET default_language = ?1, updated_at = ?2 WHERE id = 1",
                 v,

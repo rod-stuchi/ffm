@@ -632,10 +632,26 @@
   <div class="cmdbar" x-show="commanding" x-cloak>
     <span class="caret">:</span>
     <input class="cmdinput" x-ref="cmd" x-model="command"
+           @keydown="cmdKey($event)"
            @keydown.enter.prevent="runCommand()"
            @keydown.escape.prevent="commanding = false; command = ''"
            placeholder="{{ t.command_placeholder() }}" autocomplete="off" spellcheck="false">
-    <span class="cmdhint">{{ command_hint }}</span>
+    {#- At rest, the vocabulary. Typing a command's name turns it into what
+        that command does and what it takes — which is the whole answer to
+        "what does :set do?" — and Tab turns it into the wildmenu, the
+        candidates with the one on show lit. All of it from the command
+        table (`web::commands`), so none of it can name a command the
+        dispatcher refuses. -#}
+    <span class="cmdhint">
+      <template x-if="wild">
+        <span>
+          <template x-for="w in wildWindow()" :key="w.n">
+            <span class="wc" :class="{ 'is-on': w.on }" x-text="w.text"></span>
+          </template>
+        </span>
+      </template>
+      <span x-show="!wild" x-text="cmdHelp">{{ command_hint }}</span>
+    </span>
   </div>
 
   {#- The statusline. The same message channel the pre-auth pages use, so
@@ -891,6 +907,17 @@ function ledger() {
     get nuLabel() { return { relative: 'rnu', absolute: 'nu', none: 'nonu' }[this.nu] || this.nu; },
     get sortLabel() { return this.sort; },
     commanding: false,
+    // The `:` bar's table — names, aliases, the closed set each argument
+    // comes from, and what each does — rendered from `web::commands::ALL`.
+    cmds: {{ commands|json|safe }},
+    cmdHintDefault: {{ command_hint|json|safe }},
+    // Per MEMBER, in this browser: two people on one laptop keep their own.
+    cmdHistKey: 'ffm.cmds.{{ me_id }}',
+    // Tab's cycle — `{ list, i, head, tail }`, `head` being the text before
+    // the word being completed — and Ctrl-p's walk, `{ i, prefix, draft }`.
+    // Both end on any other key.
+    wild: null,
+    recallAt: null,
     logFor: null,
     logOpen: [],
     logCursor: 0,
@@ -2459,6 +2486,8 @@ function ledger() {
 
     openCommand() {
       this.commanding = true;
+      this.wild = null;
+      this.recallAt = null;
       this.focusSoon(this.$refs.cmd);
     },
 
@@ -2822,6 +2851,7 @@ function ledger() {
       this.commanding = false;
       this.command = '';
       if (!raw) return;
+      this.keepCmd(raw);
       const [name, ...rest] = raw.split(/\s+/);
       const arg = rest.join(' ');
 
@@ -2887,6 +2917,136 @@ function ledger() {
         }
       }
       this.say(this.notACommand.replace('{cmd}', name), true);
+    },
+
+    /// The command a name or alias means, if any.
+    cmdNamed(name) {
+      return this.cmds.find(c => c.name === name || c.aliases.includes(name)) || null;
+    },
+
+    /// Keys inside the `:` bar that are not Enter or Esc. Tab completes,
+    /// Ctrl-p / Ctrl-n (and the arrows) walk the history; anything else is
+    /// typing, and ends both. A modifier alone is not a key — see the Shift
+    /// gotcha in CLAUDE.md — or Shift-Tab would end the cycle it steps back
+    /// through.
+    cmdKey(e) {
+      if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
+      if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        this.completeCmd(e.shiftKey ? -1 : 1);
+        return;
+      }
+      const ctrl = e.ctrlKey && !e.metaKey && !e.altKey;
+      const older = (ctrl && e.key === 'p') || e.key === 'ArrowUp';
+      const newer = (ctrl && e.key === 'n') || e.key === 'ArrowDown';
+      if (older || newer) {
+        // preventDefault: Ctrl-p is Print on Linux, and the arrows would move
+        // the caret to an end of the line.
+        e.preventDefault();
+        this.wild = null;
+        this.recallCmd(older ? 1 : -1);
+        return;
+      }
+      this.wild = null;
+      this.recallAt = null;
+    },
+
+    /// Tab: the command's name, then its argument — Vim's wildmenu. One
+    /// candidate is filled in; several are cycled through, Shift-Tab going
+    /// back, with the candidates on show in the hint. A name that takes an
+    /// argument gets its space, so the next Tab is already completing that.
+    /// Only a CLOSED set is completed: `:grep`'s term is anybody's guess.
+    completeCmd(dir) {
+      const w = this.wild;
+      if (w) {
+        w.i = (w.i + dir + w.list.length) % w.list.length;
+        this.command = w.head + w.list[w.i] + w.tail;
+        return;
+      }
+      const text = this.command.replace(/^\s+/, '');
+      const sp = text.indexOf(' ');
+      let head, list, tail = '';
+      if (sp < 0) {
+        head = '';
+        list = this.cmds.map(c => c.name).filter(n => n.startsWith(text));
+        if (list.length === 1 && this.cmdNamed(list[0]).args.length) tail = ' ';
+      } else {
+        const c = this.cmdNamed(text.slice(0, sp));
+        if (!c || !c.args.length) return;
+        head = text.slice(0, sp) + ' ';
+        const word = text.slice(sp + 1).trim().toLowerCase();
+        list = c.args.filter(a => a.toLowerCase().startsWith(word));
+      }
+      if (!list.length) return;
+      if (list.length === 1) { this.command = head + list[0] + tail; return; }
+      this.wild = { list, i: dir > 0 ? 0 : list.length - 1, head, tail: '' };
+      this.command = head + this.wild.list[this.wild.i];
+    },
+
+    /// The wildmenu's candidates, scrolled so the one on show is never cut
+    /// off by the hint's ellipsis — `:theme` has eleven.
+    wildWindow() {
+      const w = this.wild;
+      if (!w) return [];
+      const start = Math.max(0, w.i - 3);
+      return w.list.slice(start).map((text, k) => ({
+        n: start + k,
+        text: (k === 0 && start > 0 ? '‹ ' : '') + text,
+        on: start + k === w.i,
+      }));
+    },
+
+    /// Ctrl-p / Ctrl-n: back and forward through the history, newest first.
+    /// Like Vim, whatever was typed before the walk began is a PREFIX —
+    /// `:th` then Ctrl-p steps through past `:theme …` lines only — and
+    /// walking forward past the newest puts back what was typed.
+    recallCmd(dir) {
+      const hist = this.cmdHistory();
+      if (!this.recallAt) this.recallAt = { i: -1, prefix: this.command, draft: this.command };
+      const r = this.recallAt;
+      let i = r.i;
+      do { i += dir; } while (i >= 0 && i < hist.length && !hist[i].startsWith(r.prefix));
+      if (i < 0) { r.i = -1; this.command = r.draft; return; }
+      if (i >= hist.length) return;
+      r.i = i;
+      this.command = hist[i];
+    },
+
+    /// The last 30 commands, newest first. Browser storage can be refused (a
+    /// private window), and then there is simply no history.
+    cmdHistory() {
+      try {
+        const v = JSON.parse(localStorage.getItem(this.cmdHistKey) || '[]');
+        return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [];
+      } catch (_) { return []; }
+    },
+
+    /// Remember a command as typed — refused ones too, like Vim, since the
+    /// usual reason to recall one is to fix it. A repeat moves to the top
+    /// rather than filling the history with copies.
+    keepCmd(raw) {
+      try {
+        const h = this.cmdHistory().filter(x => x !== raw);
+        h.unshift(raw);
+        localStorage.setItem(this.cmdHistKey, JSON.stringify(h.slice(0, 30)));
+      } catch (_) {}
+    },
+
+    /// The hint beside the bar. At rest, the vocabulary. With a command
+    /// typed, what it does and the values it takes; with part of one, the
+    /// commands that start that way.
+    get cmdHelp() {
+      const text = this.command.replace(/^\s+/, '');
+      if (!text) return this.cmdHintDefault;
+      const sp = text.indexOf(' ');
+      const name = sp < 0 ? text : text.slice(0, sp);
+      const c = this.cmdNamed(name);
+      if (c) {
+        return ':' + c.name + ' — ' + c.about + (c.args.length ? ' · ' + c.args.join(' | ') : '');
+      }
+      if (sp >= 0) return '';
+      const some = this.cmds.map(c => c.name).filter(n => n.startsWith(name));
+      return some.length ? some.join(' · ') : '';
     },
 
     post(url) {

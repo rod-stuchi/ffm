@@ -127,6 +127,36 @@ a hint that offers commands the app then refuses is worse than no hint. (The
 first three are in the Type table above and genuinely unbuilt; see
 `TODO_2.md`.)
 
+**One table, and everything that names a command reads it.**
+`web::commands::ALL` holds each command's name, aliases, who is offered it,
+the closed set its argument comes from and a catalog message saying what it
+does. The bar's resting hint, Tab completion, the contextual hint and `?`'s
+Type section are all rendered from it — `?` had kept advertising
+`:add 50 mercado` long after `:add` was abandoned, because it was a fifth
+hand-kept list. An argument's values come from the same constants its write
+validates against (`ThemeName::ALL`, `Currency::ALL`,
+`settings::LEDGER_SORTS`, …), so Tab cannot complete to a value the server
+then refuses.
+
+**The bar teaches itself.**
+
+- **The hint follows what you type.** At rest it is the vocabulary. With a
+  command typed it says what that command does and the values it takes —
+  `:set — line numbers: relative · absolute · off · rnu | nu | nonu` — and
+  with part of one, the commands that start that way.
+- **Tab completes** a command's name, then its argument, from the table:
+  one candidate is filled in; several are cycled Vim-wildmenu style, the one
+  on show lit in the hint, Shift-Tab going back. A name that takes an
+  argument gets its space, so the next Tab completes that. Only closed sets
+  are completed — `:grep`'s term is anybody's guess.
+- **Ctrl-p / Ctrl-n** (and the arrows) walk the last 30 commands, newest
+  first, and what was typed before the walk began is a prefix, as in Vim:
+  `:th` then Ctrl-p steps through past `:theme` lines only. Refused commands
+  are kept too — the usual reason to recall one is to fix it. The history is
+  per member, in this browser (`localStorage`): it is a convenience, like a
+  shell's, and two people on one laptop keep their own. Ctrl-p means
+  "previous month" only outside the bar, where nothing is being typed.
+
 **Admin-only commands are absent for a non-admin**, and for an admin
 previewing as one — the same rule that removes the Household button rather
 than disabling it. `preview` is the exception and follows the *role* rather
@@ -731,9 +761,10 @@ them; the pane's own create form takes it directly.
 **`just cmd-check` now reads this table, in both directions.** A row here
 whose command has no `case` in the dispatcher fails the build, and so does a
 command the dispatcher handles that no row here names. It already guarded the
-command *bar* the same way — every name in `command_hint()`, and every
-`(try X)` in the catalogs, must be handled — so all three surfaces are held
-against one another and none can drift alone.
+command *bar* the same way — every name and alias in the command table
+(`web::commands::ALL`) must be handled, every command handled must be in that
+table, and every `(try X)` in the catalogs must exist — so the surfaces are
+held against one another and none can drift alone.
 
 Reading it **both** ways is the part worth keeping. A promise nobody kept is
 the bug that started the recipe, and it is the loud one: somebody types the

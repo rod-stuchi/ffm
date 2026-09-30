@@ -1,6 +1,7 @@
 //! HTTP. Routing, and the one place a template becomes a response.
 
 pub mod auth;
+pub mod commands;
 pub mod csrf;
 pub mod files;
 pub mod form;

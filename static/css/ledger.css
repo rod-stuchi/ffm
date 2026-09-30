@@ -1060,8 +1060,15 @@
 }
 
 /* The command vocabulary, on the right of the bar. Identifiers a member types
- * back, never translated — the same rule the sort-refusal message follows. */
+ * back, never translated — the same rule the sort-refusal message follows.
+ *
+ * It is the side that gives way: `min-width: 0` lets it shrink under its
+ * ellipsis, where a flex item's default is to keep its whole content width —
+ * and the wildmenu's eleven palettes then squeezed the input to
+ * `theme tokyonigh`, cutting off the very text being completed. */
 .cmdhint {
+  flex: 0 1 auto;
+  min-width: 0;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-3);
@@ -1076,6 +1083,19 @@
   }
 }
 
+/* Tab's wildmenu: the candidates in the hint, the one on show lit with the
+ * accent — "you are here" — and `--paper` on it, as on every accent fill. */
+.cmdhint .wc + .wc {
+  margin-left: 10px;
+}
+
+.cmdhint .wc.is-on {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--paper);
+}
+
 .cmdbar .caret {
   font-family: var(--mono);
   color: var(--accent);
@@ -1083,8 +1103,8 @@
 }
 
 .cmdinput {
-  flex: 1;
-  min-width: 0;
+  flex: 1 0 auto;
+  min-width: 20ch;
   font-family: var(--mono);
   font-size: 13px;
   background: transparent;

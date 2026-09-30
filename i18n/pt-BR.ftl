@@ -313,7 +313,22 @@ members-reset-note = Redefinir a senha desconecta { $name } de tudo e fica regis
 members-signed-out = { $name } foi desconectado de { $n } aparelho(s)
 members-no-sessions = não está conectado em lugar nenhum
 
-command-placeholder = comando
+command-placeholder = comando · Tab completa · Ctrl-p recupera
+command-about-help = os atalhos — o mesmo que ?
+command-about-profile = suas configurações
+command-about-sort = a ordem das linhas
+command-about-group = agrupar as linhas por categoria, ou desagrupar
+command-about-set = números de linha: relativos · absolutos · nenhum
+command-about-theme = sua paleta de cores — sozinho, abre o seletor
+command-about-lang = seu idioma — só as palavras, nunca datas ou dinheiro
+command-about-grep = buscar em todos os meses — sozinho, repete a última busca
+command-about-trash = linhas apagadas e arquivos removidos, para trazer de volta
+command-about-household = as configurações da casa
+command-about-members = membros e links de convite
+command-about-invite = um novo link de convite
+command-about-currency = a moeda da casa e o formato dos números
+command-about-preview = ver o app como um membro sem direitos de admin, e voltar
+command-about-logout = encerrar esta sessão
 members-self-note = Este é você. Troque uma senha que você sabe em :profile; recupere uma que esqueceu com `ffm reset-link` no console.
 
 ## Histórico — `gl`

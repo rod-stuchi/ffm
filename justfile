@@ -346,17 +346,31 @@ js-check:
 cmd-check:
     #!/usr/bin/env python3
     import re, sys, pathlib
-    rs = pathlib.Path("src/web/ledger.rs").read_text()
-    m = re.search(r"fn command_hint\(.*?\n\}", rs, re.S)
+    # The command table — `web::commands::ALL` — is what the bar's hint, Tab
+    # completion, its contextual help and `?`'s Type section are all rendered
+    # from, so it is the one list the dispatcher is held against. Names and
+    # aliases both: an alias is a real command a member types.
+    rs = pathlib.Path("src/web/commands.rs").read_text()
+    m = re.search(r"pub static ALL: .*?\n\];", rs, re.S)
     if not m:
-        print("\u2717 command_hint() not found in src/web/ledger.rs"); sys.exit(1)
-    advertised = set(re.findall(r'"(\w+)"', m.group(0)))
+        print("\u2717 commands::ALL not found in src/web/commands.rs"); sys.exit(1)
+    table = m.group(0)
+    advertised = set(re.findall(r'name: "(\w+)"', table))
+    for group in re.findall(r"aliases: &\[(.*?)\]", table):
+        advertised |= set(re.findall(r'"(\w+)"', group))
     html = pathlib.Path("templates/pages/ledger.html").read_text()
     handled = set(re.findall(r"case '(\w+)':", html))
     missing = sorted(advertised - handled)
     if missing:
-        print("\u2717 the command bar offers what runCommand does not handle: "
+        print("\u2717 the command table offers what runCommand does not handle: "
               + ", ".join(missing))
+        sys.exit(1)
+    # And the other way: a command the dispatcher handles but the table does
+    # not name is one Tab, the hint and `?` can never show.
+    unlisted = sorted(handled - advertised)
+    if unlisted:
+        print("\u2717 runCommand handles a command the command table does not "
+              "name: " + ", ".join(unlisted))
         sys.exit(1)
 
     # A command named in a MESSAGE counts as advertised too. `not-a-command`

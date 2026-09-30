@@ -325,6 +325,11 @@ struct LedgerPage {
     /// previewing as one — the same rule that removes the Household button
     /// rather than disabling it.
     command_hint: String,
+    /// The same table, for the bar's Tab completion and contextual help.
+    commands: Vec<super::commands::CommandView>,
+    /// The SESSION's member id — the `:` history is kept per member, so two
+    /// people on one laptop do not recall each other's commands.
+    me_id: i64,
     /// The household's number format, for the amount mask — `{decimals,
     /// decimal, group}` as JSON. From `household_settings.locale_currency`,
     /// the one value every money display in this app reads, so a masked field
@@ -353,7 +358,7 @@ struct LedgerPage {
     months_word: String,
     /// The `?` modal, built from the same table `design/spec.md` documents —
     /// so a key that exists and a key that is written down stay the same set.
-    keymap: Vec<(String, Vec<(&'static str, &'static str)>)>,
+    keymap: Vec<(String, Vec<(String, String)>)>,
     /// What every mark means, drawn with the row's own mark partial.
     legend: Vec<LegendItem>,
     /// The three "there is no such file" messages — `g1`/`g2`/`g3` on a row
@@ -524,7 +529,9 @@ pub async fn ledger(
         // — an admin previewing as a member should read as a member here, or
         // the badge would contradict what the rest of the app is doing.
         me_admin: auth.viewer.is_admin(),
-        command_hint: command_hint(auth.viewer.is_admin(), auth.session.role_admin),
+        command_hint: super::commands::hint(auth.viewer.is_admin(), auth.session.role_admin),
+        commands: super::commands::views(&t, auth.viewer.is_admin(), auth.session.role_admin),
+        me_id: auth.session.member.id,
         money_format: money_format(currency),
         min_split: auth.settings.layout_min_split_width,
         min_width: auth.settings.layout_min_width,
@@ -548,7 +555,7 @@ pub async fn ledger(
         details_none: t.details_none().to_string(),
         no_files: t.file_no_files().to_string(),
         months_word: t.details_months().to_string(),
-        keymap: keymap(&t),
+        keymap: keymap(&t, auth.viewer.is_admin(), auth.session.role_admin),
         legend: legend(&t, currency, show_recurring),
         not_a_command: t.not_a_command("{cmd}"),
         file_not_tracked: t.file_not_tracked().to_string(),
@@ -584,111 +591,96 @@ fn money_format(currency: crate::domain::money::Currency) -> String {
     )
 }
 
-/// What the `:` bar offers, in the order a household reaches for it.
-///
-/// One name per command — `:me` and `:config` still work as aliases, but a
-/// hint listing both spellings of one thing is noise.
-fn command_hint(admin: bool, holds_admin_role: bool) -> String {
-    let mut names = vec![
-        "help", "profile", "sort", "group", "set", "theme", "lang", "grep", "trash",
-    ];
-    if admin {
-        names.extend(["household", "members", "invite", "currency"]);
-    }
-    // `preview` follows the ROLE, not whether its powers are in effect — it
-    // is the toggle itself, the same category as the badge, which stays
-    // visible so preview is reversible any time. Dropping it while previewing
-    // would tell an admin there is no way back. A member who never held the
-    // role never sees it, and the route refuses them anyway.
-    if holds_admin_role {
-        names.push("preview");
-    }
-    names.push("logout");
-    names.join(" · ")
-}
-
 /// The keymap, as `?` shows it.
 ///
 /// Lowercase acts on the **occurrence**, uppercase on the **rule or the
 /// window** — which is the rule the whole table follows, and the reason it can
 /// be read rather than memorized.
-fn keymap(t: &Catalog) -> Vec<(String, Vec<(&'static str, &'static str)>)> {
+fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(String, String)>)> {
+    let k = |key: &str, what: &str| (key.to_string(), what.to_string());
     vec![
         (
             t.keymap_move().to_string(),
             vec![
-                ("j / k", "row down / up"),
-                ("5j 7k", "counted motion"),
-                ("gg / G", "first / last row"),
-                ("H / L", "focus pane, left / right"),
-                ("gt / gT", "next / previous member tab"),
-                ("2gt", "jump straight to tab 2"),
+                k("j / k", "row down / up"),
+                k("5j 7k", "counted motion"),
+                k("gg / G", "first / last row"),
+                k("H / L", "focus pane, left / right"),
+                k("gt / gT", "next / previous member tab"),
+                k("2gt", "jump straight to tab 2"),
             ],
         ),
         (
             t.keymap_act().to_string(),
             vec![
-                ("a / i", "add a one-off spend / income"),
-                ("A / I", "create a recurring bill / income"),
-                ("e / E", "edit this row / its rule"),
-                ("J / K", "move the row down / up"),
-                ("s", "row order: manual · date · amount"),
-                ("Ctrl-H / Ctrl-L", "re-attribute to the pane left / right"),
-                ("x", "select, for a batch operation"),
-                ("p", "toggle private"),
-                ("m", "mark paid by hand — untracked recurring bills"),
-                ("gd", "due, cadence and receipt details"),
-                ("gl", "this row's history"),
+                k("a / i", "add a one-off spend / income"),
+                k("A / I", "create a recurring bill / income"),
+                k("e / E", "edit this row / its rule"),
+                k("J / K", "move the row down / up"),
+                k("s", "row order: manual · date · amount"),
+                k("Ctrl-H / Ctrl-L", "re-attribute to the pane left / right"),
+                k("x", "select, for a batch operation"),
+                k("p", "toggle private"),
+                k("m", "mark paid by hand — untracked recurring bills"),
+                k("gd", "due, cadence and receipt details"),
+                k("gl", "this row's history"),
             ],
         ),
         (
             t.keymap_find().to_string(),
             vec![
-                ("/", "search this month — incremental, regex"),
-                ("n / N", "next / previous match"),
-                (":grep", "search every month"),
+                k("/", "search this month — incremental, regex"),
+                k("n / N", "next / previous match"),
+                k(":grep", "search every month"),
             ],
         ),
         (
             t.keymap_fold().to_string(),
             vec![
-                ("za", "toggle the fold under the cursor"),
-                ("zo / zc", "open / close it"),
-                ("zR / zM", "open / close every fold"),
-                ("S", "order the groups: first seen · A–Z · by cost"),
+                k("za", "toggle the fold under the cursor"),
+                k("zo / zc", "open / close it"),
+                k("zR / zM", "open / close every fold"),
+                k("S", "order the groups: first seen · A–Z · by cost"),
             ],
         ),
         (
             t.keymap_files().to_string(),
             vec![
-                ("g1 / g2 / g3", "open the bill / scheduled / receipt"),
-                ("gu1 / gu2 / gu3", "attach a bill / scheduled / receipt"),
-                ("P", "preview this row's files"),
-                ("1 2 3 · h l", "inside P: jump to a file · step"),
-                ("+ - 0", "inside P: zoom in, out, reset"),
+                k("g1 / g2 / g3", "open the bill / scheduled / receipt"),
+                k("gu1 / gu2 / gu3", "attach a bill / scheduled / receipt"),
+                k("P", "preview this row's files"),
+                k("1 2 3 · h l", "inside P: jump to a file · step"),
+                k("+ - 0", "inside P: zoom in, out, reset"),
             ],
         ),
         (
             t.keymap_undo().to_string(),
             vec![
-                ("dd", "delete — opens a confirmation"),
-                ("y", "confirm in a modal"),
-                ("u / U", "undo · redo — your changes, this pane, this month"),
-                (
+                k("dd", "delete — opens a confirmation"),
+                k("y", "confirm in a modal"),
+                k("u / U", "undo · redo — your changes, this pane, this month"),
+                k(
                     "Ctrl-u · :trash",
                     "the trash — bring back any deleted row or file",
                 ),
-                ("Esc", "clear count, buffer, selection and search"),
+                k("Esc", "clear count, buffer, selection and search"),
             ],
         ),
         (
             t.keymap_type().to_string(),
-            vec![
-                (":add 50 mercado", "a spend, in one line"),
-                (":profile · :household", "your settings · the household's"),
-                (":theme · :lang · :sort", "one setting, one row"),
-                ("?", "this"),
-            ],
+            // From the command table, so `?` cannot advertise a command the
+            // bar refuses — it listed `:add 50 mercado` long after `:add`
+            // was abandoned.
+            super::commands::visible(admin, holds_role)
+                .map(|c| {
+                    let mut key = format!(":{}", c.name);
+                    for a in c.aliases {
+                        key.push_str(&format!(" · :{a}"));
+                    }
+                    (key, (c.about)(t))
+                })
+                .chain([k("?", "this")])
+                .collect(),
         ),
     ]
 }
