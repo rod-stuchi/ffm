@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE household_settings SET default_layout_panes = ?1, updated_at = ?2 WHERE id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "cd43b08bbbf30e4b3cc8f7a6bc04a76d35ed8041c6fdc1347bf4f3f1579d94a0"
+}

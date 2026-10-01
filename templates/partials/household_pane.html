@@ -98,6 +98,21 @@
       </label>
     </form>
 
+    {#- What a new member's palette and layout START as. Seeded into their
+        own row when they join and never read for them again, so changing one
+        moves nobody's screen — which is also why these write without the
+        refresh the rest of this pane causes. The controls are `:profile`'s
+        own partials, pointed at the household's `default_*` columns. -#}
+    <div class="sect">{{ t.household_new_members() }}</div>
+    <p class="hint mwide">{{ t.household_new_members_note() }}</p>
+    {%- let endpoint = "/settings/household" %}
+    {%- let kp = "default_" %}
+    {%- let idp = "k-hh-" %}
+    <div class="band">
+      {%- include "partials/theme_swatches.html" %}
+    </div>
+    {%- include "partials/layout_band.html" %}
+
     {#- The entire ffm.toml, read-only. They are the operator's, not the
         admin's, and showing them lets the admin confirm the vault is where
         they think it is before a single receipt is filed — without creating a

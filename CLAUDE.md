@@ -343,6 +343,10 @@ card in plain CSS.
   - **`household_settings`** (one row, admin-only, via `:household`) — name,
     currency, default language, default visibility, `show_recurring`. What's here
     is what cannot coherently differ between members.
+    It also holds what a new member's palette and layout **start as**
+    (`default_theme`, `default_layout_*`): seeded into their own row when they
+    join, never inherited, so changing one moves nobody's screen; `:profile`'s
+    *Use the household's defaults* adopts them on request.
   - **`member_settings`** (one row per member, via `:profile`) — language, theme
     and overrides, line numbers, all five `layout_*` values, `ledger_sort`,
     `search_scope`, `show_delta`, group and fold defaults, and a nullable

@@ -298,6 +298,11 @@ household-language = Idioma padrão
 household-visibility = Padrão para linhas novas
 household-show-recurring = Usar regras recorrentes
 household-storage = Definido por quem roda o programa
+household-new-members = Para novos membros
+household-new-members-note = Copiado para as configurações de cada novo membro quando ele entra. As configurações de quem já está aqui não mudam.
+profile-use-household = Usar os padrões da casa
+profile-use-household-note = A paleta e o layout que a casa dá aos novos membros.
+profile-used-household = agora usando a paleta e o layout da casa
 household-storage-note = Edite o ffm.toml e reinicie para mudar isto.
 
 members-role-admin = Administrador

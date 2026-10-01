@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE household_settings SET default_layout_gap = ?1, updated_at = ?2 WHERE id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a55ac4b56661f35d776e1f7822f60966fe885a3000c01e1609e18fe806061d5d"
+}

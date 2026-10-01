@@ -1,0 +1,75 @@
+{#- The layout band — panes and the four sizes — one copy, for two writers:
+    a member's own layout from `:profile`, and the layout a new member starts
+    with from `:household`. Same `endpoint` / `kp` / `idp` contract as
+    `theme_swatches.html`; the struct supplies `panes`, `min_split`, `gap`,
+    `min_width` and `max_width`. -#}
+{#- One band, so the four controls line up: every label sits in the band's
+    first row and every control in its second, however many lines a label
+    takes. They were three separate grid items before — a radio group, a
+    two-up `.fgrid` and a lone field — and a label that wrapped pushed
+    only its own input down, leaving the row ragged. -#}
+<div class="band">
+  <form class="setting" hx-post="{{ endpoint }}" hx-trigger="change" hx-swap="none">
+    <input type="hidden" name="key" value="{{ kp }}layout_panes">
+    {#- A labeled `radiogroup` rather than `fieldset`/`legend`: a legend
+        is rendered outside its fieldset's own layout box, so it cannot be
+        a row of the band's grid — the control under it would sit one line
+        off from every other control here. The grouping and its name are
+        the same to a screen reader. -#}
+    <div class="f">
+      <span class="k" id="{{ idp }}panes">{{ t.profile_panes() }}</span>
+      <div class="radios" role="radiogroup" aria-labelledby="{{ idp }}panes">
+        {%- for c in panes %}
+        <label><input type="radio" name="value" value="{{ c.code }}"{% if c.selected %} checked{% endif %}> {{ c.label }}</label>
+        {%- endfor %}
+      </div>
+    </div>
+  </form>
+
+  <form class="setting" hx-post="{{ endpoint }}" hx-trigger="change" hx-swap="none">
+    <input type="hidden" name="key" value="{{ kp }}layout_min_split_width">
+    <label class="f">
+      {#- `auto` resolves in CSS from this number, rendered into one media
+          query server-side — never on the server and never in Alpine,
+          which would be wrong on first paint and on every resize. -#}
+      <span class="k">{{ t.profile_min_split() }}</span>
+      <input class="i" type="number" name="value" value="{{ min_split }}" min="320" max="4000">
+    </label>
+  </form>
+
+  <form class="setting" hx-post="{{ endpoint }}" hx-trigger="change" hx-swap="none">
+    <input type="hidden" name="key" value="{{ kp }}layout_gap">
+    <label class="f">
+      <span class="k">{{ t.profile_gap() }}</span>
+      <input class="i" type="number" name="value" value="{{ gap }}" min="0" max="64">
+    </label>
+  </form>
+
+  <form class="setting" hx-post="{{ endpoint }}" hx-trigger="change" hx-swap="none">
+    <input type="hidden" name="key" value="{{ kp }}layout_min_width">
+    <label class="f">
+      {#- The floor a pane will not be squeezed below while it shares the
+          stage with another: under it a row's file rail and amount start
+          colliding with the title, so the stage scrolls sideways instead.
+          0 means no floor, the same real choice 0 means in the cap below.
+
+          It began as a constant in the stylesheet, which was the wrong
+          place for it — how narrow a pane may get is a fact about the
+          screen somebody is sitting at, like every other value in this
+          band. -#}
+      <span class="k">{{ t.profile_min_width() }}</span>
+      <input class="i" type="number" name="value" value="{{ min_width }}" min="0" max="4000">
+    </label>
+  </form>
+
+  <form class="setting" hx-post="{{ endpoint }}" hx-trigger="change" hx-swap="none">
+    <input type="hidden" name="key" value="{{ kp }}layout_max_width">
+    <label class="f">
+      {#- 0 means unlimited, which is a real value rather than a missing
+          one — a wide screen with two members may want the panes to keep
+          growing. -#}
+      <span class="k">{{ t.profile_max_width() }}</span>
+      <input class="i" type="number" name="value" value="{{ max_width }}" min="0" max="4000">
+    </label>
+  </form>
+</div>

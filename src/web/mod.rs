@@ -105,6 +105,10 @@ pub fn router(state: AppState) -> Router {
         .route("/household", get(settings::household))
         .route("/members", get(settings::members_view))
         .route("/settings/member", post(settings::set_member))
+        .route(
+            "/settings/member/household-defaults",
+            post(settings::adopt_household_defaults),
+        )
         .route("/settings/household", post(settings::set_household))
         .route("/members/invite", post(settings::invite))
         .route("/members/{id}/reset", post(settings::reset))

@@ -602,6 +602,12 @@
   grid-column: 1 / -1;
 }
 
+/* A note or a one-off control that belongs to the whole row — the
+ * household's "for new members" hint, `:profile`'s adopt button. */
+.hsplitmount .settingspane .rp-body > .mwide {
+  grid-column: 1 / -1;
+}
+
 /* `:profile`'s first line — which build this is. Mono, because a version is
  * read character by character, and quiet, because it is rarely the question. */
 .settingspane .rp-body > .version {

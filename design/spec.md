@@ -2506,7 +2506,38 @@ default_language      text     -- "en" | "pt-BR"; used pre-login and for a
                                -- member who hasn't chosen
 default_visibility    text     -- "household" | "private"; a member may override
 ledger_show_recurring bool     -- false = "we don't use this concept here"
+
+-- What a new member's own settings START as (migration 0010). Seeded, never
+-- inherited: read once, when somebody joins.
+default_theme                  text  -- a bundled palette; starts as the founder's
+default_layout_panes           text  -- "auto" | "split" | "tabs"
+default_layout_min_split_width int   -- the same bounds as the member columns
+default_layout_min_width       int
+default_layout_max_width       int
+default_layout_gap             int
 ```
+
+**The household seeds a new member's palette and layout; it never overrides
+them.** `:household`'s *For new members* section sets the six `default_*`
+values above, with the very controls `:profile` uses (one pair of partials,
+pointed at the household's columns), held to the very same bounds (one
+validator per value, whoever writes it).
+
+- **Seeded, not inherited.** They are copied into a member's own row when the
+  invite is accepted — read inside the accept's transaction — and never read
+  for that member again. Changing a default therefore moves nobody's screen,
+  which is also why those writes skip the refresh the rest of `:household`
+  causes. The alternative, member columns that follow the household until
+  changed, was rejected: an admin's tweak would rearrange somebody else's
+  screen under them.
+- **The invite page opens its palette picker on the household's palette.**
+  The newcomer still picks; a refused form comes back on what they picked.
+- **The founder sets the first one.** `/setup` stores the admin's own palette
+  as the household's default, so a new household starts looking like its
+  first member; the layout defaults keep the schema's values.
+- **A member adopts them only by asking** — `:profile`'s *Use the household's
+  defaults* copies all six into their own row, which stays theirs. The button
+  is there only while their values differ, absent rather than disabled.
 
 `CHECK (id = 1)` in the migration makes "there is one household" a schema fact
 rather than a convention.

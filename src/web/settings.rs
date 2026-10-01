@@ -44,6 +44,19 @@ fn choices(options: &[(&str, String)], selected: &str) -> Vec<Choice> {
         .collect()
 }
 
+/// The three pane modes, as both `:profile` and `:household` offer them.
+/// Identifiers a member types back (`auto`, `split`, `tabs`), so no catalog.
+fn pane_choices(selected: &str) -> Vec<Choice> {
+    choices(
+        &[
+            ("auto", "auto".into()),
+            ("split", "split".into()),
+            ("tabs", "tabs".into()),
+        ],
+        selected,
+    )
+}
+
 pub struct Swatch {
     pub key: &'static str,
     pub label: &'static str,
@@ -85,6 +98,10 @@ struct ProfilePane {
     version: &'static str,
     /// `PROD` · `dev` · `dev-lan · 15/10/2026` (`crate::run::line`).
     run: String,
+    /// Whether this member's palette or layout differ from what the household
+    /// gives new members — the "Use the household's defaults" button is there
+    /// only then, absent rather than disabled when there is nothing to adopt.
+    household_differs: bool,
     themes: Vec<Swatch>,
     languages: Vec<Choice>,
     line_numbers: Vec<Choice>,
@@ -124,6 +141,10 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
     Html(ProfilePane {
         version: crate::version(),
         run: crate::run::line(),
+        household_differs: !settings::member_defaults(&st.pool)
+            .await
+            .unwrap_or_default()
+            .matches(s),
         themes: swatches(s.theme),
         languages: choices(
             &[
@@ -140,14 +161,7 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
             ],
             &s.line_numbers,
         ),
-        panes: choices(
-            &[
-                ("auto", "auto".into()),
-                ("split", "split".into()),
-                ("tabs", "tabs".into()),
-            ],
-            &s.layout_panes,
-        ),
+        panes: pane_choices(&s.layout_panes),
         sorts: choices(
             &[
                 ("manual", t.profile_sort_manual().to_string()),
@@ -303,6 +317,22 @@ pub async fn set_member(
     }
 }
 
+/// `:profile`'s "Use the household's defaults": the palette and layout the
+/// household gives new members, copied into the **session's** own row — never
+/// the focused pane's. Layout is rendered server-side, so the page refreshes.
+pub async fn adopt_household_defaults(State(st): State<AppState>, auth: Auth) -> Response {
+    let t = auth.catalog();
+    match settings::adopt_member_defaults(&st.pool, auth.session.member.id).await {
+        Ok(()) => {
+            let mut res = crate::web::tx::say_only(t.profile_used_household(), false);
+            res.headers_mut()
+                .insert("HX-Refresh", axum::http::HeaderValue::from_static("true"));
+            res
+        }
+        Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // :household
 // ---------------------------------------------------------------------------
@@ -320,6 +350,15 @@ struct HouseholdPane {
     languages: Vec<Choice>,
     visibilities: Vec<Choice>,
     show_recurring: bool,
+    // What a new member's own settings start as — the palette swatches and
+    // the layout band, the same partials `:profile` renders, writing the
+    // household's `default_*` columns instead.
+    themes: Vec<Swatch>,
+    panes: Vec<Choice>,
+    min_split: i64,
+    min_width: i64,
+    max_width: i64,
+    gap: i64,
     db_path: String,
     receipts_root: String,
     backup_dir: String,
@@ -336,8 +375,17 @@ pub async fn household(State(st): State<AppState>, auth: Auth) -> Response {
     let Some(h) = ledger::household(&st.pool).await.ok().flatten() else {
         return crate::web::tx::say_only(t.error_not_written(), true);
     };
+    let d = settings::member_defaults(&st.pool)
+        .await
+        .unwrap_or_default();
 
     Html(HouseholdPane {
+        themes: swatches(d.theme),
+        panes: pane_choices(&d.panes),
+        min_split: d.min_split,
+        min_width: d.min_width,
+        max_width: d.max_width,
+        gap: d.gap,
         name: h.name.clone(),
         date_pattern: fmt::DATE_PATTERN,
         currencies: Currency::ALL
@@ -400,10 +448,14 @@ pub async fn set_household(
     match settings::set_household(&st.pool, key, &form.value).await {
         Ok(()) => {
             // Currency moves every amount on the page; the name moves the
-            // statusline and the heading.
+            // statusline and the heading. A new member's defaults move
+            // nothing anybody can see — they are read only when somebody
+            // joins — so they write quietly.
             let mut res = crate::web::tx::say_only(&t.settings_saved(&form.key), false);
-            res.headers_mut()
-                .insert("HX-Refresh", axum::http::HeaderValue::from_static("true"));
+            if key.changes_the_screen() {
+                res.headers_mut()
+                    .insert("HX-Refresh", axum::http::HeaderValue::from_static("true"));
+            }
             res
         }
         Err(e) => crate::web::tx::say_only(&e.to_string(), true),

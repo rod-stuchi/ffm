@@ -569,6 +569,12 @@ pub async fn invite_page(
     let link = auth::read_link(&st.pool, &token)
         .await
         .unwrap_or(Link::Unknown);
+    // The picker opens on the household's palette for new members — what
+    // the newcomer gets unless they choose otherwise.
+    let palette = crate::db::settings::member_defaults(&st.pool)
+        .await
+        .map(|d| d.theme)
+        .unwrap_or_default();
     render_link(
         chrome,
         t,
@@ -577,9 +583,13 @@ pub async fn invite_page(
         FieldErrors::new(),
         None,
         String::new(),
+        palette,
     )
 }
 
+/// `palette` is the swatch the picker opens on: the household's default on a
+/// first visit, and what was picked when a refused form comes back.
+#[allow(clippy::too_many_arguments)]
 fn render_link(
     chrome: Chrome,
     t: Catalog,
@@ -588,6 +598,7 @@ fn render_link(
     errors: FieldErrors,
     note: Option<String>,
     name: String,
+    palette: ThemeName,
 ) -> Response {
     let lang = Lang::parse(chrome.lang_code).unwrap_or(Lang::En);
     match link {
@@ -600,7 +611,7 @@ fn render_link(
             expires: iso_to_date(&expires),
             name,
             languages: languages(lang),
-            themes: swatches(ThemeName::default()),
+            themes: swatches(palette),
             note,
             errors,
             chrome,
@@ -697,13 +708,13 @@ pub async fn accept(
     } else if form.password != form.confirm {
         errors.add("confirm", t.password_mismatch());
     }
+    let theme = ThemeName::parse(&form.theme).unwrap_or_default();
     if errors.is_bad() {
-        return render_link(chrome, t, &token, link, errors, None, name);
+        return render_link(chrome, t, &token, link, errors, None, name, theme);
     }
 
     let device = auth::device_label(session::user_agent(&parts));
     let lang = Lang::parse(&form.language).unwrap_or(Lang::En);
-    let theme = ThemeName::parse(&form.theme).unwrap_or_default();
 
     let result = match &link {
         Link::Invite { role, .. } => {
@@ -747,6 +758,7 @@ pub async fn accept(
             FieldErrors::new().with("name", t.name_taken()),
             Some(t.name_taken_body().to_string()),
             name,
+            theme,
         ),
         Err(_) => {
             // The link was consumed or revoked between rendering and

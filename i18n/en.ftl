@@ -333,6 +333,11 @@ household-language = Default language
 household-visibility = Default for new rows
 household-show-recurring = Use recurring rules
 household-storage = Set by the operator
+household-new-members = For new members
+household-new-members-note = Copied into each new member's own settings when they join. Nobody's current settings change.
+profile-use-household = Use the household's defaults
+profile-use-household-note = The palette and layout the household gives new members.
+profile-used-household = now using the household's palette and layout
 household-storage-note = Edit ffm.toml and restart to change these.
 
 members-role-admin = Admin

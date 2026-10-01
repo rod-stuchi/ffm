@@ -264,3 +264,110 @@ async fn a_reset_appears_in_the_pending_list_named_for_its_member() {
     // creates a member, the other hands somebody their own account back.
     assert_eq!(pending[0].for_member.as_deref(), Some("ana"));
 }
+
+#[tokio::test]
+async fn a_new_member_starts_with_the_households_defaults_and_nobody_else_moves() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let before = format!("{:?}", settings_of(&pool, me).await);
+
+    for (k, v) in [
+        ("default_layout_panes", "tabs"),
+        ("default_layout_min_split_width", "700"),
+        ("default_layout_min_width", "0"),
+        ("default_layout_max_width", "1200"),
+        ("default_layout_gap", "24"),
+        ("default_theme", "gruvbox"),
+    ] {
+        settings::set_household(&pool, HouseholdKey::parse(k).unwrap(), v)
+            .await
+            .unwrap();
+    }
+
+    // The founder's own row is untouched: the defaults seed, they never
+    // override.
+    assert_eq!(format!("{:?}", settings_of(&pool, me).await), before);
+
+    let token = auth::issue_link(&pool, ffm::db::changes::Actor::User(me), None, None, 1)
+        .await
+        .unwrap();
+    // The theme a newcomer picks on the form is theirs; the invite page only
+    // preselects the household's.
+    let sid = auth::accept_invite(&pool, &token, "ana", "hunter2hunter2", "en", "nord", 1, "x")
+        .await
+        .unwrap();
+    let ana = auth::session(&pool, &sid).await.unwrap().unwrap().member.id;
+    let s = settings_of(&pool, ana).await;
+    assert_eq!(s.theme.key(), "nord");
+    assert_eq!(
+        (
+            s.layout_panes.as_str(),
+            s.layout_min_split_width,
+            s.layout_min_width,
+            s.layout_max_width,
+            s.layout_gap
+        ),
+        ("tabs", 700, 0, 1200, 24)
+    );
+
+    // And adopting the defaults later copies all six, the palette included.
+    settings::adopt_member_defaults(&pool, me).await.unwrap();
+    let mine = settings_of(&pool, me).await;
+    assert_eq!(mine.theme.key(), "gruvbox");
+    assert!(
+        settings::member_defaults(&pool)
+            .await
+            .unwrap()
+            .matches(&mine)
+    );
+}
+
+#[tokio::test]
+async fn a_default_is_held_to_the_same_bounds_as_the_setting_it_seeds() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+
+    let household_says = settings::set_household(&pool, HouseholdKey::DefaultGap, "99")
+        .await
+        .unwrap_err()
+        .to_string();
+    let profile_says = settings::set_member(&pool, me, MemberKey::LayoutGap, "99")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert_eq!(household_says, profile_says, "one bound, whoever writes it");
+    assert_eq!(settings::member_defaults(&pool).await.unwrap().gap, 16);
+
+    assert!(
+        settings::set_household(&pool, HouseholdKey::DefaultTheme, "nope")
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn the_household_starts_in_its_founders_palette() {
+    let pool = pool().await;
+    // `household()` sets up with theme "ffm"; a founder picking another one
+    // starts the household's palette for newcomers there.
+    let sid = auth::setup(
+        &pool,
+        auth::NewHousehold {
+            household_name: "Casa",
+            currency: "BRL",
+            language: "en",
+            admin_name: "rodrigo",
+            password: "abcd1234",
+            theme: "kanagawa",
+            line_numbers: "relative",
+            device_label: "x",
+        },
+    )
+    .await
+    .unwrap();
+    assert!(auth::session(&pool, &sid).await.unwrap().is_some());
+    assert_eq!(
+        settings::member_defaults(&pool).await.unwrap().theme.key(),
+        "kanagawa"
+    );
+}

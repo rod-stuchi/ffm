@@ -323,14 +323,18 @@ pub async fn setup(pool: &SqlitePool, new: NewHousehold<'_>) -> anyhow::Result<S
     }
 
     sqlx::query!(
+        // The household's palette for new members starts as its founder's —
+        // the household begins looking like its first admin. The layout
+        // defaults keep the schema's values.
         r#"INSERT INTO household_settings
                (id, name, locale_currency, default_language, default_visibility,
-                ledger_show_recurring, created_at, updated_at)
-           VALUES (1, ?1, ?2, ?3, 'household', 1, ?4, ?4)"#,
+                ledger_show_recurring, created_at, updated_at, default_theme)
+           VALUES (1, ?1, ?2, ?3, 'household', 1, ?4, ?4, ?5)"#,
         new.household_name,
         new.currency,
         new.language,
         at,
+        new.theme,
     )
     .execute(&mut *tx)
     .await?;
@@ -363,6 +367,12 @@ pub async fn setup(pool: &SqlitePool, new: NewHousehold<'_>) -> anyhow::Result<S
     Ok(sid)
 }
 
+/// A new member's own settings row, **seeded** from the household's defaults
+/// for new members (`settings::MemberDefaults`) — read inside the same
+/// transaction, so a default changed a moment ago is the one used. From here
+/// on the row is the member's: the household never reads its defaults for
+/// them again. The palette is the one they picked on the form, which the
+/// form preselects from the same defaults.
 async fn insert_member_settings(
     tx: &mut Transaction<'_, Sqlite>,
     member_id: i64,
@@ -370,13 +380,21 @@ async fn insert_member_settings(
     theme: &str,
     line_numbers: &str,
 ) -> sqlx::Result<()> {
+    let d = crate::db::settings::member_defaults(&mut **tx).await?;
     sqlx::query!(
-        r#"INSERT INTO member_settings (member_id, language, theme_name, line_numbers)
-           VALUES (?1, ?2, ?3, ?4)"#,
+        r#"INSERT INTO member_settings
+               (member_id, language, theme_name, line_numbers, layout_panes,
+                layout_min_split_width, layout_min_width, layout_max_width, layout_gap)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"#,
         member_id,
         language,
         theme,
         line_numbers,
+        d.panes,
+        d.min_split,
+        d.min_width,
+        d.max_width,
+        d.gap,
     )
     .execute(&mut **tx)
     .await?;

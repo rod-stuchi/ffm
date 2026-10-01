@@ -1,0 +1,20 @@
+{#- The palette picker — one copy, for two writers. `:profile` writes the
+    member's own palette (`endpoint` /settings/member, `kp` ""); `:household`
+    writes the palette a new member starts with (/settings/household,
+    `kp` "default_"). `idp` keeps the label ids apart when both panes have
+    been opened. Set the three with `{% let %}` before including. -#}
+<form class="setting" hx-post="{{ endpoint }}" hx-trigger="change" hx-swap="none">
+  <input type="hidden" name="key" value="{{ kp }}theme_name">
+  <div class="f">
+    <span class="k" id="{{ idp }}theme">{{ t.profile_theme() }}</span>
+    <div class="swatches" role="radiogroup" aria-labelledby="{{ idp }}theme">
+      {%- for s in themes %}
+      <label class="swatch">
+        <input type="radio" name="value" value="{{ s.key }}"{% if s.selected %} checked{% endif %}>
+        <span class="bars">{% for c in s.bars %}<i style="background:{{ c }}"></i>{% endfor %}</span>
+        <span class="nm">{{ s.label }}</span>
+      </label>
+      {%- endfor %}
+    </div>
+  </div>
+</form>

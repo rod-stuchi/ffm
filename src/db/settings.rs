@@ -211,6 +211,40 @@ fn in_range(key: &'static str, value: &str, lo: i64, hi: i64) -> Result<i64, Inv
     }
 }
 
+// One validator per value that a member sets for themselves AND the household
+// sets as the default a new member starts with. Both writes call the same
+// function, so a bound can never differ between `:profile` and `:household`.
+
+fn theme_value(value: &str) -> Result<&'static str, Invalid> {
+    ThemeName::parse(value).map(ThemeName::key).ok_or(Invalid {
+        key: "theme",
+        problem: "is not a bundled palette".into(),
+    })
+}
+
+fn panes_value(value: &str) -> Result<String, Invalid> {
+    one_of("layout.panes", value, &["auto", "split", "tabs"])
+}
+
+fn min_split_value(value: &str) -> Result<i64, Invalid> {
+    in_range("layout.min_split_width", value, 320, 4000)
+}
+
+/// The upper bound is the same 4000 every layout value uses. The lower one is
+/// 0 rather than a usable minimum: 0 means "no floor at all", which is a real
+/// choice — the same one `layout_max_width` spells as "unlimited".
+fn min_width_value(value: &str) -> Result<i64, Invalid> {
+    in_range("layout.min_width", value, 0, 4000)
+}
+
+fn max_width_value(value: &str) -> Result<i64, Invalid> {
+    in_range("layout.max_width", value, 0, 4000)
+}
+
+fn gap_value(value: &str) -> Result<i64, Invalid> {
+    in_range("layout.gap", value, 0, 64)
+}
+
 /// Writes one member setting, validated.
 ///
 /// The value arrives as text because a form sends text; it leaves as the right
@@ -240,11 +274,7 @@ pub async fn set_member(
             .map_err(db)?;
         }
         MemberKey::ThemeName => {
-            let v = ThemeName::parse(value).ok_or(Invalid {
-                key: "theme",
-                problem: "is not a bundled palette".into(),
-            })?;
-            let v = v.key();
+            let v = theme_value(value)?;
             sqlx::query!(
                 "UPDATE member_settings SET theme_name = ?2 WHERE member_id = ?1",
                 member_id,
@@ -266,7 +296,7 @@ pub async fn set_member(
             .map_err(db)?;
         }
         MemberKey::LayoutPanes => {
-            let v = one_of("layout.panes", value, &["auto", "split", "tabs"])?;
+            let v = panes_value(value)?;
             sqlx::query!(
                 "UPDATE member_settings SET layout_panes = ?2 WHERE member_id = ?1",
                 member_id,
@@ -277,7 +307,7 @@ pub async fn set_member(
             .map_err(db)?;
         }
         MemberKey::LayoutMinSplitWidth => {
-            let v = in_range("layout.min_split_width", value, 320, 4000)?;
+            let v = min_split_value(value)?;
             sqlx::query!(
                 "UPDATE member_settings SET layout_min_split_width = ?2 WHERE member_id = ?1",
                 member_id,
@@ -288,11 +318,7 @@ pub async fn set_member(
             .map_err(db)?;
         }
         MemberKey::LayoutMinWidth => {
-            // The upper bound is the same 4000 every layout value uses. The
-            // lower one is 0 rather than a usable minimum: 0 means "no floor
-            // at all", which is a real choice — the same one
-            // `layout_max_width` spells as "unlimited".
-            let v = in_range("layout.min_width", value, 0, 4000)?;
+            let v = min_width_value(value)?;
             sqlx::query!(
                 "UPDATE member_settings SET layout_min_width = ?2 WHERE member_id = ?1",
                 member_id,
@@ -303,7 +329,7 @@ pub async fn set_member(
             .map_err(db)?;
         }
         MemberKey::LayoutMaxWidth => {
-            let v = in_range("layout.max_width", value, 0, 4000)?;
+            let v = max_width_value(value)?;
             sqlx::query!(
                 "UPDATE member_settings SET layout_max_width = ?2 WHERE member_id = ?1",
                 member_id,
@@ -314,7 +340,7 @@ pub async fn set_member(
             .map_err(db)?;
         }
         MemberKey::LayoutGap => {
-            let v = in_range("layout.gap", value, 0, 64)?;
+            let v = gap_value(value)?;
             sqlx::query!(
                 "UPDATE member_settings SET layout_gap = ?2 WHERE member_id = ?1",
                 member_id,
@@ -427,6 +453,13 @@ pub enum HouseholdKey {
     DefaultLanguage,
     DefaultVisibility,
     ShowRecurring,
+    // What a new member's own settings start as — see `MemberDefaults`.
+    DefaultTheme,
+    DefaultPanes,
+    DefaultMinSplitWidth,
+    DefaultMinWidth,
+    DefaultMaxWidth,
+    DefaultGap,
 }
 
 impl HouseholdKey {
@@ -437,9 +470,124 @@ impl HouseholdKey {
             "default_language" => HouseholdKey::DefaultLanguage,
             "default_visibility" => HouseholdKey::DefaultVisibility,
             "ledger_show_recurring" | "show_recurring" => HouseholdKey::ShowRecurring,
+            "default_theme" | "default_theme_name" => HouseholdKey::DefaultTheme,
+            "default_layout_panes" => HouseholdKey::DefaultPanes,
+            "default_layout_min_split_width" => HouseholdKey::DefaultMinSplitWidth,
+            "default_layout_min_width" => HouseholdKey::DefaultMinWidth,
+            "default_layout_max_width" => HouseholdKey::DefaultMaxWidth,
+            "default_layout_gap" => HouseholdKey::DefaultGap,
             _ => return None,
         })
     }
+
+    /// Whether writing this key changes what is on anybody's screen. The
+    /// new-member defaults do not — they are read only when somebody joins —
+    /// so they write quietly, with no refresh.
+    pub fn changes_the_screen(self) -> bool {
+        !matches!(
+            self,
+            HouseholdKey::DefaultTheme
+                | HouseholdKey::DefaultPanes
+                | HouseholdKey::DefaultMinSplitWidth
+                | HouseholdKey::DefaultMinWidth
+                | HouseholdKey::DefaultMaxWidth
+                | HouseholdKey::DefaultGap
+        )
+    }
+}
+
+/// What a new member's palette and layout start as. The household **seeds**
+/// these into the member's own row when they join and never reads them for
+/// that member again: changing one changes nobody's current screen. A member
+/// adopts them later only by asking ([`adopt_member_defaults`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemberDefaults {
+    pub theme: ThemeName,
+    pub panes: String,
+    pub min_split: i64,
+    pub min_width: i64,
+    pub max_width: i64,
+    pub gap: i64,
+}
+
+impl Default for MemberDefaults {
+    /// The schema's own column defaults — what a household that never set
+    /// any hands out, and what its members had before these existed.
+    fn default() -> Self {
+        MemberDefaults {
+            theme: ThemeName::default(),
+            panes: "auto".into(),
+            min_split: 900,
+            min_width: 420,
+            max_width: 900,
+            gap: 16,
+        }
+    }
+}
+
+impl MemberDefaults {
+    /// Whether this member's own values already are the household's — when
+    /// they are, `:profile` has nothing to offer.
+    pub fn matches(&self, s: &MemberSettings) -> bool {
+        self.theme == s.theme
+            && self.panes == s.layout_panes
+            && self.min_split == s.layout_min_split_width
+            && self.min_width == s.layout_min_width
+            && self.max_width == s.layout_max_width
+            && self.gap == s.layout_gap
+    }
+}
+
+/// The household's defaults for a new member. Takes any executor so the
+/// invite's accept can read them inside its own transaction.
+pub async fn member_defaults<'e, E>(ex: E) -> sqlx::Result<MemberDefaults>
+where
+    E: sqlx::SqliteExecutor<'e>,
+{
+    let row = sqlx::query!(
+        r#"SELECT default_theme AS "theme!: String",
+                  default_layout_panes AS "panes!: String",
+                  default_layout_min_split_width AS "min_split!: i64",
+                  default_layout_min_width AS "min_width!: i64",
+                  default_layout_max_width AS "max_width!: i64",
+                  default_layout_gap AS "gap!: i64"
+           FROM household_settings WHERE id = 1"#
+    )
+    .fetch_optional(ex)
+    .await?;
+    Ok(row
+        .map(|r| MemberDefaults {
+            theme: ThemeName::parse(&r.theme).unwrap_or_default(),
+            panes: r.panes,
+            min_split: r.min_split,
+            min_width: r.min_width,
+            max_width: r.max_width,
+            gap: r.gap,
+        })
+        .unwrap_or_default())
+}
+
+/// `:profile`'s "Use the household's defaults": the household's palette and
+/// layout, copied into this member's own row — which stays theirs afterwards.
+pub async fn adopt_member_defaults(pool: &SqlitePool, member_id: i64) -> sqlx::Result<()> {
+    let d = member_defaults(pool).await?;
+    let theme = d.theme.key();
+    sqlx::query!(
+        r#"UPDATE member_settings
+           SET theme_name = ?2, layout_panes = ?3, layout_min_split_width = ?4,
+               layout_min_width = ?5, layout_max_width = ?6, layout_gap = ?7
+           WHERE member_id = ?1"#,
+        member_id,
+        theme,
+        d.panes,
+        d.min_split,
+        d.min_width,
+        d.max_width,
+        d.gap
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// Writes one household setting. **Admin only** — enforced by the caller,
@@ -509,6 +657,44 @@ pub async fn set_household(
         HouseholdKey::ShowRecurring => {
             let v = i64::from(is_on(value));
             sqlx::query!("UPDATE household_settings SET ledger_show_recurring = ?1, updated_at = ?2 WHERE id = 1", v, at)
+                .execute(pool).await.map_err(db)?;
+        }
+        // The new-member defaults, through the same validators a member's own
+        // setting goes through — one bound per value, whoever writes it.
+        HouseholdKey::DefaultTheme => {
+            let v = theme_value(value)?;
+            sqlx::query!(
+                "UPDATE household_settings SET default_theme = ?1, updated_at = ?2 WHERE id = 1",
+                v,
+                at
+            )
+            .execute(pool)
+            .await
+            .map_err(db)?;
+        }
+        HouseholdKey::DefaultPanes => {
+            let v = panes_value(value)?;
+            sqlx::query!("UPDATE household_settings SET default_layout_panes = ?1, updated_at = ?2 WHERE id = 1", v, at)
+                .execute(pool).await.map_err(db)?;
+        }
+        HouseholdKey::DefaultMinSplitWidth => {
+            let v = min_split_value(value)?;
+            sqlx::query!("UPDATE household_settings SET default_layout_min_split_width = ?1, updated_at = ?2 WHERE id = 1", v, at)
+                .execute(pool).await.map_err(db)?;
+        }
+        HouseholdKey::DefaultMinWidth => {
+            let v = min_width_value(value)?;
+            sqlx::query!("UPDATE household_settings SET default_layout_min_width = ?1, updated_at = ?2 WHERE id = 1", v, at)
+                .execute(pool).await.map_err(db)?;
+        }
+        HouseholdKey::DefaultMaxWidth => {
+            let v = max_width_value(value)?;
+            sqlx::query!("UPDATE household_settings SET default_layout_max_width = ?1, updated_at = ?2 WHERE id = 1", v, at)
+                .execute(pool).await.map_err(db)?;
+        }
+        HouseholdKey::DefaultGap => {
+            let v = gap_value(value)?;
+            sqlx::query!("UPDATE household_settings SET default_layout_gap = ?1, updated_at = ?2 WHERE id = 1", v, at)
                 .execute(pool).await.map_err(db)?;
         }
     }
