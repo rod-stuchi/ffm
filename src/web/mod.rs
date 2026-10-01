@@ -112,6 +112,10 @@ pub fn router(state: AppState) -> Router {
         .route("/settings/household", post(settings::set_household))
         .route("/members/invite", post(settings::invite))
         .route("/members/{id}/reset", post(settings::reset))
+        .route(
+            "/members/me/signout-others",
+            post(settings::sign_out_others),
+        )
         .route("/members/{id}/signout", post(settings::sign_out))
         .route("/members/{id}/disable", post(settings::disable))
         .route("/members/{id}/enable", post(settings::enable))

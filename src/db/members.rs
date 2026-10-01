@@ -384,6 +384,37 @@ pub async fn restore(pool: &SqlitePool, admin: i64, id: i64) -> sqlx::Result<boo
     Ok(n > 0)
 }
 
+/// Signs a member out of every device but the one asking — the "everywhere"
+/// an admin can do to their own account without locking themselves out of
+/// the page they are on. Recorded like any other sign-out.
+pub async fn sign_out_others(
+    pool: &SqlitePool,
+    member_id: i64,
+    keep_session: &str,
+) -> sqlx::Result<u64> {
+    let mut tx = pool.begin().await?;
+    let n = sqlx::query!(
+        "DELETE FROM sessions WHERE member_id = ?1 AND id <> ?2",
+        member_id,
+        keep_session
+    )
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if n > 0 {
+        Change::member(
+            Actor::User(member_id),
+            MemberAction::SessionsRevoked,
+            member_id,
+        )
+        .note("signed out of every other device")
+        .write(&mut tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(n)
+}
+
 /// Signs one member out everywhere, and records it.
 ///
 /// Separate from a reset, which does this *and* hands over a link. An admin

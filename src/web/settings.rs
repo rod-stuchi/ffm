@@ -637,6 +637,29 @@ pub async fn reset(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) 
     }
 }
 
+/// Your own row's sign-out: every device but this one, so the admin stays
+/// in the pane they clicked it from. `target()` refuses yourself for the
+/// other account actions — this one is only ever about yourself.
+pub async fn sign_out_others(State(st): State<AppState>, auth: Auth) -> Response {
+    let t = auth.catalog();
+    if !auth.viewer.is_admin() {
+        return crate::web::tx::say_only(t.settings_admin_only(), true);
+    }
+    match members::sign_out_others(&st.pool, auth.session.member.id, &auth.session.id).await {
+        Ok(n) => {
+            members_say(
+                &st,
+                &auth,
+                "active",
+                &t.members_signed_out_others(n as i64),
+                false,
+            )
+            .await
+        }
+        Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
+    }
+}
+
 pub async fn sign_out(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
     let t = auth.catalog();
     let m = match target(&st, &auth, id).await {

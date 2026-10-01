@@ -83,7 +83,16 @@
                 the first one it would revoke is the one issuing it. Changing a
                 password you still know belongs in :profile, and recovering one
                 you have lost is `ffm reset-link` at the console — which is the
-                whole reason that command exists. -#}
+                whole reason that command exists.
+
+                Signing out is offered, but as "other devices": every session
+                except the one clicking it, so you stay where you are. Only
+                when there is another device to sign out. -#}
+            {%- if m.sessions > 1 %}
+            <button class="btn" type="button"
+                    hx-post="/members/me/signout-others"
+                    hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_signout_others() }}</button>
+            {%- endif %}
             <span class="hint">{{ t.members_self_note() }}</span>
             {%- endif %}
           </div>

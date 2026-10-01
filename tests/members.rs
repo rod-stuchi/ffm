@@ -377,3 +377,31 @@ async fn a_pending_link_keeps_its_token_until_it_is_used_revoked_or_expires() {
     .unwrap();
     assert_eq!(revoked, 1);
 }
+
+#[tokio::test]
+async fn your_own_sign_out_keeps_the_device_you_asked_from() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let here = {
+        let mut t = pool.begin().await.unwrap();
+        let s = auth::start_session(&mut t, me, "Safari on Mac")
+            .await
+            .unwrap();
+        t.commit().await.unwrap();
+        s
+    };
+    // `household()` left one session; with this one, two devices.
+    assert_eq!(members::sign_out_others(&pool, me, &here).await.unwrap(), 1);
+    assert!(
+        auth::session(&pool, &here).await.unwrap().is_some(),
+        "this one stays"
+    );
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions WHERE member_id = ?1")
+        .bind(me)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 1);
+    // Nothing else to sign out: nothing written to the log either.
+    assert_eq!(members::sign_out_others(&pool, me, &here).await.unwrap(), 0);
+}
