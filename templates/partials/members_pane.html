@@ -8,7 +8,7 @@
     methods are `m`-prefixed because this scope chains onto the shell's. -#}
 <aside class="rulepane settingspane memberspane" id="settingspane"
   x-data="{
-    open: null, mtab: '{{ tab }}', copied: null,
+    open: null, mtab: '{{ tab }}', copied: null, mscrolled: false,
     async mcopy(id, el) {
       // `navigator.clipboard` exists only in a secure context, and a plain
       // http LAN address is not one — so the old select-and-copy is the
@@ -29,16 +29,19 @@
     <button class="btn rp-close" type="button" @click="closeSplit()">{{ t.pane_close() }}</button>
   </header>
 
-  <div class="chips mtabs" role="tablist">
+  {#- The strip's shadow shows only while the list below is scrolled: at the
+      top there is nothing passing under it, and an edge there is noise.
+      Whether the list is scrolled is visual state, so Alpine's. -#}
+  <div class="chips mtabs" role="tablist" :class="{ 'is-scrolled': mscrolled }">
     <button class="chip" type="button" role="tab" :class="{ 'is-on': mtab === 'active' }"
-            @click="mtab = 'active'">{{ t.members_tab_active() }} · {{ active.len() }}</button>
+            @click="mtab = 'active'; $nextTick(() => mscrolled = $root.querySelector('.rp-body').scrollTop > 0)">{{ t.members_tab_active() }} · {{ active.len() }}</button>
     <button class="chip" type="button" role="tab" :class="{ 'is-on': mtab === 'inactive' }"
-            @click="mtab = 'inactive'">{{ t.members_tab_inactive() }} · {{ inactive.len() }}</button>
+            @click="mtab = 'inactive'; $nextTick(() => mscrolled = $root.querySelector('.rp-body').scrollTop > 0)">{{ t.members_tab_inactive() }} · {{ inactive.len() }}</button>
     <button class="chip" type="button" role="tab" :class="{ 'is-on': mtab === 'trash' }"
-            @click="mtab = 'trash'">{{ t.members_tab_trash() }} · {{ trashed.len() }}</button>
+            @click="mtab = 'trash'; $nextTick(() => mscrolled = $root.querySelector('.rp-body').scrollTop > 0)">{{ t.members_tab_trash() }} · {{ trashed.len() }}</button>
   </div>
 
-  <div class="rp-body">
+  <div class="rp-body" @scroll.passive="mscrolled = $el.scrollTop > 0">
 
     {#- ---- Active ---------------------------------------------------- -#}
     <div class="mtab" x-show="mtab === 'active'">

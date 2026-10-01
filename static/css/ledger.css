@@ -1219,8 +1219,28 @@
 
 /* The tab strip reuses the change log's chips: the same "narrow what you are
  * looking at" control, not a new widget. */
+/* The list scrolls beneath the strip, so the strip is a bar: the same room
+ * below the chips as above, and its own ground. Flush against the chips, a
+ * scrolled row read as sliding under the tabs. The shadow is the edge, and
+ * it shows only while the list is scrolled (`is-scrolled`, set from the
+ * list's own scroll) — at the top nothing passes under it. */
 .memberspane .mtabs {
-  padding: 9px 12px 0;
+  padding: 9px 12px;
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.memberspane .mtabs.is-scrolled {
+  box-shadow: var(--shadow-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memberspane .mtabs {
+    transition: none;
+  }
 }
 
 .memberspane .mtabs .chip {
