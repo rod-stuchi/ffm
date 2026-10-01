@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT m.id AS \"id!: i64\", m.name AS \"name!: String\", m.role AS \"role!: i64\",\n                  m.deleted_at AS \"deleted_at: String\",\n                  (SELECT count(*) FROM sessions s WHERE s.member_id = m.id) AS \"sessions!: i64\",\n                  (SELECT i.from_period FROM member_inactive i\n                   WHERE i.member_id = m.id AND i.until_period IS NULL) AS \"inactive_from: String\",\n                  (EXISTS (SELECT 1 FROM transactions t WHERE t.member_id = m.id)\n                   OR EXISTS (SELECT 1 FROM recurring_rules r WHERE r.member_id = m.id))\n                      AS \"has_rows!: bool\"\n           FROM members m ORDER BY m.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "role!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "deleted_at: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "sessions!: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "inactive_from: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "has_rows!: bool",
+        "ordinal": 6,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e961774a3a6aedc26c137bdb80a9f3079c3a67db8028f0044c8b4e316ff787cb"
+}

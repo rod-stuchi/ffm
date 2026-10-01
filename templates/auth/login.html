@@ -7,6 +7,12 @@
     <p>{{ t.login_subtitle() }}</p>
   </div>
   <div class="cb">
+    {%- if inactive %}
+    <div class="warnbox" role="alert">
+      <span class="g" aria-hidden="true">&#9888;</span>
+      <span><b>{{ t.login_error_inactive() }}</b></span>
+    </div>
+    {%- endif %}
     {%- if failed %}
     <div class="warnbox">
       <span class="g" aria-hidden="true">&#9888;</span>

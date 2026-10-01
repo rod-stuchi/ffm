@@ -106,6 +106,39 @@ pub async fn members(pool: &SqlitePool) -> sqlx::Result<Vec<Member>> {
         .collect())
 }
 
+/// The members with a pane in `period`: everyone not in the trash and not
+/// **inactive** in it. An inactive member's pane is hidden from the month
+/// they were turned off until the month they were turned back on — the
+/// months before still show them — and a hidden pane takes its money with
+/// it: the totals and the month picker's NETs sum these panes, so a row
+/// nobody can see counts in no total either. (`member_inactive`; the same
+/// test is the `NOT EXISTS` in `grep` and `unresolved_months` below.)
+pub async fn members_in(pool: &SqlitePool, period: Period) -> sqlx::Result<Vec<Member>> {
+    let p = period.to_string();
+    let rows = sqlx::query!(
+        r#"SELECT id, name, uuid, slug, role FROM members m
+           WHERE deleted_at IS NULL
+             AND NOT EXISTS (SELECT 1 FROM member_inactive i
+                             WHERE i.member_id = m.id AND i.from_period <= ?1
+                               AND (i.until_period IS NULL OR ?1 < i.until_period))
+           ORDER BY id"#,
+        p
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| Member {
+            id: r.id,
+            name: r.name,
+            uuid: r.uuid,
+            slug: r.slug,
+            is_admin: r.role == 0,
+        })
+        .collect())
+}
+
 /// One member's rows for one period, in stored manual order, as **this viewer**
 /// is allowed to see them.
 ///
@@ -593,6 +626,11 @@ pub async fn grep(pool: &SqlitePool, viewer: Viewer, term: &str) -> sqlx::Result
            WHERE transactions_fts MATCH ?1
              AND t.deleted_at IS NULL
              AND (t.visibility = 'household' OR t.member_id = ?2 OR ?3)
+             -- A month a member was inactive in has no pane for them, so a
+             -- hit there would land on nothing (`members_in`).
+             AND NOT EXISTS (SELECT 1 FROM member_inactive i
+                             WHERE i.member_id = t.member_id AND i.from_period <= t.period
+                               AND (i.until_period IS NULL OR t.period < i.until_period))
            ORDER BY t.period DESC, t.sort_key
            LIMIT 100"#,
         query,
@@ -675,6 +713,10 @@ pub async fn unresolved_months(
              AND t.due_date IS NOT NULL
              AND t.due_date < ?2
              AND (t.visibility = 'household' OR t.member_id = ?3 OR ?4)
+             -- Nor a month the member was inactive in: nothing there is shown.
+             AND NOT EXISTS (SELECT 1 FROM member_inactive i
+                             WHERE i.member_id = t.member_id AND i.from_period <= t.period
+                               AND (i.until_period IS NULL OR t.period < i.until_period))
            ORDER BY t.period"#,
         year_start,
         today_s,

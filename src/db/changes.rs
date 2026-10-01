@@ -107,13 +107,19 @@ pub enum FileAction {
     Delete,
 }
 
-/// The two account actions an admin can take against somebody else. They carry
-/// no fields — a password has no old value worth recording, and writing one
-/// down would be worse than useless.
+/// The account actions an admin can take against somebody else. The first two
+/// carry no fields — a password has no old value worth recording, and writing
+/// one down would be worse than useless.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MemberAction {
     PasswordReset,
     SessionsRevoked,
+    /// Turned off or back on — an `edit` with one `status` field,
+    /// `active` ↔ `inactive`, so the log reads which way it went.
+    Status,
+    /// Into the trash, and back. Only a member with no rows can go there.
+    Remove,
+    Restore,
 }
 
 impl TxAction {
@@ -159,6 +165,9 @@ impl MemberAction {
         match self {
             MemberAction::PasswordReset => "password_reset",
             MemberAction::SessionsRevoked => "sessions_revoked",
+            MemberAction::Status => "edit",
+            MemberAction::Remove => "delete",
+            MemberAction::Restore => "restore",
         }
     }
 }

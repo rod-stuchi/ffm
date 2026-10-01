@@ -418,31 +418,108 @@ pub async fn set_household(
 #[template(path = "partials/members_pane.html")]
 struct MembersPane {
     t: Catalog,
-    members: Vec<members::MemberRow>,
+    active: Vec<members::MemberRow>,
+    inactive: Vec<members::MemberRow>,
+    trashed: Vec<members::MemberRow>,
     invites: Vec<members::PendingInvite>,
-    /// Shown **once**, right after it is created. Never stored in a form and
-    /// never re-shown: the token itself is not in the database to re-show.
-    new_link: Option<String>,
+    /// The link just created or reset, lit and selected in its own row. It is
+    /// in the list like every other pending link now — the token is kept
+    /// while the link is pending (migration 0009), so nothing is "shown once".
+    /// Its id, `0` for none — ids start at 1.
+    fresh: i64,
     me: i64,
+    /// Which tab the pane opens on: the one the member acted on was in, so
+    /// turning somebody back on does not bounce you to Active.
+    tab: &'static str,
+    /// "Links stop working 5 days after they are created."
+    link_note: String,
 }
 
-async fn members_pane(st: &AppState, auth: &Auth, new_link: Option<String>) -> Response {
+async fn members_pane(
+    st: &AppState,
+    auth: &Auth,
+    tab: &'static str,
+    fresh_token: Option<&str>,
+) -> Response {
     let t = auth.catalog();
     if !auth.viewer.is_admin() {
         return crate::web::tx::say_only(t.settings_admin_only(), true);
     }
+    let all = members::list(&st.pool).await.unwrap_or_default();
+    let invites = members::pending_invites(&st.pool).await.unwrap_or_default();
+    let of = |s: members::Status| all.iter().filter(|m| m.status == s).cloned().collect();
     Html(MembersPane {
-        members: members::list(&st.pool).await.unwrap_or_default(),
-        invites: members::pending_invites(&st.pool).await.unwrap_or_default(),
-        new_link,
+        active: of(members::Status::Active),
+        inactive: of(members::Status::Inactive),
+        trashed: of(members::Status::Trashed),
+        fresh: fresh_token
+            .and_then(|tok| {
+                invites
+                    .iter()
+                    .find(|i| i.token.as_deref() == Some(tok))
+                    .map(|i| i.id)
+            })
+            .unwrap_or(0),
+        invites,
         me: auth.viewer.member_id,
+        tab,
+        link_note: t.members_link_days(dbauth::LINK_DAYS),
         t,
     })
     .into_response()
 }
 
 pub async fn members_view(State(st): State<AppState>, auth: Auth) -> Response {
-    members_pane(&st, &auth, None).await
+    members_pane(&st, &auth, "active", None).await
+}
+
+/// The pane again, with a line in the statusline — how every action here
+/// answers, refusals included. A refusal must still send the pane: these
+/// swap `#settingspane` whole, and an empty answer would remove it.
+async fn members_say(
+    st: &AppState,
+    auth: &Auth,
+    tab: &'static str,
+    message: &str,
+    bad: bool,
+) -> Response {
+    crate::web::tx::say(members_pane(st, auth, tab, None).await, message, bad)
+}
+
+fn this_month() -> crate::domain::period::Period {
+    crate::domain::period::Period::of(crate::clock::today())
+}
+
+fn tab_of(m: &members::MemberRow) -> &'static str {
+    match m.status {
+        members::Status::Active => "active",
+        members::Status::Inactive => "inactive",
+        members::Status::Trashed => "trash",
+    }
+}
+
+fn refusal(t: &Catalog, r: members::Refusal) -> String {
+    match r {
+        members::Refusal::Yourself => t.members_not_yourself().to_string(),
+        members::Refusal::LastAdmin => t.members_last_admin().to_string(),
+        members::Refusal::Unknown => t.members_unknown().to_string(),
+        members::Refusal::HasRows => t.members_has_rows().to_string(),
+    }
+}
+
+/// The guard every account action shares: an admin, not on themselves, not
+/// the household's last admin, a member who exists. The pane hides what does
+/// not apply; this is the rule.
+async fn target(st: &AppState, auth: &Auth, id: i64) -> Result<members::MemberRow, Response> {
+    let t = auth.catalog();
+    if !auth.viewer.is_admin() {
+        return Err(crate::web::tx::say_only(t.settings_admin_only(), true));
+    }
+    match members::may_change(&st.pool, auth.viewer.member_id, id).await {
+        Ok(Ok(m)) => Ok(m),
+        Ok(Err(r)) => Err(members_say(st, auth, "active", &refusal(&t, r), true).await),
+        Err(_) => Err(crate::web::tx::say_only(t.error_not_written(), true)),
+    }
 }
 
 #[derive(Deserialize)]
@@ -476,18 +553,23 @@ pub async fn invite(
     )
     .await
     {
-        Ok(token) => members_pane(&st, &auth, Some(format!("/invite/{token}"))).await,
+        Ok(token) => members_pane(&st, &auth, "active", Some(&token)).await,
         Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
     }
 }
 
 /// A reset for somebody who has forgotten theirs. Same link mechanism as an
 /// invite, pointed at a member who already exists — which is why it never
-/// renames them and never orphans their receipt-vault folder.
+/// renames them and never orphans their receipt-vault folder. Only for an
+/// active member: somebody turned off has no password to set.
 pub async fn reset(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
     let t = auth.catalog();
-    if !auth.viewer.is_admin() {
-        return crate::web::tx::say_only(t.settings_admin_only(), true);
+    let m = match target(&st, &auth, id).await {
+        Ok(m) => m,
+        Err(res) => return res,
+    };
+    if m.status != members::Status::Active {
+        return members_say(&st, &auth, tab_of(&m), t.members_unknown(), true).await;
     }
     match dbauth::issue_link(
         &st.pool,
@@ -498,37 +580,75 @@ pub async fn reset(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) 
     )
     .await
     {
-        Ok(token) => members_pane(&st, &auth, Some(format!("/invite/{token}"))).await,
+        Ok(token) => members_pane(&st, &auth, "active", Some(&token)).await,
         Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
     }
 }
 
 pub async fn sign_out(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
     let t = auth.catalog();
-    if !auth.viewer.is_admin() {
-        return crate::web::tx::say_only(t.settings_admin_only(), true);
-    }
-    let name = members::list(&st.pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .find(|m| m.id == id)
-        .map(|m| m.name)
-        .unwrap_or_default();
-
+    let m = match target(&st, &auth, id).await {
+        Ok(m) => m,
+        Err(res) => return res,
+    };
     let n = members::sign_out_everywhere(&st.pool, auth.viewer.member_id, id)
         .await
         .unwrap_or(0);
-    let mut res = members_pane(&st, &auth, None).await;
-    let msg = t.members_signed_out(&name, n as i64);
-    res.headers_mut().insert(
-        "HX-Trigger",
-        axum::http::HeaderValue::from_str(&crate::web::tx::ascii_json(
-            &serde_json::json!({ "ffm:say": { "message": msg, "bad": false } }).to_string(),
-        ))
-        .unwrap_or_else(|_| axum::http::HeaderValue::from_static("{}")),
-    );
-    res
+    let msg = t.members_signed_out(&m.name, n as i64);
+    members_say(&st, &auth, tab_of(&m), &msg, false).await
+}
+
+/// Turn a member off from this month on.
+pub async fn disable(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
+    let t = auth.catalog();
+    let m = match target(&st, &auth, id).await {
+        Ok(m) => m,
+        Err(res) => return res,
+    };
+    match members::disable(&st.pool, auth.viewer.member_id, id, this_month()).await {
+        Ok(_) => members_say(&st, &auth, "active", &t.members_disabled(&m.name), false).await,
+        Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
+    }
+}
+
+/// Turn them back on from this month on.
+pub async fn enable(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
+    let t = auth.catalog();
+    let m = match target(&st, &auth, id).await {
+        Ok(m) => m,
+        Err(res) => return res,
+    };
+    match members::enable(&st.pool, auth.viewer.member_id, id, this_month()).await {
+        Ok(_) => members_say(&st, &auth, "inactive", &t.members_enabled(&m.name), false).await,
+        Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
+    }
+}
+
+/// Into the trash — only a member with no rows.
+pub async fn trash(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
+    let t = auth.catalog();
+    let m = match target(&st, &auth, id).await {
+        Ok(m) => m,
+        Err(res) => return res,
+    };
+    match members::trash(&st.pool, auth.viewer.member_id, id).await {
+        Ok(Ok(())) => members_say(&st, &auth, tab_of(&m), &t.members_trashed(&m.name), false).await,
+        Ok(Err(r)) => members_say(&st, &auth, tab_of(&m), &refusal(&t, r), true).await,
+        Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
+    }
+}
+
+/// Out of the trash, as they were.
+pub async fn restore(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
+    let t = auth.catalog();
+    let m = match target(&st, &auth, id).await {
+        Ok(m) => m,
+        Err(res) => return res,
+    };
+    match members::restore(&st.pool, auth.viewer.member_id, id).await {
+        Ok(_) => members_say(&st, &auth, "trash", &t.members_restored(&m.name), false).await,
+        Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
+    }
 }
 
 pub async fn revoke(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
@@ -537,7 +657,7 @@ pub async fn revoke(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>)
         return crate::web::tx::say_only(t.settings_admin_only(), true);
     }
     let _ = members::revoke_invite(&st.pool, id).await;
-    members_pane(&st, &auth, None).await
+    members_pane(&st, &auth, "active", None).await
 }
 
 /// Language is per member and changes the words only — the same write the

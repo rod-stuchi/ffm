@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT (SELECT count(*) FROM transactions WHERE member_id = ?1)\n                + (SELECT count(*) FROM recurring_rules WHERE member_id = ?1) AS \"n!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "n!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "af54bf02a037e61cbc9d01772b16d4459b022dbef9ab5b593a03094a3910e1ae"
+}

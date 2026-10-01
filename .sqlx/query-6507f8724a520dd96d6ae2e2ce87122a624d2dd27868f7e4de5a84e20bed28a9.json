@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT member_id AS \"member_id!: i64\", from_period AS \"from_period!: String\",\n                  until_period AS \"until_period: String\"\n           FROM member_inactive",
+  "describe": {
+    "columns": [
+      {
+        "name": "member_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "from_period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "until_period: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "6507f8724a520dd96d6ae2e2ce87122a624d2dd27868f7e4de5a84e20bed28a9"
+}

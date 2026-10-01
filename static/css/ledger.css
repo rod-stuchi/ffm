@@ -1215,6 +1215,79 @@
   min-width: 0;
 }
 
+/* --- :members — three tabs ---------------------------------------------- */
+
+/* The tab strip reuses the change log's chips: the same "narrow what you are
+ * looking at" control, not a new widget. */
+.memberspane .mtabs {
+  padding: 9px 12px 0;
+}
+
+.memberspane .mtabs .chip {
+  cursor: pointer;
+  background: transparent;
+}
+
+/* Each tab is the settings pane's own wrapping grid, one level down: it spans
+ * the pane's row and flows its groups right the same way. */
+.hsplitmount .settingspane .rp-body > .mtab {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+  align-content: start;
+}
+
+.mtab > .sect,
+.mtab > .mwide {
+  grid-column: 1 / -1;
+}
+
+.mtab > .hint {
+  margin: 0;
+}
+
+.mrow .mbtns {
+  display: flex;
+  gap: 6px;
+  margin-left: 9px;
+}
+
+/* A pending link: who and until when, then the link itself — a full URL is
+ * wide, so the row takes the whole width rather than a 320px column. */
+.prow {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.prow .phead {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.prow .phead .dim {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.prow .invitelink .i {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* The link just created or reset — "you are here", so the accent. */
+.prow.is-fresh {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 /* --- the change log pane ------------------------------------------------- */
 
 .chips {

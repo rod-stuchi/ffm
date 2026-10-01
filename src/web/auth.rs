@@ -222,6 +222,10 @@ struct LoginPage {
     t: Catalog,
     name: String,
     failed: bool,
+    /// The right password for a member who is turned off. Said plainly —
+    /// only somebody who knows the password learns it, and their next step
+    /// is not to try again but to ask an admin.
+    inactive: bool,
 }
 
 pub async fn login_page(State(st): State<AppState>, jar: CookieJar, parts: Parts) -> Response {
@@ -247,6 +251,7 @@ pub async fn login_page(State(st): State<AppState>, jar: CookieJar, parts: Parts
         t,
         name: String::new(),
         failed: false,
+        inactive: false,
     })
     .into_response()
 }
@@ -264,6 +269,21 @@ pub async fn login(
     Form(form): Form<LoginForm>,
 ) -> Response {
     match auth::authenticate(&st.pool, &form.name, &form.password).await {
+        Ok(Some(member_id))
+            if crate::db::members::is_inactive(&st.pool, member_id)
+                .await
+                .unwrap_or(false) =>
+        {
+            let (chrome, t) = chrome(&st, &jar, &parts, "sign in", "/login").await;
+            Html(LoginPage {
+                chrome,
+                t,
+                name: form.name,
+                failed: false,
+                inactive: true,
+            })
+            .into_response()
+        }
         Ok(Some(member_id)) => {
             let label = auth::device_label(session::user_agent(&parts));
             let Ok(mut tx) = st.pool.begin().await else {
@@ -311,6 +331,7 @@ async fn failed_login(st: &AppState, jar: &CookieJar, parts: &Parts, name: Strin
         t,
         name,
         failed: true,
+        inactive: false,
     })
     .into_response()
 }

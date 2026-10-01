@@ -446,8 +446,10 @@ pub async fn add(State(st): State<AppState>, auth: Auth, Form(form): Form<AddFor
     let kind = TxKind::parse(&form.kind).unwrap_or(TxKind::Out);
 
     // Attribution is a column, and it is checked: a member id from a form is
-    // input, so it has to name somebody who exists in this household.
-    let Ok(members) = ledger::members(&st.pool).await else {
+    // input, so it has to name somebody who exists in this household — and
+    // who has a pane in this month. A member turned off has none from the
+    // month they were turned off, and a row there would count in no total.
+    let Ok(members) = ledger::members_in(&st.pool, period).await else {
         return say(
             error_row(&t, t.error_not_written()),
             t.error_not_written(),

@@ -220,7 +220,8 @@ async fn a_pending_link_can_be_revoked_and_then_does_not_work() {
     let pending = members::pending_invites(&pool).await.unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].label.as_deref(), Some("for Natália"));
-    assert!(!pending[0].expired);
+    // Pending links carry their token, so the pane can show them again.
+    assert_eq!(pending[0].token.as_deref(), Some(token.as_str()));
 
     assert!(members::revoke_invite(&pool, pending[0].id).await.unwrap());
     assert!(members::pending_invites(&pool).await.unwrap().is_empty());

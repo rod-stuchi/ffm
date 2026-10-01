@@ -66,6 +66,26 @@ pub async fn reconcile(pool: &SqlitePool, today: NaiveDate) -> sqlx::Result<Repo
     .fetch_all(pool)
     .await?;
 
+    // The stretches each member was inactive in. A month inside one has no
+    // pane for that member and counts in no total, so a bill materialized
+    // there would be a row nobody sees — and turning them back on must not
+    // backfill the months they were away, which is exactly what reconciling
+    // from `start_date` would otherwise do.
+    let inactive = sqlx::query!(
+        r#"SELECT member_id AS "member_id!: i64", from_period AS "from_period!: String",
+                  until_period AS "until_period: String"
+           FROM member_inactive"#
+    )
+    .fetch_all(pool)
+    .await?;
+    let away = |member: i64, p: &str| {
+        inactive.iter().any(|i| {
+            i.member_id == member
+                && i.from_period.as_str() <= p
+                && i.until_period.as_deref().is_none_or(|u| p < u)
+        })
+    };
+
     let current = Period::of(today);
     let mut report = Report {
         rules: rules.len(),
@@ -131,6 +151,15 @@ pub async fn reconcile(pool: &SqlitePool, today: NaiveDate) -> sqlx::Result<Repo
             }
 
             let period_s = period.to_string();
+
+            // A month the member was inactive in: skipped like a month the
+            // rule does not run in, and for the same reason it is not a
+            // payment, so it does not count toward the installments either.
+            if away(r.member_id, &period_s) {
+                period = period.succ_n(cadence);
+                continue;
+            }
+
             // Soft-deleted occurrences count as PRESENT. This is where two
             // decided rules collide: deletes are soft, so a `dd`'d occurrence
             // is still a row. Looking only for live rows would resurrect every

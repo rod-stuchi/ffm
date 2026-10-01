@@ -109,6 +109,10 @@ pub fn router(state: AppState) -> Router {
         .route("/members/invite", post(settings::invite))
         .route("/members/{id}/reset", post(settings::reset))
         .route("/members/{id}/signout", post(settings::sign_out))
+        .route("/members/{id}/disable", post(settings::disable))
+        .route("/members/{id}/enable", post(settings::enable))
+        .route("/members/{id}/trash", post(settings::trash))
+        .route("/members/{id}/restore", post(settings::restore))
         .route("/members/invites/{id}/revoke", post(settings::revoke))
         .layer(axum::middleware::from_fn(csrf::guard));
 

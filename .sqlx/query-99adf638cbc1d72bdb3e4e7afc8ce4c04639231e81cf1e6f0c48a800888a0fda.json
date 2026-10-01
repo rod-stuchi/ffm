@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE member_inactive SET until_period = max(from_period, ?2)\n           WHERE member_id = ?1 AND until_period IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "99adf638cbc1d72bdb3e4e7afc8ce4c04639231e81cf1e6f0c48a800888a0fda"
+}

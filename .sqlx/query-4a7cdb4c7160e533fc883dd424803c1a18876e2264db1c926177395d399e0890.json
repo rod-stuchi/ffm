@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                  t.title AS \"title!: String\", t.kind AS \"kind!: String\",\n                  t.amount_cents AS \"amount_cents: i64\",\n                  t.member_id AS \"member_id!: i64\",\n                  m.name AS \"member!: String\"\n           FROM transactions_fts f\n           JOIN transactions t ON t.id = f.rowid\n           JOIN members m ON m.id = t.member_id\n           WHERE transactions_fts MATCH ?1\n             AND t.deleted_at IS NULL\n             AND (t.visibility = 'household' OR t.member_id = ?2 OR ?3)\n             -- A month a member was inactive in has no pane for them, so a\n             -- hit there would land on nothing (`members_in`).\n             AND NOT EXISTS (SELECT 1 FROM member_inactive i\n                             WHERE i.member_id = t.member_id AND i.from_period <= t.period\n                               AND (i.until_period IS NULL OR t.period < i.until_period))\n           ORDER BY t.period DESC, t.sort_key\n           LIMIT 100",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member!: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "4a7cdb4c7160e533fc883dd424803c1a18876e2264db1c926177395d399e0890"
+}

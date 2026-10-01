@@ -186,7 +186,10 @@ async fn session_ctx(st: &AppState, auth: &Auth) -> RowCtx {
 /// inside the pane query, so neither can count a row the ledger hides.
 async fn member_panes(st: &AppState, auth: &Auth, period: Period, ctx: RowCtx) -> Vec<Pane> {
     let mut out = Vec::new();
-    for m in ledger::members(&st.pool).await.unwrap_or_default() {
+    for m in ledger::members_in(&st.pool, period)
+        .await
+        .unwrap_or_default()
+    {
         if let Ok(pane) = ledger::pane_with_vault(
             &st.pool,
             &m,
@@ -413,7 +416,9 @@ pub async fn ledger(
     };
     let t = Catalog::new(lang);
 
-    let members = ledger::members(&st.pool).await.unwrap_or_default();
+    let members = ledger::members_in(&st.pool, period)
+        .await
+        .unwrap_or_default();
     let mut panes = Vec::new();
     let mut ins = crate::domain::money::Cents::ZERO;
     let mut outs = crate::domain::money::Cents::ZERO;

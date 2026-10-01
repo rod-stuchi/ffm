@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT s.id AS \"id!: String\",\n                  m.id AS \"member_id!: i64\",\n                  m.name AS \"name!: String\",\n                  m.uuid AS \"uuid!: String\",\n                  m.slug AS \"slug!: String\",\n                  m.role AS \"role!: i64\",\n                  s.preview AS \"preview!: i64\"\n           FROM sessions s\n           JOIN members m ON m.id = s.member_id\n           WHERE s.id = ?1 AND m.deleted_at IS NULL",
+  "query": "SELECT s.id AS \"id!: String\",\n                  m.id AS \"member_id!: i64\",\n                  m.name AS \"name!: String\",\n                  m.uuid AS \"uuid!: String\",\n                  m.slug AS \"slug!: String\",\n                  m.role AS \"role!: i64\",\n                  s.preview AS \"preview!: i64\"\n           FROM sessions s\n           JOIN members m ON m.id = s.member_id\n           WHERE s.id = ?1 AND m.deleted_at IS NULL\n             -- Turning a member off deletes their sessions too; this is the\n             -- belt to that brace, so no session outlives the decision.\n             AND NOT EXISTS (SELECT 1 FROM member_inactive i\n                             WHERE i.member_id = m.id AND i.until_period IS NULL)",
   "describe": {
     "columns": [
       {
@@ -52,5 +52,5 @@
       false
     ]
   },
-  "hash": "f68ef34bdefee415fed844eabb048f22ce01e0c290f910abda181ff0559b44f4"
+  "hash": "39e1628590998fea6b61a50ae514fc22cfdb3bd0dac3282c5f5eedad2133ec6c"
 }

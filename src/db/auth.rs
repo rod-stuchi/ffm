@@ -33,7 +33,9 @@ pub const MIN_PASSWORD: usize = 8;
 
 /// How long an invite or reset link stays good. It is handed over in person or
 /// over a chat app, so the number is short and named rather than configurable.
-pub const LINK_DAYS: i64 = 7;
+/// Past it the link is revoked on its own (`members::pending_invites`) and
+/// leaves the list — `:members` says so beside the list.
+pub const LINK_DAYS: i64 = 5;
 
 fn now() -> String {
     crate::clock::stamp()
@@ -175,7 +177,11 @@ pub async fn session(pool: &SqlitePool, id: &str) -> sqlx::Result<Option<Session
                   s.preview AS "preview!: i64"
            FROM sessions s
            JOIN members m ON m.id = s.member_id
-           WHERE s.id = ?1 AND m.deleted_at IS NULL"#,
+           WHERE s.id = ?1 AND m.deleted_at IS NULL
+             -- Turning a member off deletes their sessions too; this is the
+             -- belt to that brace, so no session outlives the decision.
+             AND NOT EXISTS (SELECT 1 FROM member_inactive i
+                             WHERE i.member_id = m.id AND i.until_period IS NULL)"#,
         id
     )
     .fetch_optional(pool)
@@ -249,6 +255,11 @@ pub async fn revoke_all_sessions(
 /// Returns `None` for both a wrong name and a wrong password, deliberately —
 /// not as security theater (this document already declines rate limiting) but
 /// because both lead to the same next action, and the copy says what that is.
+///
+/// An **inactive** member with the right password still authenticates here;
+/// the login handler asks [`crate::db::members::is_inactive`] and says so
+/// instead of starting a session. Only somebody who knows the password learns
+/// the account is off, and their next step really is different: ask an admin.
 pub async fn authenticate(
     pool: &SqlitePool,
     name: &str,
@@ -472,7 +483,7 @@ pub async fn issue_link(
     // click has to retire the first rather than leaving two working links.
     if let Some(mid) = member_id {
         sqlx::query!(
-            r#"UPDATE member_invites SET revoked_at = ?2
+            r#"UPDATE member_invites SET revoked_at = ?2, token = NULL
                WHERE member_id = ?1 AND accepted_at IS NULL AND revoked_at IS NULL"#,
             mid,
             created_s,
@@ -482,9 +493,13 @@ pub async fn issue_link(
     }
 
     sqlx::query!(
+        // The raw token too, while the link is pending, so `:members` can show
+        // and copy it again (migration 0009). `token_hash` is still what a
+        // link is looked up by; the token is wiped on accept, revoke or
+        // expiry.
         r#"INSERT INTO member_invites
-               (token_hash, member_id, label, role, created_by, created_at, expires_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
+               (token_hash, member_id, label, role, created_by, created_at, expires_at, token)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"#,
         hash,
         member_id,
         label,
@@ -492,6 +507,7 @@ pub async fn issue_link(
         issuer,
         created_s,
         expires_s,
+        token,
     )
     .execute(&mut *tx)
     .await?;
@@ -672,7 +688,7 @@ pub async fn accept_invite(
         .map_err(db)?;
 
     sqlx::query!(
-        r#"UPDATE member_invites SET accepted_at = ?2, accepted_member_id = ?3
+        r#"UPDATE member_invites SET accepted_at = ?2, accepted_member_id = ?3, token = NULL
            WHERE id = ?1"#,
         invite.id,
         at,
@@ -705,11 +721,18 @@ pub async fn accept_reset(
     let mut tx = pool.begin().await.map_err(db)?;
 
     let link = sqlx::query!(
-        r#"SELECT id AS "id!: i64", member_id AS "member_id!: i64",
-                  expires_at AS "expires_at!: String"
-           FROM member_invites
-           WHERE token_hash = ?1 AND member_id IS NOT NULL
-             AND accepted_at IS NULL AND revoked_at IS NULL"#,
+        // The member must still be one who can sign in: turning somebody off
+        // or trashing them revokes their open reset, and this is the re-check
+        // in case a link raced it.
+        r#"SELECT i.id AS "id!: i64", i.member_id AS "member_id!: i64",
+                  i.expires_at AS "expires_at!: String"
+           FROM member_invites i
+           JOIN members m ON m.id = i.member_id
+           WHERE i.token_hash = ?1 AND i.member_id IS NOT NULL
+             AND i.accepted_at IS NULL AND i.revoked_at IS NULL
+             AND m.deleted_at IS NULL
+             AND NOT EXISTS (SELECT 1 FROM member_inactive x
+                             WHERE x.member_id = m.id AND x.until_period IS NULL)"#,
         token_hash
     )
     .fetch_optional(&mut *tx)
@@ -731,7 +754,7 @@ pub async fn accept_reset(
     .map_err(db)?;
 
     sqlx::query!(
-        r#"UPDATE member_invites SET accepted_at = ?2, accepted_member_id = ?3
+        r#"UPDATE member_invites SET accepted_at = ?2, accepted_member_id = ?3, token = NULL
            WHERE id = ?1"#,
         link.id,
         at,

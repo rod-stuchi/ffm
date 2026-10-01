@@ -1258,6 +1258,21 @@ that will otherwise be re-proposed.
   it sets their **own** name and password. An admin never types somebody else's
   password, and there is no initial password to hand over. First run is `/setup`,
   which exists only while `members` is empty.
+- **A member can be turned off, or — with no rows — trashed; never erased.**
+  Turned off: cannot sign in, and their pane and its money are hidden **from
+  the month they were turned off** onward, while earlier months still show
+  them. It is a stretch in `member_inactive`, closed (not deleted) when they are
+  turned back on, so the months they were away stay hidden and the
+  materializer never backfills them. The trash (`members.deleted_at`) takes
+  only a member with no transactions and no rules — it is for a mistake — and
+  keeps their name taken so Restore is safe. Every account action refuses
+  yourself, the last admin who can sign in, and a member who is not there;
+  see `design/spec.md`'s Turning a member off.
+- **A pending link keeps its raw token, and only while pending** — the
+  reversal of "the token is never stored", so `:members` shows every pending
+  link's full URL (`location.origin` + path) with Copy, instead of showing a
+  new one once. Wiped on accept, revoke or expiry; links last 5 days and an
+  expired one is revoked on its own.
 - **A forgotten password is recovered by an admin-issued reset link, not by a
   fresh invite.** `member_invites` carries a nullable `member_id`: NULL means
   the link creates a member, set means it sets `password_hash` on one that

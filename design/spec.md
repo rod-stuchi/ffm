@@ -1341,15 +1341,25 @@ attribute transactions to them in advance. If that turns out to matter — a
 child's allowance being tracked before they ever log in — it is a small additive
 change later, not a reason to weaken the schema now.)*
 
-The token is 32 random bytes, base64url in the URL, **SHA-256 in the database;
-the token itself is never stored.** Argon2 is deliberately *not* used: there is
-nothing to brute-force in 256 bits of randomness, and a slow hash on every
-invite-page GET is a self-inflicted denial of service. Recorded here because the
-obvious "fix" is to make it match how passwords are hashed.
+The token is 32 random bytes, base64url in the URL, and **SHA-256 in the
+database** is what a link is looked up by. Argon2 is deliberately *not* used:
+there is nothing to brute-force in 256 bits of randomness, and a slow hash on
+every invite-page GET is a self-inflicted denial of service. Recorded here
+because the obvious "fix" is to make it match how passwords are hashed.
 
-Links **expire after 7 days** by default. It is a LAN app and the link is handed
-over in person or over a chat app; the number is named so the page has something
-to render.
+**The raw token is also kept — while the link is pending, and only then**
+(`member_invites.token`, migration 0009). It is set to NULL the moment the link
+is accepted, revoked or expires. This reverses "the token itself is never
+stored", which is what made a link *shown once*: an admin who closed the pane
+before copying it could only revoke it and issue another. Keeping it gives
+nothing away — whoever can read `ffm.db` can already add a member directly — and
+it is what lets every pending link be shown and copied again.
+
+Links **expire after 5 days** (`LINK_DAYS`). It is a LAN app and the link is
+handed over in person or over a chat app; the number is named so the page has
+something to render. **An expired link is revoked on its own** — `revoked_at`
+set to the moment it expired, its token wiped — and leaves the pending list: a
+link that no longer works is not pending anything.
 
 The accept form asks for name, password, confirm, language and color scheme —
 the same field grid as `/setup`'s second section, which is the point: one form,
@@ -1371,14 +1381,30 @@ Stuchi"*) and below it the expiry, in mono.
   everyone signs in, so they have to be unique."* Everything typed is preserved
   except the passwords.
 
-**`:members` is where an admin issues one** — a vsplit pane, not a modal,
-reusing the same 420px column, `esc` header and footer status line the rule pane
-and the change log already use. It lists members with their role, lists pending
-invites with their link and expiry, and has a create form at its foot: an
-optional *for whom* label, a role, and a button. The new link is shown **once**,
-in a read-only mono input with a Copy button, with a note saying to create a new
-one if it is lost. `:invite [label]` is the shorthand that creates one and opens
-the pane focused on it.
+**`:members` is where an admin issues one** — the full-width split at the foot
+of the ledger, like `:household`. It has three tabs, **Active · Inactive ·
+Trash**, each with its count; which one shows is visual state, and the server
+opens on the one the member acted on was in.
+
+- **Active** lists the members with their role and signed-in devices, a
+  create form (an optional *for whom* label, a role, and a button), and the
+  **pending links**. Each pending link is its own row: who it is for, when it
+  expires, and the **full URL** in a read-only mono input with **Copy** and
+  **Revoke**. A link just created or reset lands in its own row, lit with the
+  accent and selected — there is no separate "shown once" box any more.
+  - **The URL is the address the admin is looking at.** The page renders the
+    path and the field prefixes `location.origin`: the domain and port the
+    admin reached this server by, right behind a proxy or over https too,
+    with no Host-header guessing.
+  - **Copy** uses `navigator.clipboard` where it exists, and falls back to
+    select-and-copy: a plain-http LAN address is not a secure context, so the
+    clipboard API is simply absent there.
+  - *"Links stop working 5 days after they are created"* sits beside the list.
+- **Inactive** — members turned off: *inactive since 09/2026*, and **Turn
+  back on**.
+- **Trash** — members removed, each with **Restore**.
+
+`:invite` opens the pane on the create form.
 
 A `.notebox` beside the form states the principle so it is visible at the moment
 it applies: *"You never type anyone else's password. They set it on the link,
@@ -1386,6 +1412,48 @@ along with their name."*
 
 Like every other admin-only control, the create form **disappears** under
 preview-as-non-admin rather than sitting there disabled.
+
+### Turning a member off, and the trash
+
+Somebody leaves the household — a kid moves out — and their history is still
+the household's. Somebody was added by mistake. Those are two different things,
+and they get two different gestures.
+
+**Turn off** (the Inactive tab):
+
+- **They cannot sign in.** Every session and any open reset link go at once;
+  `/login` with the right password says *"This account is turned off. Ask an
+  admin to turn it back on."* — only somebody who knows the password learns it,
+  and their next step is not to retry. A wrong password gets the usual message.
+- **Their pane is hidden from the month they were turned off onward**, and in
+  those months **their rows count in no total** — the pane query is what the
+  totals and the month picker's NETs sum, so a hidden pane takes its money with
+  it. **The months before still show them.** `:grep` finds nothing there,
+  the unresolved badge ignores it, and nothing can be added to it.
+- **It is a stretch, not a flag** (`member_inactive`: from the month turned
+  off, until the month turned back on). Turning them back on in November keeps
+  September and October hidden, and **the materializer never backfills** a
+  bill into a month inside a stretch — reconciling from `start_date` would
+  otherwise do exactly that. Turned back on in the same month, the stretch is
+  empty and hides nothing.
+- Logged as an `edit` on `entity = member` with one `status` field,
+  `active` → `inactive` and back.
+
+**Move to trash**:
+
+- **Only a member with no rows at all** — no transaction and no rule, deleted
+  or not. It is for a mistake; a member with history is turned off instead, and
+  the pane offers only that. The server refuses it either way.
+- Sets `members.deleted_at`, which every sign-in and pane query already
+  filtered on. **Their name stays taken** while they are there
+  (`members.name` is UNIQUE), which is what makes **Restore** safe. Logged as
+  `delete` / `restore` on `entity = member`.
+
+**Guards**, checked on the server for every account action — reset and sign
+out included, which trusted the template alone before: **not on yourself**,
+**not the household's last admin who can still sign in**, and **a member who
+exists**. The pane leaves an action out where it does not apply, rather than
+disabling it.
 
 ### Forgotten passwords — an admin-issued reset link
 
@@ -1442,9 +1510,8 @@ refuses to let anyone do silently.
 #### Where the admin does it
 
 In `:members`, expanding a member reveals **Reset password** beside **Sign out
-everywhere**. The new link is shown **once**, in the same read-only mono input
-with a Copy button that a pending invite already uses — no new widget, and the
-same "create a new one if it's lost" note. `:reset <name>` is not bound; the
+everywhere**. The new link lands in the pending list like an invite, lit and
+selected, with the same full URL and Copy button — no new widget. `:reset <name>` is not bound; the
 row action is the only entry point, so the capability is visible to whoever
 holds it rather than known only to whoever remembers a command.
 

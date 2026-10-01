@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO member_inactive (member_id, from_period, created_by, created_at)\n           SELECT ?1, ?2, ?3, ?4\n           WHERE NOT EXISTS (SELECT 1 FROM member_inactive\n                             WHERE member_id = ?1 AND until_period IS NULL)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "112dd88e74b84691626c8a98e6ceee798b2fb12ebcd97a1500cbbd4960822780"
+}

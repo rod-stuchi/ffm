@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT count(*) AS \"n!: i64\" FROM members m\n               WHERE m.role = 0 AND m.deleted_at IS NULL AND m.id <> ?1\n                 AND NOT EXISTS (SELECT 1 FROM member_inactive i\n                                 WHERE i.member_id = m.id AND i.until_period IS NULL)",
+  "describe": {
+    "columns": [
+      {
+        "name": "n!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6b5e0d33d1d29f932da8f52c920a7e63519c047e8994e14b439555865d43e2e4"
+}

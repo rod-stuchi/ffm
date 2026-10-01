@@ -1,7 +1,24 @@
 {#- :members — admin only. The one place an admin can affect somebody else's
-    ability to sign in, which is why both actions here are recorded in the
-    append-only log. -#}
-<aside class="rulepane settingspane" id="settingspane" x-data="{ open: null }">
+    ability to sign in, which is why every action here is recorded in the
+    append-only log.
+
+    Three tabs — Active, Inactive, Trash. Which one is showing is visual state
+    (Alpine); the server picks the starting one, the tab the member acted on
+    was in, so turning somebody back on does not bounce you to Active. The
+    methods are `m`-prefixed because this scope chains onto the shell's. -#}
+<aside class="rulepane settingspane memberspane" id="settingspane"
+  x-data="{
+    open: null, mtab: '{{ tab }}', copied: null,
+    async mcopy(id, el) {
+      // `navigator.clipboard` exists only in a secure context, and a plain
+      // http LAN address is not one — so the old select-and-copy is the
+      // fallback, not dead code.
+      try { await navigator.clipboard.writeText(el.value); }
+      catch (_) { el.focus(); el.select(); document.execCommand('copy'); }
+      this.copied = id;
+      setTimeout(() => { if (this.copied === id) this.copied = null; }, 1500);
+    }
+  }">
   <header class="rp-head">
     <b>{{ t.settings_members() }}</b>
     {#- Closes through the shell, not `$root.remove()`. Three of these panes
@@ -12,88 +29,164 @@
     <button class="btn rp-close" type="button" @click="closeSplit()">{{ t.pane_close() }}</button>
   </header>
 
-  <div class="rp-body">
-    {%- if let Some(link) = new_link %}
-    {#- Shown ONCE. The token is not in the database to re-show: only its
-        SHA-256 is, which is why "create a new one if it's lost" is the whole
-        recovery story. -#}
-    <div class="notebox" style="margin-top:0">
-      <div class="invitelink">
-        <input class="i" readonly value="{{ link }}" x-ref="link"
-               onfocus="this.select()">
-        <button class="btn" type="button"
-                @click="$refs.link.select(); document.execCommand('copy')">{{ t.members_copy() }}</button>
-      </div>
-      <span class="hint">{{ t.members_link_once() }}</span>
-    </div>
-    {%- endif %}
+  <div class="chips mtabs" role="tablist">
+    <button class="chip" type="button" role="tab" :class="{ 'is-on': mtab === 'active' }"
+            @click="mtab = 'active'">{{ t.members_tab_active() }} · {{ active.len() }}</button>
+    <button class="chip" type="button" role="tab" :class="{ 'is-on': mtab === 'inactive' }"
+            @click="mtab = 'inactive'">{{ t.members_tab_inactive() }} · {{ inactive.len() }}</button>
+    <button class="chip" type="button" role="tab" :class="{ 'is-on': mtab === 'trash' }"
+            @click="mtab = 'trash'">{{ t.members_tab_trash() }} · {{ trashed.len() }}</button>
+  </div>
 
-    <ul class="memberlist">
-      {%- for m in members %}
-      <li>
-        <div class="mrow" @click="open = open === {{ m.id }} ? null : {{ m.id }}">
+  <div class="rp-body">
+
+    {#- ---- Active ---------------------------------------------------- -#}
+    <div class="mtab" x-show="mtab === 'active'">
+      <ul class="memberlist">
+        {%- for m in active %}
+        <li>
+          <div class="mrow" @click="open = open === {{ m.id }} ? null : {{ m.id }}">
+            <b>{{ m.name }}</b>
+            <span class="role">{% if m.is_admin %}{{ t.members_role_admin() }}{% else %}{{ t.members_role_member() }}{% endif %}</span>
+            <span class="dim">
+              {%- if m.sessions == 0 %}{{ t.members_no_sessions() }}{% else %}{{ m.devices|join(" · ") }}{% endif -%}
+            </span>
+          </div>
+          {#- Expanding a member reveals the account actions. They are here and
+              nowhere else — no `:reset <name>` command — so the capability is
+              visible to whoever holds it rather than known only to whoever
+              remembers a command. An action that does not apply is ABSENT,
+              not disabled; the server refuses it either way. -#}
+          <div class="mactions" x-show="open === {{ m.id }}" x-cloak>
+            {%- if m.id != me %}
+            <button class="btn" type="button"
+                    hx-post="/members/{{ m.id }}/reset"
+                    hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_reset() }}</button>
+            <button class="btn" type="button"
+                    hx-post="/members/{{ m.id }}/signout"
+                    hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_signout() }}</button>
+            <button class="btn" type="button"
+                    hx-post="/members/{{ m.id }}/disable"
+                    hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_disable() }}</button>
+            {%- if !m.has_rows %}
+            <button class="btn" type="button"
+                    hx-post="/members/{{ m.id }}/trash"
+                    hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_to_trash() }}</button>
+            {%- endif %}
+            <span class="hint">{{ t.members_reset_note(m.name.as_str()) }}</span>
+            <span class="hint">{{ t.members_disable_note(m.name.as_str()) }}</span>
+            {%- else %}
+            {#- Not offered against yourself: a reset revokes every session, and
+                the first one it would revoke is the one issuing it. Changing a
+                password you still know belongs in :profile, and recovering one
+                you have lost is `ffm reset-link` at the console — which is the
+                whole reason that command exists. -#}
+            <span class="hint">{{ t.members_self_note() }}</span>
+            {%- endif %}
+          </div>
+        </li>
+        {%- endfor %}
+      </ul>
+
+      <div>
+        <form hx-post="/members/invite" hx-target="#settingspane" hx-swap="outerHTML">
+          <label class="f">
+            <span class="k">{{ t.members_invite_label() }}</span>
+            <input class="i" name="label" autocomplete="off">
+          </label>
+          <div class="radios" style="margin-top:9px">
+            <label><input type="radio" name="role" value="1" checked> {{ t.members_role_member() }}</label>
+            <label><input type="radio" name="role" value="0"> {{ t.members_role_admin() }}</label>
+          </div>
+          <button class="btn pri wide" type="submit">{{ t.members_invite_create() }}</button>
+        </form>
+        {#- Stated where it applies, rather than in documentation nobody reads
+            at the moment they need it. -#}
+        <div class="notebox">{{ t.members_invite_note() }}</div>
+      </div>
+
+      <div class="sect">{{ t.members_pending() }}</div>
+      {#- How long a link lasts, beside the list it is about. Past it the link
+          is revoked on its own and leaves the list. -#}
+      <p class="hint mwide">{{ link_note }}</p>
+      {%- if !invites.is_empty() %}
+      <ul class="memberlist mwide">
+        {%- for i in invites %}
+        <li class="prow{% if i.id == fresh %} is-fresh{% endif %}">
+          <div class="phead">
+            <b>{% if let Some(who) = i.for_member %}{{ who }}{% else if let Some(l) = i.label %}{{ l }}{% else %}—{% endif %}</b>
+            <span class="dim">{{ t.members_expires(i.expires.as_str()) }}</span>
+          </div>
+          <div class="invitelink">
+            {%- if let Some(tok) = i.token %}
+            {#- The page renders the path; the field prefixes the address the
+                admin is looking at — the domain and port they reached this
+                server by, right behind a proxy or over https too. -#}
+            <input class="i" readonly data-path="/invite/{{ tok }}"
+                   x-init="$el.value = location.origin + $el.dataset.path{% if i.id == fresh %}; $nextTick(() => { $el.focus(); $el.select() }){% endif %}"
+                   onfocus="this.select()">
+            <button class="btn" type="button" @click="mcopy({{ i.id }}, $el.previousElementSibling)">
+              <span x-show="copied !== {{ i.id }}">{{ t.members_copy() }}</span>
+              <span x-show="copied === {{ i.id }}" x-cloak>{{ t.members_copied() }}</span>
+            </button>
+            {%- endif %}
+            <button class="btn" type="button"
+                    hx-post="/members/invites/{{ i.id }}/revoke"
+                    hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_revoke() }}</button>
+          </div>
+        </li>
+        {%- endfor %}
+      </ul>
+      {%- endif %}
+    </div>
+
+    {#- ---- Inactive -------------------------------------------------- -#}
+    <div class="mtab" x-show="mtab === 'inactive'" x-cloak>
+      {%- if inactive.is_empty() %}
+      <p class="hint mwide">{{ t.members_inactive_none() }}</p>
+      {%- else %}
+      <ul class="memberlist">
+        {%- for m in inactive %}
+        <li class="mrow">
           <b>{{ m.name }}</b>
           <span class="role">{% if m.is_admin %}{{ t.members_role_admin() }}{% else %}{{ t.members_role_member() }}{% endif %}</span>
-          <span class="dim">
-            {%- if m.sessions == 0 %}{{ t.members_no_sessions() }}{% else %}{{ m.devices|join(" · ") }}{% endif -%}
+          <span class="dim">{% if let Some(since) = m.inactive_since %}{{ t.members_inactive_since(since.as_str()) }}{% endif %}</span>
+          <span class="mbtns">
+            <button class="btn" type="button"
+                    hx-post="/members/{{ m.id }}/enable"
+                    hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_enable() }}</button>
+            {%- if !m.has_rows %}
+            <button class="btn" type="button"
+                    hx-post="/members/{{ m.id }}/trash"
+                    hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_to_trash() }}</button>
+            {%- endif %}
           </span>
-        </div>
-        {#- Expanding a member reveals the two account actions. They are here
-            and nowhere else — no `:reset <name>` command — so the capability
-            is visible to whoever holds it rather than known only to whoever
-            remembers a command. -#}
-        <div class="mactions" x-show="open === {{ m.id }}" x-cloak>
-          {%- if m.id != me %}
-          <button class="btn" type="button"
-                  hx-post="/members/{{ m.id }}/reset"
-                  hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_reset() }}</button>
-          <button class="btn" type="button"
-                  hx-post="/members/{{ m.id }}/signout"
-                  hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_signout() }}</button>
-          <span class="hint">{{ t.members_reset_note(m.name.as_str()) }}</span>
-          {%- else %}
-          {#- Not offered against yourself: a reset revokes every session, and
-              the first one it would revoke is the one issuing it. Changing a
-              password you still know belongs in :profile, and recovering one
-              you have lost is `ffm reset-link` at the console — which is the
-              whole reason that command exists. -#}
-          <span class="hint">{{ t.members_self_note() }}</span>
-          {%- endif %}
-        </div>
-      </li>
-      {%- endfor %}
-    </ul>
+        </li>
+        {%- endfor %}
+      </ul>
+      {%- endif %}
+    </div>
 
-    {%- if !invites.is_empty() %}
-    <div class="sect">{{ t.members_pending() }}</div>
-    <ul class="memberlist">
-      {%- for i in invites %}
-      <li class="mrow">
-        <b>{% if let Some(who) = i.for_member %}{{ who }}{% else if let Some(l) = i.label %}{{ l }}{% else %}—{% endif %}</b>
-        <span class="dim">{% if i.expired %}{{ t.members_expired() }}{% else %}{{ t.members_expires(i.expires.as_str()) }}{% endif %}</span>
-        <button class="btn" type="button"
-                hx-post="/members/invites/{{ i.id }}/revoke"
-                hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_revoke() }}</button>
-      </li>
-      {%- endfor %}
-    </ul>
-    {%- endif %}
-
-    <div class="sect">{{ t.members_invite_create() }}</div>
-    <form hx-post="/members/invite" hx-target="#settingspane" hx-swap="outerHTML">
-      <label class="f">
-        <span class="k">{{ t.members_invite_label() }}</span>
-        <input class="i" name="label" autocomplete="off">
-      </label>
-      <div class="radios" style="margin-top:9px">
-        <label><input type="radio" name="role" value="1" checked> {{ t.members_role_member() }}</label>
-        <label><input type="radio" name="role" value="0"> {{ t.members_role_admin() }}</label>
-      </div>
-      <button class="btn pri wide" type="submit">{{ t.members_invite_create() }}</button>
-    </form>
-
-    {#- Stated where it applies, rather than in documentation nobody reads at
-        the moment they need it. -#}
-    <div class="notebox">{{ t.members_invite_note() }}</div>
+    {#- ---- Trash ----------------------------------------------------- -#}
+    <div class="mtab" x-show="mtab === 'trash'" x-cloak>
+      <p class="hint mwide">{{ t.members_trash_note() }}</p>
+      {%- if trashed.is_empty() %}
+      <p class="hint mwide">{{ t.members_trash_none() }}</p>
+      {%- else %}
+      <ul class="memberlist">
+        {%- for m in trashed %}
+        <li class="mrow">
+          <b>{{ m.name }}</b>
+          <span class="role">{% if m.is_admin %}{{ t.members_role_admin() }}{% else %}{{ t.members_role_member() }}{% endif %}</span>
+          <span class="mbtns">
+            <button class="btn" type="button"
+                    hx-post="/members/{{ m.id }}/restore"
+                    hx-target="#settingspane" hx-swap="outerHTML">{{ t.members_restore() }}</button>
+          </span>
+        </li>
+        {%- endfor %}
+      </ul>
+      {%- endif %}
+    </div>
   </div>
 </aside>
