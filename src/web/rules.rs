@@ -805,18 +805,21 @@ pub async fn save(
         Ok(f) => f,
         Err(errors) => return rejected(&st, &auth, &input, Some(id), errors).await,
     };
-    match rules::edit(&st.pool, Actor::User(auth.viewer.member_id), id, &form).await {
-        Ok(true) => {
+    match rules::edit_reporting(&st.pool, Actor::User(auth.viewer.member_id), id, &form).await {
+        Ok(Some(edited)) => {
+            // A new due day that reached this month's row says so: the row
+            // moving is the part of the save a person sees.
+            let message = match edited.moved_due {
+                Some(d) => format!(
+                    "{} · {}",
+                    t.rule_saved(),
+                    t.rule_moved_due(&crate::ui::fmt::date(d))
+                ),
+                None => t.rule_saved().to_string(),
+            };
             // The pane to re-render is the rule's owner's, read from the
             // database — never from a hidden field somebody could change.
-            finish(
-                &st,
-                &auth,
-                rule.member_id,
-                &input.period,
-                t.rule_saved().to_string(),
-            )
-            .await
+            finish(&st, &auth, rule.member_id, &input.period, message).await
         }
         _ => crate::web::tx::say_only(t.error_not_written(), true),
     }

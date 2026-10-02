@@ -216,14 +216,33 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
 }
 
 /// Edits a rule, recording only the fields that actually moved.
-///
-/// **Editing `due_day` changes future materializations only.** Past
-/// occurrences keep the date they were stamped with, exactly as the rule
-/// form's own notebox promises — the occurrence's stamped date is what the
-/// ring, the overdue check and the unresolved badge all read.
 pub async fn edit(pool: &SqlitePool, actor: Actor, id: i64, form: &RuleForm) -> sqlx::Result<bool> {
+    Ok(edit_reporting(pool, actor, id, form).await?.is_some())
+}
+
+/// What a rule save did beyond the rule itself.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Edited {
+    /// This month's row followed a new due day — the date it moved to.
+    pub moved_due: Option<NaiveDate>,
+}
+
+/// [`edit`], saying what else moved. `None` when there is no such rule.
+///
+/// **A new `due_day` reaches future materializations, and this month's row
+/// while it is unconfirmed.** It used to reach only the future, so the row a
+/// person was looking at kept the old day after they changed the rule — and a
+/// rule ending this month never showed the new day anywhere. Earlier months,
+/// and this month once paid or received, keep the date they were stamped with:
+/// a confirmed row's due date is what it was paid against.
+pub async fn edit_reporting(
+    pool: &SqlitePool,
+    actor: Actor,
+    id: i64,
+    form: &RuleForm,
+) -> sqlx::Result<Option<Edited>> {
     let Some(old) = get(pool, id).await? else {
-        return Ok(false);
+        return Ok(None);
     };
 
     let mut tx = pool.begin().await?;
@@ -331,8 +350,69 @@ pub async fn edit(pool: &SqlitePool, actor: Actor, id: i64, form: &RuleForm) -> 
         entry.write(&mut tx).await?;
     }
 
+    let mut edited = Edited::default();
+    if old.due_day != form.due_day {
+        edited.moved_due = follow_due_day(&mut tx, actor, id, form.due_day).await?;
+    }
+
     tx.commit().await?;
-    Ok(true)
+    Ok(Some(edited))
+}
+
+/// Restamps this month's occurrence of a rule with a new due day, unless it is
+/// confirmed: a live receipt (or payslip) for a tracked rule, the manual tick
+/// for an untracked one. Logged on the row as an `edit` of `due_date`, so `u`
+/// puts the old date back. Returns the new date when the row moved.
+async fn follow_due_day(
+    tx: &mut Transaction<'_, Sqlite>,
+    actor: Actor,
+    rule_id: i64,
+    due_day: Option<i64>,
+) -> sqlx::Result<Option<NaiveDate>> {
+    let period = Period::of(crate::clock::today());
+    let key = period.to_string();
+    let row = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", t.due_date AS "due_date: String"
+           FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id
+           WHERE t.rule_id = ?1 AND t.period = ?2 AND t.deleted_at IS NULL
+             AND NOT (CASE WHEN r.tracked = 1
+                           THEN EXISTS (SELECT 1 FROM receipts x
+                                        WHERE x.transaction_id = t.id
+                                          AND x.kind = 'receipt'
+                                          AND x.deleted_at IS NULL)
+                           ELSE t.manual_paid = 1 END)"#,
+        rule_id,
+        key
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(row) = row else { return Ok(None) };
+
+    let old = row
+        .due_date
+        .as_deref()
+        .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+    let new = due_day
+        .and_then(|d| u32::try_from(d).ok())
+        .and_then(|d| period.due_date(d));
+    if old == new {
+        return Ok(None);
+    }
+    let stamp = new.map(iso);
+    sqlx::query!(
+        "UPDATE transactions SET due_date = ?2, version = version + 1 WHERE id = ?1",
+        row.id,
+        stamp
+    )
+    .execute(&mut **tx)
+    .await?;
+    Change::transaction(actor, crate::db::changes::TxAction::Edit, row.id)
+        .from_rule(Some(rule_id))
+        .in_period(period)
+        .diff("due_date", Value::Date(old), Value::Date(new))
+        .write(tx)
+        .await?;
+    Ok(new)
 }
 
 /// Marks a rule deleted. Its occurrences are left exactly as they are — they

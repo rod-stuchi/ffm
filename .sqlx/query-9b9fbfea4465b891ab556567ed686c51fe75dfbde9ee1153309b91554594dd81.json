@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE transactions SET title = ?2, amount_cents = ?3, date = ?4,\n                                   bucket = ?5, visibility = ?6,\n                                   amount_source = CASE\n                                       WHEN ?3 IS amount_cents OR ?8 THEN amount_source\n                                       WHEN ?3 IS NULL THEN NULL\n                                       ELSE 'user' END,\n                                   manual_paid = coalesce(?9, manual_paid),\n                                   due_date = CASE WHEN ?10 THEN ?11 ELSE due_date END,\n                                   version = version + 1\n           WHERE id = ?1 AND version = ?7",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": []
+  },
+  "hash": "9b9fbfea4465b891ab556567ed686c51fe75dfbde9ee1153309b91554594dd81"
+}

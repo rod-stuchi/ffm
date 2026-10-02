@@ -86,6 +86,7 @@ async fn set_amount(pool: &SqlitePool, who: i64, id: i64, cents: i64) {
             bucket: None,
             visibility: Visibility::Household,
             paid: None,
+            due_date: None,
         },
         None,
         None,

@@ -252,7 +252,9 @@ default, the search scope and the privacy default.
 ### Specifics that carry meaning
 
 - **The due ring is elapsed time**, not a countdown — from period start to due
-  date. Three-quarters amber reads as "still room, but not much" with no legend.
+  date. Three-quarters amber reads as "still room, but not much" with no legend. **The day you are on counts as begun**: due on the 18th, the 1st reads
+  1/18. Counting only completed days drew every ring as an empty circle on the
+  1st — the day a household opens the new month — the same as no ring at all.
 - **"The same line" means `(member_id, title)` in the previous period.**
   Unambiguous for a recurring row — it is the same rule — but a one-off has no
   rule, and the mockup shows deltas on one-offs (`Mercado ▼ −6%`), so the
@@ -1044,6 +1046,12 @@ editing. So:
   it is a soft delete undone with `u`, and the button says exactly what
   happens. Removing a file does not bump the row's `version`, so Save still
   goes through afterwards.
+- **A new due day reaches this month's row while it is unpaid.** Saving
+  the rule restamps the current month's occurrence (clamped to the month's
+  length) unless it is confirmed — a receipt or payslip for a tracked rule, the
+  manual tick for an untracked one — logs it as an edit of the row's due date
+  that `u` reverses, and the statusline says *this month's row now due
+  05/10/2026*. Earlier months stay as recorded, and the notebox says so.
 - **Due date moved from the occurrence form to the rule form.** The
   edit-occurrence form's Day field only renders at all for a non-recurring
   row; a recurring row's due day is edited on the rule (`E`) instead, so

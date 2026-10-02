@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.due_date AS \"due_date: String\"\n           FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.rule_id = ?1 AND t.period = ?2 AND t.deleted_at IS NULL\n             AND NOT (CASE WHEN r.tracked = 1\n                           THEN EXISTS (SELECT 1 FROM receipts x\n                                        WHERE x.transaction_id = t.id\n                                          AND x.kind = 'receipt'\n                                          AND x.deleted_at IS NULL)\n                           ELSE t.manual_paid = 1 END)",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "due_date: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "4bd871f372517206e283a8f61c1c9cf47f81dce335345bd344ae14e1f3423721"
+}

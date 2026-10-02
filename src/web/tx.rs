@@ -1210,6 +1210,7 @@ pub async fn save_edit(
                 Visibility::Household
             },
             paid: paid_applies(&st, id).await.then(|| form.paid.is_some()),
+            due_date: None,
         },
         None,
         form.version.trim().parse::<i64>().ok(),

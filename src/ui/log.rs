@@ -180,6 +180,7 @@ fn field_label(field: &str, t: &Catalog) -> String {
         "title" => t.log_field_title(),
         "date" => t.log_field_date(),
         "due_day" => t.log_field_due_day(),
+        "due_date" => t.log_field_due_date(),
         "bucket" => t.log_field_bucket(),
         "bill_name" => t.log_field_bill_name(),
         "instance" => t.log_field_instance(),

@@ -110,19 +110,21 @@ impl Period {
     ///
     /// Returns `1.0` once the target has passed, which is what makes the ring
     /// go fully red for an overdue row.
+    ///
+    /// **The day you are on counts as begun.** Counting only completed days
+    /// made every ring an empty circle on the 1st — `0/span` — indistinguishable
+    /// from a row with no ring at all, on exactly the day a household opens
+    /// the new month. Due on the 18th, the 1st now reads 1/18.
     pub fn elapsed_toward(self, target: NaiveDate, today: NaiveDate) -> f32 {
         let start = self.first_day();
         if today >= target {
             return 1.0;
         }
-        if today <= start {
+        if today < start {
             return 0.0;
         }
-        let span = (target - start).num_days();
-        if span <= 0 {
-            return 1.0;
-        }
-        ((today - start).num_days() as f32 / span as f32).clamp(0.0, 1.0)
+        let span = (target - start).num_days() + 1;
+        ((today - start).num_days() as f32 + 1.0) / span as f32
     }
 }
 
@@ -218,10 +220,13 @@ mod tests {
     #[test]
     fn elapsed_is_time_gone_not_time_left() {
         let sep = Period::new(2026, 9).unwrap();
-        let due = d(2026, 9, 15); // 14 days from the 1st
+        let due = d(2026, 9, 15); // the 1st to the 15th: 15 days
 
-        assert_eq!(sep.elapsed_toward(due, d(2026, 9, 1)), 0.0);
-        assert!((sep.elapsed_toward(due, d(2026, 9, 8)) - 0.5).abs() < 0.01);
+        // The 1st is a day begun, not nothing — an empty ring on the 1st read
+        // the same as no ring at all.
+        assert!((sep.elapsed_toward(due, d(2026, 9, 1)) - 1.0 / 15.0).abs() < 0.001);
+        assert!(sep.elapsed_toward(due, d(2026, 9, 1)) > 0.0);
+        assert!((sep.elapsed_toward(due, d(2026, 9, 8)) - 8.0 / 15.0).abs() < 0.001);
         // Past due is fully elapsed — this is what turns the ring red.
         assert_eq!(sep.elapsed_toward(due, d(2026, 9, 15)), 1.0);
         assert_eq!(sep.elapsed_toward(due, d(2026, 10, 2)), 1.0);

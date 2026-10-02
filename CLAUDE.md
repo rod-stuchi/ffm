@@ -946,9 +946,15 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   ring, the overdue check and the unresolved badge all read.
   - `e` never edits it for a recurring row — that is why the occurrence form's
     Day field disappears there, so there are not two controls for one fact.
-  - Editing `due_day` on the rule changes **future materializations only**.
-    Past occurrences are left as they were recorded, exactly as the rule form's
-    own notebox already promises.
+  - Editing `due_day` on the rule changes **future materializations, and
+    this month's row while it is unconfirmed** (`rules::edit_reporting`) —
+    amended from "future only", which left the row a person was looking at on
+    the old day after they changed the rule, and a rule ending this month never
+    showed the new day anywhere. The restamp is an `edit` of the row's
+    `due_date`, so `u` puts it back, and the save's statusline says where it
+    moved. Earlier months, and this month once paid or received, keep the date
+    they were stamped with: a confirmed row's due date is what it was paid
+    against.
 - **"Today" is the process's local date, and the deployment must set `TZ`.**
   The ring, `scheduled overdue`, the unresolved badge and `min(current_month,
   end_date)` all depend on it, and `ffm.toml` is three keys, none of them a

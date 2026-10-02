@@ -638,6 +638,11 @@ async fn undo_edit(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Resul
     // Only an edit that moved the tick carries a `paid` field; anything else
     // leaves the tick as it is now.
     let paid = at("paid").map(|v| v.as_deref() == Some("1"));
+    // A due date a rule's new due day moved — put back as it was stamped.
+    let due_date = at("due_date").map(|v| {
+        v.as_deref()
+            .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+    });
 
     edit(
         pool,
@@ -650,6 +655,7 @@ async fn undo_edit(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Resul
             bucket: bucket.as_deref(),
             visibility,
             paid,
+            due_date,
         },
         Some(u.change_id),
         // An undo writes regardless of the version. It is reversing a change
@@ -818,6 +824,11 @@ pub struct EditFields<'a> {
     /// (`manual_paid_applies`). `None` leaves it as it is — what every caller
     /// but the edit form and undo passes.
     pub paid: Option<bool>,
+    /// The stamped due date — `Some(None)` clears it, `None` leaves it as it
+    /// is. Only undo passes it, reversing a rule's new due day reaching this
+    /// month's row (`rules::edit_reporting`); the form never edits it on a
+    /// recurring row.
+    pub due_date: Option<Option<NaiveDate>>,
 }
 
 /// Saves an edit, recording only the fields that actually moved.
@@ -877,6 +888,15 @@ pub async fn edit(
     // Clearing it makes it a placeholder again. An undo only puts back what
     // was there, so it leaves the mark alone.
     let is_undo = undo_of.is_some();
+    let set_due = fields.due_date.is_some();
+    let due_stamp = fields
+        .due_date
+        .flatten()
+        .map(|d| d.format("%Y-%m-%d").to_string());
+    let old_due = old
+        .due_date
+        .as_deref()
+        .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
 
     // The check itself. `version` is compared in the WHERE rather than
     // against the row read above, so the test and the write are one
@@ -891,6 +911,7 @@ pub async fn edit(
                                        WHEN ?3 IS NULL THEN NULL
                                        ELSE 'user' END,
                                    manual_paid = coalesce(?9, manual_paid),
+                                   due_date = CASE WHEN ?10 THEN ?11 ELSE due_date END,
                                    version = version + 1
            WHERE id = ?1 AND version = ?7"#,
         id,
@@ -902,6 +923,8 @@ pub async fn edit(
         expected,
         is_undo,
         fields.paid,
+        set_due,
+        due_stamp,
     )
     .execute(&mut *tx)
     .await?
@@ -945,6 +968,11 @@ pub async fn edit(
             "paid",
             Value::Bool(old.manual_paid != 0),
             Value::Bool(fields.paid.unwrap_or(old.manual_paid != 0)),
+        )
+        .diff(
+            "due_date",
+            Value::Date(old_due),
+            Value::Date(fields.due_date.unwrap_or(old_due)),
         );
 
     // Privacy is its own verb, not a field of an edit: handing a hidden row to

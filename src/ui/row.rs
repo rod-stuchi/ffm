@@ -1189,12 +1189,13 @@ mod tests {
     #[test]
     fn the_ring_is_elapsed_time_and_reddens_past_due() {
         let mut r = base();
+        // The 1st is a day begun: a sliver, never an empty circle.
         r.ctx.today = d(2026, 9, 1);
-        assert_eq!(r.ring_progress(), Some(0.0));
+        assert!(r.ring_progress().unwrap() > 0.0);
         assert_eq!(r.ring_tone(), Tone::Pos);
 
-        r.ctx.today = d(2026, 9, 8); // exactly half of 1st -> 15th
-        assert!((r.ring_progress().unwrap() - 0.5).abs() < 0.01);
+        r.ctx.today = d(2026, 9, 8); // the 8th of 15 days
+        assert!((r.ring_progress().unwrap() - 8.0 / 15.0).abs() < 0.01);
 
         r.ctx.today = d(2026, 9, 14);
         assert_eq!(r.ring_tone(), Tone::Accent); // amber: room, but not much

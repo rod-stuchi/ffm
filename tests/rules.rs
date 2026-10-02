@@ -210,3 +210,92 @@ async fn the_schema_refuses_a_rule_that_contradicts_itself() {
             .is_err()
     );
 }
+
+// ---------------------------------------------------------------------------
+// a new due day reaches this month's row while it is unpaid
+// ---------------------------------------------------------------------------
+
+/// This month's row of the rule, and its stamped due date.
+async fn this_month(pool: &SqlitePool, rule: i64) -> (i64, Option<String>) {
+    let period = ffm::domain::period::Period::of(ffm::clock::today()).to_string();
+    sqlx::query_as("SELECT id, due_date FROM transactions WHERE rule_id = ? AND period = ?")
+        .bind(rule)
+        .bind(period)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_new_due_day_moves_this_months_unpaid_row_and_u_puts_it_back() {
+    use ffm::db::tx::{self, Direction, Scope};
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let today = ffm::clock::today();
+    let mut f = form(me);
+    f.start_date = d(2026, 1, 1);
+    let rule = rules::create(&pool, Actor::User(me), &f).await.unwrap();
+    ffm::services::materializer::reconcile(&pool, today)
+        .await
+        .unwrap();
+    let (row, before) = this_month(&pool, rule).await;
+
+    f.due_day = Some(31); // clamped to the month's length
+    let edited = rules::edit_reporting(&pool, Actor::User(me), rule, &f)
+        .await
+        .unwrap()
+        .unwrap();
+    let period = ffm::domain::period::Period::of(today);
+    let expected = period.due_date(31).unwrap();
+    assert_eq!(
+        edited.moved_due,
+        Some(expected),
+        "the row a person is looking at follows"
+    );
+    let (_, after) = this_month(&pool, rule).await;
+    assert_eq!(after, Some(expected.format("%Y-%m-%d").to_string()));
+
+    // `u` on the row puts the old date back.
+    let next = tx::next(
+        &pool,
+        Scope {
+            me,
+            owner: Some(me),
+            period: Some(period),
+        },
+        Direction::Undo,
+    )
+    .await
+    .unwrap();
+    let u = next.pick.expect("the restamp is undoable");
+    assert_eq!((u.action.as_str(), u.entity_id), ("edit", row));
+    assert!(tx::undo(&pool, Actor::User(me), &u).await.unwrap());
+    assert_eq!(this_month(&pool, rule).await.1, before);
+}
+
+#[tokio::test]
+async fn a_paid_row_keeps_the_date_it_was_paid_against() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let mut f = form(me);
+    f.start_date = d(2026, 1, 1);
+    f.tracked = false; // the manual tick is what confirms an untracked row
+    let rule = rules::create(&pool, Actor::User(me), &f).await.unwrap();
+    ffm::services::materializer::reconcile(&pool, ffm::clock::today())
+        .await
+        .unwrap();
+    let (row, before) = this_month(&pool, rule).await;
+    sqlx::query("UPDATE transactions SET manual_paid = 1 WHERE id = ?")
+        .bind(row)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    f.due_day = Some(5);
+    let edited = rules::edit_reporting(&pool, Actor::User(me), rule, &f)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(edited.moved_due, None);
+    assert_eq!(this_month(&pool, rule).await.1, before);
+}
