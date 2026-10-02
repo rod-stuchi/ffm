@@ -974,7 +974,7 @@ pub(crate) async fn may_write(st: &AppState, auth: &Auth, owner: i64) -> Result<
         .unwrap_or_default()
         .into_iter()
         .find(|m| m.id == owner)
-        .map(|m| m.name)
+        .map(|m| crate::ui::fmt::name(&m.name))
         .unwrap_or_default();
     Err(refuse(&t.read_only_ledger(&who), true))
 }
@@ -1266,6 +1266,7 @@ async fn last_editor(st: &AppState, id: i64) -> Option<String> {
     .await
     .ok()
     .flatten()
+    .map(|n| crate::ui::fmt::name(&n))
 }
 
 /// A refused save: the row as it actually stands now, plus a header saying
@@ -1461,7 +1462,7 @@ pub async fn reattribute(
         .unwrap_or_default()
         .into_iter()
         .find(|m| m.id == form.to)
-        .map(|m| m.name)
+        .map(|m| crate::ui::fmt::name(&m.name))
     else {
         return refuse(t.error_not_written(), true);
     };

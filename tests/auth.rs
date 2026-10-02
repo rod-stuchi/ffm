@@ -237,7 +237,8 @@ async fn an_invite_creates_the_member_when_it_is_accepted_not_when_it_is_issued(
     assert_eq!(ledger::members(&pool).await.unwrap().len(), 1);
 
     match auth::read_link(&pool, &token).await.unwrap() {
-        Link::Invite { inviter, .. } => assert_eq!(inviter, "rodrigo"),
+        // For the page's copy — "Rodrigo invited you" — so shown capitalized.
+        Link::Invite { inviter, .. } => assert_eq!(inviter, "Rodrigo"),
         other => panic!("{other:?}"),
     }
 
@@ -708,4 +709,96 @@ async fn the_console_can_reset_the_only_admin_and_the_log_says_who_did_it() {
         (after.id, after.slug.as_str(), after.is_admin),
         (admin, "rodrigo", true)
     );
+}
+
+// ---------------------------------------------------------------------------
+// names are stored lowercase and matched ignoring case
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_name_is_stored_lowercase_and_signs_in_whatever_its_case() {
+    let pool = pool().await;
+    let admin_sid = first_household(&pool).await;
+    let admin = auth::session(&pool, &admin_sid)
+        .await
+        .unwrap()
+        .unwrap()
+        .member
+        .id;
+    let token = auth::issue_link(&pool, Actor::User(admin), None, None, 1)
+        .await
+        .unwrap();
+
+    let sid = auth::accept_invite(
+        &pool,
+        &token,
+        "  Ana   Luiza ",
+        "hunter2hunter2",
+        "en",
+        "ffm",
+        1,
+        "x",
+    )
+    .await
+    .unwrap();
+    let ana = auth::session(&pool, &sid).await.unwrap().unwrap().member;
+    assert_eq!(ana.name, "ana luiza", "stored lowercase, spaces tidied");
+    assert_eq!(
+        ffm::ui::fmt::name(&ana.name),
+        "Ana Luiza",
+        "and read capitalized"
+    );
+
+    for typed in ["ana luiza", "Ana Luiza", "ANA LUIZA"] {
+        assert_eq!(
+            auth::authenticate(&pool, typed, "hunter2hunter2")
+                .await
+                .unwrap(),
+            Some(ana.id),
+            "{typed}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_name_stored_before_lowercasing_still_signs_in_and_still_takes_its_name() {
+    let pool = pool().await;
+    let admin_sid = first_household(&pool).await;
+    let admin = auth::session(&pool, &admin_sid)
+        .await
+        .unwrap()
+        .unwrap()
+        .member
+        .id;
+    // Members created before names were lowercased are left as typed.
+    sqlx::query("UPDATE members SET name = 'Rodrigo' WHERE id = ?")
+        .bind(admin)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        auth::authenticate(&pool, "rodrigo", "abcd1234")
+            .await
+            .unwrap(),
+        Some(admin)
+    );
+
+    // `RODRIGO` is the same name as `Rodrigo`, so it is taken.
+    let token = auth::issue_link(&pool, Actor::User(admin), None, None, 1)
+        .await
+        .unwrap();
+    let err = auth::accept_invite(
+        &pool,
+        &token,
+        "RODRIGO",
+        "hunter2hunter2",
+        "en",
+        "ffm",
+        1,
+        "x",
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err, AcceptError::NameTaken);
 }

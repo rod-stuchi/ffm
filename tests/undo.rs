@@ -323,7 +323,10 @@ async fn a_change_somebody_else_changed_since_is_skipped_and_named() {
         2,
         "her edit and her add, both overtaken"
     );
-    assert_eq!(next.skipped[0].who, "rodrigo");
+    assert_eq!(
+        next.skipped[0].who, "Rodrigo",
+        "named the way people read it"
+    );
     assert_eq!(next.skipped[0].title, "Padaria");
     // She reaches her previous change instead, and the admin's amount stays.
     let pick = next.pick.unwrap();

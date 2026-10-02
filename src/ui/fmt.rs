@@ -132,6 +132,25 @@ pub fn date(d: NaiveDate) -> String {
     format!("{:02}/{:02}/{:04}", d.day(), d.month(), d.year())
 }
 
+/// A member's name as people read it: every word capitalized —
+/// `astolfo` → `Astolfo`, `maria clara` → `Maria Clara`, `ana-luiza` →
+/// `Ana-Luiza`, `ângela` → `Ângela`. Names are stored lowercase (see
+/// `db::auth::normal_name`) and shown through this, everywhere a person reads
+/// one; matching a name never goes through it.
+pub fn name(stored: &str) -> String {
+    let mut out = String::with_capacity(stored.len());
+    let mut start = true;
+    for c in stored.chars() {
+        if start {
+            out.extend(c.to_uppercase());
+        } else {
+            out.push(c);
+        }
+        start = c.is_whitespace() || c == '-';
+    }
+    out
+}
+
 /// `07/2026` — a period in the statusline and the month picker.
 pub fn period(p: crate::domain::period::Period) -> String {
     format!("{:02}/{:04}", p.month(), p.year())
@@ -201,6 +220,16 @@ mod tests {
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    #[test]
+    fn a_name_is_shown_with_every_word_capitalized() {
+        assert_eq!(name("astolfo"), "Astolfo");
+        assert_eq!(name("maria clara"), "Maria Clara");
+        assert_eq!(name("ana-luiza"), "Ana-Luiza");
+        assert_eq!(name("ângela"), "Ângela");
+        // A name stored before names were lowercased keeps its own letters.
+        assert_eq!(name("Natália"), "Natália");
     }
 
     #[test]

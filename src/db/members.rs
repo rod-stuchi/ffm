@@ -95,7 +95,7 @@ pub async fn list(pool: &SqlitePool) -> sqlx::Result<Vec<MemberRow>> {
         };
         out.push(MemberRow {
             id: r.id,
-            name: r.name,
+            name: crate::ui::fmt::name(&r.name),
             is_admin: r.role == 0,
             sessions: r.sessions,
             devices,
@@ -145,7 +145,7 @@ pub async fn pending_invites(pool: &SqlitePool) -> sqlx::Result<Vec<PendingInvit
         .map(|r| PendingInvite {
             id: r.id,
             label: r.label,
-            for_member: r.for_member,
+            for_member: r.for_member.as_deref().map(crate::ui::fmt::name),
             expires: NaiveDate::parse_from_str(&r.expires_at[..10], "%Y-%m-%d")
                 .map(fmt::date)
                 .unwrap_or(r.expires_at),

@@ -145,13 +145,13 @@ pub async fn list(
                 what: What::Row { files: r.files },
                 tx_id: r.id,
                 member_id: r.member_id,
-                member: r.member,
+                member: crate::ui::fmt::name(&r.member),
                 title: r.title,
                 period: Period::parse(&r.period)?,
                 amount: r.amount_cents.map(Cents),
                 is_income: r.kind == "in",
                 deleted_at: r.deleted_at,
-                deleted_by: r.deleted_by,
+                deleted_by: r.deleted_by.as_deref().map(crate::ui::fmt::name),
                 path: None,
             })
         })
@@ -164,13 +164,13 @@ pub async fn list(
                 },
                 tx_id: r.tx_id,
                 member_id: r.member_id,
-                member: r.member,
+                member: crate::ui::fmt::name(&r.member),
                 title: r.title,
                 period: Period::parse(&r.period)?,
                 amount: r.amount_cents.map(Cents),
                 is_income: r.tx_kind == "in",
                 deleted_at: r.deleted_at,
-                deleted_by: r.deleted_by,
+                deleted_by: r.deleted_by.as_deref().map(crate::ui::fmt::name),
                 path: r.path,
             })
         }))

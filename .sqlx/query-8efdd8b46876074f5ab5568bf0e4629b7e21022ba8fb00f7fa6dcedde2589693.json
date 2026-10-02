@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", name, uuid, slug, role FROM members\n           WHERE name = ?1 AND deleted_at IS NULL",
+  "query": "SELECT id AS \"id!: i64\", name, uuid, slug, role FROM members\n           WHERE id = ?1",
   "describe": {
     "columns": [
       {
@@ -33,12 +33,12 @@
       "Right": 1
     },
     "nullable": [
-      true,
+      false,
       false,
       false,
       false,
       false
     ]
   },
-  "hash": "5af48b1d45e4bd312a5ee6029e81cd5024e852cceeadee974b803a79de22da05"
+  "hash": "8efdd8b46876074f5ab5568bf0e4629b7e21022ba8fb00f7fa6dcedde2589693"
 }

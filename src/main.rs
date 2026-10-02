@@ -322,7 +322,8 @@ async fn reset_link(pool: &sqlx::SqlitePool, name: &str) -> i32 {
             eprintln!("✗ no member called \"{name}\"");
             match ffm::db::ledger::members(pool).await {
                 Ok(all) if !all.is_empty() => {
-                    let names: Vec<&str> = all.iter().map(|m| m.name.as_str()).collect();
+                    let names: Vec<String> =
+                        all.iter().map(|m| ffm::ui::fmt::name(&m.name)).collect();
                     eprintln!("  this household has: {}", names.join(", "));
                 }
                 // An empty members table is not a typo, it is a household that
@@ -353,7 +354,7 @@ async fn reset_link(pool: &sqlx::SqlitePool, name: &str) -> i32 {
     println!();
     println!(
         "✓ reset link for {} · expires {}",
-        member.name,
+        ffm::ui::fmt::name(&member.name),
         ffm::ui::fmt::date(expires)
     );
     println!();
@@ -361,7 +362,7 @@ async fn reset_link(pool: &sqlx::SqlitePool, name: &str) -> i32 {
     println!();
     println!(
         "  It works once. {} is now signed out everywhere, and",
-        member.name
+        ffm::ui::fmt::name(&member.name)
     );
     println!("  sets their own password on that page — nobody types it for them.");
     println!();

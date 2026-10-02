@@ -1229,6 +1229,16 @@ does most of the real work, so the auth layer stays simple on purpose.
 - **The login identifier is `members.name`, not an email.** `name` is already
   declared as "display name + login identifier"; `email` is nullable and plays
   no part in signing in. There is no mail sender in this app.
+- **A name is stored lowercase and shown capitalized.** `/setup` and an
+  invite store what was typed trimmed and lowercased (`db::auth::normal_name`),
+  and signing in, a taken-name check and the console's `reset-link` all match
+  ignoring case — `Rodrigo`, `rodrigo` and `RODRIGO` are one person, and a
+  Shift key is never why somebody cannot sign in. Everywhere a person reads a
+  name it goes through `ui::fmt::name`, which capitalizes every word:
+  `maria clara` → *Maria Clara*. Members stored before this keep their names
+  as typed — they still sign in and still take their name, and read the same.
+  The comparison is done in Rust, not with SQLite's `lower()`, which folds
+  only ASCII.
 - **A real `sessions` table**, not a bare signed cookie carrying the member id
   directly: `sessions(id, member_id, created_at, last_seen_at, label)`. The
   cookie carries only the opaque session id (`HttpOnly`, `SameSite=Lax`,

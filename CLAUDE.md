@@ -322,6 +322,13 @@ card in plain CSS.
 - **Re-attribution needs a fresh sort key** in the destination member's ordering
   (append = after the current max).
 - **Rolling two-month backup** of the SQLite file.
+- **Member names are stored lowercase, matched ignoring case, and shown
+  capitalized** — `normal_name` on the way in, `fmt::name` on every way out
+  (each word: `maria clara` → *Maria Clara*). A name is the login identifier,
+  so `Rodrigo` and `rodrigo` must be one account. Matching a name — sign-in,
+  the taken check, `reset-link`, re-attribution's stored values — never goes
+  through `fmt::name`; showing one always does. Names stored before this are
+  left as typed and still match.
 - **Members are real accounts, not just an attribution label.** `members` gets
   `password_hash` and `role` (0 = admin). **No self-registration** — household
   membership stays closed, and there is no `/signup` route. There are three ways

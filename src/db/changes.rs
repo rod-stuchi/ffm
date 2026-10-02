@@ -608,7 +608,7 @@ pub async fn history(
         out.push(Entry {
             id: r.id,
             at: r.at,
-            actor: r.actor,
+            actor: r.actor.as_deref().map(crate::ui::fmt::name),
             source: r.source,
             is_rule: r.entity == "rule",
             entity: r.entity,

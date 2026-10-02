@@ -133,6 +133,10 @@ fn value(f: &FieldEntry, raw: Option<&str>, currency: Currency, t: &Catalog) -> 
     let Some(raw) = raw else {
         return NOTHING.to_string();
     };
+    // A re-attribution records the stored names; people read them capitalized.
+    if f.field == "member" {
+        return fmt::name(raw);
+    }
     match f.kind.as_str() {
         "money" => raw
             .parse::<i64>()

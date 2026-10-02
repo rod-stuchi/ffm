@@ -249,6 +249,36 @@ pub async fn revoke_all_sessions(
 // signing in
 // ---------------------------------------------------------------------------
 
+/// A name as it is stored: lowercase, trimmed, inner runs of spaces made one.
+/// Everybody signs in with their name, and `Rodrigo` and `rodrigo` must not be
+/// two accounts — nor the same person failing to sign in over a Shift key.
+/// Shown through `ui::fmt::name`, which capitalizes it back for reading.
+pub fn normal_name(typed: &str) -> String {
+    typed
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// The live member a typed name means, ignoring case — names stored before
+/// they were lowercased (`Rodrigo`) still sign in as `rodrigo`. Compared in
+/// Rust rather than with SQLite's `lower()`, which folds only ASCII and would
+/// leave `Ângela` unmatched. A household is a handful of rows.
+async fn member_named(pool: &SqlitePool, typed: &str) -> sqlx::Result<Option<i64>> {
+    let want = normal_name(typed);
+    let rows = sqlx::query!(
+        r#"SELECT id AS "id!: i64", name AS "name!: String" FROM members
+           WHERE deleted_at IS NULL"#
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .find(|r| normal_name(&r.name) == want)
+        .map(|r| r.id))
+}
+
 /// The login identifier is `members.name`, never an email: there is no mail
 /// sender in this app, and `email` plays no part in signing in.
 ///
@@ -265,11 +295,13 @@ pub async fn authenticate(
     name: &str,
     password: &str,
 ) -> sqlx::Result<Option<i64>> {
-    let name = name.trim();
+    let Some(id) = member_named(pool, name).await? else {
+        return Ok(None);
+    };
     let row = sqlx::query!(
         r#"SELECT id AS "id!: i64", password_hash AS "password_hash!: String"
-           FROM members WHERE name = ?1 AND deleted_at IS NULL"#,
-        name
+           FROM members WHERE id = ?1"#,
+        id
     )
     .fetch_optional(pool)
     .await?;
@@ -312,7 +344,8 @@ pub async fn setup(pool: &SqlitePool, new: NewHousehold<'_>) -> anyhow::Result<S
     let hash = hash_password(new.password)?;
     let at = now();
     let uuid = uuid_v4();
-    let slug = slugify(new.admin_name);
+    let admin_name = normal_name(new.admin_name);
+    let slug = slugify(&admin_name);
     let mut tx = pool.begin().await?;
 
     let existing: i64 = sqlx::query_scalar!(r#"SELECT count(*) AS "n!: i64" FROM members"#)
@@ -346,7 +379,7 @@ pub async fn setup(pool: &SqlitePool, new: NewHousehold<'_>) -> anyhow::Result<S
            VALUES (?1, ?2, ?3, ?4, 0, ?5)
            RETURNING id AS "id!: i64""#,
         uuid,
-        new.admin_name,
+        admin_name,
         slug,
         hash,
         at,
@@ -418,10 +451,14 @@ async fn insert_member_settings(
 /// this is exact rather than a search — the console resets an account, and
 /// resolving "rod" to the closest match would be the wrong kind of helpful.
 pub async fn member_by_name(pool: &SqlitePool, name: &str) -> sqlx::Result<Option<Member>> {
+    // Exact apart from case: `rodrigo` is the member stored as `Rodrigo`.
+    let Some(id) = member_named(pool, name).await? else {
+        return Ok(None);
+    };
     let row = sqlx::query!(
         r#"SELECT id AS "id!: i64", name, uuid, slug, role FROM members
-           WHERE name = ?1 AND deleted_at IS NULL"#,
-        name,
+           WHERE id = ?1"#,
+        id,
     )
     .fetch_optional(pool)
     .await?;
@@ -604,7 +641,11 @@ pub async fn read_link(pool: &SqlitePool, token: &str) -> sqlx::Result<Link> {
             // household is the admin's call, not the operator's, and the
             // schema CHECKs it. A NULL can only be a console reset, which is
             // the arm below.
-            inviter: r.inviter.unwrap_or_default(),
+            inviter: r
+                .inviter
+                .as_deref()
+                .map(crate::ui::fmt::name)
+                .unwrap_or_default(),
             expires: r.expires_at,
             role: r.role,
         },
@@ -657,7 +698,8 @@ pub async fn accept_invite(
     let token_hash = token_hash(token);
     let at = now();
     let uuid = uuid_v4();
-    let slug = slugify(name);
+    let name = normal_name(name);
+    let slug = slugify(&name);
 
     let mut tx = pool.begin().await.map_err(db)?;
 
@@ -677,14 +719,14 @@ pub async fn accept_invite(
         return Err(AcceptError::Gone);
     }
 
-    let taken: i64 = sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!: i64" FROM members WHERE name = ?1"#,
-        name
-    )
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(db)?;
-    if taken > 0 {
+    // Taken ignoring case — and including the trash, whose names stay taken
+    // so a restore is safe. `Rodrigo`, stored before names were lowercased,
+    // takes `rodrigo` too.
+    let names: Vec<String> = sqlx::query_scalar!(r#"SELECT name AS "n!: String" FROM members"#)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(db)?;
+    if names.iter().any(|n| normal_name(n) == name) {
         return Err(AcceptError::NameTaken);
     }
 

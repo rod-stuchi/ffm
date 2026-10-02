@@ -432,6 +432,7 @@ async fn overtaken(
         )
         .fetch_optional(pool)
         .await
+        .map(|who| who.map(|n| crate::ui::fmt::name(&n)))
     } else {
         sqlx::query_scalar!(
             r#"SELECT m.name AS "name!: String"
@@ -448,6 +449,7 @@ async fn overtaken(
         )
         .fetch_optional(pool)
         .await
+        .map(|who| who.map(|n| crate::ui::fmt::name(&n)))
     }
 }
 

@@ -512,7 +512,7 @@ pub async fn ledger(
         )
         .to_css(),
         attr: auth.mode.attr(),
-        me: auth.session.member.name.clone(),
+        me: fmt::name(&auth.session.member.name),
         admin: auth.viewer.is_admin(),
         previewing: auth.session.preview,
         household: name,
@@ -545,7 +545,7 @@ pub async fn ledger(
             .map(|g| g.label(&t))
             .unwrap_or_default(),
         group_order_needs_group: t.group_order_needs_group().to_string(),
-        me_name: auth.session.member.name.clone(),
+        me_name: fmt::name(&auth.session.member.name),
         // Whether admin powers are actually IN EFFECT, not what the row says
         // — an admin previewing as a member should read as a member here, or
         // the badge would contradict what the rest of the app is doing.
@@ -1228,7 +1228,7 @@ pub(crate) fn view(
     PaneView {
         writable,
         id: pane.member.id,
-        name: pane.member.name,
+        name: fmt::name(&pane.member.name),
         totals: PaneTotals {
             id: pane.member.id,
             ins: money(pane.ins, currency, pane.estimated),

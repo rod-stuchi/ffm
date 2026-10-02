@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", password_hash AS \"password_hash!: String\"\n           FROM members WHERE name = ?1 AND deleted_at IS NULL",
+  "query": "SELECT id AS \"id!: i64\", password_hash AS \"password_hash!: String\"\n           FROM members WHERE id = ?1",
   "describe": {
     "columns": [
       {
@@ -18,9 +18,9 @@
       "Right": 1
     },
     "nullable": [
-      true,
+      false,
       false
     ]
   },
-  "hash": "95177ebe52aa147d9e2c6e693ae48a0857e19e4c2ce2d865b8eee2e3acc32e18"
+  "hash": "0c3fbc1a9e97ccfea90676841c334bd00d6494b7cda139b443432a207bf711a4"
 }

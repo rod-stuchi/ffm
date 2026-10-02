@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name AS \"n!: String\" FROM members",
+  "describe": {
+    "columns": [
+      {
+        "name": "n!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0d394dd1acae3fd1861b2981d868f0f0187b699cfccef006d34ecdb55ee0b5ef"
+}

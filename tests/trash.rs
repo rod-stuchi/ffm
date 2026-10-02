@@ -216,7 +216,7 @@ async fn a_deleted_row_stands_for_its_files() {
             .unwrap()
             .deleted_by
             .as_deref(),
-        Some("rodrigo")
+        Some("Rodrigo") // display text, capitalized
     );
 
     // Deleting the occurrence moves its live bill with it.

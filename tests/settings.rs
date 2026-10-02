@@ -262,7 +262,8 @@ async fn a_reset_appears_in_the_pending_list_named_for_its_member() {
     assert_eq!(pending.len(), 1);
     // An admin has to be able to tell a reset from an invite at a glance: one
     // creates a member, the other hands somebody their own account back.
-    assert_eq!(pending[0].for_member.as_deref(), Some("ana"));
+    // Shown in `:members`, so capitalized like every name a person reads.
+    assert_eq!(pending[0].for_member.as_deref(), Some("Ana"));
 }
 
 #[tokio::test]

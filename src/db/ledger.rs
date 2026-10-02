@@ -647,7 +647,7 @@ pub async fn grep(pool: &SqlitePool, viewer: Viewer, term: &str) -> sqlx::Result
                 id: r.id,
                 period: Period::parse(&r.period)?,
                 member_id: r.member_id,
-                member: r.member,
+                member: crate::ui::fmt::name(&r.member),
                 title: r.title,
                 amount: r.amount_cents.map(Cents),
                 is_income: r.kind == "in",
