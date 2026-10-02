@@ -330,7 +330,7 @@
 }
 
 @media (max-width: 720px) {
-  /* The picker and Ctrl-P / Ctrl-N still move between months; the arrows
+  /* The picker and `[` / `]` still move between months; the arrows
    * are the width row 2 needs for the totals. */
   .mnav > a.btn {
     display: none;

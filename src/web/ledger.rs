@@ -356,6 +356,15 @@ struct LedgerPage {
     unsaved_rule_tag: String,
     drafts_parked: String,
     drafts_parked_one: String,
+    /// Changing month is a page load, and a page load loses parked drafts —
+    /// so with any parked, the first `[`/`]`/`T` (or click) asks. `{d}` is
+    /// the drafts count, already pluralized by the pane; `{k}` the key.
+    month_leave_key: String,
+    month_leave_click: String,
+    month_already_current: String,
+    /// Today's month, from `clock::today()` — never the browser's clock, so a
+    /// dev server running as of another date (`FFM_TODAY`) is honored by `T`.
+    today_key: String,
     no_pane_that_way: String,
     reattribute_title: String,
     details_none: String,
@@ -558,6 +567,10 @@ pub async fn ledger(
         // one draft read "1 unsaved drafts".
         drafts_parked: t.drafts_parked(2).replace('2', "{n}"),
         drafts_parked_one: t.drafts_parked(1),
+        month_leave_key: t.month_leave_key("{d}", "{k}"),
+        month_leave_click: t.month_leave_click("{d}"),
+        month_already_current: t.month_already_current().to_string(),
+        today_key: Period::of(today).to_string(),
         no_pane_that_way: t.no_pane_that_way().to_string(),
         reattribute_title: t.reattribute_private_title("{name}"),
         details_none: t.details_none().to_string(),
@@ -616,6 +629,9 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("H / L", "focus pane, left / right"),
                 k("gt / gT", "next / previous member tab"),
                 k("2gt", "jump straight to tab 2"),
+                k("[ / ]", "previous / next month"),
+                k("3]", "three months on — 3[ three back"),
+                k("T", "this month — today's"),
             ],
         ),
         (

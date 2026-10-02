@@ -154,8 +154,8 @@ then refuses.
   `:th` then Ctrl-p steps through past `:theme` lines only. Refused commands
   are kept too — the usual reason to recall one is to fix it. The history is
   per member, in this browser (`localStorage`): it is a convenience, like a
-  shell's, and two people on one laptop keep their own. Ctrl-p means
-  "previous month" only outside the bar, where nothing is being typed.
+  shell's, and two people on one laptop keep their own. Outside the bar
+  Ctrl-p means nothing: the months are `[` / `]`.
 
 **Admin-only commands are absent for a non-admin**, and for an admin
 previewing as one — the same rule that removes the Household button rather
@@ -467,14 +467,34 @@ Nothing destructive fires from a single keystroke.
 | `gt` / `gT` | next / previous member tab (tabs mode) |
 | `2gt` | jump straight to tab 2 — `{count}gt` is tab {count}, so `1gt` is the first |
 | `2gT` | go **back** two tabs — `gT`'s count is a distance, not a destination |
+| `[` / `]` | previous / next month — counted, so `3]` is three months on |
+| `T` | the current month — today's, as the server's clock has it |
 
 Every **uppercase** binding here (`G`, `J`/`K`, `gT`, `zR`/`zM`, `A`/`I`/`E`,
-`H`/`L`, `N`, `P`, `U`) is reached by holding Shift, which fires a keydown of its
+`H`/`L`, `N`, `P`, `T`, `U`) is reached by holding Shift, which fires a keydown of its
 own before the letter. A keymap that resets its pending prefix and count on
 every key it sees will therefore eat the keystroke *before* the one it meant
 to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 `KeyboardEvent` sends only the final key and will not catch it.
-| `Ctrl-P` / `Ctrl-N` | previous / next month |
+
+- **One way to change month, whatever asked.** `[`, `]`, `T`, the `‹ ›`
+  arrows and a picker cell all go through `gotoPeriod`, which builds the
+  URL from `location`: `?pane=` and `?split=` survive the page load — the
+  arrows' plain hrefs dropped the pane, landing you back on your own — and
+  `?row=` goes. The hrefs stay for a page without JS and for a Cmd-click to
+  a new tab.
+- **Parked drafts are asked about first.** Changing month is a page load,
+  which drops every parked draft. With any parked — an open form is parked
+  first, so a changed one counts and an unchanged one just closes — the
+  first press says *changing month loses 2 unsaved drafts — ] again to go
+  anyway*, and only the same request again goes. Any other key lets the
+  question lapse, as `u`'s does.
+- **Today is the server's** (`data-today`, from `clock::today()`), never the
+  browser's: a dev server running as of another date must agree with
+  itself. `T` on the current month says so and stays.
+- **`Ctrl-P` / `Ctrl-N` were the first binding and were never built.** Chrome
+  keeps `Ctrl-N` for a new window on Linux and Windows, where a page cannot
+  take it, so they are dropped rather than wired.
 
 ### Act
 | Key | Action |

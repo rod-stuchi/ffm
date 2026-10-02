@@ -548,6 +548,10 @@ drafts-parked = { $n ->
        *[other] { $n } rascunhos não salvos
     }
 
+month-leave-key = mudar de mês descarta { $drafts } — { $key } de novo para ir mesmo assim
+month-leave-click = mudar de mês descarta { $drafts } — clique de novo para ir mesmo assim
+month-already-current = já está no mês atual
+
 ## `gd` e o carrossel `P`
 
 details-due = Vence

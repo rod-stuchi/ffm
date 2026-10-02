@@ -1192,7 +1192,7 @@ that will otherwise be re-proposed.
   **≤ 1100px** only breaks the line: row 1 is logo · household · badge ·
   light/dark · profile, row 2 the month and the totals; nothing leaves.
   **≤ 720px** is the phone: the month arrows go (the picker and
-  `Ctrl-P`/`Ctrl-N` remain), the badge and light/dark move into the profile
+  `[`/`]` remain), the badge and light/dark move into the profile
   menu, and each total puts its label over its figure. The menu's copies are
   shown by the **same** media query that hides the originals, so no width
   has both or neither; there light/dark is three direct choices rather than
@@ -1249,6 +1249,11 @@ that will otherwise be re-proposed.
   with `replaceState` (not `pushState`: Back should not walk one member at a
   time), and it writes **above** the empty-pane return, because which member
   is focused has nothing to do with whether they have rows this month.
+- **A month change keeps `?pane=`.** `[`, `]`, `T`, the arrows and the
+  picker all go through one `gotoPeriod`, which builds the URL from
+  `location` — a server-rendered `?period=` href cannot carry a pane that
+  moved client-side, and dropped you back on your own. It asks first when
+  drafts are parked, since the page load would drop them.
 - **With no `?pane=`, you land on your OWN pane, never pane one.** The first
   thing a member sees must be their own ledger; everyone but the first member
   was being shown somebody else's. The server resolves it —

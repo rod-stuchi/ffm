@@ -585,6 +585,10 @@ drafts-parked = { $n ->
        *[other] { $n } unsaved drafts
     }
 
+month-leave-key = changing month loses { $drafts } — { $key } again to go anyway
+month-leave-click = changing month loses { $drafts } — click again to go anyway
+month-already-current = already on the current month
+
 ## `gd` — the details popup, and the `P` carousel
 
 details-due = Due

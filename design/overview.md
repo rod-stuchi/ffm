@@ -71,7 +71,7 @@ The app is designed keyboard-first, Vim-inspired, while remaining fully usable w
 - `dd` (vim-style double keystroke) deletes the current row, gated behind a confirmation modal — no destructive action fires from a single keystroke. This is still a soft delete under the hood (see Data Safety).
 - `e` edits the selected transaction occurrence; `E` edits the underlying recurring rule it was generated from, keeping the same lowercase/uppercase "this occurrence vs. the broader rule" split.
 - `u` to undo.
-- `Ctrl-P` / `Ctrl-N` move to the previous/next month view.
+- `[` / `]` move to the previous/next month view, and `T` back to the current one. (`Ctrl-P` / `Ctrl-N` were the first idea; Chrome keeps `Ctrl-N` for itself on Linux and Windows.)
 - `H` / `L` (uppercase) move focus between family-member panels, left/right, like Vim window navigation. Early idea (see `FFM_001.pdf`): each member has their own panel with an INs/OUTs header and a ledger below, and the currently focused panel is visually highlighted — full screen layout is still just a sketch at this point.
 - All standard actions are also available as clickable UI elements — the keyboard layer is an accelerator, not a requirement.
 

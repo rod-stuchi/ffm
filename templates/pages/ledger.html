@@ -78,7 +78,7 @@
 <script defer src="/static/js/alpine.min.js"></script>
 </head>
 <body>
-<div class="ledger-shell" data-period="{{ period_key }}" x-data="ledger()"
+<div class="ledger-shell" data-period="{{ period_key }}" data-today="{{ today_key }}" x-data="ledger()"
      :class="{ 'is-dragging': dragging }"
      @keydown.window="key($event)"
      @mousemove.window="mouseMoved($event)"
@@ -102,7 +102,12 @@
     {%- if let Some(r) = run %}
     <span class="runbadge" title="{{ r.title }}">{{ r.kind }}{% if let Some(d) = r.day %} · {{ d }}<span class="rb-year">{{ r.year }}</span>{% endif %}</span>
     {%- endif %}
+    {#- Every month change here goes through `monthClick`, the arrows and the
+        picker's cells alike: it keeps `?pane=` (the hrefs cannot — the pane
+        moves client-side) and asks first when drafts are parked. The hrefs
+        stay as the no-JS fallback and for a modified click to a new tab. -#}
     <nav class="mnav" x-data="{ picking: false }" @click.outside="picking = false"
+         @click="monthClick($event)"
          @keydown.escape.window="picking = false">
       <a class="btn" href="?period={{ prev }}" title="previous month">‹</a>
       {#- The dot is ambient and persistent, like every other status in this
@@ -894,6 +899,10 @@ function ledger() {
     // `{ id, dir }` while a `u`/`U` on a change from before today waits for
     // its second press. A confirmation, like `confirming` — never data.
     undoConfirm: null,
+    // The month a `[`/`]`/`T` (or a click) asked about, when drafts are
+    // parked — answered only by the same request again. Visual, like
+    // `undoConfirm`: nothing is written either way.
+    monthConfirm: null,
     nu: {{ nu|json|safe }},
     cursorOnFold: {{ cursor_on_fold|json|safe }},
     grepNeedsTerm: {{ t.grep_needs_a_term()|json|safe }},
@@ -979,6 +988,9 @@ function ledger() {
     unsavedRuleTag: {{ unsaved_rule_tag|json|safe }},
     draftsParked: {{ drafts_parked|json|safe }},
     draftsParkedOne: {{ drafts_parked_one|json|safe }},
+    monthLeaveKey: {{ month_leave_key|json|safe }},
+    monthLeaveClick: {{ month_leave_click|json|safe }},
+    monthAlreadyCurrent: {{ month_already_current|json|safe }},
     noPaneThatWay: {{ no_pane_that_way|json|safe }},
     reattributeTitleTemplate: {{ reattribute_title|json|safe }},
     detailsNone: {{ details_none|json|safe }},
@@ -1241,6 +1253,9 @@ function ledger() {
       // next key. Anything else in between and the question lapses — the
       // server re-checks the change it names either way.
       if (e.key !== 'u' && e.key !== 'U') this.undoConfirm = null;
+      // The month question lapses the same way — but not on a modifier (the
+      // Shift before `T`) or a digit (the 3 of a repeated `3]`).
+      if (!['[', ']', 'T', 'Shift', 'CapsLock'].includes(e.key) && !/^[0-9]$/.test(e.key)) this.monthConfirm = null;
 
       // A form takes literal text, so motions stop being motions inside one.
       // This is the same rule the pre-auth pages follow, not an exception.
@@ -1447,6 +1462,14 @@ function ledger() {
       else if (k === 'j') { this.row += n; this.paint(); }
       else if (k === 'k') { this.row -= n; this.paint(); }
       else if (k === 'P') { this.openCarousel(); }
+      // Months: `[` back, `]` on — counted, so `3]` is three months on — and
+      // `T` to today's. `T` is free bare: `gT` was resolved by `prefixed`.
+      else if (k === '[' || k === ']') { this.gotoPeriod(this.shiftPeriod(k === ']' ? n : -n), k); }
+      else if (k === 'T') {
+        const today = this.shell().dataset.today;
+        if (today === this.shell().dataset.period) this.say(this.monthAlreadyCurrent, false);
+        else this.gotoPeriod(today, 'T');
+      }
       else if (k === '?') { this.keymap = true; }
       else if (k === 'G') {
         // The log owns the vertical motions while it is open, and `G` is one
@@ -1529,6 +1552,63 @@ function ledger() {
       if (url.searchParams.get('pane') === id) return;
       url.searchParams.set('pane', id);
       history.replaceState(null, '', url);
+    },
+
+    /// The month `delta` months from the one on screen, as `YYYY-MM`. Plain
+    /// calendar arithmetic over the shell's own `data-period` — never the
+    /// browser's clock, which a dev server running as of another date
+    /// (`FFM_TODAY`) would disagree with. `T` reads `data-today` for that.
+    /// The shell carries the month on screen and today's. Looked up rather
+    /// than `$root`: `monthClick` runs from the picker's own `x-data`, where
+    /// `$root` is the picker.
+    shell() { return document.querySelector('.ledger-shell'); },
+
+    shiftPeriod(delta) {
+      const [y, m] = this.shell().dataset.period.split('-').map(Number);
+      const i = y * 12 + (m - 1) + delta;
+      return Math.floor(i / 12) + '-' + String((i % 12) + 1).padStart(2, '0');
+    },
+
+    /// Every month change: `[`, `]`, `T`, the arrows and the picker. A page
+    /// load, so the URL is built from `location` — `?pane=` and `?split=`
+    /// survive it, which a server-rendered href cannot promise, since the
+    /// pane moves client-side — and `?row=` goes, since it means "land here
+    /// once".
+    ///
+    /// A page load drops every parked draft, so with any parked the first
+    /// request only asks, and the same request again goes. Open forms are
+    /// parked first, exactly as moving the cursor off them would: a changed
+    /// one counts, an unchanged one just closes. `how` is the key pressed, or
+    /// 'click'.
+    gotoPeriod(key, how) {
+      if (this.editing) this.parkDraft(this.editing);
+      if (this.ruleFor) this.parkRule();
+      const n = Object.keys(this.drafts).length + Object.keys(this.ruleDrafts).length;
+      if (n && this.monthConfirm !== key) {
+        this.monthConfirm = key;
+        const drafts = n === 1 ? this.draftsParkedOne : this.draftsParked.replace('{n}', n);
+        this.say(how === 'click'
+          ? this.monthLeaveClick.replace('{d}', drafts)
+          : this.monthLeaveKey.replace('{d}', drafts).replace('{k}', how), false);
+        return;
+      }
+      this.monthConfirm = null;
+      const url = new URL(location.href);
+      url.searchParams.set('period', key);
+      url.searchParams.delete('row');
+      location.assign(url);
+    },
+
+    /// A click on a month link — `‹`, `›` or a picker cell — goes through
+    /// `gotoPeriod`. A modified or middle click is left to the browser, so
+    /// a new tab still opens on the plain href.
+    monthClick(e) {
+      const a = e.target.closest('a[href*="period="]');
+      if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const key = new URL(a.href, location.href).searchParams.get('period');
+      if (!key) return;
+      e.preventDefault();
+      this.gotoPeriod(key, 'click');
     },
 
     paneMemberId() {
