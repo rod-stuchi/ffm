@@ -686,6 +686,22 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   else. A DB row still accompanies every upload (uploader, timestamp, kind,
   original filename) but only as metadata/audit for undo — it never decides
   paid/not-paid.
+- **The vault is watched, and a file changed by hand is recorded and shown
+  live** (`services::watch`, `receipts::reconcile_row`, `GET /live`). `paid`
+  never needed it — it is read from the disk on every render — but the record
+  and the open pages did. Each change, debounced 1.5s, reconciles that member's
+  tracked rows for that month against the disk: a file with no live
+  `receipts` row was **filed by hand** (a row is added, `file_upload` logged as
+  the system, *found on disk — filed by hand*); a live row whose file is at
+  neither its computed nor its stored path was **removed by hand** (marked
+  deleted, `file_delete` logged, *removed from disk by hand*, and kept out of
+  the trash — there is nothing to restore). No list of the app's own writes
+  is kept: an app write updates its row in the same handler, so reconcile
+  finds nothing. It never moves a file — a hand-filed receipt does **not**
+  supersede the scheduled one. Startup catches up on what changed while the
+  process was down, in its own task. Every affected row is pushed over
+  Server-Sent Events as **ids only**; each page re-fetches the row as itself,
+  never swapping a row open in `e` (its kept copy goes stale instead).
 - **`receipts` is also the extension index, and that is its real second job.**
   The path ends in `.{ext}`, and the extension is whatever was uploaded, so the
   path cannot be *constructed* without reading `receipts.ext`. That makes the
@@ -1022,6 +1038,11 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   picker popup — ambient and persistent, like every other status in this app
   (marks, rings, deltas), not a toast that gets dismissed and forgotten. No
   separate "you have unpaid bills" message on load.
+- **The dot stays current without a page load.** `GET /months/dot`
+  re-renders only the trigger button — after a mutation that can change it
+  (one route group marked by `live::mark_dot`, which merges `ffm:dot` into
+  `HX-Trigger`), after any live event in any month, and when the tab becomes
+  visible (unguarded: only the button is swapped, never a form).
 - **Getting there is just existing navigation.** Clicking a flagged month cell
   jumps to it — no new command needed on top of the month picker that already
   exists.

@@ -1992,6 +1992,54 @@ extension — but purely as metadata/audit for undo, recorded as a
 `file_upload` entry in the change log (below) rather than in a separate
 upload table. It does not decide paid/not-paid; the disk does.
 
+### Files changed by hand — watched, recorded, shown live
+
+The vault is meant to be filed by hand, and `paid` was always read from the
+disk on render, so the ledger was never *wrong* after a hand edit. It was
+**silent**: no record of the file, nothing in the log, and the open pages
+found out on their next load. A file deleted by hand even stayed "live" in
+`receipts`, and the trash offered to restore what was gone.
+
+- **One function decides** — `receipts::reconcile_row`, run per row by the
+  watcher, the startup catch-up and the tests. It compares the disk with the
+  live `receipts` rows, per kind, and never touches a file:
+
+  | on disk | live row | meaning | recorded as |
+  |---|---|---|---|
+  | a file at the row's computed path | none | filed by hand | a `receipts` row (`uploaded_by` = the row's member) and `file_upload`, system, *found on disk — filed by hand* |
+  | at neither the computed nor the stored path | yes | removed by hand | the row marked deleted (`manual`) and `file_delete`, system, *removed from disk by hand* |
+  | anything else | | agrees | nothing |
+
+  The **stored** path is what keeps a rule rename, a re-attribution or an
+  amount change — which move the computed path, never the file — from
+  reading as a removal.
+- **No list of the app's own writes.** An upload, a soft delete or a restore
+  updates its `receipts` row in the same handler that touches the disk, so by
+  the time the watcher looks the two agree and nothing is logged.
+- **The watcher** (`notify`: FSEvents, inotify) watches the whole vault, and
+  acts on a path once it has been quiet for **1.5s** — a Finder copy is a
+  burst. A path names a member (its first folder) and a month (its year folder
+  and the file name's first two digits); that member's tracked rows in that
+  month are reconciled, so the bucket and bill name never have to be read
+  back out of a slug. `.delete/`, dotfiles and half-downloaded names are
+  ignored; a whole folder going reconciles the whole member.
+- **A hand-filed receipt does not supersede the scheduled file** the way an
+  upload does. The watcher records; it never rearranges somebody's filing.
+- **Startup catches up**, on its own task after the bind — the server answers
+  from the first moment — and logs `files · N found on disk, M removed by hand
+  while away`.
+- **The trash leaves a file removed by hand out**: nothing went through
+  `.delete/`, so there is nothing to bring back.
+- **Open pages update live, over Server-Sent Events** (`GET /live`). An event
+  is `row` with `{id, member, period, disk}` — ids, never HTML: a row is
+  rendered per viewer, so each page that has it on screen re-fetches it
+  (`GET /tx/{id}`) as itself, totals included. The row open in `e` is never
+  swapped under the form; its kept copy goes stale, the statusline says so,
+  and Esc shows the new one. Every affected row is pushed, so another
+  member's upload through the app shows live too; *updated from disk* is said
+  only for a hand change. The stream ends on shutdown, or graceful shutdown
+  would wait on it forever.
+
 ### Extensions
 
 Same closed, case-insensitive set as before: `pdf`, `jpg`, `png`, `txt`. The
@@ -2258,6 +2306,25 @@ rule (a private row only counts for its owner and the admin).
   that gets dismissed and then forgotten.
 - Clicking a flagged cell jumps to that month — the picker's existing
   behavior, unchanged. No new command.
+- **The trigger's dot stays current without a reload.** The page draws it
+  once; `GET /months/dot` re-renders just the trigger button, from the same
+  partial (`partials/month_trigger.html`), at three moments:
+  - **after a mutation that can move the answer** — files, row deletes and
+    restores, undo/redo, privacy, re-attribution, rule writes, members turned
+    off and on. Those routes are listed once, in one group, behind one layer
+    (`live::mark_dot`) that adds `ffm:dot` to a successful non-GET's
+    `HX-Trigger`, merged with whatever the handler said there. No handler has
+    to remember.
+  - **after any live event, in any month** — a receipt filed by hand in
+    August is exactly what clears a dot seen from September, so the live
+    listener refreshes the dot before it filters by the month on screen.
+  - **when the tab becomes visible again** — midnight makes bills overdue
+    with nothing else happening. Deliberately unguarded: only the button is
+    swapped, so an open `e` form, a rule pane or the add row are never in its
+    way, and whatever is typed in them stays.
+
+  Debounced (a burst of events is one fetch), quiet (no loader), and per
+  viewer like the page.
 
 ### The picker is also the year
 
@@ -2333,7 +2400,8 @@ Each key is also readable from `FFM_DB_PATH` / `FFM_RECEIPTS_ROOT` /
 `FFM_BACKUP_DIR`, with the environment winning, so a container deployment needs
 no file at all.
 
-**These three are read once at startup and are not watched.** The earlier
+**These three are read once at startup and are not watched.** (The receipt
+vault's *contents* are — see Files changed by hand; its *location* is not.) The earlier
 `notify`-watched-at-runtime design is dropped, because it is now false for
 everything left in the file: `db_path` cannot change under a running process
 without swapping the database out from beneath open transactions, and

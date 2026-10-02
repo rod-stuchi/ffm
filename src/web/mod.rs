@@ -7,6 +7,7 @@ pub mod files;
 pub mod form;
 pub mod import;
 pub mod ledger;
+pub mod live;
 pub mod log;
 pub mod rules;
 pub mod selection;
@@ -40,6 +41,30 @@ pub fn router(state: AppState) -> Router {
         .route("/lang", post(auth::set_lang))
         .route("/theme", post(auth::set_theme));
 
+    // The mutations that can move a month in or out of "overdue" — the dot on
+    // the month picker's trigger. Listed once, here, and marked by one layer
+    // (`live::mark_dot`) so the page re-fetches the dot after any of them;
+    // no handler has to remember to say so.
+    let overdue = Router::new()
+        .route("/tx/{id}/delete", post(tx::delete))
+        .route("/undo", post(tx::undo))
+        .route("/redo", post(tx::redo))
+        .route("/trash/restore", post(trash::restore))
+        .route("/tx/{id}", get(tx::one_row).post(tx::save_edit))
+        .route("/tx/{id}/privacy", post(tx::privacy))
+        .route("/tx/{id}/member", post(tx::reattribute))
+        // Files. Three distinct actions rather than one upload plus a
+        // question: each kind has its own fixed name on disk and its own
+        // effect on state.
+        .route("/tx/{id}/file/{kind}", get(files::open).post(files::upload))
+        .route("/tx/{id}/file/{kind}/delete", post(files::delete))
+        .route("/rules", post(rules::create))
+        .route("/rules/{id}", post(rules::save))
+        .route("/rules/{id}/delete", post(rules::delete))
+        .route("/members/{id}/disable", post(settings::disable))
+        .route("/members/{id}/enable", post(settings::enable))
+        .route_layer(axum::middleware::from_fn(live::mark_dot));
+
     // Authenticated, state-changing: these carry the same-origin check.
     let guarded = Router::new()
         .route("/logout", post(auth::logout))
@@ -47,31 +72,19 @@ pub fn router(state: AppState) -> Router {
         // Every mutation in the app goes through one response shape: a row
         // fragment, or an error row carrying Try Again. See web::tx.
         .route("/tx", post(tx::add))
-        .route("/tx/{id}/delete", post(tx::delete))
-        .route("/undo", post(tx::undo))
-        .route("/redo", post(tx::redo))
         // `Ctrl-u` / `:trash` — every deleted row and removed file, each one
         // restorable on its own rather than in `u`'s order.
         .route("/trash", get(trash::view))
-        .route("/trash/restore", post(trash::restore))
         .route("/tx/{id}/move", post(tx::move_row))
         // `e` — the row opens into its own form, in place.
-        .route("/tx/{id}", get(tx::one_row).post(tx::save_edit))
         .route("/tx/{id}/edit", get(tx::edit_form))
-        .route("/tx/{id}/privacy", post(tx::privacy))
         .route("/tx/{id}/paid", post(tx::paid))
-        .route("/tx/{id}/member", post(tx::reattribute))
-        // Files. Three distinct actions rather than one upload plus a
-        // question: each kind has its own fixed name on disk and its own
-        // effect on state.
         // The statusline's selection cell - `x`, summed like the pane header.
         .route("/tx/selection", get(selection::cell))
-        .route("/tx/{id}/file/{kind}", get(files::open).post(files::upload))
         // The `P` carousel's stage, and a PDF's pages as images — see
         // `files::FileView` for why the browser's PDF viewer is not used.
         .route("/tx/{id}/file/{kind}/view", get(files::view))
         .route("/tx/{id}/file/{kind}/page/{n}", get(files::page))
-        .route("/tx/{id}/file/{kind}/delete", post(files::delete))
         // `gl` — read-only, and the same column the rule editor uses.
         .route("/tx/{id}/log", get(log::log))
         // `:grep` — every month, which is what makes it a different verb.
@@ -79,6 +92,8 @@ pub fn router(state: AppState) -> Router {
         // The month picker's numbers — fetched when it opens, not on every
         // ledger load. See `ledger::month_pop`.
         .route("/months", get(ledger::month_pop))
+        .route("/months/dot", get(ledger::month_dot))
+        .route("/live", get(live::stream))
         // The rule pane. A / I open it blank, E on a recurring row opens it
         // filled in; saving reconciles immediately so the periods the rule is
         // responsible for arrive in the same response.
@@ -86,10 +101,7 @@ pub fn router(state: AppState) -> Router {
         // The months read-back. A pure GET: twelve numbers of arithmetic,
         // rendered by the same parser that stores the value.
         .route("/rules/months", get(rules::months_preview))
-        .route("/rules", post(rules::create))
         .route("/rules/{id}/edit", get(rules::edit_rule))
-        .route("/rules/{id}", post(rules::save))
-        .route("/rules/{id}/delete", post(rules::delete))
         // The ONE place a barcode file is ever attached: the rule's own
         // editor, where the rule is already identified.
         .route("/rules/{id}/barcode", post(import::attach))
@@ -117,11 +129,10 @@ pub fn router(state: AppState) -> Router {
             post(settings::sign_out_others),
         )
         .route("/members/{id}/signout", post(settings::sign_out))
-        .route("/members/{id}/disable", post(settings::disable))
-        .route("/members/{id}/enable", post(settings::enable))
         .route("/members/{id}/trash", post(settings::trash))
         .route("/members/{id}/restore", post(settings::restore))
         .route("/members/invites/{id}/revoke", post(settings::revoke))
+        .merge(overdue)
         .layer(axum::middleware::from_fn(csrf::guard));
 
     let app = Router::new()

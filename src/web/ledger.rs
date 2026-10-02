@@ -885,6 +885,47 @@ pub struct MonthParams {
     period: Option<String>,
 }
 
+#[derive(Template)]
+#[template(path = "partials/month_trigger.html")]
+struct MonthTrigger {
+    t: Catalog,
+    period: String,
+    unresolved_total: usize,
+    unresolved_title: String,
+}
+
+/// `GET /months/dot` — the picker's trigger and its dot, alone. The page draws
+/// it once; this is how it stays current without a reload: after a mutation
+/// that says `ffm:dot`, after any live event (a file filed by hand in August
+/// resolves August's dot while September is on screen), and when the tab
+/// becomes visible again — the one moment the clock can have made a bill
+/// overdue with nothing else happening. Per viewer, like the page: a private
+/// row's overdue state lights only its owner's and the admin's dot.
+pub async fn month_dot(
+    State(st): State<AppState>,
+    auth: Auth,
+    Query(p): Query<MonthParams>,
+) -> impl IntoResponse {
+    let today = crate::clock::today();
+    let showing = p
+        .period
+        .as_deref()
+        .and_then(Period::parse)
+        .unwrap_or_else(|| Period::of(today));
+    let t = auth.catalog();
+    let unresolved =
+        ledger::unresolved_months(&st.pool, auth.viewer, today, Some(&st.cfg.receipts_root))
+            .await
+            .unwrap_or_default();
+    let total: usize = unresolved.iter().map(|u| u.count).sum();
+    Html(MonthTrigger {
+        period: fmt::period(showing),
+        unresolved_total: total,
+        unresolved_title: t.unresolved_dot(total as i64),
+        t,
+    })
+}
+
 /// `GET /months` — the picker's body with its numbers, fetched each time the
 /// picker opens.
 ///

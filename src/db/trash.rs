@@ -114,12 +114,18 @@ pub async fn list(
              AND NOT EXISTS (SELECT 1 FROM change x
                              WHERE x.entity = 'file' AND x.entity_id = r.id
                                AND x.action = 'file_unlink' AND x.note = ?4)
+             -- Nor a file deleted by hand: it left the vault without
+             -- passing through the trash, so there is nothing to restore.
+             AND NOT EXISTS (SELECT 1 FROM change x
+                             WHERE x.entity = 'file' AND x.entity_id = r.id
+                               AND x.action = 'file_delete' AND x.note = ?5)
            ORDER BY r.deleted_at DESC, r.id DESC
            LIMIT ?3"#,
         me,
         all,
         fetch,
         crate::services::receipts::MOVED,
+        crate::services::receipts::REMOVED_BY_HAND,
     )
     .fetch_all(pool)
     .await?;

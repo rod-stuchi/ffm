@@ -786,3 +786,233 @@ pub async fn restore_with_row(
     }
     Ok(n)
 }
+
+// ---------------------------------------------------------------------------
+// files changed by hand
+// ---------------------------------------------------------------------------
+
+/// The note on a file the vault holds but nobody uploaded — copied in by hand.
+pub const FOUND_BY_HAND: &str = "found on disk — filed by hand";
+/// The note on a file that left the vault without the app: deleted by hand.
+/// Nothing is in the trash to bring back, so the trash does not offer it.
+pub const REMOVED_BY_HAND: &str = "removed from disk by hand";
+
+/// What a reconcile wrote down.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Reconciled {
+    pub found: u32,
+    pub removed: u32,
+}
+
+impl Reconciled {
+    pub fn changed(self) -> bool {
+        self.found + self.removed > 0
+    }
+}
+
+/// The slot of one tracked occurrence, from the same columns the pane reads —
+/// the transaction's bucket and bill name, the rule's instance and
+/// amount-in-filename, the member's folder — so a reconcile and the row's
+/// own mark can never disagree about where its files belong. `None` for a
+/// row with nothing to file under, or one that is deleted (its files went to
+/// the trash with it).
+pub async fn slot_of(pool: &SqlitePool, transaction_id: i64) -> sqlx::Result<Option<(Slot, i64)>> {
+    let row = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+                  t.bucket AS "bucket: String", t.bill_name AS "bill_name: String",
+                  t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
+                  m.slug AS "slug!: String",
+                  r.instance AS "instance: String",
+                  r.amount_in_filename AS "amount_in_filename!: i64"
+           FROM transactions t
+           JOIN recurring_rules r ON r.id = t.rule_id
+           JOIN members m ON m.id = t.member_id
+           WHERE t.id = ?1 AND t.deleted_at IS NULL AND r.tracked = 1"#,
+        transaction_id
+    )
+    .fetch_optional(pool)
+    .await?;
+    let Some(r) = row else { return Ok(None) };
+    let (Some(bucket), Some(bill_name), Some(period)) =
+        (r.bucket, r.bill_name, Period::parse(&r.period))
+    else {
+        return Ok(None);
+    };
+    let currency = crate::db::ledger::household(pool)
+        .await?
+        .map(|h| h.currency)
+        .unwrap_or_default();
+    Ok(Some((
+        Slot {
+            transaction_id: r.id,
+            vault: receipt_path::vault(&r.slug),
+            bucket,
+            bill_name,
+            instance: r.instance,
+            period,
+            amount: r.amount_cents.map(|c| (Cents(c), currency)),
+            amount_in_filename: r.amount_in_filename != 0,
+        },
+        r.member_id,
+    )))
+}
+
+/// Brings one occurrence's **record** in line with its **disk**, and logs the
+/// difference as the system — the one thing a hand edit to the vault leaves
+/// undone. `paid` never needed this: it is read from the disk on every render.
+///
+/// - A file on disk with no live `receipts` row was **filed by hand**: it gets
+///   a row (so the log has something to point at) and a `file_upload` entry.
+/// - A live row whose file is at neither the path the row would compute now
+///   nor the path it was stored at was **removed by hand**: the row is marked
+///   deleted and a `file_delete` entry written. Checking the stored path is
+///   what keeps a rule rename or a re-attribution — which move the computed
+///   path, never the file — from reading as a removal.
+///
+/// It never moves or deletes a file. An app write changes the row in the same
+/// handler that touches the disk, so after it the two already agree and this
+/// writes nothing — which is why the watcher needs no list of its own writes.
+pub async fn reconcile_row(
+    pool: &SqlitePool,
+    root: &Path,
+    transaction_id: i64,
+) -> sqlx::Result<Reconciled> {
+    let mut out = Reconciled::default();
+    let Some((slot, member_id)) = slot_of(pool, transaction_id).await? else {
+        return Ok(out);
+    };
+    let live = sqlx::query!(
+        r#"SELECT id AS "id!: i64", kind AS "kind!: String", ext AS "ext!: String",
+                  path AS "path!: String"
+           FROM receipts WHERE transaction_id = ?1 AND deleted_at IS NULL"#,
+        transaction_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for kind in Kind::ALL {
+        let mut held = false;
+        if let Some(row) = live.iter().find(|r| r.kind == kind.code()) {
+            if root.join(slot.path(kind, &row.ext)).exists() || root.join(&row.path).exists() {
+                held = true;
+            } else {
+                let mut tx = pool.begin().await?;
+                let at = now();
+                sqlx::query!(
+                    r#"UPDATE receipts SET deleted_at = ?2, deleted_by = NULL,
+                                           delete_reason = 'manual', deleted_from_path = path
+                       WHERE id = ?1 AND deleted_at IS NULL"#,
+                    row.id,
+                    at
+                )
+                .execute(&mut *tx)
+                .await?;
+                Change::file(Actor::System, FileAction::Delete, row.id)
+                    .in_period(slot.period)
+                    .diff("path", Value::path(&row.path), Value::Path(None))
+                    .note(REMOVED_BY_HAND)
+                    .write(&mut tx)
+                    .await?;
+                tx.commit().await?;
+                out.removed += 1;
+            }
+        }
+        if held {
+            continue;
+        }
+        // No live row (or its file just went): is there one filed by hand?
+        let Some(ext) = receipt_path::EXTENSIONS
+            .iter()
+            .find(|ext| root.join(slot.path(kind, ext)).exists())
+        else {
+            continue;
+        };
+        let rel = slot.path(kind, ext);
+        let name = Path::new(&rel)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&rel)
+            .to_string();
+        let mut tx = pool.begin().await?;
+        let at = now();
+        let kind_s = kind.code();
+        // `uploaded_by` is NOT NULL, and nobody here uploaded anything: the
+        // file is the member's own filing, so it is recorded as theirs. The
+        // log entry is the system's, and its note says how it arrived.
+        let id = sqlx::query_scalar!(
+            r#"INSERT INTO receipts
+                   (transaction_id, kind, path, ext, original_filename, uploaded_by, uploaded_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+               RETURNING id AS "id!: i64""#,
+            transaction_id,
+            kind_s,
+            rel,
+            ext,
+            name,
+            member_id,
+            at,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        Change::file(Actor::System, FileAction::Upload, id)
+            .in_period(slot.period)
+            .diff("path", Value::Path(None), Value::path(&rel))
+            .diff("kind", Value::Text(None), Value::text(kind.code()))
+            .note(FOUND_BY_HAND)
+            .write(&mut tx)
+            .await?;
+        tx.commit().await?;
+        out.found += 1;
+    }
+    Ok(out)
+}
+
+/// The tracked occurrences of one member in one month — what a changed path
+/// under `{slug}/…/{year}/{month}…` can belong to. A handful of rows, so the
+/// watcher reconciles them all rather than parsing bucket and bill name back
+/// out of a lossy slug.
+/// `period` `None` means every month — a whole folder went, and the path no
+/// longer says which.
+pub async fn tracked_in(
+    pool: &SqlitePool,
+    slug: &str,
+    period: Option<Period>,
+) -> sqlx::Result<Vec<(i64, i64, String)>> {
+    let p = period.map(|p| p.to_string());
+    let rows = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", t.member_id AS "member_id!: i64",
+                  t.period AS "period!: String"
+           FROM transactions t
+           JOIN recurring_rules r ON r.id = t.rule_id
+           JOIN members m ON m.id = t.member_id
+           WHERE m.slug = ?1 AND (?2 IS NULL OR t.period = ?2)
+             AND t.deleted_at IS NULL AND r.tracked = 1"#,
+        slug,
+        p
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.id, r.member_id, r.period))
+        .collect())
+}
+
+/// Every live tracked occurrence, with its member and month — the startup
+/// catch-up's list.
+pub async fn all_tracked(pool: &SqlitePool) -> sqlx::Result<Vec<(i64, i64, String)>> {
+    let rows = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", t.member_id AS "member_id!: i64",
+                  t.period AS "period!: String"
+           FROM transactions t
+           JOIN recurring_rules r ON r.id = t.rule_id
+           WHERE t.deleted_at IS NULL AND r.tracked = 1
+           ORDER BY t.period, t.id"#
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.id, r.member_id, r.period))
+        .collect())
+}

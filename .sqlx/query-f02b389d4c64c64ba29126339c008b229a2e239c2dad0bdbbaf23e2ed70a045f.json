@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                  t.bucket AS \"bucket: String\", t.bill_name AS \"bill_name: String\",\n                  t.amount_cents AS \"amount_cents: i64\", t.member_id AS \"member_id!: i64\",\n                  m.slug AS \"slug!: String\",\n                  r.instance AS \"instance: String\",\n                  r.amount_in_filename AS \"amount_in_filename!: i64\"\n           FROM transactions t\n           JOIN recurring_rules r ON r.id = t.rule_id\n           JOIN members m ON m.id = t.member_id\n           WHERE t.id = ?1 AND t.deleted_at IS NULL AND r.tracked = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "bucket: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "bill_name: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "slug!: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "instance: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_in_filename!: i64",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "f02b389d4c64c64ba29126339c008b229a2e239c2dad0bdbbaf23e2ed70a045f"
+}

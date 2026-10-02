@@ -124,9 +124,12 @@ async fn main() {
     ffm::services::backup::spawn(pool.clone(), cfg.backup_dir.clone());
 
     let state_pool = pool.clone();
+    let receipts_root = cfg.receipts_root.clone();
+    let (live, stop_live) = ffm::services::live::Live::new();
     let state = AppState {
         pool,
         cfg: std::sync::Arc::new(cfg),
+        live: live.clone(),
     };
 
     let app = web::router(state);
@@ -162,6 +165,12 @@ async fn main() {
     #[cfg(debug_assertions)]
     tracing::info!("sandbox · http://{shown}/__sandbox/rows");
 
+    // Files changed by hand: watched from now on, and caught up on for the
+    // time the process was down. Both are their own tasks, started after the
+    // bind, so the server answers from the first moment.
+    ffm::services::watch::spawn(state_pool.clone(), receipts_root.clone(), live.clone());
+    ffm::services::watch::catch_up(state_pool.clone(), receipts_root, live);
+
     // WAL mode means `ffm.db` is only the whole database when read WITH its
     // sidecar. Checkpointing on the way out leaves a file that is complete on
     // its own — which is what whoever copies it will assume.
@@ -183,6 +192,9 @@ async fn main() {
             let _ = ctrl_c.await;
 
             tracing::info!("shutting down");
+            // Every open live stream ends here, or graceful shutdown would
+            // wait on them forever — an SSE response never finishes by itself.
+            let _ = stop_live.send(true);
             ffm::services::backup::checkpoint(&pool).await;
             pool.close().await;
         }

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO receipts\n                   (transaction_id, kind, path, ext, original_filename, uploaded_by, uploaded_at)\n               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)\n               RETURNING id AS \"id!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "3afe8955a21359fe83a0e57378f98d888951a4c7a4b644ceabe6c5eecc4980d1"
+}

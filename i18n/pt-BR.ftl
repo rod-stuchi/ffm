@@ -661,3 +661,8 @@ busy-offline = O servidor não respondeu — nada foi alterado. Tente de novo.
 run-dev-title = Um build de desenvolvimento — não é o servidor da casa. O que você muda aqui não é o livro de verdade.
 run-dev-lan-title = Um build de desenvolvimento, aberto à rede local — não é o servidor da casa.
 run-demo-title = Um build de desenvolvimento rodando como se fosse { $date }, numa cópia do banco — nada aqui chega ao livro de verdade.
+
+## Live updates — a row changed while this page was open
+
+live-from-disk = atualizado a partir do disco — um arquivo foi colocado ou removido à mão
+live-under-edit = os arquivos desta linha mudaram no disco — Esc para vê-los

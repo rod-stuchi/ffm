@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.member_id AS \"member_id!: i64\",\n                  t.period AS \"period!: String\"\n           FROM transactions t\n           JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.deleted_at IS NULL AND r.tracked = 1\n           ORDER BY t.period, t.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "19e3f7c75c22c8548349f059567d248723b50cceaa109644e37fd991162c014d"
+}

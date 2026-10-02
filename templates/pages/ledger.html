@@ -109,10 +109,7 @@
           app — not a toast that gets dismissed and then forgotten. It sits on
           the trigger when ANY other month this year has something overdue and
           unreceipted, and again on each flagged cell inside. -#}
-      <button class="btn mlabel" type="button" @click="picking = !picking"
-              title="{% if unresolved_total > 0 %}{{ unresolved_title }}{% else %}{{ t.month_picker() }}{% endif %}">
-        {{ period }}{% if unresolved_total > 0 %}<i class="dot"></i>{% endif %}
-      </button>
+      {%- include "partials/month_trigger.html" %}
       <a class="btn" href="?period={{ next }}" title="next month">›</a>
 
       {#- Each month's NET is a dozen pane reads, so it is fetched when the
@@ -900,6 +897,10 @@ function ledger() {
     nu: {{ nu|json|safe }},
     cursorOnFold: {{ cursor_on_fold|json|safe }},
     grepNeedsTerm: {{ t.grep_needs_a_term()|json|safe }},
+    liveFromDisk: {{ t.live_from_disk()|json|safe }},
+    // `refreshDot`'s debounce: a burst of events is one re-fetch.
+    dotTimer: null,
+    liveUnderEdit: {{ t.live_under_edit()|json|safe }},
     addSpend: {{ t.row_add_spend()|json|safe }},
     addIncome: {{ t.row_add_income()|json|safe }},
     // The household's number format, from the one value that owns it. Every
@@ -1111,6 +1112,54 @@ function ledger() {
     /// where you are looking — a side pane opening into an empty mount, a
     /// move swapped into `body` — and for background requests, which pass
     /// `'none'`.
+    /// `GET /live`: the server says a row changed — a file filed or removed
+    /// by hand in the vault, or one another member uploaded — and this page
+    /// fetches that row again, as itself, if it is on screen. The event
+    /// carries an id and a month and nothing else; privacy, language and
+    /// sort all stay with the fetch. `EventSource` reconnects by itself.
+    listenLive() {
+      if (!window.EventSource) return;
+      const es = new EventSource('/live');
+      es.addEventListener('row', (e) => {
+        let ev;
+        try { ev = JSON.parse(e.data); } catch (_) { return; }
+        // Any month, not only the one on screen: the dot is about the OTHER
+        // months, and a receipt filed by hand in August is what clears it.
+        this.refreshDot();
+        const period = document.querySelector('.ledger-shell')?.dataset.period;
+        const id = String(ev.id);
+        if (ev.period !== period || !document.getElementById('row-' + id)) return;
+        // The row being edited is never swapped under the form: `savedSwap`
+        // would read the swap as a finished save and throw the draft away.
+        // Its kept copy goes stale instead, so Esc fetches the new one.
+        if (String(this.editing) === id) {
+          ffmRowHtml.delete(id);
+          if (ev.disk) this.say(this.liveUnderEdit, false);
+          return;
+        }
+        this.ajax('GET', '/tx/' + id, { target: '#row-' + id, swap: 'outerHTML' }, 'none')
+          .then(() => {
+            this.markDrafts();
+            this.paintSelection();
+            this.paint();
+            if (ev.disk) this.say(this.liveFromDisk, false);
+          });
+      });
+    },
+
+    /// The month picker's trigger and its dot, re-rendered alone
+    /// (`GET /months/dot`) — debounced, quiet (no loader), and swapped over
+    /// the button only.
+    refreshDot() {
+      clearTimeout(this.dotTimer);
+      this.dotTimer = setTimeout(() => {
+        const period = document.querySelector('.ledger-shell')?.dataset.period || '';
+        if (!document.querySelector('.mnav .mlabel')) return;
+        this.ajax('GET', '/months/dot?period=' + encodeURIComponent(period),
+          { target: '.mnav .mlabel', swap: 'outerHTML' }, 'none');
+      }, 250);
+    },
+
     ajax(method, url, opts, anchor) {
       ffmBusy.next = anchor || 'status';
       try { return htmx.ajax(method, url, opts); }
@@ -3264,6 +3313,16 @@ function ledger() {
         if (e.detail.flash) this.flashRow(String(e.detail.id));
       });
       document.body.addEventListener('ffm:undo-confirm', e => { this.undoConfirm = e.detail; });
+      this.listenLive();
+      // A mutation that can move a month in or out of "overdue" says so in
+      // its `HX-Trigger` (`live::mark_dot` on the server); and a tab coming
+      // back into view may have crossed midnight, which makes bills overdue
+      // with nothing else happening. Both re-fetch only the picker's trigger,
+      // so nothing being typed elsewhere on the page is touched.
+      document.body.addEventListener('ffm:dot', () => this.refreshDot());
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this.refreshDot();
+      });
       // Every htmx request, declarative or `htmx.ajax`, shows its loader from
       // here. It ends on the XHR's own `loadend` rather than on
       // `htmx:afterRequest`: that event is dispatched on the element that

@@ -695,3 +695,8 @@ busy-offline = No answer from the server — nothing changed. Try again.
 run-dev-title = A development build — not the household's server. What you change here is not the real ledger's.
 run-dev-lan-title = A development build, open to the local network — not the household's server.
 run-demo-title = A development build running as of { $date }, on a copy of the database — nothing here reaches the real ledger.
+
+## Live updates — a row changed while this page was open
+
+live-from-disk = updated from disk — a file was filed or removed by hand
+live-under-edit = this row's files changed on disk — Esc to see them
