@@ -147,6 +147,18 @@ css:
 css-build:
     tailwindcss -i static/css/app.css -o static/css/build.css --minify
 
+# Throw away this crate's build output — never the dependencies' — when the
+# incremental cache goes stale. The symptom is a link failure, not a compile
+# error: `linking with cc failed` and `Undefined symbols … drop_glue … ffm…web`
+# naming our own handlers, after switching between builds with and without
+# `dev-reload` while the same files kept changing. It is the cache, not the
+# code; a rebuild from clean links. It also reclaims space: that cache had
+# grown to 35 GiB when this was added.
+#
+# Clear ffm's own build cache — the cure for "Undefined symbols … drop_glue" at link time
+clean:
+    cargo clean -p ffm
+
 # Re-download the self-hosted font subsets and regenerate static/css/fonts.css.
 # The output is committed, so this is only needed when the weights change.
 fonts:
