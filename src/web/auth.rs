@@ -226,6 +226,10 @@ struct LoginPage {
     /// only somebody who knows the password learns it, and their next step
     /// is not to try again but to ask an admin.
     inactive: bool,
+    /// Arrived here because this device's session was revoked while the page
+    /// was open — another device signed it out, or an admin did (`/live`'s
+    /// `signedout`). Said, so the sign-in page is not a mystery.
+    signed_out: bool,
 }
 
 pub async fn login_page(State(st): State<AppState>, jar: CookieJar, parts: Parts) -> Response {
@@ -245,6 +249,10 @@ pub async fn login_page(State(st): State<AppState>, jar: CookieJar, parts: Parts
         return Redirect::to("/").into_response();
     }
 
+    let signed_out = parts
+        .uri
+        .query()
+        .is_some_and(|q| q.split('&').any(|kv| kv == "out=1"));
     let (chrome, t) = chrome(&st, &jar, &parts, "sign in", "/login").await;
     Html(LoginPage {
         chrome,
@@ -252,6 +260,7 @@ pub async fn login_page(State(st): State<AppState>, jar: CookieJar, parts: Parts
         name: String::new(),
         failed: false,
         inactive: false,
+        signed_out,
     })
     .into_response()
 }
@@ -281,6 +290,7 @@ pub async fn login(
                 name: form.name,
                 failed: false,
                 inactive: true,
+                signed_out: false,
             })
             .into_response()
         }
@@ -332,6 +342,7 @@ async fn failed_login(st: &AppState, jar: &CookieJar, parts: &Parts, name: Strin
         name,
         failed: true,
         inactive: false,
+        signed_out: false,
     })
     .into_response()
 }
@@ -353,6 +364,8 @@ pub async fn logout(State(st): State<AppState>, jar: CookieJar) -> Response {
             ));
         }
         let _ = auth::end_session(&st.pool, &sid).await;
+        // Other tabs on this session are signed out too; tell them.
+        st.live.sessions_revoked();
     }
     (jar.add(session::clear_session()), Redirect::to("/login")).into_response()
 }

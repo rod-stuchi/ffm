@@ -22,6 +22,7 @@ login-submit = Sign in
 # One message for both a wrong name and a wrong password, on purpose: saying
 # which was wrong tells an attacker which half they got right.
 login-error-mismatch = That name and password don't match.
+login-signed-out = This device was signed out — from another device, or by an admin. Sign in again to carry on.
 
 setup-title = Set up your household
 setup-household-section = Your household

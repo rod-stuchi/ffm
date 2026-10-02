@@ -7,6 +7,13 @@
     <p>{{ t.login_subtitle() }}</p>
   </div>
   <div class="cb">
+    {%- if signed_out %}
+    {#- The page was open when this device's session was revoked — from
+        another device, by an admin, or by a reset. -#}
+    <div class="notebox" role="status">
+      <span>{{ t.login_signed_out() }}</span>
+    </div>
+    {%- endif %}
     {%- if inactive %}
     <div class="warnbox" role="alert">
       <span class="g" aria-hidden="true">&#9888;</span>

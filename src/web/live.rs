@@ -4,34 +4,96 @@
 //! server says which row changed and the page fetches it as itself. A session
 //! is required, so a stream belongs to somebody; what it carries is ids and a
 //! month, never a rendered row.
+//!
+//! **And it is how a signed-out device finds out.** "Sign out other devices",
+//! an admin's "Sign out everywhere", a password reset and turning a member off
+//! all revoke sessions, and a page whose session is gone used to carry on
+//! looking signed in until its next click bounced to `/login`. Now every
+//! stream checks its own session the moment any revoke happens
+//! (`Live::sessions_revoked`), and the page whose session is gone gets one
+//! `signedout` event and goes to `/login` at once. A WebSocket was not needed
+//! for this: the signal only ever runs server to page, which is what this
+//! stream already is.
 
-use crate::services::live::LiveEvent;
+use crate::services::live::Signal;
 use crate::state::AppState;
 use crate::web::session::Auth;
 use axum::extract::State;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use std::convert::Infallible;
-use tokio_stream::wrappers::{BroadcastStream, WatchStream};
-use tokio_stream::{Stream, StreamExt};
+use std::time::Duration;
+use tokio::sync::{broadcast, mpsc};
+use tokio_stream::Stream;
+use tokio_stream::wrappers::ReceiverStream;
+
+/// How often a stream re-checks its session with no signal at all. A revoke
+/// made from another process — the console's `ffm reset-link` — cannot reach
+/// this one's channel, so it is caught here instead, within this long.
+const RECHECK: Duration = Duration::from_secs(30);
 
 pub async fn stream(
     State(st): State<AppState>,
-    _auth: Auth,
+    auth: Auth,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let rows = BroadcastStream::new(st.live.subscribe())
-        // A page that fell behind loses the oldest events, not the stream;
-        // the next one still arrives.
-        .filter_map(|ev| ev.ok())
-        .map(Some::<LiveEvent>);
-    // The switch `main` trips on shutdown, as one `None` that ends the stream.
-    let stop = WatchStream::new(st.live.stopped())
-        .filter(|stopped| *stopped)
-        .map(|_| None);
-    let events = rows.merge(stop).take_while(|ev| ev.is_some()).map(|ev| {
-        let ev = ev.expect("take_while keeps only Some");
-        Ok(Event::default().event("row").data(ev.json()))
+    let (out, events) = mpsc::channel::<Result<Event, Infallible>>(32);
+    let mut signals = st.live.subscribe();
+    let mut stop = st.live.stopped();
+    let pool = st.pool.clone();
+    let sid = auth.session.id.clone();
+
+    // One task per open page. It ends when the page goes away (the send
+    // fails), when its session is revoked, or on shutdown — an SSE response
+    // never finishes on its own, and graceful shutdown would otherwise wait
+    // on it forever.
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(RECHECK);
+        tick.tick().await; // the first tick is immediate; the session was just checked
+        loop {
+            let check = tokio::select! {
+                sig = signals.recv() => match sig {
+                    Ok(Signal::Row(ev)) => {
+                        let ev = Event::default().event("row").data(ev.json());
+                        if out.send(Ok(ev)).await.is_err() {
+                            return;
+                        }
+                        false
+                    }
+                    Ok(Signal::Sessions) => true,
+                    // A page that fell behind loses the oldest events, not the
+                    // stream — and whatever it missed may have been a revoke.
+                    Err(broadcast::error::RecvError::Lagged(_)) => true,
+                    Err(broadcast::error::RecvError::Closed) => return,
+                },
+                _ = tick.tick() => true,
+                _ = stop.changed() => return,
+            };
+            if check && !session_alive(&pool, &sid).await {
+                // Not an empty `data`: an SSE event with no data is never
+                // dispatched — the stream would just close, and the page would
+                // read that as a dropped connection and reconnect.
+                let _ = out
+                    .send(Ok(Event::default().event("signedout").data("1")))
+                    .await;
+                return;
+            }
+        }
     });
-    Sse::new(events).keep_alive(KeepAlive::default())
+
+    Sse::new(ReceiverStream::new(events)).keep_alive(KeepAlive::default())
+}
+
+/// Whether this stream's session still exists. A database error answers yes:
+/// signing somebody out because a query failed would be worse than a stream
+/// that learns about a revoke one tick later.
+async fn session_alive(pool: &sqlx::SqlitePool, sid: &str) -> bool {
+    sqlx::query_scalar!(
+        r#"SELECT 1 AS "one!: i64" FROM sessions WHERE id = ?1"#,
+        sid
+    )
+    .fetch_optional(pool)
+    .await
+    .map(|row| row.is_some())
+    .unwrap_or(true)
 }
 
 /// Marks a successful mutation with `ffm:dot`, so the page re-fetches the

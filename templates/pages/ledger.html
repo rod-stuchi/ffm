@@ -1132,6 +1132,14 @@ function ledger() {
     listenLive() {
       if (!window.EventSource) return;
       const es = new EventSource('/live');
+      // This device's session was revoked while the page was open — another
+      // device's "Sign out other devices", an admin, a reset. The server says
+      // so only to the page whose session is gone; go to /login now rather
+      // than at the next click, and stop the stream reconnecting.
+      es.addEventListener('signedout', () => {
+        es.close();
+        location.href = '/login?out=1';
+      });
       es.addEventListener('row', (e) => {
         let ev;
         try { ev = JSON.parse(e.data); } catch (_) { return; }

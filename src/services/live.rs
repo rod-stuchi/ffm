@@ -32,12 +32,25 @@ impl LiveEvent {
     }
 }
 
+/// What goes down the channel. A row to re-fetch, or word that some sessions
+/// were just revoked.
+///
+/// **`Sessions` names nobody.** A session id is the cookie itself, so it never
+/// travels — not even to the server's own stream tasks as a list to compare.
+/// Each open stream asks the database whether *its own* session is still
+/// there, and only the page whose session is gone hears anything.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Signal {
+    Row(LiveEvent),
+    Sessions,
+}
+
 /// The sender half every handler and task shares, plus the switch that ends
 /// every open stream on shutdown — an SSE response never finishes on its own,
 /// and graceful shutdown would otherwise wait on it forever.
 #[derive(Clone)]
 pub struct Live {
-    tx: broadcast::Sender<LiveEvent>,
+    tx: broadcast::Sender<Signal>,
     stop: watch::Receiver<bool>,
 }
 
@@ -52,10 +65,17 @@ impl Live {
 
     /// Nobody listening is not an error: no page is open.
     pub fn publish(&self, ev: LiveEvent) {
-        let _ = self.tx.send(ev);
+        let _ = self.tx.send(Signal::Row(ev));
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<LiveEvent> {
+    /// Some sessions were revoked — signed out of other devices, everywhere,
+    /// by a reset, or a member turned off. Every open page whose session is
+    /// gone is told so at once and sent to `/login` (`web::live::stream`).
+    pub fn sessions_revoked(&self) {
+        let _ = self.tx.send(Signal::Sessions);
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<Signal> {
         self.tx.subscribe()
     }
 

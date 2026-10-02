@@ -623,7 +623,11 @@ pub async fn invite(
     )
     .await
     {
-        Ok(token) => members_pane(&st, &auth, "active", Some(&token)).await,
+        Ok(token) => {
+            // A reset signs the member out everywhere — see `issue_link`.
+            st.live.sessions_revoked();
+            members_pane(&st, &auth, "active", Some(&token)).await
+        }
         Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
     }
 }
@@ -665,6 +669,8 @@ pub async fn sign_out_others(State(st): State<AppState>, auth: Auth) -> Response
     }
     match members::sign_out_others(&st.pool, auth.session.member.id, &auth.session.id).await {
         Ok(n) => {
+            // The other devices go to /login now, not at their next click.
+            st.live.sessions_revoked();
             members_say(
                 &st,
                 &auth,
@@ -687,6 +693,7 @@ pub async fn sign_out(State(st): State<AppState>, auth: Auth, Path(id): Path<i64
     let n = members::sign_out_everywhere(&st.pool, auth.viewer.member_id, id)
         .await
         .unwrap_or(0);
+    st.live.sessions_revoked();
     let msg = t.members_signed_out(&m.name, n as i64);
     members_say(&st, &auth, tab_of(&m), &msg, false).await
 }
@@ -699,7 +706,12 @@ pub async fn disable(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>
         Err(res) => return res,
     };
     match members::disable(&st.pool, auth.viewer.member_id, id, this_month()).await {
-        Ok(_) => members_say(&st, &auth, "active", &t.members_disabled(&m.name), false).await,
+        Ok(_) => {
+            // Turning a member off signs them out everywhere; their open pages
+            // leave now.
+            st.live.sessions_revoked();
+            members_say(&st, &auth, "active", &t.members_disabled(&m.name), false).await
+        }
         Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
     }
 }

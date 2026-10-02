@@ -1286,6 +1286,15 @@ that will otherwise be re-proposed.
   `?pane=` → the session member → 0 — and an id naming nobody falls through
   the same chain rather than erroring, because a stale bookmark is not worth a
   failure page.
+- **A revoked session leaves its open pages at once.** "Sign out other
+  devices", an admin's "Sign out everywhere", a reset, turning a member off
+  and `:logout` all call `Live::sessions_revoked`; every `/live` stream then
+  checks its **own** session, and only the page whose session is gone gets a
+  `signedout` event and goes to `/login?out=1`, which says why. The ping names
+  nobody — a session id is the cookie, so it never travels. A revoke from
+  another process (the console's `reset-link`) cannot ping, so each stream
+  also re-checks every 30 seconds. The existing Server-Sent Events channel
+  was enough: this signal only runs server to page, so no WebSocket.
 - **Sessions are server-side, not a bare signed cookie.** A `sessions` table
   (`id`, `member_id`, `created_at`, `last_seen_at`, `label`) backs an opaque
   `HttpOnly` session cookie, so a single lost/stolen device can be logged out
@@ -1684,6 +1693,10 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   long as it existed; a drop on the row calls `upload()` directly, which is
   why nothing looked broken. One flag must not mean both "a popup is open"
   and "what the next event is for": the picker's row is `pickFor` now.
+- **An SSE event with empty `data` is never dispatched.** The first
+  `signedout` was `data("")`: curl printed it, the browser dropped it, and
+  the page read the stream closing as a lost connection and reconnected —
+  signed out, and still showing the ledger. Every event carries a payload.
 - **Watch class-name collisions.** An `app.cfg` state class silently matched a
   leftover `.cfg { display: grid; align-items: start }` rule and broke the whole
   shell width. Namespace state classes (`is-`/`has-` prefix) and delete dead CSS.

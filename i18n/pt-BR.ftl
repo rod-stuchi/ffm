@@ -15,6 +15,7 @@ login-name = Nome
 login-password = Senha
 login-submit = Entrar
 login-error-mismatch = Nome e senha não conferem.
+login-signed-out = Este aparelho foi desconectado — por outro aparelho ou por um admin. Entre de novo para continuar.
 
 setup-title = Configure sua casa
 setup-household-section = Sua casa

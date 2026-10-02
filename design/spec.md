@@ -1239,6 +1239,13 @@ does most of the real work, so the auth layer stays simple on purpose.
   as typed — they still sign in and still take their name, and read the same.
   The comparison is done in Rust, not with SQLite's `lower()`, which folds
   only ASCII.
+- **Signing a device out reaches it while it is open.** Any revoke — "Sign
+  out other devices", "Sign out everywhere", a reset, a member turned off,
+  `:logout` on another tab — pings the live channel; each open page's stream
+  checks its own session server-side, and the page whose session is gone is
+  sent to `/login` at once, where a note says *this device was signed out —
+  from another device, or by an admin*. Nothing else on any page moves. A
+  console reset (another process) is caught by a 30-second re-check instead.
 - **A real `sessions` table**, not a bare signed cookie carrying the member id
   directly: `sessions(id, member_id, created_at, last_seen_at, label)`. The
   cookie carries only the opaque session id (`HttpOnly`, `SameSite=Lax`,
