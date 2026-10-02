@@ -38,6 +38,39 @@ row itself includes — from real `Mark` values, so the legend cannot show a
 mark the ledger does not draw. The words are catalog messages; the `~R$`
 sample goes through `fmt::money`.
 
+### Density
+
+`member_settings.density`, picked in `:profile` from three cards that each
+draw what they do — Gmail's picker. Written onto the shell as
+`data-density`; `row.css` holds the three presets as one set of custom
+properties (`--row-py`, `--entry-py`, `--gut-pt`), and that is the one place
+they live.
+
+| density | between rows | a row | the file rail |
+|---|---|---|---|
+| `default` | 6px | taller | every empty slot as its own `+1` / `+2` / `+3`, dashed, in its numbered place — straight to that slot's picker, as `gu1` is |
+| `comfortable` | 2px | as the ledger always was | only the files that exist, and the `+` menu on the focused row |
+| `compact` | none | one line: the meta line goes, the delta sits beside the amount, and the rows touch with a hairline between | as `comfortable` |
+
+- **`default` is a value**, Gmail's name for its roomiest — it never means
+  "follow the household". Everybody, existing members included, starts on
+  `comfortable`, which is exactly the screen they already had.
+- **Compact gives up the meta line and nothing else.** The mark carries the
+  state, the rail the files, the amount the money; a parked draft still shows
+  by its dashed border. What it loses is the second reading — the due date,
+  the paid date, `7/12` — which is what makes it compact.
+- **The skeleton reads the same numbers**, and drops its second bar in
+  compact, so its geometry still matches the real row at every density.
+- **The `+` slots are rendered at every density and shown by CSS**, so the
+  density is the attribute and nothing else. A read-only pane shows none, and
+  a file in the air hides them for the drop targets — the rules the `+`
+  already follows.
+- **Writing it refreshes the page**, like every layout value: the server
+  renders the attribute, so the first frame is already right.
+  `?split=profile` keeps the pane open across it.
+- **The household seeds it** (`default_density`, starting at `comfortable`),
+  with the palette and the layout — see the household schema.
+
 ### The add form (`a` / `i`)
 
 It opens inside the pane, never in a modal, and **stays open after a save** —
@@ -336,10 +369,13 @@ standing out.)
   (*"no scheduled payment on an income row"*), joining the family a missing
   file already belongs to. `g1` and `g3` therefore mean one consistent thing
   on every row in the ledger, which is what makes them learnable.
-- **Only rendered when that file exists.** A row with a bill and a receipt but
-  no scheduled file shows `[1] [3]` — nothing sits where `2` would be. No
-  ghost/hollow placeholder; the keybinding still works purely off kind, not
-  position.
+- **Only rendered when that file exists** — at `comfortable` and `compact`
+  density. A row with a bill and a receipt but no scheduled file shows
+  `[1] [3]` — nothing sits where `2` would be. No ghost/hollow placeholder;
+  the keybinding still works purely off kind, not position. **`default`
+  density is the one exception, on purpose** (see Density, below): it is the
+  roomy, explicit setting, and there every empty slot of an attachable row
+  shows as its own dashed `+2`, in its numbered place.
 - **Neutral stroke icon per kind, not a color-coded emoji.** Bill, scheduled
   and receipt each get their own small matching-weight line-icon (a
   document, a clock-in-a-box, a checked receipt) rendered in `currentColor` —
@@ -2660,6 +2696,7 @@ default_layout_min_split_width int   -- the same bounds as the member columns
 default_layout_min_width       int
 default_layout_max_width       int
 default_layout_gap             int
+default_density                text  -- "default" | "comfortable" | "compact" (0011)
 ```
 
 **The household seeds a new member's palette and layout; it never overrides
@@ -2706,6 +2743,7 @@ ledger_search_scope     text  -- "pane" | "household"
 ledger_show_delta       bool
 ledger_group            text  -- "none" | "bucket"
 group_fold_default      text  -- "expanded" | "collapsed"
+density                 text  -- "default" | "comfortable" | "compact"; see Density
 default_visibility      text  -- NULL = follow the household's policy,
                               -- else "household" | "private"
 ```

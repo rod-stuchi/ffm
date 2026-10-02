@@ -365,6 +365,10 @@ struct LedgerPage {
     /// Today's month, from `clock::today()` — never the browser's clock, so a
     /// dev server running as of another date (`FFM_TODAY`) is honored by `T`.
     today_key: String,
+    /// `default` | `comfortable` | `compact` — the session member's, written
+    /// onto the shell; `row.css` reads it. Server-rendered so the first frame
+    /// is already right, which is why writing it refreshes the page.
+    density: String,
     no_pane_that_way: String,
     reattribute_title: String,
     details_none: String,
@@ -571,6 +575,7 @@ pub async fn ledger(
         month_leave_click: t.month_leave_click("{d}"),
         month_already_current: t.month_already_current().to_string(),
         today_key: Period::of(today).to_string(),
+        density: auth.settings.density.clone(),
         no_pane_that_way: t.no_pane_that_way().to_string(),
         reattribute_title: t.reattribute_private_title("{name}"),
         details_none: t.details_none().to_string(),

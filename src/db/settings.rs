@@ -36,6 +36,7 @@ pub enum MemberKey {
     GroupFoldDefault,
     GroupOrder,
     DefaultVisibility,
+    Density,
 }
 
 impl MemberKey {
@@ -56,6 +57,7 @@ impl MemberKey {
             "group_fold_default" => MemberKey::GroupFoldDefault,
             "group_order" => MemberKey::GroupOrder,
             "default_visibility" => MemberKey::DefaultVisibility,
+            "density" => MemberKey::Density,
             _ => return None,
         })
     }
@@ -91,6 +93,10 @@ pub struct MemberSettings {
     /// is rendered as one: three radios, the first labeled with what it
     /// currently resolves to.
     pub default_visibility: Option<String>,
+    /// How much room the ledger's rows take: `default` (the roomiest — a
+    /// value, Gmail's name for it, never "follow the household") |
+    /// `comfortable` | `compact`. Applied in CSS off one attribute.
+    pub density: String,
 }
 
 impl Default for MemberSettings {
@@ -112,6 +118,7 @@ impl Default for MemberSettings {
             group_fold_default: "expanded".into(),
             group_order: "appearance".into(),
             default_visibility: None,
+            density: "comfortable".into(),
         }
     }
 }
@@ -133,7 +140,8 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
                   ledger_group AS "ledger_group!: String",
                   group_fold_default AS "group_fold_default!: String",
                   group_order AS "group_order!: String",
-                  default_visibility AS "default_visibility: String"
+                  default_visibility AS "default_visibility: String",
+                  density AS "density!: String"
            FROM member_settings WHERE member_id = ?1"#,
         member_id
     )
@@ -162,6 +170,7 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
             group_fold_default: r.group_fold_default,
             group_order: r.group_order,
             default_visibility: r.default_visibility,
+            density: r.density,
         })
         .unwrap_or_default())
 }
@@ -189,6 +198,8 @@ impl std::fmt::Display for Invalid {
 pub const LANGUAGES: [&str; 2] = ["en", "pt-BR"];
 pub const LEDGER_SORTS: [&str; 3] = ["manual", "date", "amount"];
 pub const LEDGER_GROUPS: [&str; 2] = ["none", "bucket"];
+/// Roomiest first, the order `:profile` shows them in.
+pub const DENSITIES: [&str; 3] = ["default", "comfortable", "compact"];
 
 fn one_of(key: &'static str, value: &str, allowed: &[&str]) -> Result<String, Invalid> {
     if allowed.contains(&value) {
@@ -416,6 +427,17 @@ pub async fn set_member(
             .await
             .map_err(db)?;
         }
+        MemberKey::Density => {
+            let v = one_of("density", value, &DENSITIES)?;
+            sqlx::query!(
+                "UPDATE member_settings SET density = ?2 WHERE member_id = ?1",
+                member_id,
+                v
+            )
+            .execute(pool)
+            .await
+            .map_err(db)?;
+        }
         MemberKey::DefaultVisibility => {
             // The empty string is the third state, not a missing one: NULL
             // means "follow the household", which is a choice a member makes.
@@ -460,6 +482,7 @@ pub enum HouseholdKey {
     DefaultMinWidth,
     DefaultMaxWidth,
     DefaultGap,
+    DefaultDensity,
 }
 
 impl HouseholdKey {
@@ -476,6 +499,7 @@ impl HouseholdKey {
             "default_layout_min_width" => HouseholdKey::DefaultMinWidth,
             "default_layout_max_width" => HouseholdKey::DefaultMaxWidth,
             "default_layout_gap" => HouseholdKey::DefaultGap,
+            "default_density" => HouseholdKey::DefaultDensity,
             _ => return None,
         })
     }
@@ -492,6 +516,7 @@ impl HouseholdKey {
                 | HouseholdKey::DefaultMinWidth
                 | HouseholdKey::DefaultMaxWidth
                 | HouseholdKey::DefaultGap
+                | HouseholdKey::DefaultDensity
         )
     }
 }
@@ -508,6 +533,7 @@ pub struct MemberDefaults {
     pub min_width: i64,
     pub max_width: i64,
     pub gap: i64,
+    pub density: String,
 }
 
 impl Default for MemberDefaults {
@@ -521,6 +547,7 @@ impl Default for MemberDefaults {
             min_width: 420,
             max_width: 900,
             gap: 16,
+            density: "comfortable".into(),
         }
     }
 }
@@ -535,6 +562,7 @@ impl MemberDefaults {
             && self.min_width == s.layout_min_width
             && self.max_width == s.layout_max_width
             && self.gap == s.layout_gap
+            && self.density == s.density
     }
 }
 
@@ -550,7 +578,8 @@ where
                   default_layout_min_split_width AS "min_split!: i64",
                   default_layout_min_width AS "min_width!: i64",
                   default_layout_max_width AS "max_width!: i64",
-                  default_layout_gap AS "gap!: i64"
+                  default_layout_gap AS "gap!: i64",
+                  default_density AS "density!: String"
            FROM household_settings WHERE id = 1"#
     )
     .fetch_optional(ex)
@@ -563,6 +592,7 @@ where
             min_width: r.min_width,
             max_width: r.max_width,
             gap: r.gap,
+            density: r.density,
         })
         .unwrap_or_default())
 }
@@ -575,7 +605,8 @@ pub async fn adopt_member_defaults(pool: &SqlitePool, member_id: i64) -> sqlx::R
     sqlx::query!(
         r#"UPDATE member_settings
            SET theme_name = ?2, layout_panes = ?3, layout_min_split_width = ?4,
-               layout_min_width = ?5, layout_max_width = ?6, layout_gap = ?7
+               layout_min_width = ?5, layout_max_width = ?6, layout_gap = ?7,
+               density = ?8
            WHERE member_id = ?1"#,
         member_id,
         theme,
@@ -583,7 +614,8 @@ pub async fn adopt_member_defaults(pool: &SqlitePool, member_id: i64) -> sqlx::R
         d.min_split,
         d.min_width,
         d.max_width,
-        d.gap
+        d.gap,
+        d.density
     )
     .execute(pool)
     .await?;
@@ -697,6 +729,17 @@ pub async fn set_household(
             sqlx::query!("UPDATE household_settings SET default_layout_gap = ?1, updated_at = ?2 WHERE id = 1", v, at)
                 .execute(pool).await.map_err(db)?;
         }
+        HouseholdKey::DefaultDensity => {
+            let v = one_of("density", value, &DENSITIES)?;
+            sqlx::query!(
+                "UPDATE household_settings SET default_density = ?1, updated_at = ?2 WHERE id = 1",
+                v,
+                at
+            )
+            .execute(pool)
+            .await
+            .map_err(db)?;
+        }
     }
     Ok(())
 }
@@ -740,6 +783,7 @@ mod tests {
             "group_fold_default",
             "group_order",
             "default_visibility",
+            "density",
         ] {
             assert!(MemberKey::parse(k).is_some(), "{k}");
         }

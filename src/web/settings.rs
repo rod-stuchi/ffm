@@ -44,6 +44,19 @@ fn choices(options: &[(&str, String)], selected: &str) -> Vec<Choice> {
         .collect()
 }
 
+/// The three densities, roomiest first, as both `:profile` and `:household`
+/// offer them. Words, unlike the pane modes: nobody types these back.
+fn density_choices(t: &Catalog, selected: &str) -> Vec<Choice> {
+    choices(
+        &[
+            ("default", t.density_default().to_string()),
+            ("comfortable", t.density_comfortable().to_string()),
+            ("compact", t.density_compact().to_string()),
+        ],
+        selected,
+    )
+}
+
 /// The three pane modes, as both `:profile` and `:household` offer them.
 /// Identifiers a member types back (`auto`, `split`, `tabs`), so no catalog.
 fn pane_choices(selected: &str) -> Vec<Choice> {
@@ -115,6 +128,7 @@ struct ProfilePane {
     min_width: i64,
     max_width: i64,
     gap: i64,
+    densities: Vec<Choice>,
     show_delta: bool,
     devices: Vec<String>,
 }
@@ -212,6 +226,7 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
         min_width: s.layout_min_width,
         max_width: s.layout_max_width,
         gap: s.layout_gap,
+        densities: density_choices(&t, &s.density),
         show_delta: s.ledger_show_delta,
         devices,
         t,
@@ -305,6 +320,7 @@ pub async fn set_member(
                     | MemberKey::LedgerShowDelta
                     | MemberKey::LedgerGroup
                     | MemberKey::GroupOrder
+                    | MemberKey::Density
             );
             let mut res = crate::web::tx::say_only(&t.settings_saved(&form.key), false);
             if whole_page {
@@ -359,6 +375,7 @@ struct HouseholdPane {
     min_width: i64,
     max_width: i64,
     gap: i64,
+    densities: Vec<Choice>,
     db_path: String,
     receipts_root: String,
     backup_dir: String,
@@ -386,6 +403,7 @@ pub async fn household(State(st): State<AppState>, auth: Auth) -> Response {
         min_width: d.min_width,
         max_width: d.max_width,
         gap: d.gap,
+        densities: density_choices(&t, &d.density),
         name: h.name.clone(),
         date_pattern: fmt::DATE_PATTERN,
         currencies: Currency::ALL

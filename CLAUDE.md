@@ -343,14 +343,15 @@ card in plain CSS.
   - **`household_settings`** (one row, admin-only, via `:household`) — name,
     currency, default language, default visibility, `show_recurring`. What's here
     is what cannot coherently differ between members.
-    It also holds what a new member's palette and layout **start as**
-    (`default_theme`, `default_layout_*`): seeded into their own row when they
+    It also holds what a new member's palette, layout and density **start
+    as** (`default_theme`, `default_layout_*`, `default_density`): seeded into their own row when they
     join, never inherited, so changing one moves nobody's screen; `:profile`'s
     *Use the household's defaults* adopts them on request.
   - **`member_settings`** (one row per member, via `:profile`) — language, theme
-    and overrides, line numbers, all five `layout_*` values, `ledger_sort`,
-    `search_scope`, `show_delta`, group and fold defaults, and a nullable
-    privacy default that falls back to the household's.
+    and overrides, line numbers, all five `layout_*` values, `density`
+    (`default` | `comfortable` | `compact` — see `design/spec.md`'s Density),
+    `ledger_sort`, `search_scope`, `show_delta`, group and fold defaults, and
+    a nullable privacy default that falls back to the household's.
 
   The reason is the one already argued for theme: a shared file that two people
   both want to edit is the file *disagreeing with itself*. Once that's admitted
@@ -1228,6 +1229,12 @@ that will otherwise be re-proposed.
   server-side memory that two windows would disagree about. **`:grep` is
   deliberately not remembered** — it is a result list for a term you typed,
   and reopening it on every reload is a nuisance, not a courtesy.
+  **And it comes back scrolled to where you were.** Changing a control
+  keeps the pane body's scroll offset in `localStorage` (`ffm.splitScroll`),
+  restored once when `?split=` reopens the pane — and only within a few
+  seconds, so a change that did not reload never scrolls a pane opened later.
+  Otherwise a setting near the foot of `:profile` sent you back to its top on
+  every change.
 - **A palette change does not refresh at all.** It is one `<style>` block and
   nothing else on the page depends on it, so the write answers with that block
   `hx-swap-oob` and every color changes in place. This is what the Themes

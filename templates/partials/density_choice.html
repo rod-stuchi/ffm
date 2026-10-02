@@ -1,0 +1,32 @@
+{#- Density — how much room the ledger's rows take. One copy, for the two
+    writers `layout_band.html` already serves: a member's own (`density`,
+    from `:profile`) and the one a new member starts with (`default_density`,
+    from `:household`). Same `endpoint` / `kp` / `idp` contract; the struct
+    supplies `densities`.
+
+    Gmail's shape: three cards, each drawing what it does — the roomiest with
+    its `+` slots, then two rows, then three — because the difference is a
+    picture, not a word. CSS only; nothing here is a real row. -#}
+<form class="setting mwide" hx-post="{{ endpoint }}" hx-trigger="change" hx-swap="none">
+  <input type="hidden" name="key" value="{{ kp }}density">
+  <div class="f">
+    <span class="k" id="{{ idp }}density">{{ t.profile_density() }}</span>
+    <div class="densities" role="radiogroup" aria-labelledby="{{ idp }}density">
+      {%- for c in densities %}
+      <label class="dcard">
+        <input type="radio" name="value" value="{{ c.code }}"{% if c.selected %} checked{% endif %}>
+        <span class="dname">{{ c.label }}</span>
+        <span class="dprev is-{{ c.code }}" aria-hidden="true">
+          {%- if c.code == "default" %}
+          <i class="drow"><b></b><s></s><s></s><s></s></i>
+          {%- else if c.code == "comfortable" %}
+          <i class="drow"><b></b></i><i class="drow"><b></b></i>
+          {%- else %}
+          <i class="drow"><b></b></i><i class="drow"><b></b></i><i class="drow"><b></b></i>
+          {%- endif %}
+        </span>
+      </label>
+      {%- endfor %}
+    </div>
+  </div>
+</form>

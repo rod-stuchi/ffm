@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE member_settings SET density = ?2 WHERE member_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "49bfd4797673de39fd779604f611bd6ae6c3cd39d5dd79762bd21275d65288e6"
+}

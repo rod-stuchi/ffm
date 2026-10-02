@@ -1734,6 +1734,100 @@
   }
 }
 
+/* --- density (`:profile`, `:household`) ------------------------------- */
+
+/* Three cards, each drawing what it does — Gmail's picker, in this ledger's
+ * tokens. The radio is the real control; the drawing is decoration, hidden
+ * from screen readers. A card reads like a radio label (`.radios label`):
+ * the same border, the same checked fill. */
+.densities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dcard {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 8px 8px;
+  width: 172px;
+  padding: 9px 11px 11px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dcard input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.dcard:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.dcard:focus-within {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* The drawing: a miniature ledger, one bar per row, at the density's own
+ * spacing. Fixed height, so the three cards line up. */
+.dprev {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 46px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.dprev .drow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.dprev .drow b {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-2);
+}
+
+/* Roomiest: one tall row, and its three empty `+` slots. */
+.dprev.is-default .drow {
+  padding: 8px 5px;
+}
+
+.dprev.is-default .drow s {
+  width: 9px;
+  height: 9px;
+  border: 1px dashed var(--ink-3);
+  border-radius: 2px;
+}
+
+.dprev.is-comfortable {
+  gap: 3px;
+}
+
+/* Rows touching, one line each, a hairline between. */
+.dprev.is-compact .drow {
+  border-radius: 0;
+  padding: 3px 5px;
+  border-bottom: 1px solid var(--line);
+}
+
 /* --- duplicate files (`:prune`) ----------------------------------------- */
 
 /* A group's header is its fingerprint and what it costs, in mono: it is read
@@ -1925,8 +2019,13 @@
 
 /* --neg, the same color `scheduled overdue` already uses: a third meaning
  * would need a twelfth token, and this is the same fact — something is owed
- * and nothing proves it was paid. */
-.dot {
+ * and nothing proves it was paid.
+ *
+ * Scoped to the picker: a bare `.dot` also matched the row mark's own dot
+ * (`partials/mark.html`) and pinned every plain row's dot to the corner of
+ * its mark, which a one-line compact row made plain to see. */
+.mlabel .dot,
+.mcell .dot {
   position: absolute;
   top: 3px;
   right: 3px;

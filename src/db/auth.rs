@@ -384,8 +384,9 @@ async fn insert_member_settings(
     sqlx::query!(
         r#"INSERT INTO member_settings
                (member_id, language, theme_name, line_numbers, layout_panes,
-                layout_min_split_width, layout_min_width, layout_max_width, layout_gap)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"#,
+                layout_min_split_width, layout_min_width, layout_max_width, layout_gap,
+                density)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"#,
         member_id,
         language,
         theme,
@@ -395,6 +396,7 @@ async fn insert_member_settings(
         d.min_width,
         d.max_width,
         d.gap,
+        d.density,
     )
     .execute(&mut **tx)
     .await?;

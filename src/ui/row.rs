@@ -632,6 +632,35 @@ impl LedgerRow {
     ///
     /// Income has no slot 2 — money arriving is never "scheduled" — so `g2` on
     /// an income row is a no-op with a message rather than a renumbering.
+    /// Whether this row can take a file at all: a tracked row with the
+    /// taxonomy its files are filed under, and not a stand-in for one.
+    pub fn attachable(&self) -> bool {
+        self.tracked
+            && self.bucket.is_some()
+            && self.bill_name.is_some()
+            && !matches!(self.state, RowState::Skeleton | RowState::Placeholder)
+    }
+
+    /// The slots an attachable row has no file in, in their fixed order —
+    /// what `density = default` draws as `+1`, `+2`, `+3`.
+    fn missing_slots(&self, t: &Catalog) -> Vec<SlotView> {
+        if !self.attachable() {
+            return Vec::new();
+        }
+        let income = self.kind.is_income();
+        let have: Vec<FileKind> = self.file_rail().into_iter().map(|c| c.kind).collect();
+        FileKind::ALL
+            .into_iter()
+            .filter(|k| !have.contains(k) && !(income && *k == FileKind::Scheduled))
+            .map(|k| SlotView {
+                svg: slot_svg(k),
+                number: k.number(),
+                label: slot_label(k, income, t),
+                kind: k.storage().code(),
+            })
+            .collect()
+    }
+
     pub fn file_rail(&self) -> Vec<FileControl> {
         let income = self.kind.is_income();
         FileKind::ALL
@@ -771,6 +800,10 @@ pub struct RowView {
 
     // files
     pub files: Vec<FileView>,
+    /// The slots this row could hold a file in and does not — empty unless
+    /// `attachable`. Slot 2 is never here on an income: you do not schedule
+    /// money arriving.
+    pub missing: Vec<SlotView>,
     /// Whether this row can hold files at all. A one-off has no taxonomy to
     /// file under, so it gets no attach control — the feature is scoped to
     /// recurring-rule occurrences, and the row says which it is.
@@ -871,6 +904,39 @@ pub struct FileView {
     pub warn: bool,
 }
 
+/// An empty slot on an attachable row, drawn as its own `+` control under
+/// `density = default` — `+1 Bill`, `+3 Receipt` — instead of the single
+/// `+` menu. Rendered at every density and shown by CSS, so a density change
+/// needs nothing from the server but the attribute.
+pub struct SlotView {
+    pub svg: &'static str,
+    pub number: u8,
+    pub label: &'static str,
+    /// `barcode` | `scheduled` | `receipt` — the picker's kind.
+    pub kind: &'static str,
+}
+
+/// The word for a slot: chosen by the kind AND which way the money goes — a
+/// spend's Bill is an income's Invoice. One match, for the files a row has
+/// and the slots it is missing alike.
+fn slot_label(kind: FileKind, income: bool, t: &Catalog) -> &'static str {
+    match (kind, income) {
+        (FileKind::Bill, false) => t.file_bill(),
+        (FileKind::Bill, true) => t.file_invoice(),
+        (FileKind::Scheduled, _) => t.file_scheduled(),
+        (FileKind::Receipt, false) => t.file_receipt(),
+        (FileKind::Receipt, true) => t.file_payslip(),
+    }
+}
+
+fn slot_svg(kind: FileKind) -> &'static str {
+    crate::ui::icons::svg(match kind {
+        FileKind::Bill => "bill",
+        FileKind::Scheduled => "scheduled",
+        FileKind::Receipt => "receipt",
+    })
+}
+
 pub struct DeltaView {
     pub arrow: &'static str,
     pub text: String,
@@ -934,11 +1000,7 @@ impl LedgerRow {
                 .file_rail()
                 .into_iter()
                 .map(|c| FileView {
-                    svg: crate::ui::icons::svg(match c.kind {
-                        FileKind::Bill => "bill",
-                        FileKind::Scheduled => "scheduled",
-                        FileKind::Receipt => "receipt",
-                    }),
+                    svg: slot_svg(c.kind),
                     number: c.number,
                     // From the catalog, not a literal. The rail is one of the
                     // few places a word is chosen by BOTH the file's kind and
@@ -946,13 +1008,7 @@ impl LedgerRow {
                     // income's Invoice — and doing that match where there is
                     // no Catalog in scope is how it ended up in English on a
                     // pt-BR ledger.
-                    label: match (c.kind, self.kind.is_income()) {
-                        (FileKind::Bill, false) => t.file_bill(),
-                        (FileKind::Bill, true) => t.file_invoice(),
-                        (FileKind::Scheduled, _) => t.file_scheduled(),
-                        (FileKind::Receipt, false) => t.file_receipt(),
-                        (FileKind::Receipt, true) => t.file_payslip(),
-                    },
+                    label: slot_label(c.kind, self.kind.is_income(), t),
                     page: c.page.map(|p| format!("p.{}", p.page)),
                     warn: c.page.is_some_and(|p| !p.in_window),
                     href: format!("/tx/{}/file/{}", self.id, c.kind.storage().code()),
@@ -961,10 +1017,8 @@ impl LedgerRow {
                 })
                 .collect(),
 
-            attachable: self.tracked
-                && self.bucket.is_some()
-                && self.bill_name.is_some()
-                && !matches!(self.state, RowState::Skeleton | RowState::Placeholder),
+            attachable: self.attachable(),
+            missing: self.missing_slots(t),
 
             amount: amount.text,
             amount_income: amount.is_income,

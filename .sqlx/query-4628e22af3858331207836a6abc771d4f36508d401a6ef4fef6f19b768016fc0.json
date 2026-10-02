@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO member_settings\n               (member_id, language, theme_name, line_numbers, layout_panes,\n                layout_min_split_width, layout_min_width, layout_max_width, layout_gap,\n                density)\n           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "4628e22af3858331207836a6abc771d4f36508d401a6ef4fef6f19b768016fc0"
+}

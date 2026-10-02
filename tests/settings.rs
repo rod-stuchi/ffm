@@ -278,6 +278,7 @@ async fn a_new_member_starts_with_the_households_defaults_and_nobody_else_moves(
         ("default_layout_max_width", "1200"),
         ("default_layout_gap", "24"),
         ("default_theme", "gruvbox"),
+        ("default_density", "compact"),
     ] {
         settings::set_household(&pool, HouseholdKey::parse(k).unwrap(), v)
             .await
@@ -309,11 +310,14 @@ async fn a_new_member_starts_with_the_households_defaults_and_nobody_else_moves(
         ),
         ("tabs", 700, 0, 1200, 24)
     );
+    assert_eq!(s.density, "compact", "density is seeded with the layout");
 
-    // And adopting the defaults later copies all six, the palette included.
+    // And adopting the defaults later copies all of them, the palette and the
+    // density included.
     settings::adopt_member_defaults(&pool, me).await.unwrap();
     let mine = settings_of(&pool, me).await;
     assert_eq!(mine.theme.key(), "gruvbox");
+    assert_eq!(mine.density, "compact");
     assert!(
         settings::member_defaults(&pool)
             .await
@@ -370,4 +374,34 @@ async fn the_household_starts_in_its_founders_palette() {
         settings::member_defaults(&pool).await.unwrap().theme.key(),
         "kanagawa"
     );
+}
+
+#[tokio::test]
+async fn density_starts_comfortable_and_takes_only_its_three_values() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    // The founder, and the household's default for new members, both start
+    // on the ledger as it always looked.
+    assert_eq!(settings_of(&pool, me).await.density, "comfortable");
+    assert_eq!(
+        settings::member_defaults(&pool).await.unwrap().density,
+        "comfortable"
+    );
+
+    for v in ["default", "compact", "comfortable"] {
+        settings::set_member(&pool, me, MemberKey::Density, v)
+            .await
+            .unwrap();
+        assert_eq!(settings_of(&pool, me).await.density, v);
+    }
+    let member_says = settings::set_member(&pool, me, MemberKey::Density, "cozy")
+        .await
+        .unwrap_err()
+        .to_string();
+    let household_says = settings::set_household(&pool, HouseholdKey::DefaultDensity, "cozy")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert_eq!(member_says, household_says, "one bound, whoever writes it");
+    assert_eq!(settings_of(&pool, me).await.density, "comfortable");
 }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE household_settings SET default_density = ?1, updated_at = ?2 WHERE id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "74602bd1d113180e7369cc88fffae3ca8915a46e82bc2fc2b8d155ba3aa5755a"
+}

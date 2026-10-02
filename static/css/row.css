@@ -17,7 +17,9 @@
   grid-template-columns: 34px 1fr;
   align-items: stretch;
   border-left: 3px solid transparent;
-  padding: 1px 10px 1px 0;
+  /* The space between rows, from the member's density (see Density, below);
+   * the fallbacks are `comfortable`, which is how the ledger always looked. */
+  padding: var(--row-py, 1px) 10px var(--row-py, 1px) 0;
   position: relative;
 }
 
@@ -46,7 +48,7 @@
   font-size: 11.5px;
   color: var(--ink-3);
   text-align: right;
-  padding: 11px 8px 0 0;
+  padding: var(--gut-pt, 11px) 8px 0 0;
   user-select: none;
 }
 
@@ -77,7 +79,7 @@
   align-items: center;
   background: var(--surface-2);
   border-radius: var(--r);
-  padding: 8px 12px;
+  padding: var(--entry-py, 8px) 12px;
   min-width: 0;
   cursor: pointer;
   border: 1px solid transparent;
@@ -606,3 +608,97 @@ body:not(.kbd-nav) .row:hover .entry {
   color: var(--ink);
   pointer-events: none;
 }
+
+/* --- density ------------------------------------------------------------ */
+
+/* `member_settings.density`, written onto the shell as `data-density`. Three
+ * presets of the same three numbers — the space between rows, the room
+ * inside one, and the gutter's drop to stay level with the title — and this
+ * is the one place they live. `comfortable` is the fallback above: the
+ * ledger as it always was, 2px between rows. */
+.ledger-shell[data-density="default"] {
+  --row-py: 3px;
+  --entry-py: 11px;
+  --gut-pt: 14px;
+}
+
+.ledger-shell[data-density="compact"] {
+  --row-py: 0px;
+  --entry-py: 4px;
+  --gut-pt: 10px;
+}
+
+/* Compact is one line a row: the meta line goes, and the delta sits beside
+ * the amount instead of under it. The mark, the rail and the amount stay —
+ * they are the row's facts — and a parked draft still shows by its dashed
+ * border. The rows touch, so the cards lose their corners and a hairline
+ * divides them; focus keeps its rail and its ground. */
+.ledger-shell[data-density="compact"] .name .meta {
+  display: none;
+}
+
+.ledger-shell[data-density="compact"] .amt {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ledger-shell[data-density="compact"] .amt .d {
+  order: -1;
+  margin-top: 0;
+}
+
+.ledger-shell[data-density="compact"] .entry {
+  border-radius: 0;
+  border-bottom-color: var(--line);
+}
+
+/* The skeleton is the same row, so it reads the same numbers; in compact it
+ * drops the bar that stands for the meta line. Geometry must match the real
+ * row exactly, at every density. */
+.ledger-shell[data-density="compact"] .name .sk-bar + .sk-bar {
+  display: none;
+}
+
+/* The rail's order is the slots' fixed numbering, whatever is present: a
+ * file and an empty `+` slot interleave as 1, 2, 3. */
+.fbadge[data-n="1"] {
+  order: 1;
+}
+.fbadge[data-n="2"] {
+  order: 2;
+}
+.fbadge[data-n="3"] {
+  order: 3;
+}
+.fadd,
+.fdrops {
+  order: 4;
+}
+
+/* `default` shows every empty slot as its own `+` — instead of the single
+ * `+` on the focused row — dashed, the language this ledger uses for "not
+ * here yet". The other densities never show them. */
+.fslot {
+  display: none;
+  border-style: dashed;
+  color: var(--ink-3);
+}
+
+.ledger-shell[data-density="default"] .fslot {
+  display: inline-flex;
+}
+
+.ledger-shell[data-density="default"] .fadd,
+.ledger-shell[data-density="default"] .row.is-focus .fadd {
+  display: none;
+}
+
+/* While a file is in the air the three drop targets say it better, and a
+ * read-only pane files nothing — the same two rules the `+` follows. */
+.ledger-shell.is-dragging .fslot,
+.ledger-shell .pane.is-readonly .row .fslot {
+  display: none;
+}
+

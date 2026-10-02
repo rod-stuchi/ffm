@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT default_theme AS \"theme!: String\",\n                  default_layout_panes AS \"panes!: String\",\n                  default_layout_min_split_width AS \"min_split!: i64\",\n                  default_layout_min_width AS \"min_width!: i64\",\n                  default_layout_max_width AS \"max_width!: i64\",\n                  default_layout_gap AS \"gap!: i64\"\n           FROM household_settings WHERE id = 1",
+  "query": "SELECT default_theme AS \"theme!: String\",\n                  default_layout_panes AS \"panes!: String\",\n                  default_layout_min_split_width AS \"min_split!: i64\",\n                  default_layout_min_width AS \"min_width!: i64\",\n                  default_layout_max_width AS \"max_width!: i64\",\n                  default_layout_gap AS \"gap!: i64\",\n                  default_density AS \"density!: String\"\n           FROM household_settings WHERE id = 1",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,11 @@
         "name": "gap!: i64",
         "ordinal": 5,
         "type_info": "Integer"
+      },
+      {
+        "name": "density!: String",
+        "ordinal": 6,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -43,8 +48,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "2917e12cfdd61e961740a8f7f1760eeba4f07611b727ca7ced8e8618ea64a693"
+  "hash": "caeab5d0373ddfb2667d6900df69c7d202ff81f01fb9eb18858a9454fd2e90fe"
 }

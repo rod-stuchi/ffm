@@ -78,7 +78,7 @@
 <script defer src="/static/js/alpine.min.js"></script>
 </head>
 <body>
-<div class="ledger-shell" data-period="{{ period_key }}" data-today="{{ today_key }}" x-data="ledger()"
+<div class="ledger-shell" data-period="{{ period_key }}" data-today="{{ today_key }}" data-density="{{ density }}" x-data="ledger()"
      :class="{ 'is-dragging': dragging }"
      @keydown.window="key($event)"
      @mousemove.window="mouseMoved($event)"
@@ -2682,6 +2682,33 @@ function ledger() {
     /// about. Only the settings surfaces are remembered — `:grep` is a result
     /// list for a term you typed, and reopening it on every reload would be a
     /// nuisance rather than a courtesy.
+    /// Where a settings pane was scrolled to, kept across the reload a setting
+    /// forces — `?split=` brings the pane back, and this brings it back to the
+    /// control you just changed rather than to its top. Per browser
+    /// (`localStorage`), like the command history: a convenience, not a
+    /// setting. Stamped with the time and used at most once, within a few
+    /// seconds, so a change that did NOT reload (the palette, the fold
+    /// default) never scrolls a pane opened later.
+    keepSplitScroll() {
+      const name = new URLSearchParams(location.search).get('split');
+      const body = document.querySelector('#hsplitmount .rp-body');
+      if (!name || !body) return;
+      try {
+        localStorage.setItem('ffm.splitScroll', JSON.stringify({ name, top: body.scrollTop, at: Date.now() }));
+      } catch (_) {}
+    },
+
+    restoreSplitScroll(name) {
+      let kept = null;
+      try {
+        kept = JSON.parse(localStorage.getItem('ffm.splitScroll') || 'null');
+        localStorage.removeItem('ffm.splitScroll');
+      } catch (_) { return; }
+      if (!kept || kept.name !== name || Date.now() - kept.at > 15000) return;
+      const body = document.querySelector('#hsplitmount .rp-body');
+      if (body) body.scrollTop = kept.top;
+    },
+
     trackSplit(url) {
       const name = { '/profile': 'profile', '/household': 'household', '/members': 'members' }[url];
       const u = new URL(location.href);
@@ -3226,6 +3253,14 @@ function ledger() {
       this.$refs.picker.click();
     },
 
+    /// A `+` slot on the rail (`density = default`) — straight to that slot's
+    /// picker, as `gu1`/`gu2`/`gu3` are, never through the `+` menu.
+    attachSlot(id, kind, e) {
+      if (this.readOnly(e.currentTarget)) return;
+      this.pickFor = id;
+      this.pick(kind);
+    },
+
     /// `gu1` / `gu2` / `gu3` — straight to that slot, no menu. The numbering
     /// is `g1`/`g2`/`g3`'s, unchanged: 1 states the amount, 2 is the promise,
     /// 3 is proof the money moved. One set of numbers for opening a file and
@@ -3390,8 +3425,13 @@ function ledger() {
       // the same parameter it reads, so this is idempotent.
       const split = new URLSearchParams(location.search).get('split');
       if (['profile', 'household', 'members'].includes(split)) {
-        this.$nextTick(() => this.showSplit('/' + split));
+        this.$nextTick(() => this.showSplit('/' + split).then(() => this.restoreSplitScroll(split)));
       }
+      // Any control changed in a settings pane may be about to reload the page
+      // (`HX-Refresh`), so where the pane was scrolled to is kept first.
+      // Capture, so it is read before the change's own request goes out.
+      document.getElementById('hsplitmount')
+        ?.addEventListener('change', () => this.keepSplitScroll(), true);
       // The statusline is fed by a response header, so a swap never has to
       // include chrome in order to say something.
       document.body.addEventListener('ffm:say', e => this.say(e.detail.message, e.detail.bad));

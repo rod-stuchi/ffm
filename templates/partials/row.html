@@ -74,7 +74,7 @@
           exists. The href is built from the row's id and the file's KIND,
           never from the computed path — a URL made of user-typed taxonomy is
           a traversal waiting to be written. -#}
-      <a class="fbadge{% if f.warn %} is-warn{% endif %}" href="{{ f.href }}"
+      <a class="fbadge{% if f.warn %} is-warn{% endif %}" data-n="{{ f.number }}" href="{{ f.href }}"
          target="_blank" rel="noopener" title="{{ f.label }} — {{ f.path }}">
         <kbd>{{ f.number }}</kbd>
         <span class="ficon">{{ f.svg|safe }}</span>
@@ -85,6 +85,20 @@
           still shows only files that EXIST — no ghost placeholders — so
           attaching one lives behind a single control rather than three empty
           slots pretending to be files. -#}
+      {#- `density = default` only: each empty slot as its own `+`, in its
+          fixed place among the files (`data-n` orders the rail), straight to
+          that slot's picker — `gu1`'s path, no menu. Rendered at every
+          density and shown by CSS, so changing density changes nothing here.
+          This is the one density where the rail shows slots with no file in
+          them; the others keep "only what exists" and the single `+`. -#}
+      {%- for s in v.missing -%}
+      <button class="fbadge fslot" type="button" data-n="{{ s.number }}"
+              @click.stop="attachSlot({{ v.id }}, '{{ s.kind }}', $event)" title="+ {{ s.label }}">
+        <kbd>+{{ s.number }}</kbd>
+        <span class="ficon">{{ s.svg|safe }}</span>
+        <span class="flabel">{{ s.label }}</span>
+      </button>
+      {%- endfor -%}
       {%- if v.attachable -%}
       <button class="fbadge fadd" type="button"
               @click.stop="attach({{ v.id }}, $event)" title="{{ t.file_add_receipt() }}">
