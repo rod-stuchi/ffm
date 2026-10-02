@@ -15,6 +15,13 @@
          tg: false,
          tBoxes() { return [...this.$root.querySelectorAll('input[name=pick]')]; },
          tCount() { this.tn = this.tBoxes().filter(b => b.checked).length; },
+         // `X` on the day under the cursor, `gx` on the whole trash: all
+         // checked → none, otherwise → all.
+         tToggle(boxes) {
+           const on = !boxes.every(b => b.checked);
+           boxes.forEach(b => { b.checked = on; });
+           this.tCount();
+         },
          tGo(i) {
            const b = this.tBoxes();
            if (!b.length) return;
@@ -36,14 +43,16 @@
            else if (e.key === 'k') { e.preventDefault(); this.tGo(i - 1); }
            else if (e.key === 'G') { e.preventDefault(); this.tGo(b.length - 1); }
            else if (e.key === 'g') { e.preventDefault(); if (g) this.tGo(0); else this.tg = true; }
+           else if (e.key === 'x' && g) { e.preventDefault(); this.tToggle(b); }
            else if (e.key === 'x') { e.preventDefault(); b[i].click(); }
+           else if (e.key === 'X') { e.preventDefault(); this.tToggle([...b[i].closest('.tgroup').querySelectorAll('input[name=pick]')]); }
            else if (e.key === 'Enter') { e.preventDefault(); this.$refs.trashform.requestSubmit(); }
          }
        }"
        @keydown="tKey($event)">
   <header class="rp-head">
     <b>{{ t.trash_title() }}{% if !empty %} · {{ count }}{% endif %}</b>
-    <button class="btn rp-close" type="button" @click="closeSplit()">{{ t.pane_close() }}</button>
+    {%- include "partials/split_actions.html" %}
   </header>
 
   <form class="trashform" x-ref="trashform"
@@ -57,6 +66,7 @@
       {%- else %}
       <p class="hint">{{ t.trash_hint() }}{% if more %} · {{ t.trash_more() }}{% endif %}</p>
       {%- for day in days %}
+      <div class="tgroup">
       <div class="logday">{{ day.label }}</div>
       {%- for it in day.items %}
       <label class="trow{% if show_member %} has-member{% endif %}">
@@ -71,6 +81,7 @@
         <span class="ha {% if it.is_income %}pos{% endif %}">{{ it.amount }}</span>
       </label>
       {%- endfor %}
+      </div>
       {%- endfor %}
       <p class="notebox">{{ t.trash_note() }}</p>
       {%- endif %}

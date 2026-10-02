@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT deleted_from_path AS \"p: String\" FROM receipts\n           WHERE id = ?1 AND deleted_at IS NOT NULL\n             -- A retired copy (`RETIRED`) is never put back.\n             AND NOT EXISTS (SELECT 1 FROM change x\n                             WHERE x.entity = 'file' AND x.entity_id = receipts.id\n                               AND x.action = 'file_unlink' AND x.note IN (?2, ?3))",
+  "describe": {
+    "columns": [
+      {
+        "name": "p: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "7f9bf939e73072538ffc7791446bbfe9cd0c5464f918888c84bf4f125d535e3d"
+}

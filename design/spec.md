@@ -736,8 +736,9 @@ checkbox each, restored in any combination.
   like `:grep`, it is a list for a moment, not a setting being watched.
 - **A real form.** The checked boxes are unsubmitted form values, like a
   draft; the server re-checks every pick. `Ctrl-u` opens it with the keyboard on
-  the first entry: `j`/`k`, `gg`/`G`, `x` or Space checks, `Enter` restores
-  what is checked, `Esc` closes. No confirmation — a restore is undone by `u`,
+  the first entry: `j`/`k`, `gg`/`G`, `x` or Space checks, `X` checks or
+  clears the whole day under the cursor and `gx` the whole trash (all checked
+  → none, otherwise → all), `Enter` restores what is checked, `Esc` closes. No confirmation — a restore is undone by `u`,
   so the consequence is obvious from the action.
 - **The answer** is the trash again without what left it, every pane of the
   month on screen that a restored row or file landed in, with its totals, and
@@ -750,6 +751,7 @@ checkbox each, restored in any combination.
 | `:` | open the command bar |
 | `:grep vinho` | search every month — a result list, not a filter over this one · bare `:grep` reopens the last search |
 | `:trash` | deleted rows and removed files, to bring back — the same pane `Ctrl-u` opens |
+| `:prune` | admin only — byte-identical files in the vault; remove the copies in the trash, for good |
 | `:sort date` | row order: manual · date · amount |
 | `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |
@@ -2068,6 +2070,49 @@ found out on their next load. A file deleted by hand even stayed "live" in
   only for a hand change. The stream ends on shutdown, or graceful shutdown
   would wait on it forever.
 
+### Pruning duplicates (`:prune`)
+
+Every delete, replace and supersede moves a file into `{slug}/.delete/`, and
+nothing ever leaves — so the trash fills with exact copies of files that are
+still live, or of each other. `:prune`, admin only, lists every group of
+byte-identical files in the vault, and removes the trash's copies the admin
+checks.
+
+- **It is the one place a file leaves the disk**, and that is defensible only
+  because what goes is an exact copy of a file that **stays**: no bytes are
+  lost. The server proves it again at the moment of removal, against a fresh
+  scan rather than the page, and refuses the whole batch if any pick is not a
+  copy in a member's trash (`{slug}/.delete/…`, no `..`), is no longer a
+  duplicate, or would leave a group with no copy at all.
+- **Size first, then blake3.** Only sizes two files share are hashed, so a
+  vault of unique PDFs costs one `stat` each. Dotfiles are skipped; `.delete`
+  is the one hidden folder walked.
+- **Every group is listed**, the way `fd … | sha1sum | uniq` shows them:
+  groups with a copy in the trash first, by the space their copies take, then
+  the groups made only of live files — the same PDF filed on two rows is worth
+  seeing. A live file has no checkbox; only a copy in the trash has one.
+- **Each line says what the file is**, read off `receipts`: *live · Moto CG
+  09/2026 · Bill*, *trash · … · deleted 18/09/2026*, or *not on record* for a
+  file the app never filed.
+- **Checked one at a time, a group at a time, or all at once** — `x`, `X`
+  on the group under the cursor, `gx` on the whole list; all checked → none,
+  otherwise → all, as in the trash. In a group with no live copy the server
+  marks one copy to keep (`data-keep`), and `X`/`gx` never check it, so
+  either is always a batch the server accepts; it can still be checked by
+  hand, and the last-copy refusal stands behind that. **The group header**
+  is the heading of what follows — the fingerprint, the count and the size
+  in the ink, bold, with a rule under it — not a faint label.
+- **It asks first, with `y`.** Enter (or Remove) raises the confirmation
+  `dd` uses — only `y` goes, Esc backs out — because this is the one action
+  `u` cannot take back.
+- **A pruned copy is retired**, like a bill that moved to another row: a
+  `file_unlink` noted *removed for good — a duplicate kept elsewhere*, with
+  the removed `path` and the `kept` one, so the trash, `u` and every restore
+  leave it alone (`receipts::RETIRED`). A copy with no record is logged too,
+  with `entity_id = 0` — no `receipts` row has that id — and its path.
+- **Folders the removal empties go with it**, as they do when a file moves
+  into the trash.
+
 ### Extensions
 
 Same closed, case-insensitive set as before: `pdf`, `jpg`, `png`, `txt`. The
@@ -2559,7 +2604,11 @@ full width, at the bottom, over the ledger — fzf-shaped.
   the reason `?pane=` is — two windows are two searches. That is still not
   `?split=`: a refresh does not reopen the list.
 - **`zz` zooms** the split between half the ledger area and nearly all of it
-  — worth it for `:grep` with forty hits.
+  — worth it for `:grep` with forty hits. **Every drawer's head says so**: a
+  maximize button beside `esc` (`partials/split_actions.html`, one partial
+  for all six) writes the same `splitZoom` the key does, and its title names
+  the key — *Maximize · zz*. Closing resets it. The rule pane and the log
+  don't carry it: they are columns beside a row, with nothing to grow into.
 - **`Ctrl-j` drops into the split and `Ctrl-k` off its top field comes back
   out**, the mirror of the rule pane's `Ctrl-h` past its left edge, rotated
   onto the axis the split sits on. Inside it, `Ctrl-h/j/k/l` move between

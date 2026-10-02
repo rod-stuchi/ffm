@@ -446,8 +446,19 @@
   --split-h: 52vh;
 }
 
-.stagewrap.is-zoom {
-  --split-h: 88vh;
+/* `zz` (and a drawer's maximize button): nearly all of the LEDGER AREA,
+ * measured from it rather than from the viewport. It was `88vh`, which is
+ * taller than the ledger area under the app bar and the tab bar — so the
+ * drawer rode up over them, and the stage's matching padding, which cannot
+ * shrink, pushed the stage out of its wrap and over the statusline. A strip
+ * of ledger stays visible above it, which is what says it is still a split.
+ * The padding goes too: at this size there is no row to scroll clear. */
+.stagewrap.is-zoom .hsplitmount {
+  height: calc(100% - 28px);
+}
+
+.stagewrap.is-zoom:has(.hsplitmount:not(:empty)) .stage {
+  padding-bottom: 16px;
 }
 
 .stage {
@@ -877,6 +888,24 @@
   font-family: var(--mono);
   font-size: 10px;
   padding: 3px 8px;
+}
+
+/* A drawer's maximize sits just before its close, and takes over the push
+ * to the right edge so the two stay together. */
+.rp-zoom {
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  padding: 3px 7px;
+  color: var(--ink-2);
+}
+
+.rp-zoom + .rp-close {
+  margin-left: 0;
+}
+
+.rp-zoom[aria-pressed="true"] {
+  color: var(--ink);
 }
 
 .rp-body {
@@ -1702,6 +1731,106 @@
   .trow .hm,
   .trow .tw {
     display: none;
+  }
+}
+
+/* --- duplicate files (`:prune`) ----------------------------------------- */
+
+/* A group's header is its fingerprint and what it costs, in mono: it is read
+ * character by character, like a path. */
+.prunehead {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 0 7px 5px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* A group, and a day in the trash, are one element each — so `X` can find
+ * the one under the cursor with `closest`. Each still opens with its own
+ * header's breathing room, which `.logday:first-child` would otherwise take
+ * away now that every header is its wrapper's first child. */
+.dupgroup > .logday:first-child,
+.tgroup > .logday:first-child {
+  margin-top: 13px;
+}
+
+.dupgroup > .prunehead:first-child {
+  margin-top: 18px;
+}
+
+/* The trash row's shape — a box, then what it is — with the path as the
+ * thing being read. A live copy keeps the box's column empty, so every path
+ * in a group starts at the same x. */
+.duprow {
+  display: grid;
+  grid-template-columns: 13px 1fr max-content;
+  gap: 9px;
+  align-items: baseline;
+  padding: 6px 7px;
+  border-radius: 7px;
+  font-size: 12.5px;
+}
+
+.duprow.is-trash {
+  cursor: pointer;
+}
+
+.duprow.is-trash:hover {
+  background: var(--surface-2);
+}
+
+.duprow.is-trash:focus-within {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.duprow input[type="checkbox"] {
+  accent-color: var(--info);
+  margin: 0;
+  align-self: center;
+}
+
+.duprow input[type="checkbox"]:focus-visible {
+  outline: none;
+}
+
+.duprow .dupp {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What stays reads quieter than what could go. */
+.duprow.is-live .dupp {
+  color: var(--ink-2);
+}
+
+.duprow:has(input:checked) .dupp {
+  color: var(--info);
+  text-decoration: line-through;
+}
+
+.duprow .dupw {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* Narrow: the path is the fact; what it is goes under it. */
+@media (max-width: 720px) {
+  .duprow {
+    grid-template-columns: 13px 1fr;
+  }
+
+  .duprow .dupw {
+    grid-column: 2;
   }
 }
 

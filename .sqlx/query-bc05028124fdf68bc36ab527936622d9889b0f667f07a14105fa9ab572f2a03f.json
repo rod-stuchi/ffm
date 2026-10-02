@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT r.id AS \"id!: i64\", r.kind AS \"kind!: String\",\n                  COALESCE(r.deleted_from_path, r.path) AS \"path!: String\",\n                  r.deleted_at AS \"deleted_at: String\",\n                  t.title AS \"title!: String\", t.period AS \"period!: String\",\n                  t.kind AS \"tx_kind!: String\", t.rule_id AS \"rule_id: i64\"\n           FROM receipts r JOIN transactions t ON t.id = r.transaction_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "path!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "deleted_at: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "tx_kind!: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 7,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "bc05028124fdf68bc36ab527936622d9889b0f667f07a14105fa9ab572f2a03f"
+}

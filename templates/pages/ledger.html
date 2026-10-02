@@ -1205,7 +1205,7 @@ function ledger() {
       // A side pane shows it in its header, beside the title; anything else
       // lays it over itself.
       const head = anchor.querySelector(':scope > .rp-head');
-      if (head) head.insertBefore(loader, head.querySelector('.rp-close'));
+      if (head) head.insertBefore(loader, head.querySelector('.rp-zoom, .rp-close'));
       else anchor.appendChild(loader);
     },
 
@@ -2707,6 +2707,14 @@ function ledger() {
         .then(() => this.focusSplit());
     },
 
+    /// `:prune` — opened with the keyboard on the first copy that can go.
+    /// Not remembered in `?split=`: like the trash, it is a list for a
+    /// moment, and reopening it on a reload would re-hash the vault for
+    /// nothing.
+    openPrune() {
+      this.showSplit('/prune').then(() => this.focusSplit());
+    },
+
     /// `:grep` — opened with the keyboard already on a hit (the `at`th), since
     /// the only thing to do in a result list is pick one.
     openGrep(q, at) {
@@ -2839,7 +2847,7 @@ function ledger() {
       const visible = (el) => el && el.offsetParent !== null;
       const pick = (sel) => [...pane.querySelectorAll(sel)].find(visible);
       const field = pick('input:not([type=hidden]), select, textarea')
-        || pick('a, button:not(.rp-close)')
+        || pick('a, button:not(.rp-close):not(.rp-zoom)')
         || pick('button');
       if (field) field.focus();
       else {
@@ -2998,6 +3006,8 @@ function ledger() {
         case 'household': case 'config':  return this.showSplit('/household');
         case 'members':                   return this.showSplit('/members');
         case 'trash':                     return this.openTrash();
+        // Duplicate files, admin only — the server refuses anybody else.
+        case 'prune':                     return this.openPrune();
         // Every month, as opposed to `/`, which filters what is on screen.
         // `:help` opens the keymap — the same modal `?` does. It is not a
         // nicety: `not-a-command` literally tells people to "try help", so

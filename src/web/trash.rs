@@ -199,7 +199,7 @@ fn item_view(it: &Item, t: &Catalog, currency: crate::domain::money::Currency) -
 
 /// The word the file rail uses for this slot — a spend's Bill is an income's
 /// Invoice, the same match `ui::row` makes.
-fn file_kind(t: &Catalog, code: &str, income: bool) -> &'static str {
+pub(crate) fn file_kind(t: &Catalog, code: &str, income: bool) -> &'static str {
     match (code, income) {
         ("barcode", false) => t.file_bill(),
         ("barcode", true) => t.file_invoice(),

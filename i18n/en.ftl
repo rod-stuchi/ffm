@@ -295,6 +295,8 @@ settings-members = Members
 settings-saved = { $name } saved
 settings-admin-only = that is admin only
 pane-close = esc
+pane-maximize = Maximize · zz
+pane-restore = Restore · zz
 
 profile-appearance = Appearance
 profile-ledger = Ledger
@@ -393,6 +395,7 @@ command-about-theme = your color palette — bare, it opens the picker
 command-about-lang = your language — words only, never dates or money
 command-about-grep = search every month — bare, the last search again
 command-about-trash = deleted rows and removed files, to bring back
+command-about-prune = duplicate files — remove the copies in the trash
 command-about-household = the household's settings
 command-about-members = members and invite links
 command-about-invite = a new invite link
@@ -487,7 +490,7 @@ trash-with-files = { $n ->
        *[other] + { $n } files
     }
 trash-restore = Restore
-trash-hint = x or click to check · Enter restores what is checked
+trash-hint = x or click to check · X the day · gx all · Enter restores what is checked
 trash-note = A row comes back where it was, with its files. An older file swaps places with the current one, which goes to the trash in its stead.
 trash-menu = Deleted rows and removed files, to bring back
 trash-nothing-picked = nothing checked — x or click an item first
@@ -706,3 +709,32 @@ run-demo-title = A development build running as of { $date }, on a copy of the d
 
 live-from-disk = updated from disk — a file was filed or removed by hand
 live-under-edit = this row's files changed on disk — Esc to see them
+
+## Duplicate files — :prune
+
+prune-title = Duplicates
+prune-count = { $n ->
+        [one] 1 group
+       *[other] { $n } groups
+    } · { $size } can go
+prune-group = { $hash } · { $n } copies · { $size }
+prune-empty = No two files in the vault are the same. Nothing to prune.
+prune-hint = Only copies in a trash folder can be checked — what is live stays · x or click to check · X the group · gx all · Enter removes
+prune-note = Each copy here has the same bytes as one that stays, so removing it loses nothing. It is removed from the disk for good: not to the trash, and u cannot bring it back.
+prune-live = live · { $row }
+prune-live-unknown = live · on disk, not on record
+prune-trash = trash · { $row } · deleted { $day }
+prune-trash-unknown = trash · not on record
+prune-remove = Remove
+prune-confirm = Remove the checked copies for good?
+prune-confirm-body = Every one has the same bytes as a file that stays. They do not go to the trash — they leave the disk, and u cannot bring them back.
+prune-confirm-yes = Remove for good
+prune-nothing-picked = nothing checked — x or click a copy first
+prune-done = removed { $n ->
+        [one] 1 copy
+       *[other] { $n } copies
+    } · { $size } freed
+prune-not-in-trash = { $path } is not in a trash folder — only a copy there can be removed
+prune-not-a-duplicate = { $path } is no longer a copy of anything — the list was out of date, look again
+prune-last-copy = every copy of { $path } is checked — keep one
+prune-failed = could not remove every copy — the list shows what is left

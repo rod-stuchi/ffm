@@ -1,0 +1,125 @@
+{#- `:prune` — byte-identical files in the vault, and removing the copies the
+    trash holds of them. Admin only.
+
+    The one place this app removes a file from disk, so the one list that
+    asks before it acts: Enter (or Remove) raises a `y`-only confirmation, the
+    same shape as `dd`'s, because `u` cannot bring these back. What is removed
+    is always an exact copy of a file that stays — the server checks that
+    again, against a fresh scan, before anything goes.
+
+    A real form, like the trash: the checked boxes are unsubmitted values, and
+    only copies in a member's `.delete/` have a box at all. Names carry a `p`
+    prefix because this component's scope chains onto the ledger's. -#}
+<aside class="rulepane logpane trashpane prunepane" id="settingspane"
+       x-data="{
+         pn: 0,
+         pg: false,
+         pAsk: false,
+         pBoxes() { return [...this.$root.querySelectorAll('input[name=pick]')]; },
+         pCount() { this.pn = this.pBoxes().filter(b => b.checked).length; },
+         pGo(i) {
+           const b = this.pBoxes();
+           if (!b.length) return;
+           const el = b[Math.max(0, Math.min(b.length - 1, i))];
+           el.focus();
+           el.closest('.duprow').scrollIntoView({ block: 'nearest' });
+         },
+         pAsking() { if (this.pn) this.pAsk = true; },
+         // `X` on the group under the cursor, `gx` on the whole list: all
+         // checked → none, otherwise → all. The server's `data-keep` copy is
+         // never checked this way, so either is a batch it will accept.
+         pToggle(boxes) {
+           const can = boxes.filter(b => !b.hasAttribute('data-keep'));
+           const on = !can.every(b => b.checked);
+           boxes.forEach(b => { b.checked = on && !b.hasAttribute('data-keep'); });
+           this.pCount();
+         },
+         pKey(e) {
+           if (e.ctrlKey || e.metaKey || e.altKey) return;
+           if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
+           // While asking, only `y` says yes — Enter is unbound, as in `dd`'s
+           // confirmation — and Esc backs out without closing the pane.
+           if (this.pAsk) {
+             e.preventDefault();
+             e.stopPropagation();
+             if (e.key === 'y') { this.pAsk = false; this.$refs.pruneform.requestSubmit(); }
+             else if (e.key === 'Escape') { this.pAsk = false; }
+             return;
+           }
+           const b = this.pBoxes();
+           const i = b.indexOf(document.activeElement);
+           if (i < 0) return;
+           const g = this.pg;
+           this.pg = false;
+           if (e.key === 'j') { e.preventDefault(); this.pGo(i + 1); }
+           else if (e.key === 'k') { e.preventDefault(); this.pGo(i - 1); }
+           else if (e.key === 'G') { e.preventDefault(); this.pGo(b.length - 1); }
+           else if (e.key === 'g') { e.preventDefault(); if (g) this.pGo(0); else this.pg = true; }
+           else if (e.key === 'x' && g) { e.preventDefault(); this.pToggle(b); }
+           else if (e.key === 'x') { e.preventDefault(); b[i].click(); }
+           else if (e.key === 'X') { e.preventDefault(); this.pToggle([...b[i].closest('.dupgroup').querySelectorAll('input[name=pick]')]); }
+           else if (e.key === 'Enter') { e.preventDefault(); this.pAsking(); }
+         }
+       }"
+       @keydown="pKey($event)">
+  <header class="rp-head">
+    <b>{{ t.prune_title() }}{% if !empty %} · {{ count }}{% endif %}</b>
+    {%- include "partials/split_actions.html" %}
+  </header>
+
+  <form class="trashform" x-ref="pruneform"
+        hx-post="/prune" hx-target="#settingspane" hx-swap="outerHTML"
+        @change="pCount()" @submit="if (!pn) $event.preventDefault()">
+    <div class="rp-body logbody">
+      {%- if empty %}
+      {#- A vault with nothing doubled is an answer, not an error. -#}
+      <p class="hint">{{ t.prune_empty() }}</p>
+      {%- else %}
+      <p class="hint">{{ t.prune_hint() }}</p>
+      {%- for g in groups %}
+      <div class="dupgroup">
+      <div class="logday prunehead">{{ g.head }}</div>
+      {%- for c in g.copies %}
+      {%- if c.in_trash %}
+      <label class="duprow is-trash">
+        <input type="checkbox" name="pick" value="{{ c.rel }}"{% if c.keep %} data-keep{% endif %}>
+        <span class="dupp">{{ c.rel }}</span>
+        <span class="dupw">{{ c.what }}</span>
+      </label>
+      {%- else %}
+      {#- What stays: listed, never offered. -#}
+      <div class="duprow is-live">
+        <span></span>
+        <span class="dupp">{{ c.rel }}</span>
+        <span class="dupw">{{ c.what }}</span>
+      </div>
+      {%- endif %}
+      {%- endfor %}
+      </div>
+      {%- endfor %}
+      <p class="notebox">{{ t.prune_note() }}</p>
+      {%- endif %}
+    </div>
+
+    {%- if !empty %}
+    <div class="rp-actions">
+      <button class="btn pri" type="button" :disabled="!pn" @click="pAsking()">
+        {{ t.prune_remove() }} <span class="tcount" x-show="pn" x-text="pn"></span><kbd>&#9166;</kbd>
+      </button>
+    </div>
+    {%- endif %}
+  </form>
+
+  <div class="modal" x-show="pAsk" x-cloak @click.self="pAsk = false">
+    <div class="card" style="max-width:min(460px,100%)">
+      <div class="ch"><h1>{{ t.prune_confirm() }} <span class="tcount" x-text="'· ' + pn"></span></h1></div>
+      <div class="cb">
+        <p class="hint" style="margin-top:0">{{ t.prune_confirm_body() }}</p>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="pAsk = false">{{ t.row_cancel() }} <kbd>esc</kbd></button>
+          <button class="btn" type="button" @click="pAsk = false; $refs.pruneform.requestSubmit()">{{ t.prune_confirm_yes() }} <kbd>y</kbd></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</aside>

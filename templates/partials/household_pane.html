@@ -12,7 +12,7 @@
     and the button removed the whole application. Going through the shell
     also clears the mount, so the `<script>` a fragment ships beside
     itself is not orphaned. -#}
-    <button class="btn rp-close" type="button" @click="closeSplit()">{{ t.pane_close() }}</button>
+    {%- include "partials/split_actions.html" %}
   </header>
 
   {#- One form per setting, for the same reason :profile has: a radio group is

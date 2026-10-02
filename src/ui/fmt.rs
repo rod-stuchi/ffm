@@ -137,6 +137,34 @@ pub fn period(p: crate::domain::period::Period) -> String {
     format!("{:02}/{:04}", p.month(), p.year())
 }
 
+/// A file size: `412 KB`, `1,2 MB` — the decimal separator is the
+/// household's, since a number reads one way in a household whatever the
+/// words around it. Whole bytes and kilobytes, one decimal from megabytes up.
+pub fn bytes(n: u64, currency: Currency) -> String {
+    const UNITS: [&str; 3] = ["MB", "GB", "TB"];
+    if n < 1024 {
+        return format!("{n} B");
+    }
+    let kb = n as f64 / 1024.0;
+    if kb < 1024.0 {
+        return format!("{} KB", kb.round() as u64);
+    }
+    let mut v = kb / 1024.0;
+    let mut unit = 0;
+    while v >= 1024.0 && unit < UNITS.len() - 1 {
+        v /= 1024.0;
+        unit += 1;
+    }
+    let tenths = (v * 10.0).round() as u64;
+    format!(
+        "{}{}{} {}",
+        tenths / 10,
+        currency.format().decimal_sep,
+        tenths % 10,
+        UNITS[unit]
+    )
+}
+
 /// The digits alone, grouped and separated for this currency: `12.345,67`.
 fn digits(amount: Cents, currency: Currency) -> String {
     let f = currency.format();
@@ -173,6 +201,14 @@ mod tests {
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    #[test]
+    fn a_file_size_reads_in_the_households_numbers() {
+        assert_eq!(bytes(512, Currency::Brl), "512 B");
+        assert_eq!(bytes(421_888, Currency::Brl), "412 KB");
+        assert_eq!(bytes(1_258_291, Currency::Brl), "1,2 MB");
+        assert_eq!(bytes(1_258_291, Currency::Usd), "1.2 MB");
     }
 
     #[test]

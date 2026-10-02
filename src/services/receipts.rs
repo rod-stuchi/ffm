@@ -402,12 +402,13 @@ pub async fn restore(
     let rel: Option<String> = sqlx::query_scalar!(
         r#"SELECT deleted_from_path AS "p: String" FROM receipts
            WHERE id = ?1 AND deleted_at IS NOT NULL
-             -- A retired bill (`MOVED`) is never put back.
+             -- A retired copy (`RETIRED`) is never put back.
              AND NOT EXISTS (SELECT 1 FROM change x
                              WHERE x.entity = 'file' AND x.entity_id = receipts.id
-                               AND x.action = 'file_unlink' AND x.note = ?2)"#,
+                               AND x.action = 'file_unlink' AND x.note IN (?2, ?3))"#,
         receipt_id,
-        MOVED
+        RETIRED[0],
+        RETIRED[1],
     )
     .fetch_optional(pool)
     .await
@@ -489,12 +490,13 @@ pub async fn restore_swapping(
         r#"SELECT transaction_id AS "tx!: i64", kind AS "kind!: String",
                   deleted_from_path AS "from: String"
            FROM receipts WHERE id = ?1 AND deleted_at IS NOT NULL
-             -- A retired bill (`MOVED`) is never put back.
+             -- A retired copy (`RETIRED`) is never put back.
              AND NOT EXISTS (SELECT 1 FROM change x
                              WHERE x.entity = 'file' AND x.entity_id = receipts.id
-                               AND x.action = 'file_unlink' AND x.note = ?2)"#,
+                               AND x.action = 'file_unlink' AND x.note IN (?2, ?3))"#,
         receipt_id,
-        MOVED
+        RETIRED[0],
+        RETIRED[1],
     )
     .fetch_optional(pool)
     .await
@@ -676,6 +678,12 @@ pub const WITH_ROW: &str = "moved with its row";
 /// the append-only log rather than in `receipts.delete_reason`, whose `CHECK`
 /// allows only `manual` and `superseded`.
 pub const MOVED: &str = "its bill is on another row";
+
+/// The notes that **retire** a copy in the trash — it can never come back,
+/// so `U` does not list it, `u` never picks its delete or upload, and a
+/// restore refuses it: a bill now on another row ([`MOVED`]), and a duplicate
+/// `:prune` removed from disk (`prune::PRUNED`). Both are a `file_unlink`.
+pub const RETIRED: [&str; 2] = [MOVED, crate::services::prune::PRUNED];
 
 /// Moves every live file of a row into the member's trash, because the row
 /// was deleted. A deleted row's bill left standing in the vault reads as

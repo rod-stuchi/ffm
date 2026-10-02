@@ -9,6 +9,7 @@ pub mod import;
 pub mod ledger;
 pub mod live;
 pub mod log;
+pub mod prune;
 pub mod rules;
 pub mod selection;
 pub mod session;
@@ -75,6 +76,10 @@ pub fn router(state: AppState) -> Router {
         // `Ctrl-u` / `:trash` — every deleted row and removed file, each one
         // restorable on its own rather than in `u`'s order.
         .route("/trash", get(trash::view))
+        // `:prune` — admin only, and the one place a file leaves the disk:
+        // only a copy in the trash of a file that stays. Not in `overdue`: a
+        // trashed copy never decides whether a month is overdue.
+        .route("/prune", get(prune::view).post(prune::run))
         .route("/tx/{id}/move", post(tx::move_row))
         // `e` — the row opens into its own form, in place.
         .route("/tx/{id}/edit", get(tx::edit_form))

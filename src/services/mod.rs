@@ -7,6 +7,7 @@ pub mod issuers;
 pub mod live;
 pub mod materializer;
 pub mod pending;
+pub mod prune;
 pub mod receipts;
 pub mod vault;
 pub mod watch;

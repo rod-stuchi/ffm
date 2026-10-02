@@ -791,6 +791,12 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   own `receipts` row (`09_barcode.r42.pdf`): a fixed `09_barcode.pdf` let a
   second delete of the same slot overwrite the first. Restore finds a file in
   any place a delete has ever put one, and refuses to overwrite a live file.
+  **`:prune` is the one exception to "never removed from disk"**: an admin can
+  remove a copy in the trash that is byte-identical (blake3) to a file that
+  stays — no bytes are lost, which is the whole argument. Checked again on the
+  server against a fresh scan, never the last copy of a group, confirmed with
+  `y`, and logged as a retirement (`prune::PRUNED`) that the trash, `u` and
+  every restore leave alone. See `design/spec.md`'s Pruning duplicates.
 - **Deleting a rule leaves its occurrences as orphaned bills** — never
   re-parented, never cleared. They keep `rule_id` (the change log and the
   files still need it), their files and their tracked status, because the

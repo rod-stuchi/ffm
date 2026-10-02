@@ -43,6 +43,9 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 # Watching the receipt vault for files changed by hand — FSEvents on macOS,
 # inotify on Linux (fine in the static musl builds).
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
+# `:prune` — walking the vault and finding byte-identical files in it.
+walkdir = "2.5"
+blake3 = "1.8"
 tower = { version = "0.5", features = ["util"] }
 # No "compression": behind a LAN, brotli costs more CPU than it saves.
 tower-http = { version = "0.6", features = ["fs", "trace", "set-header", "catch-panic"] }

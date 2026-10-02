@@ -260,6 +260,8 @@ settings-members = Membros
 settings-saved = { $name } salvo
 settings-admin-only = isso é só para administradores
 pane-close = esc
+pane-maximize = Maximizar · zz
+pane-restore = Restaurar · zz
 
 profile-appearance = Aparência
 profile-ledger = Livro
@@ -356,6 +358,7 @@ command-about-theme = sua paleta de cores — sozinho, abre o seletor
 command-about-lang = seu idioma — só as palavras, nunca datas ou dinheiro
 command-about-grep = buscar em todos os meses — sozinho, repete a última busca
 command-about-trash = linhas apagadas e arquivos removidos, para trazer de volta
+command-about-prune = arquivos duplicados — remover as cópias na lixeira
 command-about-household = as configurações da casa
 command-about-members = membros e links de convite
 command-about-invite = um novo link de convite
@@ -450,7 +453,7 @@ trash-with-files = { $n ->
        *[other] + { $n } arquivos
     }
 trash-restore = Restaurar
-trash-hint = x ou clique para marcar · Enter restaura o que está marcado
+trash-hint = x ou clique para marcar · X o dia · gx tudo · Enter restaura o que está marcado
 trash-note = A linha volta para onde estava, com os arquivos dela. Um arquivo antigo troca de lugar com o atual, que vai para a lixeira no lugar dele.
 trash-menu = Linhas excluídas e arquivos removidos, para trazer de volta
 trash-nothing-picked = nada marcado — marque um item com x ou um clique
@@ -672,3 +675,32 @@ run-demo-title = Um build de desenvolvimento rodando como se fosse { $date }, nu
 
 live-from-disk = atualizado a partir do disco — um arquivo foi colocado ou removido à mão
 live-under-edit = os arquivos desta linha mudaram no disco — Esc para vê-los
+
+## Duplicate files — :prune
+
+prune-title = Duplicados
+prune-count = { $n ->
+        [one] 1 grupo
+       *[other] { $n } grupos
+    } · { $size } podem sair
+prune-group = { $hash } · { $n } cópias · { $size }
+prune-empty = Nenhum arquivo do cofre se repete. Nada para limpar.
+prune-hint = Só cópias numa lixeira podem ser marcadas — o que está em uso fica · x ou clique para marcar · X o grupo · gx tudo · Enter remove
+prune-note = Cada cópia aqui tem os mesmos bytes de uma que fica, então removê-la não perde nada. Ela sai do disco de vez: não vai para a lixeira, e u não a traz de volta.
+prune-live = em uso · { $row }
+prune-live-unknown = em uso · no disco, sem registro
+prune-trash = lixeira · { $row } · excluído em { $day }
+prune-trash-unknown = lixeira · sem registro
+prune-remove = Remover
+prune-confirm = Remover de vez as cópias marcadas?
+prune-confirm-body = Todas têm os mesmos bytes de um arquivo que fica. Elas não vão para a lixeira — saem do disco, e u não as traz de volta.
+prune-confirm-yes = Remover de vez
+prune-nothing-picked = nada marcado — x ou clique numa cópia antes
+prune-done = { $n ->
+        [one] 1 cópia removida
+       *[other] { $n } cópias removidas
+    } · { $size } liberados
+prune-not-in-trash = { $path } não está numa lixeira — só uma cópia ali pode ser removida
+prune-not-a-duplicate = { $path } não é mais cópia de nada — a lista estava desatualizada, veja de novo
+prune-last-copy = todas as cópias de { $path } estão marcadas — deixe uma
+prune-failed = não foi possível remover todas as cópias — a lista mostra o que restou
