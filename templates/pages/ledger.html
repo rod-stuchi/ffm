@@ -137,9 +137,9 @@
       </form>
       {%- endif %}
       <span class="htot" id="htot">
-        <span><i>IN</i> <b class="pos">{{ house.ins }}</b></span>
-        <span><i>OUT</i> <b class="neg">{{ house.outs }}</b></span>
-        <span><i>NET</i> <b class="{% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
+        <span><i>{{ t.totals_in() }}</i> <b class="pos">{{ house.ins }}</b></span>
+        <span><i>{{ t.totals_out() }}</i> <b class="neg">{{ house.outs }}</b></span>
+        <span><i>{{ t.totals_net() }}</i> <b class="{% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
       </span>
     </div>
     {#- Light/dark, as a plain form. The `ffm.theme` cookie is HttpOnly, so
@@ -285,9 +285,9 @@
         <span class="rotag">{{ t.pane_read_only() }}</span>
         {%- endif %}
         <span class="ptotals" id="ptot-{{ p.id }}">
-          <i>in</i> <b class="pos">{{ p.totals.ins }}</b>
-          <i>out</i> <b class="neg">{{ p.totals.outs }}</b>
-          <i>bal</i> <b class="{% if p.totals.negative %}neg{% else %}pos{% endif %}">{% if p.totals.negative %}−{% endif %}{{ p.totals.balance }}</b>
+          <span><i>{{ t.totals_in() }}</i> <b class="pos">{{ p.totals.ins }}</b></span>
+          <span><i>{{ t.totals_out() }}</i> <b class="neg">{{ p.totals.outs }}</b></span>
+          <span><i>{{ t.totals_balance() }}</i> <b class="{% if p.totals.negative %}neg{% else %}pos{% endif %}">{% if p.totals.negative %}−{% endif %}{{ p.totals.balance }}</b></span>
         </span>
       </header>
 

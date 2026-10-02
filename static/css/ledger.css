@@ -97,6 +97,14 @@
   margin-right: 4px;
 }
 
+/* The words are the catalog's, one per idea and lowercase — `in`, or
+ * `entradas` — and the bar SHOUTS them: the case is a matter of where the
+ * word sits, not of what it says. */
+.htot i,
+.mfsum i {
+  text-transform: uppercase;
+}
+
 .who {
   color: var(--ink-3);
 }
@@ -657,8 +665,9 @@
 
 .pane-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 12px;
+  gap: 4px 12px;
   padding: 9px 12px;
   border-bottom: 1px solid var(--line);
 }
@@ -677,11 +686,22 @@
   white-space: nowrap;
 }
 
+/* Each label stays with its figure — a pair never breaks, and a figure never
+ * splits between `R$` and its digits. When the three do not fit beside the
+ * name (a pane at its floor, in a language with longer words: `entradas`,
+ * `saídas`), the pairs wrap whole, right-aligned, and the header grows a line
+ * rather than the numbers breaking. */
 .ptotals {
   margin-left: auto;
   font-size: 11px;
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 10px;
+}
+
+.ptotals > span {
+  white-space: nowrap;
 }
 
 .rows {

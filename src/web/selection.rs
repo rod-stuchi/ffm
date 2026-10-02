@@ -91,7 +91,7 @@ pub fn summarize(items: &[Item], ids: &HashSet<i64>) -> Summary {
 /// One figure in the cell: an optional label (`in`, `out`, `net`), the money,
 /// and the color class the header gives the same figure.
 pub struct Part {
-    label: &'static str,
+    label: String,
     value: String,
     class: &'static str,
 }
@@ -125,17 +125,17 @@ impl SelectionCell {
                 let net = s.ins - s.outs;
                 vec![
                     Part {
-                        label: "in",
+                        label: t.totals_in().to_string(),
                         value: format!("+ {}", money(s.ins, s.estimated)),
                         class: "pos",
                     },
                     Part {
-                        label: "out",
+                        label: t.totals_out().to_string(),
                         value: money(s.outs, false),
                         class: "neg",
                     },
                     Part {
-                        label: "net",
+                        label: t.totals_net().to_string(),
                         value: format!(
                             "{}{}",
                             if net.is_negative() { "−" } else { "" },
@@ -146,12 +146,12 @@ impl SelectionCell {
                 ]
             }
             (true, false) => vec![Part {
-                label: "Σ",
+                label: "Σ".into(),
                 value: format!("+ {}", money(s.ins, s.estimated)),
                 class: "pos",
             }],
             (false, true) => vec![Part {
-                label: "Σ",
+                label: "Σ".into(),
                 value: money(s.outs, false),
                 class: "neg",
             }],

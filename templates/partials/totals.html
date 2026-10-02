@@ -5,9 +5,9 @@
     privacy is applied inside the same query that produced the row, the two
     cannot drift apart. -#}
 <span class="ptotals" id="ptot-{{ pt.id }}" hx-swap-oob="true">
-  <i>in</i> <b class="pos">{{ pt.ins }}</b>
-  <i>out</i> <b class="neg">{{ pt.outs }}</b>
-  <i>bal</i> <b class="{% if pt.negative %}neg{% else %}pos{% endif %}">{% if pt.negative %}−{% endif %}{{ pt.balance }}</b>
+  <span><i>{{ t.totals_in() }}</i> <b class="pos">{{ pt.ins }}</b></span>
+  <span><i>{{ t.totals_out() }}</i> <b class="neg">{{ pt.outs }}</b></span>
+  <span><i>{{ t.totals_balance() }}</i> <b class="{% if pt.negative %}neg{% else %}pos{% endif %}">{% if pt.negative %}−{% endif %}{{ pt.balance }}</b></span>
 </span>
 {#- The same balance again, in the member's tab. It is a second place the
     number appears, so it is swapped from the same fragment as the first —
@@ -16,7 +16,7 @@
 <span class="tbal {% if pt.negative %}neg{% else %}pos{% endif %}"
       id="tbal-{{ pt.id }}" hx-swap-oob="true">{% if pt.negative %}−{% endif %}{{ pt.balance }}</span>
 <span class="htot" id="htot" hx-swap-oob="true">
-  <span><i>IN</i> <b class="pos">{{ house.ins }}</b></span>
-  <span><i>OUT</i> <b class="neg">{{ house.outs }}</b></span>
-  <span><i>NET</i> <b class="{% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
+  <span><i>{{ t.totals_in() }}</i> <b class="pos">{{ house.ins }}</b></span>
+  <span><i>{{ t.totals_out() }}</i> <b class="neg">{{ house.outs }}</b></span>
+  <span><i>{{ t.totals_net() }}</i> <b class="{% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
 </span>

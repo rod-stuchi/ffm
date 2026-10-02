@@ -1752,6 +1752,14 @@ period is confirmed, the row shows an **estimate** derived from history.
   the `~`** when any component is a projection. Leaving projections out of
   the totals would make a future month's NET useless; putting them in
   unmarked would present a guess as a fact.
+- **The totals' words are the catalog's, not literals** — `in` / `out` /
+  `net` / `bal` in English, `entradas` / `saídas` / `saldo` in Portuguese —
+  in the app bar, every pane header, the month picker's year and the
+  selection cell alike. Stored lowercase, one word per idea; the bar and the
+  picker uppercase them in CSS, so the case is where a word sits, not what it
+  says. Each word stays with its figure (`white-space: nowrap` on the pair):
+  a pane at its floor, in a language with longer words, moves the pairs under
+  its name whole rather than splitting `R$` from its digits.
 - **The MoM delta inverts.** The arrow is direction, the color is whether
   it's good news: more money out is bad, more money in is good, so a raise
   never paints itself red. A recurring income gets a delta; a one-off and an

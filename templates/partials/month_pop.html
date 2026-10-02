@@ -24,9 +24,9 @@
 <div class="mfoot">
   <div class="mfh">{{ y.heading }}</div>
   <div class="mfsum">
-    <span><i>IN</i> <b class="pos">{{ y.ins }}</b></span>
-    <span><i>OUT</i> <b class="neg">{{ y.outs }}</b></span>
-    <span><i>NET</i> <b class="{% if y.negative %}neg{% else %}pos{% endif %}">{{ y.net }}</b></span>
+    <span><i>{{ t.totals_in() }}</i> <b class="pos">{{ y.ins }}</b></span>
+    <span><i>{{ t.totals_out() }}</i> <b class="neg">{{ y.outs }}</b></span>
+    <span><i>{{ t.totals_net() }}</i> <b class="{% if y.negative %}neg{% else %}pos{% endif %}">{{ y.net }}</b></span>
   </div>
   <div class="mfnote">{{ y.avg }}{% if !y.unresolved.is_empty() %} · <span class="mfwarn">{{ y.unresolved }}</span>{% endif %}</div>
 </div>

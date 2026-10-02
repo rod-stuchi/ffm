@@ -708,3 +708,10 @@ prune-not-in-trash = { $path } não está numa lixeira — só uma cópia ali po
 prune-not-a-duplicate = { $path } não é mais cópia de nada — a lista estava desatualizada, veja de novo
 prune-last-copy = todas as cópias de { $path } estão marcadas — deixe uma
 prune-failed = não foi possível remover todas as cópias — a lista mostra o que restou
+
+## The totals' words — lowercase; the app bar and the picker uppercase them
+
+totals-in = entradas
+totals-out = saídas
+totals-net = saldo
+totals-balance = saldo

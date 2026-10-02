@@ -742,3 +742,10 @@ prune-not-in-trash = { $path } is not in a trash folder — only a copy there ca
 prune-not-a-duplicate = { $path } is no longer a copy of anything — the list was out of date, look again
 prune-last-copy = every copy of { $path } is checked — keep one
 prune-failed = could not remove every copy — the list shows what is left
+
+## The totals' words — lowercase; the app bar and the picker uppercase them
+
+totals-in = in
+totals-out = out
+totals-net = net
+totals-balance = bal
