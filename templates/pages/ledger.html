@@ -698,6 +698,9 @@
     {%- endif %}
     <div class="st right is-click" @click="cycleNu()" x-text="nuLabel"
          title="{{ t.profile_line_numbers() }}">{{ nu_label }}</div>
+    {#- The version, last and always shown — a phone, where the other right
+        cells step aside, is exactly where "which version is this?" is asked. -#}
+    <div class="st ver" title="{{ t.status_version() }}">{{ version }}</div>
   </div>
 
   {#- The loader, cloned onto whatever a request is about (`busyStart`). A

@@ -319,6 +319,9 @@ struct LedgerPage {
     /// member, never the focused pane's — focusing somebody else's pane does
     /// not make you them.
     me_name: String,
+    /// The running build — `v0.0.3`, `v0.0.4-dev` on a dev build — at the
+    /// statusline's far right. Not a PROD label: every build shows it.
+    version: &'static str,
     me_admin: bool,
     /// The `:` bar's hint — **exactly** what `runCommand` handles, built here
     /// rather than written out in the template so the two cannot drift. The
@@ -546,6 +549,7 @@ pub async fn ledger(
             .unwrap_or_default(),
         group_order_needs_group: t.group_order_needs_group().to_string(),
         me_name: fmt::name(&auth.session.member.name),
+        version: crate::version(),
         // Whether admin powers are actually IN EFFECT, not what the row says
         // — an admin previewing as a member should read as a member here, or
         // the badge would contradict what the rest of the app is doing.

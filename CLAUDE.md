@@ -1411,7 +1411,10 @@ that will otherwise be re-proposed.
     drops the badge's year.
   - **PROD wears nothing**, and says so only in `:profile`'s first line and
     the boot log (`ffm v0.0.1 · PROD`): a badge that is always there stops
-    being read, and the danger runs one way.
+    being read, and the danger runs one way. The **version number** is not that
+    label: every build shows it at the statusline's far right (`v0.0.3`,
+    `-dev` on a dev build), because "which version is this?" is a question
+    about any server, while the DEV badge still marks only the dev ones.
   - The badge speaks in ink, not a semantic color: the accent, pos/neg and
     info all already mean something.
 - **`just release` builds a release; `just release-approve` tags it.**

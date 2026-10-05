@@ -143,6 +143,12 @@ The statusline carries, left to right:
 | sort | `manual` · `date` · `amount` — **clickable, cycles**, the same as `s` |
 | group order | `First seen` · `A–Z` · `By cost` — only while the pane is grouped; **clickable, cycles**, the same as `S` |
 | line numbers | `rnu` · `nu` · `nonu` — **clickable, cycles** |
+| version | the running build — `v0.0.3`, or `v0.0.4-dev` on a dev build. Last, quiet, and **kept at every width**, where the cells before it step aside below 700px: a phone is where "which version is this?" gets asked |
+
+**On a phone the household and the member cells give way** with an ellipsis,
+while the mode badge and the version keep their size. They did not fit beside
+the badge on their own — 404px of cells on a 400px screen — so the bar used to
+run off the edge before the version was ever added.
 
 The last two are the single-source rule made visible: a command, a form
 control and a statusline cell are three gestures writing **one** row. Clicking

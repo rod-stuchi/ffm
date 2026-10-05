@@ -497,6 +497,31 @@ legend {
   .st.right {
     display: none;
   }
+
+  /* On a phone the household and the member did not fit beside the mode
+   * badge on their own — 404px of cells on a 400px screen — so the bar ran
+   * off the edge. They give way with an ellipsis; the mode badge and the
+   * version keep their size, being the two read at a glance. */
+  .st {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .st.mode,
+  .st.ver {
+    flex: none;
+  }
+}
+
+/* The running version: last, quiet, and kept at every width — unlike the
+ * .right cells, it is not about the pane, and a phone is where "which version
+ * is this?" gets asked. */
+.st.ver {
+  border-right: none;
+  border-left: 1px solid var(--line);
+  font-family: var(--mono);
+  color: var(--ink-3);
 }
 
 /* --- per-field validation ------------------------------------------------
