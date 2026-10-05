@@ -83,5 +83,5 @@ The local dev loop is designed to stay close to a modern hot-reload experience w
 
 - **Tailwind CLI** runs in `--watch` mode, regenerating CSS as templates change.
 - **`cargo-watch -x run`** recompiles and restarts the server on every save.
-- **`tower-livereload`** (dev-only, gated behind `#[cfg(debug_assertions)]`) auto-refreshes the browser once the server restarts.
+- **A dev-only reload stream** (`web::dev_reload`, behind the opt-in `dev-reload` feature) refreshes the browser once the server restarts — and only then, by comparing the process's boot id.
 - A **dev-only UI sandbox router**, also gated behind `#[cfg(debug_assertions)]`, renders templates (including success/error/skeleton states) against dummy data — letting UI and CSS be iterated on directly without touching the real database.

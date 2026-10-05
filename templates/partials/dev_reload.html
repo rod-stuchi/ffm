@@ -1,0 +1,5 @@
+{#- `just dev`'s reload (`web::dev_reload`): absent unless the binary was built
+    with the `dev-reload` feature, which a release never is. -#}
+{%- if crate::run::DEV_RELOAD %}
+<script src="/static/js/dev-reload.js"></script>
+{%- endif %}

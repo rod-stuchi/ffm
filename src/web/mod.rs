@@ -3,6 +3,8 @@
 pub mod auth;
 pub mod commands;
 pub mod csrf;
+#[cfg(feature = "dev-reload")]
+pub mod dev_reload;
 pub mod files;
 pub mod form;
 pub mod import;
@@ -157,6 +159,11 @@ pub fn router(state: AppState) -> Router {
     // release binary, so there is no auth guard to forget.
     #[cfg(debug_assertions)]
     let app = app.merge(sandbox::router());
+
+    // `just dev`'s reload stream. Outside every guard: the pre-auth pages and
+    // the sandbox reload too.
+    #[cfg(feature = "dev-reload")]
+    let app = app.route("/_dev/reload", get(dev_reload::stream));
 
     app.with_state(state)
 }

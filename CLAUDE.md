@@ -1514,10 +1514,13 @@ that will otherwise be re-proposed.
   (gitignored), made once per invocation. The demo materializes that month's
   rows and stamps its edits with that date, which must never reach the real
   database — so it never runs on it.
-- `tower-livereload` **0.10+**, behind the opt-in `dev-reload` feature (which is
-  what `just dev` turns on) — refreshes the browser once the server restarts.
-  Not `#[cfg(debug_assertions)]`, and not a default feature: see the gotcha
-  below for why both of those are wrong.
+- **The browser reloads once the server restarts** — `web::dev_reload`, behind
+  the opt-in `dev-reload` feature (which is what `just dev` turns on). The
+  page's `EventSource` on `/_dev/reload` receives the process's boot id, and
+  reloads only when a reconnect brings a **different** one; keep-alives every
+  15s hold the stream open through a proxy. Not `#[cfg(debug_assertions)]`,
+  and not a default feature: see the gotcha below for why both are wrong.
+  It replaced `tower-livereload` — see the gotcha on reloading on reconnect.
 - **The same feature sends `Cache-Control: no-cache` on `/static`**, so a
   rebuilt `build.css` lands on a plain reload. Without it Safari reused a
   stale stylesheet from its heuristic cache and a CSS fix looked like it had
@@ -1778,13 +1781,16 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   rather than default-on, so a forgotten flag fails as "livereload didn't
   reload" (noticed in seconds) instead of "livereload shipped in release"
   (never noticed).
-- **tower-livereload before 0.10 reload-loops against hyper 1.x.** Its
-  `LongPollBody::poll_frame` `take()`s the receiver, so the body can return
-  `Pending` exactly once; the next poll hits the `None` arm and ends the
-  stream. The injected client reads a completed long-poll as "the server
-  restarted", fetches `back-up`, gets 200, and calls `location.reload()` —
-  forever, on every page. **Symptom to recognize:** the page reloads endlessly
-  while the server PID never changes (so it is *not* a cargo-watch rebuild
-  loop), and the long-poll endpoint returns 200 in under a millisecond instead
-  of hanging. 0.10 replaced it with a real SSE state machine that holds the
-  connection open. Do not pin back below 0.10.
+- **A dev reload that fires on any reconnect reloads every time a proxy cuts
+  an idle stream.** `tower-livereload` (0.10) sent one `init` event and then
+  not a byte, and its script reloaded on the first `init` after any error.
+  Behind the HTTPS proxy that fronts `just dev-lan`, an idle stream is cut at
+  60s (`ERR_HTTP2_PROTOCOL_ERROR` at ~65s in the HAR), so the page reloaded
+  about once a minute on a server that never restarted — taking parked drafts
+  with it. Loopback `just dev` has no proxy, which is why it only ever showed
+  on `dev-lan`. **Symptom to recognize:** the reload stream fails, a new one
+  starts, a document load follows, and the terminal shows no rebuild. The fix
+  is two things, both needed: reload only on a **changed boot id**, and send
+  keep-alives. (Before 0.10 the same library reload-looped against hyper 1.x
+  — a long-poll that completed at once read as a restart. One more reason it
+  is gone.)

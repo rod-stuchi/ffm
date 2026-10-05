@@ -134,9 +134,6 @@ async fn main() {
 
     let app = web::router(state);
 
-    #[cfg(feature = "dev-reload")]
-    let app = app.layer(tower_livereload::LiveReloadLayer::new());
-
     let addr = std::env::var("FFM_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".into());
     let listener = tokio::net::TcpListener::bind(&addr)
         .await

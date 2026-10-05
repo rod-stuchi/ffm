@@ -128,11 +128,14 @@ anyhow = "1"
 # The feature is opt-in rather than default-on so the failure mode is
 # "livereload didn't reload", which you notice in seconds, rather than
 # "livereload shipped in the release build", which you never notice.
-tower-livereload = { version = "0.10", optional = true }
+#
+# It gates no dependency any more: the reload is our own (`web::dev_reload`),
+# since `tower-livereload` reloaded on every reconnect and a proxy cutting an
+# idle stream made that once a minute.
 
 [features]
 default = []
-dev-reload = ["dep:tower-livereload"]
+dev-reload = []
 
 [build-dependencies]
 # The .ftl parser. Note it is a BUILD dependency only — the generated catalog

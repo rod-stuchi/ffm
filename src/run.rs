@@ -21,6 +21,10 @@ use crate::ui::i18n::Catalog;
 
 static LAN: OnceLock<bool> = OnceLock::new();
 
+/// Whether pages load `just dev`'s reload script (`web::dev_reload`). A
+/// release build is never built with the feature, so it renders nothing.
+pub const DEV_RELOAD: bool = cfg!(feature = "dev-reload");
+
 /// Record what the listener bound to. Called once, after the bind — before it
 /// nothing has been served, so nothing has asked.
 pub fn bound(ip: std::net::IpAddr) {
