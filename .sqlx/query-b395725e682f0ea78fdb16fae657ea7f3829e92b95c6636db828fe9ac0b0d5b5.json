@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT r.spans_period AS \"s!: bool\"\n           FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "s!: bool",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b395725e682f0ea78fdb16fae657ea7f3829e92b95c6636db828fe9ac0b0d5b5"
+}

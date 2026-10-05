@@ -159,7 +159,7 @@ pub async fn upload(
 }
 
 /// The password a row's rule opens its PDFs with, if it has one.
-async fn rule_pdf_password(st: &AppState, tx_id: i64) -> Option<String> {
+pub(crate) async fn rule_pdf_password(st: &AppState, tx_id: i64) -> Option<String> {
     sqlx::query_scalar!(
         r#"SELECT r.pdf_password AS "pdf_password: String"
            FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id
@@ -242,7 +242,7 @@ fn refuse(message: &str, bad: bool) -> Response {
 /// The path is computed from the same builder the store writes with, so no
 /// handler that serves a file takes a user-supplied path, and there is
 /// nothing to traverse out of.
-async fn on_disk(
+pub(crate) async fn on_disk(
     st: &AppState,
     auth: &Auth,
     tx_id: i64,
@@ -417,7 +417,7 @@ pub async fn page(
 }
 
 /// `pdfinfo`'s page count.
-async fn page_count(path: &std::path::Path) -> Option<i64> {
+pub(crate) async fn page_count(path: &std::path::Path) -> Option<i64> {
     let path = path.to_path_buf();
     let out = tokio::task::spawn_blocking(move || {
         std::process::Command::new("pdfinfo").arg(path).output()

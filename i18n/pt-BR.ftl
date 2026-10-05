@@ -63,6 +63,7 @@ row-menu-paid = Marcar como pago
 row-menu-unpaid = Desmarcar pago
 row-menu-received = Marcar como recebido
 row-menu-unreceived = Desmarcar recebido
+row-menu-give = Passar para…
 
 ## Arquivos
 
@@ -560,9 +561,11 @@ received-unmarked = não está mais marcado como recebido
 paid-refused-tracked = uma conta acompanhada é paga pelo comprovante no disco, não à mão — gu3 anexa
 paid-refused-one-off = só uma conta recorrente é marcada como paga à mão
 row-now-shared = compartilhado com a casa
-reattribute-private-title = Passar uma linha escondida para { $name }?
-reattribute-private-body = A linha passa a ser dela, então você deixa de vê-la. Aperte y para confirmar.
-no-pane-that-way = não há painel desse lado
+# `ga` — the member picker that re-attribution opens.
+give-title = Passar para qual membro?
+give-private = Esta linha está escondida dos outros. Quem recebê-la vira o dono, e você deixa de vê-la.
+give-nobody = não há outro membro para quem passar
+give-moved-key = agora um lançamento passa para outro membro com ga
 drafts-parked = { $n ->
         [one] 1 rascunho não salvo
        *[other] { $n } rascunhos não salvos
@@ -726,3 +729,18 @@ totals-in = entradas
 totals-out = saídas
 totals-net = saldo
 totals-balance = saldo
+
+# --- a vista de recortar e reduzir ------------------------------------------------
+prepare-title = Antes de arquivar — fique com as páginas que importam
+prepare-title-stored = Recortar ou reduzir este arquivo
+prepare-remove = Remover
+prepare-keep = Manter
+prepare-shrink = Reduzir
+prepare-hint = x mantém ou remove a página · h l navegam · Enter arquiva
+prepare-spans = Esta conta cobre vários meses, uma página cada — as páginas ficam, só reduzir é possível
+prepare-save = Salvar
+prepare-keep-one = Fique com pelo menos uma página
+prepare-failed = Não foi possível calcular o tamanho — o arquivo ficou como estava
+prepare-shrink-no-gain = reduzir não deixaria menor, então não foi reduzido
+prepare-not-pdf = Só um PDF pode ser recortado ou reduzido
+prepare-trim = Recortar / reduzir

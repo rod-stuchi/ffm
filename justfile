@@ -304,7 +304,13 @@ tpl-check:
         echo "✗ a |json expression is missing |safe — it will render &#34; inside <script>" >&2
         exit 1
     fi
-    echo "✓ every |json is paired with |safe"
+    # A JSON string carries double quotes, so inside a double-quoted attribute
+    # the first one ends the attribute and Alpine reads half an expression.
+    if grep -rnE '="[^"]*\{\{[^}]*\|json\|safe' templates/; then
+        echo "✗ a |json|safe inside a double-quoted attribute — its quotes end the attribute; use single quotes" >&2
+        exit 1
+    fi
+    echo "✓ every |json is paired with |safe, and none sits inside double quotes"
 
 # Alpine merges a component's data and its methods into ONE object, so a
 # method named after a data property silently replaces it. `pane: 0` and

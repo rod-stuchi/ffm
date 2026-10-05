@@ -29,12 +29,20 @@ for tool in pdftotext pdftoppm pdfinfo; do
     fi
 done
 
-# qpdf opens a bank's password-protected PDFs with the rule's password. Only a
-# locked file needs it — every other upload works without — so a warning, and
-# only the one.
+# qpdf opens a bank's password-protected PDFs with the rule's password, and
+# drops the pages removed before a PDF is filed. Only a locked file, or a
+# trimmed one, needs it — every other upload works without — so a warning,
+# and only the one.
 if ! command -v qpdf >/dev/null 2>&1; then
-    echo "ffm · warning: qpdf not found — a password-protected PDF will be refused" >&2
+    echo "ffm · warning: qpdf not found — a password-protected PDF will be refused, and no PDF can be trimmed" >&2
     echo "      Debian/Ubuntu: apt install qpdf · Fedora: dnf install qpdf · macOS: brew install qpdf" >&2
+fi
+
+# Ghostscript shrinks a PDF before it is filed. Optional: without it the
+# Shrink switch is simply absent, so this is a note rather than a warning.
+if ! command -v gs >/dev/null 2>&1; then
+    echo "ffm · note: Ghostscript (gs) not found — PDFs are filed without shrinking" >&2
+    echo "      Debian/Ubuntu: apt install ghostscript · Fedora: dnf install ghostscript · macOS: brew install ghostscript" >&2
 fi
 
 # Every interface, so the phones and laptops of the house can reach it. The

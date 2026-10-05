@@ -1434,7 +1434,7 @@ pub struct MoveMemberForm {
     to: i64,
 }
 
-/// `Ctrl-H` / `Ctrl-L` — re-attribute to another member's pane.
+/// `ga` — re-attribute to the member picked in the page's list.
 ///
 /// Fully undoable, and the statusline says where it went — which is why an
 /// ordinary row does not confirm. A **private** row does: handing a hidden

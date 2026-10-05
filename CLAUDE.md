@@ -284,8 +284,8 @@ card in plain CSS.
   exception: a single full-width submit on a card, with nothing to put
   beside it.
 - **Still modal:** the `dd` delete confirmation (and its twin for removing a
-  file from the `P` carousel), the private-row re-attribution confirm, the
-  `?` keymap and the `P` file carousel — confirmations and viewers, not forms.
+  file from the `P` carousel), the `ga` member picker, the `?` keymap and
+  the `P` file carousel — confirmations and viewers, not forms.
 
 ---
 
@@ -376,7 +376,7 @@ card in plain CSS.
 - **A non-admin reads the other ledgers and writes only their own.** Another
   member's shared rows, rules and files are read-only to them: no add, edit,
   delete, reorder, privacy toggle or file attach/remove, and no undo that
-  would reach into it. **Re-attribution (`Ctrl-H`/`Ctrl-L`) is admin-only**,
+  would reach into it. **Re-attribution (`ga`) is admin-only**,
   even on your own row — handing a row to somebody writes into *their*
   ledger. The one server-side answer is `Viewer::may_write` (with
   `tx::may_write`, `tx::may_touch` and `rules::rule_access` built on it), and
@@ -753,6 +753,29 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   fixed name and its own effect on state. The file is renamed to the
   deterministic convention on disk; the user's original filename is kept as
   metadata only.
+- **Every PDF stops at a trim-and-shrink view before it is filed** — a row's
+  three slots and `A`/`E`'s bill dropzone alike — and a stored one can go
+  back through it from `P` with `t`. It replaces what the household did by
+  hand: `qpdf` drops the pages nobody needs (the advert at the end of a
+  statement), Ghostscript's `/ebook` shrinks what is left, and the view says
+  what that comes to (*987 KB → 78 KB −93%*) before anything is written. A
+  photo or a text file goes straight in.
+  - **Save re-sends the finished bytes through the same upload the file was
+    headed for** (`services::stage` holds the original meanwhile). Nothing
+    about filing was reimplemented, so the bill's binding check, the
+    duplicate check, the amount read off the bill, `superseded` and the log
+    all run on what is actually filed — a bill whose barcode page was
+    dropped is refused with the usual message, and the view stays open to
+    put it back. From `P` it is a replacement, so the old copy goes to the
+    trash and `u` brings it back.
+  - **Ghostscript is optional.** Without `gs` on the server the Shrink
+    switch is absent and trimming still works; `qpdf` was already required.
+  - **A shrink that does not come out smaller is thrown away** — an already
+    lean PDF can grow under `/ebook` — and the view says so; only the page
+    selection, if any, is applied.
+  - **A bill spanning several months (`spans_period`) keeps every page.**
+    Page N is month N, so dropping one would point every later month at the
+    wrong page; the view offers only the shrink there, and says why.
 - **A file badge or `g1`/`g2`/`g3` still opens the file in a new browser
   tab** — that stays the default, and no custom rendering is built for it:
   all four allowed extensions already render natively in a browser. `P`
@@ -1141,7 +1164,7 @@ that will otherwise be re-proposed.
      ledger untrustworthy when it happens.
    - **Only `e`'s save is guarded**, because a lost update needs a form held
      open across somebody else's change and `e` is the only gesture that
-     does that. `p`, `dd`, `J`/`K` and `Ctrl-L` are instantaneous and fully
+     does that. `p`, `dd`, `J`/`K` and `ga` are instantaneous and fully
      undoable, and a stale-version refusal there would fire because a
      background materializer touched the row.
    - **A refused save keeps the draft.** The row collapses to read-only
@@ -1206,10 +1229,17 @@ that will otherwise be re-proposed.
      exists. Falling back to tabs above a member *count* was also rejected:
      it puts a second rule in charge of a layout that a width setting
      already decides.
-   - **`Ctrl-H`/`Ctrl-L` re-attribute to the adjacent pane**, so reaching a
-     distant member in a six-person household is five keystrokes.
-     `:move <name>` is the right answer at that size and already exists; the
-     keys stay the fast path for the common case.
+   - **`ga` re-attributes to a member picked by name — reversing
+     `Ctrl-H`/`Ctrl-L`.** Those moved the row one pane left or right per
+     press: one key away from `H`/`L`, so a slip moved money between two
+     people's totals, and reaching the fourth member meant stepping through
+     the two between. `ga` ("give to") opens a list of the household, each
+     member under their pane's number — the `2gt` number — so `ga2` is one
+     deliberate choice at any household size; `j`/`k` + `Enter` and a click
+     work too, and the row menu has *Move to…*. A private row's warning sits
+     in the picker, before the choice, so picking a name is the
+     confirmation — there is no second `y` modal. `Ctrl-H`/`Ctrl-L` now only
+     say where the gesture went.
 
 ### The ledger bar
 
@@ -1417,8 +1447,9 @@ that will otherwise be re-proposed.
   ever there to run Tailwind. Rust is pinned by `rust-toolchain.toml` (rustup),
   including `rust-analyzer` and the two musl targets, not by mise. Left to the
   system: `sqlite3`, `poppler` (`pdftoppm`/`pdftotext`, `brew install poppler`),
-  `qpdf` (password-protected PDFs, `brew install qpdf`) and Safari's
-  `safaridriver`.
+  `qpdf` (password-protected PDFs and trimming pages, `brew install qpdf`),
+  Ghostscript (optional, shrinking PDFs, `brew install ghostscript`) and
+  Safari's `safaridriver`.
 - **A dev server says it is one, on every screen** (`crate::run`). The
   modes look identical otherwise, and a dev server on a copy of the database —
   or one three weeks in the future — is exactly where a real bill gets typed

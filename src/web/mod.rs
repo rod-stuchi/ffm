@@ -9,6 +9,7 @@ pub mod import;
 pub mod ledger;
 pub mod live;
 pub mod log;
+pub mod prepare;
 pub mod prune;
 pub mod rules;
 pub mod selection;
@@ -59,6 +60,9 @@ pub fn router(state: AppState) -> Router {
         // effect on state.
         .route("/tx/{id}/file/{kind}", get(files::open).post(files::upload))
         .route("/tx/{id}/file/{kind}/delete", post(files::delete))
+        .route("/tx/{id}/file/{kind}/prepare", post(prepare::stage_stored))
+        .route("/prepare", post(prepare::stage_upload))
+        .route("/prepare/{token}/cancel", post(prepare::cancel))
         .route("/rules", post(rules::create))
         .route("/rules/{id}", post(rules::save))
         .route("/rules/{id}/delete", post(rules::delete))
@@ -90,6 +94,9 @@ pub fn router(state: AppState) -> Router {
         // `files::FileView` for why the browser's PDF viewer is not used.
         .route("/tx/{id}/file/{kind}/view", get(files::view))
         .route("/tx/{id}/file/{kind}/page/{n}", get(files::page))
+        .route("/prepare/{token}/page/{n}", get(prepare::page))
+        .route("/prepare/{token}/size", get(prepare::size))
+        .route("/prepare/{token}/file", get(prepare::file))
         // `gl` — read-only, and the same column the rule editor uses.
         .route("/tx/{id}/log", get(log::log))
         // `:grep` — every month, which is what makes it a different verb.

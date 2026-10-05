@@ -399,6 +399,18 @@ function rulePane() {
     /// statusline in HX-Trigger.
     send(file) {
       if (!file) return;
+      // A PDF stops at the trim-and-shrink view first (the shell's); Save
+      // there hands the finished file back to `sendNow`, the same request.
+      const shell = Alpine.$data(document.querySelector('.ledger-shell'));
+      return shell.prepare(file, {
+        rule: {{ id.unwrap_or(0) }} || '',
+        pdf_password: this.$root.querySelector('[name=pdf_password]')?.value || '',
+        spans: this.spans ? 1 : 0,
+      }, f => this.sendNow(f));
+    },
+
+    /// The upload itself. Resolves to whether the bill was taken.
+    sendNow(file) {
       const body = new FormData();
       body.append('file', file);
       // What the pane's PDF password says right now, saved or not: a locked
@@ -410,7 +422,7 @@ function rulePane() {
       // The shell owns the loader; this pane is the anchor, so it shows in
       // the header beside the title, as every request from here does.
       const shell = Alpine.$data(document.querySelector('.ledger-shell'));
-      shell.busyFetch(this.$root, fetch(url, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
+      return shell.busyFetch(this.$root, fetch(url, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
         .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
         .then(({ html, trigger }) => {
           if (html.trim()) {
@@ -434,6 +446,7 @@ function rulePane() {
             const payload = JSON.parse(trigger)['ffm:say'];
             if (payload) shell.say(payload.message, payload.bad);
           }
+          return !!html.trim();
         }));
     },
 

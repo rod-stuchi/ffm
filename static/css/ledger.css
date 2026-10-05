@@ -856,6 +856,29 @@
   margin-top: 14px;
 }
 
+/* `ga`: the household as a list, each member under their pane's number. The
+ * highlighted one wears the focus language — accent rail, tinted ground —
+ * because it is "where Enter goes", not something picked yet. */
+.givelist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.give {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  text-align: left;
+  padding: 9px 12px;
+}
+
+.give.is-sel {
+  box-shadow: inset 3px 0 0 var(--accent);
+  background: var(--accent-soft);
+}
+
 [x-cloak] {
   display: none !important;
 }
@@ -2549,4 +2572,182 @@
 
 .lsamples .fbadge {
   pointer-events: none;
+}
+
+/* --- the trim-and-shrink view (partials/prepare.html) --------------------- */
+
+/* Full viewport and above the carousel, which it can be opened from: the
+ * point is to see the pages well enough to tell an advert from a barcode. */
+.prepmount {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: var(--paper);
+}
+
+.prepare {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+.pz-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.pz-name {
+  color: var(--ink-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pz-body {
+  display: grid;
+  grid-template-columns: minmax(130px, 170px) minmax(0, 1fr);
+  min-height: 0;
+}
+
+/* The strip: every page small, in order, with its own keep/remove. */
+.pz-strip {
+  list-style: none;
+  margin: 0;
+  padding: 10px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pz-thumb {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  padding: 6px;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+
+.pz-thumb img {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--paper);
+}
+
+/* The focused page wears the accent — "you are here". */
+.pz-thumb.is-focus {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* A removed page stays in the strip, dimmed and struck through, so it can
+ * be put back — it is a choice, not a deletion. */
+.pz-thumb.is-dropped img,
+.pz-big.is-dropped {
+  opacity: 0.3;
+  filter: grayscale(1);
+}
+
+.pz-thumb.is-dropped .pz-num {
+  text-decoration: line-through;
+  color: var(--neg);
+}
+
+.pz-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.pz-stage {
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  justify-items: center;
+  align-items: start;
+}
+
+.pz-big {
+  max-width: 100%;
+  height: auto;
+  background: var(--paper);
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+.pz-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.pz-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pz-size {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.pz-orig {
+  color: var(--ink-3);
+}
+
+.pz-new {
+  color: var(--ink);
+}
+
+.pz-saved {
+  color: var(--pos);
+}
+
+.pz-note {
+  color: var(--ink-3);
+}
+
+/* A form's actions end it: their own group, at the right, primary last. */
+.pz-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+@media (max-width: 700px) {
+  .pz-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .pz-strip {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .pz-thumb {
+    width: 96px;
+    flex: none;
+  }
 }

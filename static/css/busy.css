@@ -108,6 +108,23 @@
   transform: translate(-50%, -50%);
 }
 
+/* The trim view's size line: Ghostscript can take seconds, so the figure on
+ * show dims while the next one is worked out, with the houses after it. The
+ * view covers the statusline, which is why it does not use it. */
+.pz-size.is-busy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pz-size.is-busy > #prepsize {
+  animation: busy-dim 0s 150ms forwards;
+}
+
+.pz-size > .loader {
+  height: 14px;
+}
+
 /* The statusline's cell. It sits right after the message, which is the one
  * cell that grows, so appearing and disappearing moves nothing to its right. */
 .st.busy {

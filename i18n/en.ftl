@@ -73,6 +73,7 @@ row-menu-paid = Mark paid
 row-menu-unpaid = Unmark paid
 row-menu-received = Mark received
 row-menu-unreceived = Unmark received
+row-menu-give = Move to…
 
 ## File rail. Slot numbers never change; only the labels do, by direction.
 
@@ -597,9 +598,11 @@ received-unmarked = no longer marked received
 paid-refused-tracked = a tracked bill is paid by its receipt on disk, not by hand — gu3 attaches it
 paid-refused-one-off = only a recurring bill is marked paid by hand
 row-now-shared = shared with the household
-reattribute-private-title = Move a hidden row to { $name }?
-reattribute-private-body = They become its owner, so you stop seeing it. Press y to confirm.
-no-pane-that-way = no pane that way
+# `ga` — the member picker that re-attribution opens.
+give-title = Move to which member?
+give-private = This row is hidden from the others. Whoever gets it becomes its owner, so you stop seeing it.
+give-nobody = nobody else to move it to
+give-moved-key = rows move to another member with ga now
 drafts-parked = { $n ->
         [one] 1 unsaved draft
        *[other] { $n } unsaved drafts
@@ -760,3 +763,18 @@ totals-in = in
 totals-out = out
 totals-net = net
 totals-balance = bal
+
+# --- the trim-and-shrink view -----------------------------------------------------
+prepare-title = Before filing — keep the pages you need
+prepare-title-stored = Trim or shrink this file
+prepare-remove = Remove
+prepare-keep = Keep
+prepare-shrink = Shrink
+prepare-hint = x keeps or removes the page · h l move · Enter files it
+prepare-spans = This bill covers several months, one page each — its pages stay, so only shrinking is offered
+prepare-save = Save
+prepare-keep-one = Keep at least one page
+prepare-failed = Could not work out the size — the file is as it was
+prepare-shrink-no-gain = shrinking would not make it smaller, so it is not shrunk
+prepare-not-pdf = Only a PDF can be trimmed or shrunk
+prepare-trim = Trim / shrink

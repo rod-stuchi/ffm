@@ -450,6 +450,8 @@
       <span x-show="rowMenu && rowMenu.income && !rowMenu.paid">{{ t.row_menu_received() }}</span>
       <span x-show="rowMenu && rowMenu.income && rowMenu.paid">{{ t.row_menu_unreceived() }}</span>
       <kbd>m</kbd></button>
+    <button class="btn" type="button" role="menuitem" x-show="rowMenu?.give"
+            @click="rowMenu = null; askGive()">{{ t.row_menu_give() }} <kbd>ga</kbd></button>
   </div>
   <input type="file" x-ref="picker" class="hidden-input"
          accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()" @cancel="pickFor = null">
@@ -542,10 +544,18 @@
           <button class="btn" type="button" @click="askRemoveFile()">
             {{ t.carousel_remove() }} <kbd>dd</kbd>
           </button>
+          {#- The trim-and-shrink view on the PDF on show (`t`). Saving it
+              replaces the file — the old one goes to the trash. -#}
+          <button class="btn" type="button" x-show="/\.pdf$/i.test(carousel.current.path)"
+                  @click="trimCurrent()">{{ t.prepare_trim() }} <kbd>t</kbd></button>
         </div>
       </div>
     </template>
   </div>
+
+  {#- The trim-and-shrink view (`partials/prepare.html`), mounted here when a
+      PDF is on its way in or brought back from `P`. Above the carousel. -#}
+  <div id="prepmount" class="prepmount" x-show="prep" x-cloak></div>
 
   {#- `?` opens the keymap, not reverse search. `N` already walks a `/` search
       backwards, and `?`-as-help is the one key a non-Vim user will try — half
@@ -590,18 +600,36 @@
     </div>
   </div>
 
-  {#- Re-attributing an ordinary row does NOT confirm: it is fully undoable
-      and the statusline says where it went. A PRIVATE row does, because
+  {#- `ga` — "give to": re-attribution names the member it goes to. It was
+      Ctrl-H / Ctrl-L, one keystroke from H / L, and it walked one pane per
+      press — so a slip moved money between two people's totals, and reaching
+      the fourth member took three of them. A list of the household, each
+      member under their pane's number (the `2gt` number), is one deliberate
+      choice whatever the household's size. The owner is left out.
+
+      A PRIVATE row says so here, before the choice rather than after it:
       handing it over makes somebody else its owner and the person who hid it
-      stops seeing it — invisible in the gesture, which is exactly the test. -#}
-  <div class="modal" x-show="movingPrivate" x-cloak @click.self="movingPrivate = null">
-    <div class="card" style="max-width:min(460px,100%)">
-      <div class="ch"><h1 x-text="reattributeTitle()"></h1></div>
+      stops seeing it — invisible in the gesture, which is exactly the test
+      the confirmation rule applies. Picking a name IS the confirmation. -#}
+  <div class="modal" x-show="giving" x-cloak @click.self="giving = null">
+    <div class="card" style="max-width:min(420px,100%)">
+      <div class="ch"><h1>{{ t.give_title() }}</h1><p x-text="giving?.title"></p></div>
       <div class="cb">
-        <p class="hint" style="margin-top:0">{{ t.reattribute_private_body() }}</p>
+        <div class="warnbox" x-show="giving?.private"><span class="g">!</span><span>{{ t.give_private() }}</span></div>
+        <div class="givelist" role="listbox">
+          {%- for p in panes %}
+          <button class="btn give" type="button" role="option" data-member="{{ p.id }}"
+                  x-show="giving && giving.from !== {{ loop.index0 }}"
+                  :class="{ 'is-sel': giving?.sel === {{ loop.index0 }} }"
+                  :aria-selected="giving?.sel === {{ loop.index0 }}"
+                  @click="give({{ loop.index0 }})">
+            <b>{{ p.name }}</b>
+            {%- if loop.index <= 9 %}<kbd>{{ loop.index }}</kbd>{% endif %}
+          </button>
+          {%- endfor %}
+        </div>
         <div class="modal-actions">
-          <button class="btn" type="button" @click="movingPrivate = null">{{ t.row_cancel() }} <kbd>esc</kbd></button>
-          <button class="btn" type="button" @click="doReattribute()">{{ t.members_role_member() }} <kbd>y</kbd></button>
+          <button class="btn" type="button" @click="giving = null">{{ t.row_cancel() }} <kbd>esc</kbd></button>
         </div>
       </div>
     </div>
@@ -876,12 +904,20 @@ function ledger() {
     adding: null,
     kind: 'out',
     confirming: null,
-    movingPrivate: null,
+    /// The `ga` picker while it is open: the row, its pane, whether it is
+    /// private, and which member is highlighted. Visual state — nothing is
+    /// sent until a name is picked.
+    giving: null,
     tip: null,
     /// Where the pointer last was, in screen coordinates — see `mouseMoved`.
     pointerAt: null,
     tipStyle: '',
     carousel: null,
+    /// The trim-and-shrink view while it is open: the staged token, which
+    /// pages are kept, the focused page, whether to shrink, and what Save
+    /// does with the finished file. Visual state — unsubmitted choices; the
+    /// server draws, sizes and builds.
+    prep: null,
     /// The file the carousel is asking to remove: `{ id, kind, label }`.
     removingFile: null,
     /// `d` pressed once inside the carousel, waiting for the second.
@@ -984,6 +1020,10 @@ function ledger() {
     paidRefusedTracked: {{ paid_refused_tracked|json|safe }},
     paidRefusedOneOff: {{ paid_refused_one_off|json|safe }},
     errorNotWritten: {{ error_not_written|json|safe }},
+    prepNotPdf: {{ t.prepare_not_pdf()|json|safe }},
+    prepKeepOne: {{ t.prepare_keep_one()|json|safe }},
+    prepFailed: {{ t.prepare_failed()|json|safe }},
+    prepTimer: null,
     notACommand: {{ not_a_command|json|safe }},
     groupOrder: {{ group_order|json|safe }},
     groupOrderNeedsGroup: {{ group_order_needs_group|json|safe }},
@@ -994,8 +1034,8 @@ function ledger() {
     monthLeaveKey: {{ month_leave_key|json|safe }},
     monthLeaveClick: {{ month_leave_click|json|safe }},
     monthAlreadyCurrent: {{ month_already_current|json|safe }},
-    noPaneThatWay: {{ no_pane_that_way|json|safe }},
-    reattributeTitleTemplate: {{ reattribute_title|json|safe }},
+    giveNobody: {{ give_nobody|json|safe }},
+    giveMovedKey: {{ give_moved_key|json|safe }},
     detailsNone: {{ details_none|json|safe }},
     noFiles: {{ no_files|json|safe }},
     fileNotTracked: {{ file_not_tracked|json|safe }},
@@ -1299,6 +1339,13 @@ function ledger() {
       // stayed lit beside the cursor's on every j/k. Cleared by `mouseMoved`.
       if (!typing) document.body.classList.add('kbd-nav');
 
+      // The trim-and-shrink view sits above everything, the carousel included.
+      if (this.prep) {
+        if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
+        e.preventDefault();
+        this.prepKey(e.key);
+        return;
+      }
       if (this.removingFile) {
         // As on the row's own confirm: `y` is the only yes, Enter is unbound.
         if (e.key === 'y') { e.preventDefault(); this.doRemoveFile(); }
@@ -1320,11 +1367,7 @@ function ledger() {
         if (e.key === 'Escape') { e.preventDefault(); this.confirming = null; }
         return;
       }
-      if (this.movingPrivate) {
-        if (e.key === 'y') { e.preventDefault(); this.doReattribute(); }
-        if (e.key === 'Escape') { e.preventDefault(); this.movingPrivate = null; }
-        return;
-      }
+      if (this.giving) { e.preventDefault(); this.giveKey(e.key); return; }
       // A form — the edit row, the rule pane, a settings pane — answers
       // Ctrl-h/j/k/l itself: they move between its fields, and past its edge
       // hand focus back to the ledger (`formEdge`). Decided by the CONTAINER,
@@ -1388,14 +1431,13 @@ function ledger() {
         }
         return;
       }
-      // Ctrl-H / Ctrl-L re-attribute. They are deliberately NOT J/K: reorder
-      // is cosmetic and affects nobody's totals, while re-attribution moves
-      // money between two people's INs and OUTs and changes who owns the row.
-      // Same-shaped gesture, very different blast radius — they must not share
-      // a keystroke you can overshoot into.
+      // Ctrl-H / Ctrl-L used to re-attribute, one key away from H / L. They
+      // answer with where it went (`ga`) rather than nothing, for the hands
+      // that still reach for them — and so Ctrl-H is not the browser's
+      // history on Linux.
       if (e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'h' || e.key === 'l')) {
         e.preventDefault();
-        this.reattribute(e.key === 'l' ? 1 : -1);
+        this.say(this.giveMovedKey);
         return;
       }
       // Ctrl-u opens the trash: `u` undoes one change, `U` redoes it, and
@@ -2020,6 +2062,7 @@ function ledger() {
     },
 
     carouselKey(k) {
+      if (k === 't') { this.carouselBuf = ''; this.trimCurrent(); return; }
       // `dd` removes the file on show — the row's own delete gesture, pointed
       // at the file. The carousel reads its own keys, so the pending `d` lives
       // here; any other key drops it, the way `zq` drops the `z`.
@@ -2300,33 +2343,55 @@ function ledger() {
                 '&ids=' + ids.join(','), { target: '#stsel', swap: 'outerHTML' }, 'none');
     },
 
-    /// Ctrl-H / Ctrl-L. A private row confirms first: handing a hidden
-    /// transaction to somebody makes THEM its owner, so the person who hid it
-    /// stops seeing it — and that is invisible in the gesture.
-    reattribute(dir) {
+    /// `ga` — "give to". Opens the member picker for the row under the
+    /// cursor; the move itself waits for a name.
+    askGive() {
       const id = this.rowUnderCursor();
       if (!id) return;
       // Handing a row to somebody writes into their ledger: an admin's
       // gesture, even on a row of your own.
       if (!this.admin) { this.say(this.reattributeAdminOnly, true); return; }
-      const panes = document.querySelectorAll('.pane');
-      const target = panes[this.pane + dir];
-      if (!target) { this.say(this.noPaneThatWay, true); return; }
-      const to = target.querySelector('.rows').id.slice(5);
+      const others = this.giveOrder().filter(i => i !== this.pane);
+      if (!others.length) { this.say(this.giveNobody, true); return; }
       const row = this.rows()[this.row];
-      const isPrivate = !!row?.querySelector('.mflag.flag-private.is-on');
-
-      if (isPrivate) {
-        this.movingPrivate = { id, to, name: target.querySelector('b').textContent };
-        return;
-      }
-      this.doMove(id, to);
+      this.giving = {
+        id,
+        from: this.pane,
+        sel: others[0],
+        title: row?.querySelector('.name > b')?.textContent || '',
+        private: !!row?.querySelector('.mflag.flag-private.is-on'),
+      };
     },
 
-    doReattribute() {
-      const m = this.movingPrivate;
-      this.movingPrivate = null;
-      if (m) this.doMove(m.id, m.to);
+    /// Every pane's index, in pane order — the picker's list.
+    giveOrder() {
+      return [...document.querySelectorAll('.givelist .give')].map((_, i) => i);
+    },
+
+    /// Inside the picker: a pane's number picks it, `j`/`k` walk the list,
+    /// Enter takes the highlighted one, Esc backs out.
+    giveKey(k) {
+      const g = this.giving;
+      if (k === 'Escape') { this.giving = null; return; }
+      if (k === 'Enter') { this.give(g.sel); return; }
+      if (/^[1-9]$/.test(k)) {
+        const i = Number(k) - 1;
+        if (i !== g.from && i < this.giveOrder().length) this.give(i);
+        return;
+      }
+      const step = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[k];
+      if (!step) return;
+      const others = this.giveOrder().filter(i => i !== g.from);
+      const at = others.indexOf(g.sel);
+      g.sel = others[Math.max(0, Math.min(at + step, others.length - 1))];
+    },
+
+    give(i) {
+      const g = this.giving;
+      this.giving = null;
+      const btn = document.querySelectorAll('.givelist .give')[i];
+      if (!g || !btn || i === g.from) return;
+      this.doMove(g.id, btn.dataset.member);
     },
 
     doMove(id, to) {
@@ -2584,6 +2649,8 @@ function ledger() {
         // `togglePaid()`'s own test: absent where the tick does not apply.
         paid: hit.dataset.paid === undefined ? null : hit.dataset.paid === '1',
         income: !!hit.querySelector('.amt .v.is-income'),
+        // `askGive()`'s own tests: an admin, and somebody else to give it to.
+        give: this.admin && document.querySelectorAll('.pane').length > 1,
       };
       // Beside the press rather than under it, so a finger does not cover
       // what it just opened; clamped to the viewport with the menu's rough
@@ -2936,6 +3003,8 @@ function ledger() {
         // `gl` — "go to log", the same extension of the g vocabulary.
         if (k === 'l') { this.openLog(); return true; }
         if (k === 'd') { this.showDetails(); return true; }
+        // `ga` — "give to": move the row to another member, picked by name.
+        if (k === 'a') { this.askGive(); return true; }
         // `gt` / `gT` cycle the member tabs, wrapping — and a count jumps
         // straight to that tab (`2gt`), which is why the count is read here
         // rather than treated as a repeat. H/L keep working unchanged, so
@@ -3332,14 +3401,22 @@ function ledger() {
     },
 
     /// The one upload path, whichever gesture asked for it.
+    /// Every PDF on its way to a row stops at the trim-and-shrink view first;
+    /// a photo or a text file goes straight in.
     upload(id, kind, file) {
+      return this.prepare(file, { tx: id }, f => this.sendUpload(id, kind, f));
+    },
+
+    /// The upload itself — today's request, unchanged. Resolves to whether
+    /// the file was taken: a refusal answers no body, only the statusline.
+    sendUpload(id, kind, file) {
       const body = new FormData();
       body.append('file', file);
       // htmx.ajax cannot carry a FormData body, so this one request is a plain
       // fetch and the response is swapped by hand. It still speaks the same
       // contract: a row fragment back, and the statusline in HX-Trigger.
       const row = document.getElementById('row-' + id) || 'status';
-      this.busyFetch(row, fetch('/tx/' + id + '/file/' + kind, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
+      return this.busyFetch(row, fetch('/tx/' + id + '/file/' + kind, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
         .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
         .then(({ html, trigger }) => {
           // Through htmx's own swap, not `outerHTML`: the answer is the row
@@ -3357,7 +3434,158 @@ function ledger() {
             if (payload) this.say(payload.message, payload.bad);
           }
           this.paint();
+          return !!html.trim();
         }));
+    },
+
+    // --- trim and shrink (partials/prepare.html) -------------------------
+
+    isPdf(file) {
+      return !!file && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || ''));
+    },
+
+    /// Stages a PDF and opens the view; anything else is handed straight to
+    /// `onSave`, which is the upload the file was headed for. `fields` say
+    /// where it is going (`tx`, `rule`, `pdf_password`, `spans`) so the server
+    /// asks the same permission and opens it with the same password.
+    prepare(file, fields, onSave) {
+      if (!this.isPdf(file)) return onSave(file);
+      const body = new FormData();
+      body.append('file', file);
+      for (const [k, v] of Object.entries(fields)) body.append(k, v == null ? '' : String(v));
+      return this.prepOpen(fetch('/prepare', { method: 'POST', body, headers: { 'HX-Request': 'true' } }), onSave);
+    },
+
+    /// `t` in `P`: the same view on the file on show. Saving replaces it — the
+    /// upload path supersedes the old one into the trash, and `u` brings it back.
+    trimCurrent() {
+      const c = this.carousel;
+      if (!c || !c.current) return;
+      if (!/\.pdf$/i.test(c.current.path || '')) { this.say(this.prepNotPdf, true); return; }
+      const kind = c.current.kind;
+      const id = c.id;
+      this.prepOpen(fetch('/tx/' + id + '/file/' + kind + '/prepare',
+                          { method: 'POST', headers: { 'HX-Request': 'true' } }),
+        f => this.sendUpload(id, kind, f).then(ok => {
+          // The carousel shows the file again, as it now is.
+          if (ok && this.carousel) {
+            const el = document.querySelector('.cviewin');
+            if (el) { el.dataset.src = ''; this.showFile(el, this.carousel.current); }
+          }
+          return ok;
+        }));
+    },
+
+    prepOpen(request, onSave) {
+      return this.busyFetch('status', request
+        .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
+        .then(({ html, trigger }) => {
+          if (!html.trim()) {
+            const payload = trigger && JSON.parse(trigger)['ffm:say'];
+            if (payload) this.say(payload.message, payload.bad);
+            return false;
+          }
+          const mount = document.getElementById('prepmount');
+          mount.innerHTML = html;
+          const root = mount.querySelector('[data-prep]');
+          const n = parseInt(root.dataset.pages, 10) || 1;
+          this.prep = {
+            token: root.dataset.token,
+            name: root.dataset.name,
+            pages: n,
+            keep: Array(n).fill(true),
+            focus: 0,
+            gs: !!root.dataset.gs,
+            spans: !!root.dataset.spans,
+            shrink: !!root.dataset.gs,
+            onSave,
+          };
+          this.prepSize();
+          return true;
+        }));
+    },
+
+    prepQuery() {
+      const p = this.prep;
+      const keep = p.keep.map((k, i) => k ? i + 1 : 0).filter(Boolean).join(',');
+      return 'keep=' + keep + '&shrink=' + (p.shrink ? 1 : 0);
+    },
+
+    /// The size line, from the server — debounced, so a run of `x` presses
+    /// asks once.
+    prepSize() {
+      clearTimeout(this.prepTimer);
+      this.prepTimer = setTimeout(() => {
+        if (!this.prep) return;
+        // A shrink can take Ghostscript several seconds, so the houses show
+        // here, beside the figure they will replace.
+        this.ajax('GET', '/prepare/' + this.prep.token + '/size?' + this.prepQuery(),
+                  { target: '#prepsize', swap: 'innerHTML' }, document.querySelector('.pz-size'));
+      }, 150);
+    },
+
+    prepFocus(i) {
+      if (!this.prep) return;
+      this.prep.focus = Math.max(0, Math.min(this.prep.pages - 1, i));
+      document.querySelectorAll('.pz-thumb')[this.prep.focus]?.scrollIntoView({ block: 'nearest' });
+    },
+
+    prepToggle(i) {
+      const p = this.prep;
+      if (!p || p.spans) return;
+      const idx = i == null ? p.focus : i;
+      // Never down to nothing: a file with no pages is not a file.
+      if (p.keep[idx] && p.keep.filter(Boolean).length === 1) { this.say(this.prepKeepOne, true); return; }
+      p.keep[idx] = !p.keep[idx];
+      this.prepSize();
+    },
+
+    prepShrink(on) {
+      if (!this.prep || !this.prep.gs) return;
+      this.prep.shrink = on;
+      this.prepSize();
+    },
+
+    prepKey(k) {
+      const p = this.prep;
+      if (k === 'Escape') return this.prepCancel();
+      if (k === 'Enter') return this.prepSave();
+      if (k === 'h' || k === 'ArrowLeft' || k === 'k' || k === 'ArrowUp') return this.prepFocus(p.focus - 1);
+      if (k === 'l' || k === 'ArrowRight' || k === 'j' || k === 'ArrowDown') return this.prepFocus(p.focus + 1);
+      if (k === 'x' || k === ' ') return this.prepToggle();
+      if (k === 's') return this.prepShrink(!p.shrink);
+    },
+
+    /// Builds the file on the server, then sends it through the upload it was
+    /// headed for. The view closes only once that upload took it: a refusal
+    /// (a bill whose barcode page was removed, say) leaves it open to fix.
+    prepSave() {
+      const p = this.prep;
+      if (!p || p.saving) return;
+      p.saving = true;
+      const url = '/prepare/' + p.token + '/file?' + this.prepQuery();
+      // In the Save button: the view covers the statusline, so the loader's
+      // usual fallback would be out of sight.
+      this.busyFetch(document.querySelector('.pz-actions .btn.pri') || 'status', fetch(url)
+        .then(r => r.ok ? r.blob() : Promise.reject(r.status))
+        .then(blob => p.onSave(new File([blob], p.name, { type: 'application/pdf' })))
+        .then(ok => {
+          p.saving = false;
+          if (ok) this.prepClose();
+        })
+        .catch(() => { p.saving = false; this.say(this.prepFailed, true); }));
+    },
+
+    prepCancel() {
+      if (!this.prep) return;
+      this.prepClose();
+    },
+
+    prepClose() {
+      const token = this.prep && this.prep.token;
+      this.prep = null;
+      document.getElementById('prepmount').innerHTML = '';
+      if (token) fetch('/prepare/' + token + '/cancel', { method: 'POST', headers: { 'HX-Request': 'true' } });
     },
 
     openLog() {
@@ -3410,12 +3638,6 @@ function ledger() {
       if (this.undoConfirm && this.undoConfirm.dir === dir) values.confirm = this.undoConfirm.id;
       this.undoConfirm = null;
       htmx.ajax('POST', '/' + dir, { target: 'body', swap: 'none', values });
-    },
-
-    reattributeTitle() {
-      return this.movingPrivate
-        ? this.reattributeTitleTemplate.replace('{name}', this.movingPrivate.name)
-        : '';
     },
 
     init() {

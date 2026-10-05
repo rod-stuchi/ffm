@@ -372,8 +372,8 @@ struct LedgerPage {
     /// onto the shell; `row.css` reads it. Server-rendered so the first frame
     /// is already right, which is why writing it refreshes the page.
     density: String,
-    no_pane_that_way: String,
-    reattribute_title: String,
+    give_nobody: String,
+    give_moved_key: String,
     details_none: String,
     no_files: String,
     months_word: String,
@@ -580,8 +580,8 @@ pub async fn ledger(
         month_already_current: t.month_already_current().to_string(),
         today_key: Period::of(today).to_string(),
         density: auth.settings.density.clone(),
-        no_pane_that_way: t.no_pane_that_way().to_string(),
-        reattribute_title: t.reattribute_private_title("{name}"),
+        give_nobody: t.give_nobody().to_string(),
+        give_moved_key: t.give_moved_key().to_string(),
         details_none: t.details_none().to_string(),
         no_files: t.file_no_files().to_string(),
         months_word: t.details_months().to_string(),
@@ -651,7 +651,7 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("e / E", "edit this row / its rule"),
                 k("J / K", "move the row down / up"),
                 k("s", "row order: manual · date · amount"),
-                k("Ctrl-H / Ctrl-L", "re-attribute to the pane left / right"),
+                k("ga", "give the row to another member — picked by name, admin only"),
                 k("x", "select, for a batch operation"),
                 k("p", "toggle private"),
                 k("m", "mark paid by hand — untracked recurring bills"),
@@ -684,6 +684,7 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("P", "preview this row's files"),
                 k("1 2 3 · h l", "inside P: jump to a file · step"),
                 k("+ - 0", "inside P: zoom in, out, reset"),
+                k("t", "inside P: trim or shrink the PDF on show"),
             ],
         ),
         (

@@ -483,6 +483,11 @@ receipt — without leaving the ledger behind it.
   question. It is the existing soft delete into the member's trash, so `u`
   puts it back. The carousel drops the file only once the row fragment that
   comes back no longer shows it, and closes when the last one goes.
+- **A PDF on show can be trimmed or shrunk from here** — a *Trim / shrink*
+  button beside Remove, and `t`. It opens the view every PDF upload passes
+  through (see Trim and shrink, under Receipt tracking & files), on the
+  stored file; saving replaces it, and the carousel then shows the new copy.
+  On a photo or a text file the button is absent and `t` says why.
 - **A bill whose rule spans several periods (`spans_period`) shows its page
   prominently in the stage**, not just in the file rail's small label —
   "One file, 10 pages — this month is page **4**" sits right under the
@@ -546,7 +551,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | `J` / `K` | move the row — or every selected row — down / up |
 | `s` | row order: `manual` → `date` → `amount`, and round again — `S` does the same for groups |
 | `3J` | move it three places — a count past the end lands on the end |
-| `Ctrl-H` / `Ctrl-L` | **re-attribute** the row to the member pane left / right |
+| `ga` | **re-attribute** — give the row to another member, picked from a list: their pane's number (`ga2`), or `j`/`k` + `Enter`. Admin only |
 | `a` | add a one-off spend |
 | `i` | add a one-off income |
 | `x` | toggle selection for a batch operation — the statusline counts and sums what is selected in the focused pane |
@@ -566,7 +571,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | Click a row | focus it — the same cursor `j`/`k` move, just placed by pointing instead |
 | Tap a row (phone) | the same as a click — a tap is a click, nothing separate to learn |
 | Click a fold header | put the cursor on it **and** toggle the fold — `za` from the header, so closing a fold by mouse never leaves the cursor inside it |
-| Long-press a row (touch) · right-click (mouse) | the row menu — **Edit** `e`, **Edit rule** `E` when the row has a rule, and **Mark paid** `m` when the row takes the manual tick |
+| Long-press a row (touch) · right-click (mouse) | the row menu — **Edit** `e`, **Edit rule** `E` when the row has a rule, **Mark paid** `m` when the row takes the manual tick, and **Move to…** `ga` for an admin |
 | Hover a recurring row | show its due/cadence/receipt details — the same info `gd` shows for the focused row, keyboard-only |
 | Click a file control | open that file, new tab — the same action as `g1`/`g2`/`g3` |
 
@@ -660,6 +665,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | `+` / `-` | inside the carousel — zoom in / out |
 | `0` | inside the carousel — reset zoom to 100% |
 | `dd` | inside the carousel — remove the file on show; confirms with `y`, never `Enter` |
+| `t` | inside the carousel — trim or shrink the PDF on show (see Trim and shrink, below) |
 
 `gu` is "goto upload", a second step of the same `g`-prefix vocabulary rather
 than a new pattern — and it deliberately reuses `g1`/`g2`/`g3`'s numbering, so
@@ -816,12 +822,12 @@ abandoned rather than deferred — see `TODO_2.md` §2 for the reasoning, kept
 so their absence is not read as an oversight and re-opened.
 
 The short version: each is a second spelling of a gesture that already
-works (`a`, `i`, `Ctrl-H`/`Ctrl-L`), so nothing is unreachable without them,
+works (`a`, `i`, `ga`), so nothing is unreachable without them,
 and each costs more than a keystroke is worth — `:add 50 mercado` is a
 second place money is parsed out of a string, in an app whose currency
 design is *exactly one place formats and parses money*, and `:move ana` has
 to resolve a typed name and then route a private row through the
-confirmation `Ctrl-L` already opens. `:invite`'s label argument goes with
+warning the `ga` picker already shows. `:invite`'s label argument goes with
 them; the pane's own create form takes it directly.
 
 **`just cmd-check` now reads this table, in both directions.** A row here
@@ -939,7 +945,7 @@ editing. So:
   fires the events `x-model` listens for, toggles first, so the fields they
   reveal exist and the path preview follows.
 - **Still modal, on purpose:** the `dd` delete confirmation, the
-  private-row re-attribution confirm, the `?` keymap and the `P` file
+  `ga` member picker, the `?` keymap and the `P` file
   carousel. Those are confirmations and full-screen viewers, not forms —
   there's nothing to type, and a confirmation *should* stop you.
 
@@ -1165,11 +1171,16 @@ editing. So:
 - **`J` moves the row, not join-lines.** There is nothing to join in a ledger,
   and `j` moves me / `J` moves the thing is a clean extension of the
   lowercase/uppercase rule.
-- **`Ctrl-H` / `Ctrl-L` are separate from `J` / `K` on purpose.** `J` reorders —
-  cosmetic, affects nobody's totals. `Ctrl-L` re-attributes — it moves money
-  between two people's INs/OUTs and changes who owns the row. Same-shaped
-  gesture, very different blast radius; they must not share a keystroke you can
-  overshoot into.
+- **Re-attribution is `ga` and a name, not a direction.** `J` reorders —
+  cosmetic, affects nobody's totals. Re-attribution moves money between two
+  people's INs/OUTs and changes who owns the row. It was `Ctrl-H`/`Ctrl-L`,
+  which kept it off `J`/`K` but put it one modifier away from `H`/`L` — the
+  keys pressed most to move between panes — and made a distant member a walk
+  through every pane between. `ga` ("give to") opens a list of the household
+  instead, each member under their pane's number, the owner left out: two
+  keys to ask, a third to choose, at any household size. `Esc` backs out with
+  nothing written. `Ctrl-H`/`Ctrl-L` now only say *rows move to another
+  member with ga now*. The row menu offers it as *Move to…*.
 
 ### A rejected form says which box
 
@@ -1213,11 +1224,13 @@ never in the source.
 the action writes something.**
 
 - `dd` confirms: deletion reads as destructive even though it is a soft delete.
-- Re-attributing an ordinary row does **not** confirm: it is fully undoable and
-  the statusline says where it went.
-- Re-attributing a **private** row **does** confirm: handing a hidden transaction
-  to another member makes *them* the owner, so the person who hid it stops seeing
-  it. That is invisible in the gesture.
+- Re-attributing a row asks **who**, never **whether**: `ga` opens a picker, and
+  naming the member is the deliberate step. It is fully undoable and the
+  statusline says where it went.
+- On a **private** row the picker says so before the choice: handing a hidden
+  transaction to another member makes *them* the owner, so the person who hid it
+  stops seeing it. That is invisible in the gesture, so it is written above the
+  names — and picking one is the confirmation, with no second `y` dialog.
 
 ---
 
@@ -2246,6 +2259,42 @@ state, so asking afterwards would be asking about something already decided.
 **An income row has no slot 2** in any of them — no menu entry, no drop
 target, and `gu2` refuses with the message `g2` already gives.
 
+### Trim and shrink — every PDF, before it is filed
+
+All three gestures, and `A`/`E`'s bill dropzone, stop a PDF at one more
+view before it reaches the vault: the pages as a strip of thumbnails, the
+focused one large beside it, and a size line — *987 KB → 78 KB −93%*. It
+does what the household used to do by hand before uploading: `qpdf` keeps
+the pages that matter, Ghostscript (`/ebook`) shrinks the rest. A photo or a
+text file skips it. `t` in the `P` carousel opens the same view on a PDF
+already stored.
+
+- **Full viewport, like `P`**, because the reason to look is to tell an
+  advert from the page with the barcode, which needs the page large.
+- **Keys:** `h`/`l` (or `j`/`k`, or the arrows) move between pages, `x` or
+  Space keeps or removes the one in focus, `s` switches the shrink, `Enter`
+  saves and `Esc` cancels. A click on a thumbnail focuses it; its button
+  keeps or removes it. Removing the last page is refused — a file with no
+  pages is not a file.
+- **The size line is worked out by the server**, on every change (debounced),
+  from the same files Save will send: what is kept and whether to shrink are
+  visual state, the arithmetic is not. Results are cached per selection, so
+  flipping a choice back is instant. A shrink can take Ghostscript several
+  seconds on a long statement, so the figure on show dims and the loader sits
+  beside it — not in the statusline, which the view covers.
+- **Shrink is on by default, and absent without `gs`** on the server. A
+  shrink that comes out no smaller is dropped and the line says so.
+- **A bill covering several months (`spans_period`) has no page toggles** —
+  page N is month N — and a line in their place says why. Shrink still works.
+- **Save sends the finished file through the upload it was headed for**, so
+  every check runs on what is actually filed. A bill whose barcode page was
+  removed is refused with the usual message and the view **stays open** to
+  put it back; anything else closes it. From `P`, saving replaces the stored
+  file — the old copy goes to the trash as `superseded`, the carousel shows
+  the new one, and `u` brings the old one back.
+- **Esc files nothing**, and the staged copy is deleted. A staged file nobody
+  saved or canceled is swept after a day.
+
 ### Bill import — attached inside the rule's own form
 
 Binding a barcode file to a rule is an explicit action in the rule's own form — never
@@ -2356,7 +2405,7 @@ of a three-row fold followed by `j` landed four folds further down. `zR` and
 nothing it could be standing on disappears.
 
 A row action on a header — `e`, `dd`, `p`, `gl`, `g1`, `x`, `J`/`K`,
-`Ctrl-H`/`Ctrl-L` — says *"that is a group, not a row"* rather than doing
+`ga` — says *"that is a group, not a row"* rather than doing
 nothing at all, the same treatment every other misplaced key gets. Relative
 line numbers stay counted among **rows**: a header carries no gutter, so
 counting it would leave a hole where nothing is printed; the cursor sitting
