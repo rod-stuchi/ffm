@@ -399,6 +399,7 @@ async fn recurring(pool: &SqlitePool, me: i64, tracked: bool) -> i64 {
             amount_in_filename: false,
             months: None,
             visibility: Visibility::Household,
+            pdf_password: None,
         },
     )
     .await

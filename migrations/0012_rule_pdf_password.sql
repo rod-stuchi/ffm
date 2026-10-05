@@ -1,0 +1,20 @@
+-- ---------------------------------------------------------------------------
+-- recurring_rules.pdf_password — the password a rule's PDFs open with.
+-- ---------------------------------------------------------------------------
+--
+-- Some banks send statements (and some employers payslips) as PDFs that open
+-- only with a password, usually a piece of the holder's CPF. Every upload to a
+-- row of this rule is unlocked with it, and the vault keeps the UNLOCKED copy:
+-- the browser tab, the `P` carousel, pdftotext and a person browsing the
+-- folder by hand then all just work. A locked file that this password does
+-- not open is refused before anything is written.
+--
+-- Stored in PLAIN TEXT, on purpose: it is a key that has to open files, so a
+-- hash would be useless. Whoever can read ffm.db can already read the ledger.
+-- It is never written to the change log — a save records only whether one is
+-- set — and the rule pane renders it only to somebody who may write the rule.
+--
+-- Meaningful only on a tracked rule (nothing else has files), but there is no
+-- CHECK tying it to `tracked`: the form drops it on save, the way `instance`
+-- is dropped, rather than the schema refusing the save.
+ALTER TABLE recurring_rules ADD COLUMN pdf_password TEXT;

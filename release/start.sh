@@ -29,6 +29,14 @@ for tool in pdftotext pdftoppm pdfinfo; do
     fi
 done
 
+# qpdf opens a bank's password-protected PDFs with the rule's password. Only a
+# locked file needs it — every other upload works without — so a warning, and
+# only the one.
+if ! command -v qpdf >/dev/null 2>&1; then
+    echo "ffm · warning: qpdf not found — a password-protected PDF will be refused" >&2
+    echo "      Debian/Ubuntu: apt install qpdf · Fedora: dnf install qpdf · macOS: brew install qpdf" >&2
+fi
+
 # Every interface, so the phones and laptops of the house can reach it. The
 # app has no business on the open internet (see README.md); set
 # FFM_ADDR=127.0.0.1:3000 to keep it to this machine.

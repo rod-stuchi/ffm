@@ -88,6 +88,7 @@ async fn commission(pool: &SqlitePool, me: i64, basis: &str) -> i64 {
             amount_in_filename: false,
             months: None,
             visibility: Visibility::Household,
+            pdf_password: None,
         },
     )
     .await
@@ -319,6 +320,7 @@ async fn a_fixed_income_is_not_projected_at_all() {
             amount_in_filename: false,
             months: None,
             visibility: Visibility::Household,
+            pdf_password: None,
         },
     )
     .await

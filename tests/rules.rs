@@ -60,6 +60,7 @@ fn form(member_id: i64) -> RuleForm {
         amount_in_filename: false,
         months: None,
         visibility: Visibility::Household,
+        pdf_password: None,
     }
 }
 
@@ -298,4 +299,78 @@ async fn a_paid_row_keeps_the_date_it_was_paid_against() {
         .unwrap();
     assert_eq!(edited.moved_due, None);
     assert_eq!(this_month(&pool, rule).await.1, before);
+}
+
+/// The PDF password opens files, so it is stored as typed — and never written
+/// to the log, which only says whether one is set, and that it moved.
+#[tokio::test]
+async fn the_pdf_password_is_kept_but_never_logged() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let mut first = form(me);
+    first.pdf_password = Some("123.456".into());
+    let id = rules::create(&pool, Actor::User(me), &first).await.unwrap();
+    assert_eq!(
+        rules::get(&pool, id)
+            .await
+            .unwrap()
+            .unwrap()
+            .pdf_password
+            .as_deref(),
+        Some("123.456")
+    );
+
+    // Replaced by another: still on → on, but it is recorded.
+    let mut second = form(me);
+    second.pdf_password = Some("654.321".into());
+    rules::edit(&pool, Actor::User(me), id, &second)
+        .await
+        .unwrap();
+    // And taken away.
+    rules::edit(&pool, Actor::User(me), id, &form(me))
+        .await
+        .unwrap();
+    assert_eq!(
+        rules::get(&pool, id).await.unwrap().unwrap().pdf_password,
+        None
+    );
+
+    let fields: Vec<(String, String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT c.action, f.field, f.old_value, f.new_value FROM change_field f
+           JOIN change c ON c.id = f.change_id
+          WHERE f.field = 'pdf_password' ORDER BY f.id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let on = Some("1".to_string());
+    let off = Some("0".to_string());
+    assert_eq!(
+        fields,
+        vec![
+            (
+                "rule_create".into(),
+                "pdf_password".into(),
+                off.clone(),
+                on.clone()
+            ),
+            (
+                "rule_edit".into(),
+                "pdf_password".into(),
+                on.clone(),
+                on.clone()
+            ),
+            ("rule_edit".into(), "pdf_password".into(), on, off),
+        ]
+    );
+
+    let leaked: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM change_field
+          WHERE old_value LIKE '%456%' OR new_value LIKE '%456%'
+             OR old_value LIKE '%321%' OR new_value LIKE '%321%'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(leaked, 0, "the password itself is never in the log");
 }

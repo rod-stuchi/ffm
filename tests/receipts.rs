@@ -107,6 +107,7 @@ async fn tracked_occurrence(pool: &SqlitePool, me: i64) -> (i64, Slot) {
             amount_in_filename: false,
             months: None,
             visibility: Visibility::Household,
+            pdf_password: None,
         },
     )
     .await
@@ -483,6 +484,7 @@ async fn cyclic_rule(pool: &SqlitePool, me: i64, window_start: &str, size: i64) 
         amount_in_filename: false,
         months: None,
         visibility: Visibility::Household,
+        pdf_password: None,
     };
     rules::create(pool, Actor::User(me), &form).await.unwrap()
 }
@@ -568,6 +570,7 @@ async fn renewing_a_window_does_not_rewrite_last_years_pages() {
         amount_in_filename: next.amount_in_filename,
         months: None,
         visibility: next.visibility,
+        pdf_password: None,
     };
     rules::edit(&pool, Actor::User(me), rule, &form)
         .await
@@ -643,6 +646,7 @@ async fn an_ordinary_save_does_not_pile_up_windows() {
         amount_in_filename: r.amount_in_filename,
         months: None,
         visibility: r.visibility,
+        pdf_password: None,
     };
     rules::edit(&pool, Actor::User(me), rule, &form)
         .await
@@ -1110,4 +1114,81 @@ async fn a_removed_bill_gives_its_barcode_up_and_its_trashed_copy_is_retired() {
 
     // The file itself is still on disk: nothing is destroyed.
     assert!(deleted_copy(&root, &slot.vault, "09_barcode").is_some());
+}
+
+/// A one-page PDF that opens only with `1234`, made by qpdf — `None` where
+/// qpdf is not installed, and the test says so and passes.
+fn locked_pdf() -> Option<Vec<u8>> {
+    let dir = std::env::temp_dir();
+    let plain = dir.join(format!("ffm-locked-{}-plain.pdf", std::process::id()));
+    let locked = dir.join(format!("ffm-locked-{}.pdf", std::process::id()));
+    let ok = std::process::Command::new("qpdf")
+        .arg("--empty")
+        .arg(&plain)
+        .status()
+        .is_ok_and(|s| s.success())
+        && std::process::Command::new("qpdf")
+            .args([
+                "--encrypt",
+                "--user-password=1234",
+                "--owner-password=x",
+                "--bits=256",
+                "--",
+            ])
+            .arg(&plain)
+            .arg(&locked)
+            .status()
+            .is_ok_and(|s| s.success());
+    let bytes = ok.then(|| std::fs::read(&locked).unwrap());
+    let _ = std::fs::remove_file(&plain);
+    let _ = std::fs::remove_file(&locked);
+    if bytes.is_none() {
+        eprintln!("qpdf not on PATH — skipping");
+    }
+    bytes
+}
+
+/// The backstop behind every upload path: a PDF that still needs a password
+/// never lands in the vault — and is refused BEFORE the file already on the
+/// row is moved aside for it.
+#[tokio::test]
+async fn a_locked_pdf_is_refused_and_the_file_on_the_row_stays() {
+    let Some(locked) = locked_pdf() else { return };
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (_, slot) = tracked_occurrence(&pool, me).await;
+
+    receipts::store(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Receipt,
+        "r.pdf",
+        b"r",
+    )
+    .await
+    .unwrap();
+
+    let refused = receipts::store(
+        &pool,
+        &root,
+        Actor::User(me),
+        &slot,
+        Kind::Receipt,
+        "fatura.pdf",
+        &locked,
+    )
+    .await;
+    assert!(matches!(refused, Err(receipts::StoreError::Locked)));
+
+    let present = receipts::presence(&pool, &root, &slot).await.unwrap();
+    assert_eq!(present.receipt.as_deref(), Some("pdf"));
+    assert_eq!(
+        std::fs::read(root.join(format!("{}/consumo/energia/2026/09.pdf", slot.vault))).unwrap(),
+        b"r",
+        "the live file was not touched"
+    );
+    assert!(deleted_copies(&root, &slot.vault, "09").is_empty());
 }

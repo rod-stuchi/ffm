@@ -113,6 +113,9 @@ pub enum StoreError {
     /// The occurrence has no taxonomy to file under — an untracked rule or a
     /// one-off, neither of which gets attachments.
     NotTracked,
+    /// A PDF that still opens only with a password. Every upload path unlocks
+    /// first (`services::pdflock`); this is the backstop for one that forgot.
+    Locked,
     Io(String),
     Db(String),
 }
@@ -122,6 +125,7 @@ impl std::fmt::Display for StoreError {
         match self {
             StoreError::Extension => write!(f, "that file type is not one we keep"),
             StoreError::NotTracked => write!(f, "this row has nothing to file under"),
+            StoreError::Locked => write!(f, "this PDF is password-protected"),
             StoreError::Io(e) | StoreError::Db(e) => write!(f, "{e}"),
         }
     }
@@ -155,6 +159,18 @@ pub async fn store(
 
     if slot.bucket.trim().is_empty() || slot.bill_name.trim().is_empty() {
         return Err(StoreError::NotTracked);
+    }
+
+    // **A locked PDF never reaches the vault.** The callers unlock with the
+    // rule's password before they get here; a file that still needs one is a
+    // caller that skipped that step. Refused BEFORE the soft delete below, so
+    // the file already on the row is not moved aside for nothing.
+    if matches!(
+        crate::services::pdflock::unlock(original_filename, bytes, None),
+        Err(crate::services::pdflock::LockError::NeedsPassword
+            | crate::services::pdflock::LockError::NoTool)
+    ) {
+        return Err(StoreError::Locked);
     }
 
     // **Replacing a file moves the old one aside first.** This used to write

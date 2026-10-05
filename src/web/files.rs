@@ -99,6 +99,7 @@ pub async fn upload(
     if let Err(refused) = crate::web::tx::may_write(&st, &auth, member_id).await {
         return refused;
     }
+    let password = rule_pdf_password(&st, tx_id).await;
 
     let mut filename = String::new();
     let mut bytes: Vec<u8> = Vec::new();
@@ -116,6 +117,16 @@ pub async fn upload(
     if bytes.is_empty() || filename.is_empty() {
         return crate::web::tx::say_only(t.error_not_written(), true);
     }
+
+    // A locked PDF is opened with the rule's password BEFORE anything else
+    // sees it — the bill's barcode is read from the unlocked copy, and the
+    // unlocked copy is what the vault keeps, on every slot.
+    let upload = crate::web::import::Upload { filename, bytes };
+    let crate::web::import::Upload { filename, bytes } =
+        match crate::web::import::unlock_for(&t, upload, password.as_deref()) {
+            Ok(u) => u,
+            Err(crate::web::import::Refused(m)) => return crate::web::tx::say_only(&m, true),
+        };
 
     // A bill is not just a file: it is checked against what the rule is bound
     // to, through the same attach the rule pane's dropzone uses — see
@@ -142,8 +153,24 @@ pub async fn upload(
         Ok(_) => {
             crate::web::tx::row_fragment(&st, &auth, tx_id, member_id, period, t.file_added()).await
         }
+        Err(receipts::StoreError::Locked) => crate::web::tx::say_only(t.file_pdf_locked(), true),
         Err(e) => crate::web::tx::say_only(&e.to_string(), true),
     }
+}
+
+/// The password a row's rule opens its PDFs with, if it has one.
+async fn rule_pdf_password(st: &AppState, tx_id: i64) -> Option<String> {
+    sqlx::query_scalar!(
+        r#"SELECT r.pdf_password AS "pdf_password: String"
+           FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id
+           WHERE t.id = ?1"#,
+        tx_id
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .ok()
+    .flatten()
+    .flatten()
 }
 
 /// `?in=edit` — the request came from the `e` form's file strip.

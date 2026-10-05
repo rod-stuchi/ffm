@@ -116,6 +116,7 @@ async fn tracked_occurrence(pool: &SqlitePool, me: i64) -> (i64, Slot) {
             amount_in_filename: false,
             months: None,
             visibility: Visibility::Household,
+            pdf_password: None,
         },
     )
     .await

@@ -26,10 +26,11 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # macOS
 sudo pacman -S rustup && rustup default stable                   # Arch Linux
 
 # 3. Tools mise does not manage
-brew install poppler                # macOS — sqlite3 ships with the OS
-sudo pacman -S poppler sqlite       # Arch Linux
+brew install poppler qpdf           # macOS — sqlite3 ships with the OS
+sudo pacman -S poppler qpdf sqlite  # Arch Linux
                                     # poppler: pdftoppm / pdftotext, for the P
                                     # carousel and bill import
+                                    # qpdf: unlocks password-protected PDFs
 
 # 4. The pinned tools
 mise trust                 # allow this repo's mise.toml
@@ -91,6 +92,7 @@ be a second pin that could disagree with the first.
 
 ### Everything else
 
-`brew upgrade poppler` on macOS, where `sqlite3` and `safaridriver` come with the
-OS. On Arch Linux, `sudo pacman -Syu` covers `poppler` and `sqlite`. There is no
+`brew upgrade poppler qpdf` on macOS, where `sqlite3` and `safaridriver` come
+with the OS. On Arch Linux, `sudo pacman -Syu` covers `poppler`, `qpdf` and
+`sqlite`. There is no
 `safaridriver` on Linux, so the Safari half of UI testing needs a Mac.

@@ -58,25 +58,68 @@ pub struct Upload {
 /// "nothing was written".
 pub struct Refused(pub String);
 
-/// Reads the `file` field of a multipart body.
-async fn read_upload(t: &Catalog, form: &mut Multipart) -> Result<Upload, Refused> {
+/// Reads the `file` field of a multipart body — and `pdf_password`, which the
+/// rule pane's dropzone sends with it: what the pane's field says right now,
+/// saved or not, so typing the password and then dropping the statement works
+/// in one go, before Create or Save.
+async fn read_upload(
+    t: &Catalog,
+    form: &mut Multipart,
+) -> Result<(Upload, Option<String>), Refused> {
     let mut filename = String::new();
     let mut bytes: Vec<u8> = Vec::new();
+    let mut password = None;
     while let Ok(Some(field)) = form.next_field().await {
-        if field.name() != Some("file") {
-            continue;
-        }
-        filename = field.file_name().unwrap_or_default().to_string();
-        match field.bytes().await {
-            Ok(b) if b.len() <= MAX_BYTES => bytes = b.to_vec(),
-            Ok(_) => return Err(Refused(t.file_too_big().to_string())),
-            Err(_) => return Err(Refused(t.error_not_written().to_string())),
+        match field.name() {
+            Some("file") => {
+                filename = field.file_name().unwrap_or_default().to_string();
+                match field.bytes().await {
+                    Ok(b) if b.len() <= MAX_BYTES => bytes = b.to_vec(),
+                    Ok(_) => return Err(Refused(t.file_too_big().to_string())),
+                    Err(_) => return Err(Refused(t.error_not_written().to_string())),
+                }
+            }
+            Some("pdf_password") => {
+                password = field
+                    .text()
+                    .await
+                    .ok()
+                    .map(|p| p.trim().to_string())
+                    .filter(|p| !p.is_empty());
+            }
+            _ => {}
         }
     }
     if bytes.is_empty() {
         return Err(Refused(t.error_not_written().to_string()));
     }
-    Ok(Upload { filename, bytes })
+    Ok((Upload { filename, bytes }, password))
+}
+
+/// Opens a password-protected PDF with the rule's password, before anything
+/// reads, parks or stores it — the vault keeps the unlocked copy. Anything
+/// that is not a locked PDF comes back exactly as it was.
+///
+/// Called on every way a file reaches a rule's row: the row's own slots, and
+/// `A`'s and `E`'s dropzone. A file this password does not open is refused
+/// here, so nothing downstream ever sees it.
+pub fn unlock_for(t: &Catalog, upload: Upload, password: Option<&str>) -> Result<Upload, Refused> {
+    use crate::services::pdflock::{self, LockError};
+    match pdflock::unlock(&upload.filename, &upload.bytes, password) {
+        Ok(std::borrow::Cow::Borrowed(_)) => Ok(upload),
+        Ok(std::borrow::Cow::Owned(bytes)) => Ok(Upload {
+            filename: upload.filename,
+            bytes,
+        }),
+        Err(LockError::NeedsPassword) => Err(Refused(t.file_pdf_locked().to_string())),
+        Err(LockError::WrongPassword) => Err(Refused(t.file_pdf_wrong_password().to_string())),
+        Err(LockError::NoTool) => Err(Refused(t.file_pdf_no_tool().to_string())),
+        // qpdf's own reason is for the log, not the statusline.
+        Err(LockError::Tool(why)) => {
+            tracing::info!("could not open {}: {why}", upload.filename);
+            Err(Refused(t.file_pdf_unreadable().to_string()))
+        }
+    }
 }
 
 /// Reads a bill. Pure: nothing lands in the vault or the database here —
@@ -151,7 +194,12 @@ pub async fn attach(
     if let Err(refused) = crate::web::rules::rule_access(&st, &auth, &rule).await {
         return refused;
     }
-    let upload = match read_upload(&t, &mut form).await {
+    // The pane's field wins over the saved password: it is what the person
+    // is looking at, and the Save that would store it may not have happened.
+    let upload = match read_upload(&t, &mut form)
+        .await
+        .and_then(|(u, typed)| unlock_for(&t, u, typed.as_deref().or(rule.pdf_password.as_deref())))
+    {
         Ok(u) => u,
         Err(Refused(m)) => return say(&m, true),
     };
@@ -242,6 +290,7 @@ pub async fn attach_on_row(st: &AppState, auth: &Auth, tx_id: i64, upload: Uploa
                     crate::web::tx::row_fragment(st, auth, tx_id, member_id, period, t.file_added())
                         .await
                 }
+                Err(receipts::StoreError::Locked) => say(t.file_pdf_locked(), true),
                 Err(e) => say(&e.to_string(), true),
             }
         }
@@ -724,7 +773,12 @@ pub async fn meta(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<i6
 /// the token and attaches it — see `services::pending`.
 pub async fn preview(State(st): State<AppState>, auth: Auth, mut form: Multipart) -> Response {
     let t = auth.catalog();
-    let upload = match read_upload(&t, &mut form).await {
+    // No rule yet, so the only password is the one typed in the pane. What
+    // is parked is the UNLOCKED copy, so Create attaches it as it is.
+    let upload = match read_upload(&t, &mut form)
+        .await
+        .and_then(|(u, typed)| unlock_for(&t, u, typed.as_deref()))
+    {
         Ok(u) => u,
         Err(Refused(m)) => return crate::web::tx::say_only(&m, true),
     };

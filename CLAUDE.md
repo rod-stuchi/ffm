@@ -723,6 +723,28 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   remove the entire reason the filesystem is authoritative in the first place.
 - **Extensions are the closed, case-insensitive set**: `pdf`, `jpg`, `png`,
   `txt` — whatever the uploaded file actually was, not fixed per rule.
+- **A tracked rule may carry a PDF password, and the vault keeps the file
+  unlocked.** Banks send statements (employers, payslips) that open only with
+  a password. `recurring_rules.pdf_password` (migration 0012) holds it, and
+  every way a file reaches a rule's row — its slots, `A`'s and `E`'s dropzone
+  — passes through `import::unlock_for` before anything reads, parks or
+  stores it: a locked PDF is opened with `qpdf` (`services::pdflock`) and the
+  **unlocked copy** is what lands, so the tab, the `P` carousel, `pdftotext`
+  and a person browsing the folder never meet the password again. One with
+  only an owner password is unlocked with none. A locked file the password
+  does not open, or a rule with none, is **refused before anything is
+  written** — and `receipts::store` refuses one too, before moving the live
+  file aside, as the backstop for a path that forgot.
+  - **Plain text, on purpose**: it is a key that has to open files, so a hash
+    is useless, and whoever reads `ffm.db` already reads the ledger. It is
+    **never in the change log** — a save records only whether one is set
+    (`always` when one replaces another, so the move still shows) — and only
+    `E`, which opens for writers alone, renders it.
+  - **A dropzone sends what the pane's field says now**, saved or not, so
+    typing the password and dropping the statement works before Save or
+    Create; `A` parks the unlocked copy.
+  - **A file filed by hand is never rewritten** — the watcher records, it
+    does not rearrange — so a locked PDF dropped into the vault stays locked.
 - **Upload, view, delete are scoped to recurring-rule occurrences only** — a
   one-off transaction has no taxonomy to file itself under, so it gets no
   attachment feature.
@@ -1394,8 +1416,9 @@ that will otherwise be re-proposed.
   with `cargo-zigbuild` for the Linux releases. There is no Node — it was only
   ever there to run Tailwind. Rust is pinned by `rust-toolchain.toml` (rustup),
   including `rust-analyzer` and the two musl targets, not by mise. Left to the
-  system: `sqlite3`, `poppler` (`pdftoppm`/`pdftotext`, `brew install poppler`)
-  and Safari's `safaridriver`.
+  system: `sqlite3`, `poppler` (`pdftoppm`/`pdftotext`, `brew install poppler`),
+  `qpdf` (password-protected PDFs, `brew install qpdf`) and Safari's
+  `safaridriver`.
 - **A dev server says it is one, on every screen** (`crate::run`). The
   modes look identical otherwise, and a dev server on a copy of the database —
   or one three weeks in the future — is exactly where a real bill gets typed
@@ -1427,7 +1450,9 @@ that will otherwise be re-proposed.
     cargo-zigbuild — zig is the C compiler for the bundled SQLite. That was
     chosen over a container building against an old LTS glibc: a static
     binary has no glibc to match at all, and nothing needs a Linux VM here.
-    The one runtime dependency left is poppler, run as a program, not linked.
+    The runtime dependencies left are poppler and qpdf, run as programs, not
+    linked — and qpdf only for a locked PDF, so a server without it still
+    takes every other file (`start.sh` warns).
   - **The number is the last `v0.0.*` tag + 1**, written into Cargo.toml
     before the build so the binary reports it (`crate::version()` — the boot
     log and `:profile`'s first line; `-dev` on a `cargo run` build). Running

@@ -242,6 +242,33 @@
       </label>
       </div>
 
+      {#- What a locked PDF of this rule opens with — a bank statement, a
+          payslip. Every upload to the rule's rows is unlocked with it and the
+          vault keeps the unlocked copy; a file it does not open is refused.
+          Spend and income alike, so it sits outside the barcode block.
+
+          A text field masked by CSS, NOT type="password": a real password
+          field makes Safari and Chrome offer to save a login on every rule
+          save, and autofill the member's own ffm password into it. Both are
+          wrong for a bank file's password. The eye is visual state only. -#}
+      <label class="f">
+        <span class="k">{{ t.rule_pdf_password() }}</span>
+        <span class="pwfield">
+          <input class="i" name="pdf_password" value="{{ pdf_password }}" type="text"
+                 autocomplete="off" autocapitalize="off" spellcheck="false"
+                 data-1p-ignore data-lpignore="true" data-form-type="other"
+                 :class="{ 'is-masked': !showPw }">
+          <button type="button" class="pw-eye" @click.prevent="showPw = !showPw"
+                  :aria-pressed="showPw.toString()"
+                  :title='showPw ? {{ t.rule_pdf_password_hide()|json|safe }} : {{ t.rule_pdf_password_show()|json|safe }}'
+                  :aria-label='showPw ? {{ t.rule_pdf_password_hide()|json|safe }} : {{ t.rule_pdf_password_show()|json|safe }}'>
+            <span x-show="!showPw">{{ crate::ui::icons::svg("eye")|safe }}</span>
+            <span x-show="showPw" x-cloak>{{ crate::ui::icons::svg("eye_off")|safe }}</span>
+          </button>
+        </span>
+        <span class="hint">{{ t.rule_pdf_password_hint() }}</span>
+      </label>
+
       {#- The real path as it stands, above a dim reminder of what makes it up.
           It recomputes on every keystroke in Bucket, Bill name or Instance, so
           renaming taxonomy shows where the files will move BEFORE saving. -#}
@@ -360,6 +387,9 @@ function rulePane() {
     },
 
     over: false,
+    // Whether the PDF password is shown. Visual state, and not a form field:
+    // the draft machinery reads only `[name]`, so it never parks this.
+    showPw: false,
 
     /// `E`: uploads the bill, swaps the row it belongs to, and refreshes the
     /// "Bill on file" box. `A`: there is no rule yet, so the bill is only
@@ -371,6 +401,9 @@ function rulePane() {
       if (!file) return;
       const body = new FormData();
       body.append('file', file);
+      // What the pane's PDF password says right now, saved or not: a locked
+      // statement dropped right after typing it opens in one go.
+      body.append('pdf_password', this.$root.querySelector('[name=pdf_password]')?.value || '');
       const rule = {{ id.unwrap_or(0) }};
       const period = document.querySelector('.ledger-shell')?.dataset.period || '';
       const url = rule ? '/rules/' + rule + '/barcode?period=' + period : '/rules/barcode/preview';

@@ -75,6 +75,7 @@ async fn bill(pool: &SqlitePool) -> (i64, i64) {
         amount_in_filename: false,
         months: None,
         visibility: Visibility::Household,
+        pdf_password: None,
     };
     rules::create(pool, Actor::User(me), &form).await.unwrap();
     materializer::reconcile(pool, d(2026, 9, 21)).await.unwrap();

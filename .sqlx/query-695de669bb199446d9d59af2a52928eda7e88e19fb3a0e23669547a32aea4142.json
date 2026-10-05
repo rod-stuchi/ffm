@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT r.pdf_password AS \"pdf_password: String\"\n           FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "pdf_password: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "695de669bb199446d9d59af2a52928eda7e88e19fb3a0e23669547a32aea4142"
+}

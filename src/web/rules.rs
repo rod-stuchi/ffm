@@ -69,6 +69,9 @@ pub struct RulePane {
     bucket: String,
     bill_name: String,
     instance: String,
+    /// The rule's PDF password, in the clear: this pane only opens for
+    /// somebody who may write the rule, and that is who it is for.
+    pdf_password: String,
     buckets: Vec<String>,
     cadences: Vec<CadenceChoice>,
     start: String,
@@ -266,6 +269,7 @@ pub async fn new_rule(
         bucket: String::new(),
         bill_name: String::new(),
         instance: String::new(),
+        pdf_password: String::new(),
         buckets: rules::buckets(&st.pool, auth.viewer.member_id)
             .await
             .unwrap_or_default(),
@@ -354,6 +358,7 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         bucket: r.bucket.clone().unwrap_or_default(),
         bill_name: r.bill_name.clone().unwrap_or_default(),
         instance: r.instance.clone().unwrap_or_default(),
+        pdf_password: r.pdf_password.clone().unwrap_or_default(),
         buckets: rules::buckets(&st.pool, auth.viewer.member_id)
             .await
             .unwrap_or_default(),
@@ -517,6 +522,8 @@ pub struct RuleFormInput {
     bill_name: String,
     #[serde(default)]
     instance: String,
+    #[serde(default)]
+    pdf_password: String,
     cadence_months: i64,
     start: String,
     #[serde(default)]
@@ -670,6 +677,10 @@ impl RuleFormInput {
             // `instance` only ever existed to disambiguate a receipt path, so
             // an untracked rule has no use for one.
             instance: tracked.then(|| some_trimmed(&self.instance)).flatten(),
+            // Only files need opening, and only a tracked rule has files.
+            // Trimmed: a password pasted from a bank's email often brings a
+            // stray space with it, and none ever starts or ends with one.
+            pdf_password: tracked.then(|| some_trimmed(&self.pdf_password)).flatten(),
             // The whole barcode apparatus is spend-only: money arriving has no
             // boleto to scan, and the schema has a CHECK saying so.
             no_barcode: !kind.is_income() && on(&self.no_barcode),
@@ -868,6 +879,7 @@ async fn rejected(
         bucket: input.bucket.clone(),
         bill_name: input.bill_name.clone(),
         instance: input.instance.clone(),
+        pdf_password: input.pdf_password.clone(),
         buckets: rules::buckets(&st.pool, auth.viewer.member_id)
             .await
             .unwrap_or_default(),
@@ -1091,6 +1103,7 @@ mod tests {
             bucket: bucket.into(),
             bill_name: String::new(),
             instance: String::new(),
+            pdf_password: String::new(),
             cadence_months: 1,
             start: "2026-09-23".into(),
             due_day: String::new(),

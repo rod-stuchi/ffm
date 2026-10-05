@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO recurring_rules\n               (member_id, title, kind, amount_cents, cadence_months, due_day,\n                start_date, end_date, total_installments, carry_forward_amount,\n                tracked, bucket, bill_name, instance, no_barcode, varies,\n                estimate_basis, estimate_window, amount_in_filename,\n                visibility, created_at, spans_period, window_size, window_start,\n                months, pdf_password)\n           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,\n                   ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)\n           RETURNING id AS \"id!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 26
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "b31179f44f7c771c6ebf77413eff86cb58ad3c4e2eb8902f9daf2fa2fce2361c"
+}

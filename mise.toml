@@ -4,7 +4,8 @@
 # Rust is deliberately not here: rust-toolchain.toml pins it, and mise's rust
 # backend is rustup anyway — a second pin would be two places to disagree.
 # System tools stay system: sqlite3 (macOS ships it), poppler for
-# pdftoppm/pdftotext (`brew install poppler`), and Safari's safaridriver.
+# pdftoppm/pdftotext (`brew install poppler`), qpdf for password-protected
+# PDFs (`brew install qpdf`), and Safari's safaridriver.
 
 [tools]
 # Tailwind's standalone binary. Node was only ever here to run this CLI.

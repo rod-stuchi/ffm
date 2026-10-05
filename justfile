@@ -440,7 +440,7 @@ md:
 # Build a release into dist/v0.0.N/ — one folder and one .tar.gz per platform,
 # each holding the binary, static/, config/issuers.toml, ffm.example.toml,
 # start.sh and README.md (from release/): everything a fresh machine needs
-# besides poppler.
+# besides poppler and qpdf.
 #
 # - macOS arm64 is built natively. Linux x86_64 and arm64 are cross-compiled
 #   from this Mac with cargo-zigbuild (mise installs it and zig), for musl:

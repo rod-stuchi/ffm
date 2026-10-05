@@ -7,6 +7,10 @@ A shared household ledger. This folder is everything needed to run it.
 - **poppler** — `pdftotext`, `pdftoppm` and `pdfinfo`, for bill import and the
   `P` file preview. Debian/Ubuntu: `apt install poppler-utils` · Fedora:
   `dnf install poppler-utils` · macOS: `brew install poppler`.
+- **qpdf** — opens a bank's password-protected PDFs with the rule's PDF
+  password, so the vault keeps an unlocked copy. Only a locked file needs it.
+  Debian/Ubuntu: `apt install qpdf` · Fedora: `dnf install qpdf` · macOS:
+  `brew install qpdf`.
 - **`TZ` set to the household's time zone** (e.g. `TZ=America/Sao_Paulo`).
   "Today" — due dates, overdue bills, the month the ledger opens on — is the
   machine's local date. The boot log prints the zone and date it is using.

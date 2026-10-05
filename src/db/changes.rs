@@ -340,13 +340,16 @@ impl Change {
 
     /// Record a field **even when it did not move**.
     ///
-    /// The exception to the rule above, and it has exactly one caller: a
+    /// The exception to the rule above, and it has two callers. A
     /// re-attribution's `sort_key`, which `u` needs verbatim to put the row
     /// back where it was. Two members' keys are generated independently, so
     /// the destination's appended key can happen to equal the source's — and
     /// `diff` would then drop the one value the undo depends on, silently and
     /// only sometimes. This field is filtered out of what the log pane reads,
     /// so it stays plumbing rather than becoming something a reader sees.
+    ///
+    /// And a rule's PDF password replaced by another: it is logged only as
+    /// whether one is set, so a change reads on → on, which `diff` would drop.
     pub fn always(mut self, field: &str, old: Value, new: Value) -> Change {
         debug_assert_eq!(
             old.kind(),

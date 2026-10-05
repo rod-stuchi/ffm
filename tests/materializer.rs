@@ -68,6 +68,7 @@ fn form(member_id: i64, title: &str, start: NaiveDate) -> RuleForm {
         amount_in_filename: false,
         months: None,
         visibility: Visibility::Household,
+        pdf_password: None,
     }
 }
 

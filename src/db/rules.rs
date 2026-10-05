@@ -69,6 +69,9 @@ pub struct RuleForm {
     /// "seasonal" and "ordinary" stay distinguishable in the value itself.
     pub months: Option<Months>,
     pub visibility: Visibility,
+    /// What a locked PDF of this rule opens with — see migration 0012. Only a
+    /// tracked rule keeps one; the form drops it otherwise.
+    pub pdf_password: Option<String>,
 }
 
 /// A rule as stored, with the fields the pane and the materializer read.
@@ -112,6 +115,9 @@ pub struct Rule {
     /// `None` = runs every month.
     pub months: Option<Months>,
     pub visibility: Visibility,
+    /// Plain text on purpose — it has to open files. Never logged, and only
+    /// rendered to somebody who may write the rule.
+    pub pdf_password: Option<String>,
 }
 
 /// `end_date` and `total_installments` are two ways of saying the same thing
@@ -165,9 +171,9 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
                 tracked, bucket, bill_name, instance, no_barcode, varies,
                 estimate_basis, estimate_window, amount_in_filename,
                 visibility, created_at, spans_period, window_size, window_start,
-                months)
+                months, pdf_password)
            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-                   ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
+                   ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
            RETURNING id AS "id!: i64""#,
         form.member_id,
         form.title,
@@ -194,6 +200,7 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
         form.window_size,
         window_start,
         months,
+        form.pdf_password,
     )
     .fetch_one(&mut *tx)
     .await?;
@@ -207,6 +214,11 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
             "due_day",
             Value::Day(None),
             Value::Day(form.due_day.map(|d| d as u32)),
+        )
+        .diff(
+            "pdf_password",
+            Value::Bool(false),
+            Value::Bool(form.pdf_password.is_some()),
         )
         .write(&mut tx)
         .await?;
@@ -269,7 +281,7 @@ pub async fn edit_reporting(
                no_barcode = ?15, varies = ?16, estimate_basis = ?17,
                estimate_window = ?18, amount_in_filename = ?19, visibility = ?20,
                spans_period = ?21, window_size = ?22, window_start = ?23,
-               months = ?24
+               months = ?24, pdf_password = ?25
            WHERE id = ?1"#,
         id,
         form.title,
@@ -295,6 +307,7 @@ pub async fn edit_reporting(
         form.window_size,
         window_start,
         months,
+        form.pdf_password,
     )
     .execute(&mut *tx)
     .await?;
@@ -343,6 +356,7 @@ pub async fn edit_reporting(
             Value::Bool(old.tracked),
             Value::Bool(form.tracked),
         );
+    let entry = password_field(entry, &old.pdf_password, &form.pdf_password);
 
     // A save that changed nothing writes nothing: a log full of empty edits is
     // a log nobody reads.
@@ -357,6 +371,20 @@ pub async fn edit_reporting(
 
     tx.commit().await?;
     Ok(Some(edited))
+}
+
+/// The PDF password as the log sees it: whether one is set, never what it is.
+///
+/// A password replaced by another is still on → on, which `diff` would drop as
+/// unchanged — so that one case is written with `always`, and the log still
+/// says the password moved without saying to what.
+fn password_field(entry: Change, old: &Option<String>, new: &Option<String>) -> Change {
+    let (was, is) = (Value::Bool(old.is_some()), Value::Bool(new.is_some()));
+    if old.is_some() && new.is_some() && old != new {
+        entry.always("pdf_password", was, is)
+    } else {
+        entry.diff("pdf_password", was, is)
+    }
 }
 
 /// Restamps this month's occurrence of a rule with a new due day, unless it is
@@ -528,7 +556,8 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
                   estimate_window AS "estimate_window!: i64",
                   amount_in_filename AS "amount_in_filename!: i64",
                   months AS "months: String",
-                  visibility AS "visibility!: String"
+                  visibility AS "visibility!: String",
+                  pdf_password AS "pdf_password: String"
            FROM recurring_rules WHERE id = ?1 AND deleted_at IS NULL"#,
         id
     )
@@ -568,6 +597,7 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
             amount_in_filename: r.amount_in_filename != 0,
             months: r.months.as_deref().and_then(Months::from_storage),
             visibility: Visibility::parse(&r.visibility)?,
+            pdf_password: r.pdf_password,
         })
     }))
 }

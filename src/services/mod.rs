@@ -6,6 +6,7 @@ pub mod import;
 pub mod issuers;
 pub mod live;
 pub mod materializer;
+pub mod pdflock;
 pub mod pending;
 pub mod prune;
 pub mod receipts;

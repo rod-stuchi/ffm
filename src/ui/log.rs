@@ -188,6 +188,7 @@ fn field_label(field: &str, t: &Catalog) -> String {
         "bucket" => t.log_field_bucket(),
         "bill_name" => t.log_field_bill_name(),
         "instance" => t.log_field_instance(),
+        "pdf_password" => t.log_field_pdf_password(),
         "cadence" => t.log_field_cadence(),
         "start_date" => t.log_field_start_date(),
         "end_date" => t.log_field_end_date(),

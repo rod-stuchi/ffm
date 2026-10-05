@@ -190,6 +190,7 @@ async fn the_materializer_skips_the_months_away_and_never_backfills_them() {
         amount_in_filename: false,
         months: None,
         visibility: Visibility::Household,
+        pdf_password: None,
     };
     rules::create(&pool, Actor::User(ana), &form).await.unwrap();
 

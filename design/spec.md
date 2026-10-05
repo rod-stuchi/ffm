@@ -1107,6 +1107,17 @@ editing. So:
   blank when creating a new rule specifically (not when editing an
   existing one), regardless of what the anchor transaction was tagged
   with before it became a rule.
+- **A tracked rule has a PDF password field, with an eye to show it.** It
+  sits under Bill name / Instance, for spend and income alike — payslips are
+  locked as often as statements. Every upload to the rule's rows is opened
+  with it and stored unlocked; a file it does not open is refused, *nothing
+  was saved* (see CLAUDE.md's Recurring rules). The field is a text input
+  masked by `-webkit-text-security`, **not `type="password"`**: a real
+  password field makes Safari and Chrome offer to save a login on every rule
+  save and autofill the member's own ffm password into it, both wrong for a
+  bank file's key. The eye (`showPw`) is visual state and never part of a
+  draft; the value, having a `name`, parks with the rest. The log says only
+  *PDF password · off → on*, never the value.
 - **Numeric fields refuse a bad keystroke outright — value and selection
   untouched.** Day, Due date, Installments and Pages only ever hold digits,
   and Amount only ever takes typed digits. A letter is rejected *before* it

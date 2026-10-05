@@ -52,6 +52,13 @@ pub fn svg(name: &str) -> &'static str {
         "person" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>"#
         }
+        // The rule pane's PDF password: show it, and hide it again.
+        "eye" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>"#
+        }
+        "eye_off" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.6 3.6M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>"#
+        }
         _ => r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>"#,
     }
 }
@@ -61,10 +68,11 @@ mod tests {
     use super::*;
 
     /// Every name the UI asks for by hand — the row's five, the ledger
-    /// bar's four and the pre-auth chrome's globe. A name added to `svg()` and not to here is untested; a name
-    /// used in a template and not here is worse, because the fallback circle
-    /// renders and nothing complains.
-    const NAMES: [&str; 10] = [
+    /// bar's four, the pre-auth chrome's globe and the rule pane's two eyes.
+    /// A name added to `svg()` and not to here is untested; a name used in a
+    /// template and not here is worse, because the fallback circle renders
+    /// and nothing complains.
+    const NAMES: [&str; 12] = [
         "bill",
         "scheduled",
         "receipt",
@@ -75,6 +83,8 @@ mod tests {
         "moon",
         "person",
         "globe",
+        "eye",
+        "eye_off",
     ];
 
     #[test]
