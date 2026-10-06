@@ -1787,6 +1787,7 @@ function ledger() {
       const url = new URL(location.href);
       url.searchParams.set('period', key);
       url.searchParams.delete('row');
+      this.keepFollow(key);
       location.assign(url);
     },
 
@@ -3143,13 +3144,67 @@ function ledger() {
     /// out), so its fold opens first — landing on the fold's header instead
     /// would answer a question nobody asked.
     landOn(id) {
+      this.openFoldOf(id);
+      this.cursorTo(String(id));
+      this.flashRow(String(id));
+    },
+
+    /// Open the fold a row sits in, if it is closed: a row inside a closed
+    /// fold is not a cursor position, so nothing can land on it otherwise.
+    openFoldOf(id) {
       const section = document.getElementById('row-' + id)?.closest('.fold');
       if (section) {
         const f = this.foldIdOf(section);
         if (f && this.closed(f)) this.folds[f] = false;
       }
-      this.cursorTo(String(id));
-      this.flashRow(String(id));
+    },
+
+    /// What the cursor is on, kept as the month changes (`gotoPeriod`), so the
+    /// next month's page can put it back on the same row. Each month's row is
+    /// a different transaction, so the identity kept is one that spans months:
+    /// the rule — which survives a rename, Nubank to Nubank&Co — and the exact
+    /// title, the spec's "same line" for a one-off; and the position, for when
+    /// neither is there. In `sessionStorage`, not the URL: a title is
+    /// household content, and per window is right for a cursor.
+    keepFollow(period) {
+      const el = this.rows()[this.row];
+      const row = el && el.closest('div[id^="row-"]')?.querySelector('.row');
+      const follow = {
+        period,
+        rule: row?.dataset.ruleId || null,
+        title: row?.querySelector('.name > b')?.textContent || null,
+        at: this.row,
+      };
+      try { sessionStorage.setItem('ffm.follow', JSON.stringify(follow)); } catch (_) {}
+    },
+
+    /// Read once on load, and dropped, so a refresh does not replay it. Only
+    /// for the month it was kept for — any other load ignores it.
+    takeFollow() {
+      let saved = null;
+      try {
+        saved = JSON.parse(sessionStorage.getItem('ffm.follow') || 'null');
+        sessionStorage.removeItem('ffm.follow');
+      } catch (_) {}
+      return saved && saved.period === this.shell().dataset.period ? saved : null;
+    },
+
+    /// The same row as last month's cursor: its rule, else its exact title
+    /// (first hit), else the same position, clamped to the last row. No blink
+    /// — this is ordinary navigation, not a search hit.
+    follow({ rule, title, at }) {
+      const wraps = Array.from(document.querySelectorAll('.pane')[this.pane]
+        ?.querySelectorAll('div[id^="row-"]') || []);
+      const hit = (rule && wraps.find(w => w.querySelector('.row')?.dataset.ruleId === rule))
+        || (title && wraps.find(w => w.querySelector('.row .name > b')?.textContent === title));
+      if (hit) {
+        const id = hit.id.slice(4);
+        this.openFoldOf(id);
+        this.cursorTo(id);
+        return;
+      }
+      this.row = Math.max(0, Math.min(at || 0, this.rows().length - 1));
+      this.paint();
     },
 
     /// A surface about ONE ROW — the change log. It keeps the rule editor's
@@ -4009,9 +4064,13 @@ function ledger() {
         u.searchParams.delete('row');
         history.replaceState(null, '', u);
       }
+      // A month change carries the cursor's row across (`keepFollow`); a
+      // `:grep` hit's `?row=` is more specific, so it wins.
+      const follow = this.takeFollow();
       this.$nextTick(() => {
         this.paint();
         if (/^\d+$/.test(land || '')) this.landOn(land);
+        else if (follow) this.follow(follow);
       });
       // Reopen the settings pane a refresh just closed. `showSplit` rewrites
       // the same parameter it reads, so this is idempotent.

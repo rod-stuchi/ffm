@@ -597,6 +597,16 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
   arrows' plain hrefs dropped the pane, landing you back on your own — and
   `?row=` goes. The hrefs stay for a page without JS and for a Cmd-click to
   a new tab.
+- **The cursor follows its row to the new month.** It used to come back on
+  row 1 every time. Each month's row is a different transaction, so what is
+  carried is what spans months: the **rule** first — it survives a rename,
+  Nubank to Nubank&Co — then the **exact title**, the "same line" a one-off
+  has; with neither there, the **same position**, clamped to the last row.
+  A closed fold holding the row opens, and there is no blink: this is
+  ordinary navigation, not a search hit. It is kept in `sessionStorage`
+  (`ffm.follow`), not the URL — a title is household content — read once
+  for the month it was kept for, and dropped, so a refresh starts on row 1.
+  A `:grep` hit's `?row=` is more specific and wins.
 - **Parked drafts are asked about first.** Changing month is a page load,
   which drops every parked draft. With any parked — an open form is parked
   first, so a changed one counts and an unchanged one just closes — the
