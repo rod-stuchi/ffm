@@ -1753,6 +1753,14 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   the month picker's warning dots look broken. Verify with a clean headless
   render (`--headless --screenshot` on a minimal HTML file) before changing a
   color — this has now cost time twice.
+- **iOS shows its keyboard only for a `focus()` made synchronously inside a
+  tap, and keeps it only when focus moves to another text field in the same
+  gesture.** A `focus()` after `$nextTick` or a timeout is silently a focus
+  with no keyboard. So the phone's key trap is focused in the `NORMAL` tap
+  itself, `:` and `/` focus their field at once while it is up (`focusBar`,
+  which first undoes `x-show`'s `display: none`), and the key strip's buttons
+  act on `pointerdown.prevent` so a tap never takes focus from the field
+  holding the keyboard. See `design/spec.md`'s *On a phone*.
 - **`x-show` has not been applied yet when `$nextTick` runs.** Alpine queues
   the DOM mutation behind its own scheduler, so for a frame after a fold key
   the `.foldrows` are still laid out in their *previous* state — and in a

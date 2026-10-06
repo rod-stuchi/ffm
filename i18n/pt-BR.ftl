@@ -280,6 +280,7 @@ profile-privacy = Linhas novas
 profile-theme = Tema de cores
 profile-line-numbers = Números de linha
 status-version = A versão que este servidor está rodando
+status-keyboard = Mostrar o teclado
 profile-panes = Painéis
 profile-min-split = Abaixo desta largura, usar abas
 profile-min-width = Largura mínima do painel

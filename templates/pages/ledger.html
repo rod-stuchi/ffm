@@ -79,6 +79,7 @@
 </head>
 <body>
 <div class="ledger-shell" data-period="{{ period_key }}" data-today="{{ today_key }}" data-density="{{ density }}" data-pdf-view="{{ pdf_view }}" x-data="ledger()"
+     @focusout="keyFocusOut($event)"
      :class="{ 'is-dragging': dragging }"
      @keydown.window="key($event)"
      @mousemove.window="mouseMoved($event)"
@@ -696,8 +697,8 @@
   <div class="cmdbar searchbar" x-show="searching" x-cloak>
     <span class="caret">/</span>
     <input class="cmdinput" x-ref="search" x-model="search" @input="runSearch()"
-           @keydown.enter.prevent="step(1); $el.blur()"
-           @keydown.escape.prevent="clearSearch()"
+           @keydown.enter.prevent="step(1); backToKeys($el)"
+           @keydown.escape.prevent="clearSearch(); backToKeys($el)"
            autocomplete="off" spellcheck="false">
   </div>
 
@@ -713,7 +714,7 @@
     <input class="cmdinput" x-ref="cmd" x-model="command"
            @keydown="cmdKey($event)"
            @keydown.enter.prevent="runCommand()"
-           @keydown.escape.prevent="commanding = false; command = ''"
+           @keydown.escape.prevent="commanding = false; command = ''; backToKeys($el)"
            placeholder="{{ t.command_placeholder() }}" autocomplete="off" spellcheck="false">
     {#- At rest, the vocabulary. Typing a command's name turns it into what
         that command does and what it takes — which is the whole answer to
@@ -733,12 +734,39 @@
     </span>
   </div>
 
+  {#- A phone's keyboard, for the keymap. iOS shows its keyboard only for a
+      focused field, so the keys go through this one: invisible, never
+      typed into (`keyTrapDown` stops every character), and excluded from
+      `key()`'s `typing` guard, so what lands here is a ledger key. Fixed at
+      the top and 16px, or iOS scrolls to it and zooms in on it. -#}
+  <input class="keytrap" x-ref="keytrap" type="text" tabindex="-1" aria-hidden="true"
+         autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+         enterkeyhint="done"
+         @keydown="keyTrapDown($event)" @input="keyTrapInput($event)">
+
+  {#- What the phone's keyboard does not have — Esc and Ctrl — and the two
+      keys that open a bar, one tap away. Only while the keyboard is up. A
+      tap must not take focus from the field holding the keyboard, so the
+      buttons act on `pointerdown` and prevent it. The labels are key names,
+      not words, the way a `<kbd>` is. -#}
+  <div class="keystrip" x-show="keyboard" x-cloak>
+    <button class="btn" type="button" @pointerdown.prevent="stripKey('Escape')">esc</button>
+    <button class="btn" type="button" :class="{ 'is-on': ctrlArmed }"
+            @pointerdown.prevent="ctrlArmed = !ctrlArmed">ctrl</button>
+    <button class="btn" type="button" @pointerdown.prevent="stripKey(':')">:</button>
+    <button class="btn" type="button" @pointerdown.prevent="stripKey('/')">/</button>
+  </div>
+
   {#- The statusline. The same message channel the pre-auth pages use, so
       there is one way the app talks to you on both sides of the login —
       with the cells the mock carries around it. -#}
   <div class="status">
-    <div class="st mode" :class="{ cmd: commanding || searching }"
-         x-text="commanding ? 'COMMAND' : (searching ? 'SEARCH' : 'NORMAL')">NORMAL</div>
+    {#- On a touch screen the badge is also the keyboard: tap it to bring the
+        phone's keyboard up for the keymap, tap again to put it away. -#}
+    <div class="st mode" :class="{ cmd: commanding || searching, 'is-kb': keyboard }"
+         role="button" title="{{ t.status_keyboard() }}" aria-label="{{ t.status_keyboard() }}"
+         @pointerdown.prevent @click="toggleKeyboard()"><span class="kbglyph">{{ crate::ui::icons::svg("keyboard")|safe }}</span><span
+         x-text="commanding ? 'COMMAND' : (searching ? 'SEARCH' : 'NORMAL')">NORMAL</span></div>
     <div class="st">{{ household }} · {{ period }}</div>
     <div class="st stmember">{{ me_name }}{% if me_admin %} (admin){% endif %}</div>
     <div class="st grow msg" :class="{ bad: msgBad }" x-text="msg"></div>
@@ -975,6 +1003,12 @@ function ledger() {
     /// (`data-pdf-view`, from `:profile`); `v` flips it while the carousel is
     /// open, across the row's files.
     pdfView: false,
+    /// A phone's keyboard is up for the keymap (`toggleKeyboard`) — the
+    /// intent, kept while focus moves to the command bar or a form field and
+    /// dropped the moment focus goes nowhere (Done, a tap elsewhere).
+    keyboard: false,
+    /// The key strip's `ctrl`: the next key typed is sent with Ctrl held.
+    ctrlArmed: false,
     /// The size of the file on show, `412 KB` — from the stage fragment's
     /// `data-size`, so it is the server's reading of the file on disk.
     fileSize: '',
@@ -1370,7 +1404,9 @@ function ledger() {
       // the window as its target, and `window.matches` does not exist. Guard
       // it, or the whole keymap dies silently on the first such event.
       const el = e.target instanceof Element ? e.target : null;
-      const typing = !!el && el.matches('input, textarea, select');
+      // Except the phone's key trap: it is a field only so the keyboard shows,
+      // and what is typed there is meant for the ledger.
+      const typing = !!el && el.matches('input, textarea, select') && !el.matches('.keytrap');
       // The `:grep` list owns its keys the way a field does — decided by the
       // container, as Ctrl-h/j/k/l below are. Its hits are links, so `typing`
       // is false there, and `j` walked the ledger cursor behind the list as
@@ -2556,7 +2592,113 @@ function ledger() {
 
     openSearch() {
       this.searching = true;
-      this.focusSoon(this.$refs.search);
+      this.focusBar(this.$refs.search);
+    },
+
+    /// A bar's field takes focus as soon as it can — and, with a phone's
+    /// keyboard up, at once: iOS keeps its keyboard only when focus moves to
+    /// another field inside the same gesture, and `focusSoon`'s `$nextTick`
+    /// is already outside it, so the keyboard dropped and `:` typed nothing.
+    /// The bar is still `display: none` until Alpine's `x-show` lands, and a
+    /// hidden field cannot take focus, so it is shown here first; `x-show`
+    /// then agrees with it.
+    focusBar(el) {
+      if (!this.keyboard || !el) return this.focusSoon(el);
+      el.closest('.cmdbar')?.style.removeProperty('display');
+      el.focus({ preventScroll: true });
+    },
+
+    // --- the phone's keyboard ----------------------------------------------
+
+    /// The `NORMAL` badge. The focus has to happen right here, synchronously
+    /// inside the tap: that is the only way iOS shows its keyboard.
+    toggleKeyboard() {
+      const trap = this.$refs.keytrap;
+      if (this.keyboard) {
+        this.keyboard = false;
+        this.ctrlArmed = false;
+        trap.blur();
+        return;
+      }
+      this.keyboard = true;
+      trap.focus({ preventScroll: true });
+    },
+
+    /// Back to the trap after a bar closes, so the next `j` is a motion
+    /// without another tap — or, with no keyboard up, simply out of the field.
+    backToKeys(el) {
+      if (this.keyboard) this.$refs.keytrap.focus({ preventScroll: true });
+      else el?.blur();
+    },
+
+    /// A key typed into the trap. Runs before the window's `key()`, which
+    /// still sees the event: this only makes sure nothing is ever inserted,
+    /// and adds Ctrl when the strip armed it.
+    keyTrapDown(e) {
+      // Predictive text sends `Unidentified`; the character arrives on
+      // `input` instead (`keyTrapInput`). `key()` must not see it, or it
+      // clears a pending `g` or count for a key that was never pressed.
+      if (e.key === 'Unidentified' || e.key === 'Process' || e.isComposing) {
+        e.stopPropagation();
+        return;
+      }
+      if (this.ctrlArmed && e.key.length === 1 && !e.ctrlKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.ctrlArmed = false;
+        e.target.dispatchEvent(new KeyboardEvent('keydown',
+          { key: e.key, ctrlKey: true, bubbles: true, cancelable: true }));
+        return;
+      }
+      if (e.key.length === 1) e.preventDefault();
+    },
+
+    /// The fallback: a character that reached the field anyway is sent on as
+    /// the key it is, and the field is emptied again.
+    keyTrapInput(e) {
+      const chars = Array.from(e.data || e.target.value || '');
+      e.target.value = '';
+      chars.forEach(ch => e.target.dispatchEvent(new KeyboardEvent('keydown',
+        { key: ch, bubbles: true, cancelable: true })));
+    },
+
+    /// The strip's buttons: a key the phone's keyboard does not have, sent to
+    /// whatever has focus — the command bar's own Esc handler when it is
+    /// open, `key()` otherwise. A tap, so any focus it causes keeps the
+    /// keyboard up.
+    stripKey(k) {
+      if (k === 'Escape') this.ctrlArmed = false;
+      const at = document.activeElement && document.activeElement !== document.body
+        ? document.activeElement : this.$refs.keytrap;
+      at.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+    },
+
+    /// Focus left for somewhere that holds no keyboard — nowhere (Done, a tap
+    /// on the ledger, a field swapped away), or a checkbox or button (the
+    /// trash's list) — so the keyboard is gone, and the strip goes with it.
+    /// Focus moving between text fields (trap → command bar → trap) keeps it.
+    keyFocusOut(e) {
+      const to = e.relatedTarget;
+      const typed = !!to && to.matches('textarea, input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file])');
+      if (this.keyboard && !typed) {
+        this.keyboard = false;
+        this.ctrlArmed = false;
+      }
+    },
+
+    /// iOS shrinks only the VISUAL viewport for its keyboard, so a shell that
+    /// is `100vh` tall puts the statusline and the command bar under it. While
+    /// the keyboard is up the shell is sized to what is actually visible.
+    fitViewport() {
+      const vv = window.visualViewport;
+      const shell = this.shell();
+      if (!vv || !shell) return;
+      if (!this.keyboard) {
+        shell.style.removeProperty('--app-h');
+        return;
+      }
+      shell.style.setProperty('--app-h', vv.height + 'px');
+      window.scrollTo(0, 0);
     },
 
     /// Incremental, client-side and scoped to the visible month: it filters
@@ -2790,7 +2932,7 @@ function ledger() {
       this.commanding = true;
       this.wild = null;
       this.recallAt = null;
-      this.focusSoon(this.$refs.cmd);
+      this.focusBar(this.$refs.cmd);
     },
 
     /// Focus a control that is revealed by `x-show`.
@@ -3189,6 +3331,8 @@ function ledger() {
       const raw = this.command.trim();
       this.commanding = false;
       this.command = '';
+      // Inside the Enter that ran it, so a phone keeps its keyboard.
+      if (this.keyboard) this.backToKeys();
       if (!raw) return;
       this.keepCmd(raw);
       const [name, ...rest] = raw.split(/\s+/);
@@ -3781,6 +3925,11 @@ function ledger() {
       // Capture, so it is read before the change's own request goes out.
       document.getElementById('hsplitmount')
         ?.addEventListener('change', () => this.keepSplitScroll(), true);
+      // A phone's keyboard covers the bottom of the screen without shrinking
+      // the page, so while it is up the shell follows what is visible.
+      window.visualViewport?.addEventListener('resize', () => this.fitViewport());
+      window.visualViewport?.addEventListener('scroll', () => this.fitViewport());
+      this.$watch('keyboard', () => this.fitViewport());
       // The statusline is fed by a response header, so a swap never has to
       // include chrome in order to say something.
       document.body.addEventListener('ffm:say', e => this.say(e.detail.message, e.detail.bad));

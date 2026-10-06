@@ -10,6 +10,10 @@
    * flow, so the shell has to have a bottom for them to sit against. With
    * min-height the stage could grow past the screen and take them with it. */
   height: 100vh;
+  /* While a phone's keyboard is up, what is actually visible (`fitViewport`):
+   * iOS shrinks only the visual viewport, and 100vh put the statusline and
+   * the command bar under the keyboard. */
+  height: var(--app-h, 100vh);
   background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
@@ -1220,6 +1224,47 @@
   background: var(--surface);
   border-top: 1px solid var(--accent-line);
   flex: none;
+}
+
+/* A phone's keyboard for the keymap goes through this field. Never seen and
+ * never typed into, but a real, focusable field: `display: none` cannot take
+ * focus. Fixed at the top so iOS has nothing to scroll to, and 16px so it
+ * does not zoom in on focus. */
+.keytrap {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  pointer-events: none;
+}
+
+/* What the phone's keyboard lacks, above it while it is up. The statusline's
+ * own ground and type: it is part of the foot, not a toolbar of its own. */
+.keystrip {
+  display: flex;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--line);
+  flex: none;
+}
+
+.keystrip .btn {
+  font-family: var(--mono);
+  font-size: 13px;
+  min-width: 44px;
+  padding: 6px 12px;
+}
+
+/* An armed Ctrl reads as held: "you are here", the accent. */
+.keystrip .btn.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* The command vocabulary, on the right of the bar. Identifiers a member types

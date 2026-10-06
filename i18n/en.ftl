@@ -315,6 +315,7 @@ profile-privacy = New rows
 profile-theme = Color scheme
 profile-line-numbers = Line numbers
 status-version = The version this server is running
+status-keyboard = Show the keyboard
 profile-panes = Panes
 profile-min-split = Split below this width, use tabs
 profile-min-width = Minimum pane width

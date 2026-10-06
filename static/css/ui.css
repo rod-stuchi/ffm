@@ -408,6 +408,35 @@ legend {
   letter-spacing: 0.1em;
 }
 
+/* The badge is also the phone's keyboard (`toggleKeyboard`). The glyph says
+ * so only where a finger is the pointer; on a desktop nothing changes. */
+.st.mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.kbglyph {
+  display: none;
+}
+
+.kbglyph svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (pointer: coarse) {
+  .kbglyph {
+    display: inline-flex;
+  }
+}
+
 .st.mode.cmd {
   background: var(--info);
   color: var(--paper);

@@ -677,6 +677,39 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
   half of this, `body:not(.kbd-nav) .row:hover`, existed for a long time with
   nothing setting the class, so the hovered row stayed lit beside the cursor.)
 
+### On a phone — the keyboard
+
+A phone shows its keyboard only for a focused text field, so on an iPhone the
+whole keymap was out of reach: there was no field to focus.
+
+- **Tap `NORMAL` for the keyboard.** On a touch screen the statusline's mode
+  badge wears a small keyboard glyph and is a button: a tap brings the
+  keyboard up, another (or the keyboard's Done) puts it away. On a desktop
+  nothing changes — the glyph is not drawn, and a click is harmless.
+- **The keys go through an invisible field** (`.keytrap`), excluded from
+  `key()`'s `typing` guard, so what is typed there is a ledger key and goes
+  through the one dispatcher. Nothing is ever inserted into it. Predictive
+  text sends `Unidentified` for a key and the character on `input` instead;
+  that is caught and sent on as the key it is, and the `Unidentified` itself
+  never reaches `key()`, where it would drop a pending `g` or count.
+- **A key strip above the keyboard — `esc`, `ctrl`, `:`, `/`** — while it is
+  up. The phone's keyboard has no Esc and no Ctrl; `:` and `/` open a bar in
+  one tap. `ctrl` is sticky for the next key (`ctrl` then `u` is the trash)
+  and is lit while armed; `esc` disarms it. The buttons act on `pointerdown`
+  and never take focus, or the keyboard would drop.
+- **The focus has to happen inside the tap.** iOS shows its keyboard only for
+  a `focus()` made synchronously in the gesture, and keeps it only when focus
+  moves to another text field in the same gesture. So with the keyboard up,
+  `:` and `/` focus their field at once (`focusBar`) rather than after Alpine's
+  next tick, and closing either bar hands focus straight back to the trap.
+- **The shell follows the visible screen.** iOS shrinks only the visual
+  viewport for its keyboard; a `100vh` shell put the statusline and the
+  command bar underneath it. While the keyboard is up the shell is sized to
+  `visualViewport.height` (`--app-h`).
+- **Known limit:** after a form field took the keyboard (`e`, the add row),
+  saving or canceling closes the keyboard with the field; tap `NORMAL` again.
+  Focus moving to a checkbox or a button (the trash's list) does the same.
+
 ### Find
 | Key | Action |
 |---|---|
