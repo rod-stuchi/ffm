@@ -349,24 +349,34 @@ pub async fn attach_to(
     // the same bill — "already on Moto CG", about a row showing no bill at
     // all. Such a row gives the bill up to this one (`takeover`, below),
     // provided the viewer may write to it.
+    //
+    // **Unless the barcode names an account rather than a bill**: a card's
+    // payment slip with no date and no amount, identical on every month's
+    // fatura (`boleto::Barcode::names_one_bill`). Another row carrying it is
+    // last month, not this bill twice — so there is nothing to refuse and
+    // nothing to take over.
     let raw = parsed.barcode.raw.clone();
-    let already = sqlx::query!(
-        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
-                  t.title AS "title!: String", t.rule_id AS "rule_id: i64",
-                  t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
-                  t.visibility AS "visibility!: String",
-                  EXISTS (SELECT 1 FROM receipts r
-                          WHERE r.transaction_id = t.id AND r.kind = 'barcode'
-                            AND r.deleted_at IS NULL) AS "holds!: bool"
-           FROM transactions t
-           WHERE t.barcode_raw = ?1 AND t.id <> ?2 AND t.deleted_at IS NULL"#,
-        raw,
-        tx_id
-    )
-    .fetch_optional(&st.pool)
-    .await
-    .ok()
-    .flatten();
+    let already = if parsed.barcode.names_one_bill() {
+        sqlx::query!(
+            r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+                      t.title AS "title!: String", t.rule_id AS "rule_id: i64",
+                      t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
+                      t.visibility AS "visibility!: String",
+                      EXISTS (SELECT 1 FROM receipts r
+                              WHERE r.transaction_id = t.id AND r.kind = 'barcode'
+                                AND r.deleted_at IS NULL) AS "holds!: bool"
+               FROM transactions t
+               WHERE t.barcode_raw = ?1 AND t.id <> ?2 AND t.deleted_at IS NULL"#,
+            raw,
+            tx_id
+        )
+        .fetch_optional(&st.pool)
+        .await
+        .ok()
+        .flatten()
+    } else {
+        None
+    };
     let (refuse, takeover) = match already {
         Some(r) if r.holds || !auth.viewer.may_write(r.member_id) => (Some(r), None),
         other => (None, other),

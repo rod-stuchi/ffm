@@ -652,6 +652,16 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     `.delete/`; nothing is destroyed. A holder that still has the file, or
     one the viewer may not write to, refuses as before. A row deleted with
     `dd` is untouched: it is outside the unique index and the check alike.
+  - **A card's payment slip names an account, not a bill.** A cobrança
+    whose due factor and amount are both zero (`… 3 00000000000000`) lets
+    the payer choose what to pay, and an issuer like Inter prints the very
+    same digits on every month's fatura — so January's read as "already on
+    10/2026" and was refused, which was never an error. Such a barcode is
+    exempt from one-barcode-one-row: no duplicate refusal, no takeover, and
+    `idx_tx_barcode` leaves it out (migration 0013), as does the trash's
+    `bill_held_by`. The test is `boleto::names_an_account` — positions 6–19
+    of the 44 digits all zero on a cobrança — and the SQL repeats it; keep
+    them in step. Every other barcode keeps the rule.
   - **A bill's amount replaces the row's amount, whoever set it.** The
     checksummed barcode is the evidence of what is owed, so it wins over a
     seed from the materializer *and* over a figure somebody typed with `e` —
@@ -809,7 +819,10 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   job isn't just "glance at which file this is" — it's reading a boleto's
   barcode digits, or holding a phone up to its QR code, both of which need
   the file genuinely large on screen. A 560px dialog can't do that; this is
-  the one modal in the app sized to the full window on purpose.
+  the one modal in the app sized to the full window on purpose. **All but
+  the statusline**, which it and the trim view stop above (`--status-h`):
+  covering it hid every answer given from inside them — a removal, a bill
+  refused on Save.
 - **Zoom (`+`/`-`, or `0` to reset) scales the preview** — the page images'
   width, so 100% is fitted to the view and above it the view scrolls to the
   rest. It is the same on every file type and in every browser, which is the

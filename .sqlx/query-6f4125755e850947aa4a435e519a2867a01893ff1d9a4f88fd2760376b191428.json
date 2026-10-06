@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                  t.title AS \"title!: String\", t.rule_id AS \"rule_id: i64\",\n                  t.amount_cents AS \"amount_cents: i64\", t.member_id AS \"member_id!: i64\",\n                  t.visibility AS \"visibility!: String\",\n                  EXISTS (SELECT 1 FROM receipts r\n                          WHERE r.transaction_id = t.id AND r.kind = 'barcode'\n                            AND r.deleted_at IS NULL) AS \"holds!: bool\"\n           FROM transactions t\n           WHERE t.barcode_raw = ?1 AND t.id <> ?2 AND t.deleted_at IS NULL",
+  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                      t.title AS \"title!: String\", t.rule_id AS \"rule_id: i64\",\n                      t.amount_cents AS \"amount_cents: i64\", t.member_id AS \"member_id!: i64\",\n                      t.visibility AS \"visibility!: String\",\n                      EXISTS (SELECT 1 FROM receipts r\n                              WHERE r.transaction_id = t.id AND r.kind = 'barcode'\n                                AND r.deleted_at IS NULL) AS \"holds!: bool\"\n               FROM transactions t\n               WHERE t.barcode_raw = ?1 AND t.id <> ?2 AND t.deleted_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -41,7 +41,7 @@
       {
         "name": "holds!: bool",
         "ordinal": 7,
-        "type_info": "Null"
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -55,8 +55,8 @@
       true,
       false,
       false,
-      null
+      false
     ]
   },
-  "hash": "948877bb96323d858d156f6cfe1478166c88c79e09ffbd611ef8107eb05f8952"
+  "hash": "6f4125755e850947aa4a435e519a2867a01893ff1d9a4f88fd2760376b191428"
 }

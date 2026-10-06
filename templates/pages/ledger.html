@@ -542,6 +542,10 @@
                x-effect="showFile($el, carousel.current)"></div>
         </div>
         <div class="cnav">
+          {#- The file's size, at the bar's left end — beside Trim, since the
+              size is what decides whether a PDF is worth shrinking. -#}
+          <span class="csize" x-show="fileSize" x-text="fileSize"
+                title="{{ t.carousel_size_title() }}"></span>
           <button class="btn" type="button" :disabled="carousel.at === 0"
                   @click="stepFile(-1)">‹</button>
           <template x-for="(f, i) in carousel.files" :key="f.kind">
@@ -945,6 +949,9 @@ function ledger() {
     /// as page images (`v`). Every `P` starts on the images; the choice holds
     /// while the carousel is open, across the row's files.
     pdfView: false,
+    /// The size of the file on show, `412 KB` — from the stage fragment's
+    /// `data-size`, so it is the server's reading of the file on disk.
+    fileSize: '',
     keymap: false,
     monthsWord: {{ months_word|json|safe }},
     attaching: null,
@@ -2033,11 +2040,16 @@ function ledger() {
       if (!f || el.dataset.src === key) return;
       el.dataset.src = key;
       el.innerHTML = '';
+      // Cleared first, so the last file's size never sits beside this one.
+      this.fileSize = '';
       const page = (f.page.match(/p\.\s*(\d+)/) || [])[1];
       const query = [this.pdfView && 'pdf=1', page && 'page=' + page].filter(Boolean).join('&');
       this.ajax('GET', f.href + '/view' + (query ? '?' + query : ''),
                 { target: el, swap: 'innerHTML' }, el)
-        .then(() => el.querySelector('[data-owed]')?.scrollIntoView({ block: 'start' }));
+        .then(() => {
+          this.fileSize = el.querySelector('[data-size]')?.dataset.size || '';
+          el.querySelector('[data-owed]')?.scrollIntoView({ block: 'start' });
+        });
     },
 
     /// The file on show is a PDF — the only kind with two ways to see it.

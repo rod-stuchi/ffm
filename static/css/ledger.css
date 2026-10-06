@@ -2394,11 +2394,15 @@
 /* The whole viewport, edge to edge, and the one modal sized that way on
  * purpose: the job is reading a boleto's barcode digits or holding a phone up
  * to its QR code. It was an 1100 × 760 box on a dimmed backdrop, which kept a
- * margin of ledger around a file opened precisely to be seen large. `dvh`, so
- * a phone's collapsing toolbar does not cut off the file-nav row. */
+ * margin of ledger around a file opened precisely to be seen large.
+ *
+ * Edge to edge except the statusline, which stays visible under it: a
+ * removal or an upload refused from in here says so there, and covering it
+ * hid the answer. The stage fills the box rather than `100dvh`, so the
+ * file-nav row ends exactly where the statusline starts. */
 .carousel {
   position: fixed;
-  inset: 0;
+  inset: 0 0 var(--status-h) 0;
   z-index: 50;
   display: grid;
 }
@@ -2406,7 +2410,7 @@
 .cstage {
   position: relative;
   width: 100vw;
-  height: 100dvh;
+  height: 100%;
   background: var(--surface);
   display: grid;
   grid-template-rows: max-content 1fr max-content;
@@ -2563,6 +2567,7 @@
 }
 
 .cnav {
+  position: relative;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -2570,6 +2575,40 @@
   padding: 12px;
   border-top: 1px solid var(--line);
   background: var(--surface-2);
+}
+
+/* The file's size, at the bar's left end. Out of the flow, so the centered
+ * buttons stay exactly where they were; on a phone there is no room beside
+ * them, so it rejoins the row as its first item. */
+.csize {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  /* The buttons' own size and ink. It was --ink-3 at 12px, which all but
+   * vanished on --surface-2 (2.5:1 in the median palette, 2.0 at worst);
+   * --ink-2 still left 9 of the 22 palettes under 4.5:1. --ink reads like
+   * the button labels beside it (8.5:1 median). */
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* A phone cannot fit the bar on one line — the size, the file buttons and
+ * the actions, in either language — and the stage clips what overflows, so
+ * the bar wraps rather than cutting its last button off. */
+@media (max-width: 700px) {
+  .cnav {
+    flex-wrap: wrap;
+  }
+
+  .csize {
+    position: static;
+    transform: none;
+  }
 }
 
 /* --- ?: the keymap ------------------------------------------------------- */
@@ -2623,10 +2662,12 @@
 /* --- the trim-and-shrink view (partials/prepare.html) --------------------- */
 
 /* Full viewport and above the carousel, which it can be opened from: the
- * point is to see the pages well enough to tell an advert from a barcode. */
+ * point is to see the pages well enough to tell an advert from a barcode.
+ * All but the statusline, like the carousel: Save sends the file on to its
+ * upload, and a refusal ("wrong row?", "already on …") is said there. */
 .prepmount {
   position: fixed;
-  inset: 0;
+  inset: 0 0 var(--status-h) 0;
   z-index: 70;
   background: var(--paper);
 }

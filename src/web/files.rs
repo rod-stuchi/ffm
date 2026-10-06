@@ -345,6 +345,9 @@ pub struct FileView {
     /// A PDF handed whole to the browser's own viewer (`?pdf=1`), opened on
     /// `owed` when there is one.
     embed: bool,
+    /// The file's size, `412 KB` / `1,2 MB` — shown at the left of the
+    /// carousel's bottom bar. Empty when the file could not be read.
+    size: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -368,6 +371,17 @@ pub async fn view(
         return StatusCode::NOT_FOUND.into_response();
     };
     let base = format!("/tx/{tx_id}/file/{kind}");
+    // In the household's numbers, like every other size this app shows.
+    let currency = ledger::household(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|h| h.currency)
+        .unwrap_or_default();
+    let size = tokio::fs::metadata(&path)
+        .await
+        .map(|m| crate::ui::fmt::bytes(m.len(), currency))
+        .unwrap_or_default();
     let mut view = FileView {
         t,
         base,
@@ -376,6 +390,7 @@ pub async fn view(
         image: false,
         text: None,
         embed: false,
+        size,
     };
     match ext.as_str() {
         // The viewer draws every page itself; only the owed one is needed,

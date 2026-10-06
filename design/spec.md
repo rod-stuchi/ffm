@@ -449,6 +449,11 @@ receipt — without leaving the ledger behind it.
   of ledger around a file opened to be seen large. With no backdrop left to
   click away on, an `esc` button beside the zoom controls closes it, the same
   word the rule pane's close button uses.
+- **Except the statusline, which stays visible below it** — and below the
+  trim view, which shares the rule. It is the one place the app speaks, and
+  covering it meant a bill refused on the trim view's Save was refused in
+  silence. Both overlays end at `--status-h` (30px, `tokens.css`), the
+  statusline's own fixed height.
 - **Full-viewport, not a dialog-sized modal** — the few other modals left
   in this app (confirmations, the keymap) are centered `min(560px, 100%)`
   boxes, and this is the one deliberate exception. The actual job is reading a boleto's barcode digits, or
@@ -493,6 +498,15 @@ receipt — without leaving the ledger behind it.
   open, across the row's files, and is not remembered after it closes. An
   SVG drawing of each page (`pdftocairo`) was tried as a third way and did
   not fit as well as either.
+- **The bottom bar's left end shows the file's size** — `412 KB`,
+  `1,2 MB`, in the household's numbers (`fmt::bytes`, as `:prune` and the
+  trim view write it). The server reads it off the disk with the stage
+  (`data-size` on the fragment), so it is the stored file's size in every
+  view, and it changes as `h`/`l` move to another file. It sits at the same
+  end of the bar as *Trim* on purpose: the size is what decides whether a
+  PDF is worth shrinking. Out of the flow beside the centered buttons; on a
+  phone, the row's first item — and there the bar wraps onto a second line,
+  since the stage clips whatever overflows and would cut its last button off.
 - **A row with zero files refuses outright** — `P` says "no files on this
   row" rather than opening an empty carousel with nothing to look at.
 - **The file on show can be removed from here** — a Remove button beside

@@ -93,6 +93,28 @@ pub struct Barcode {
     pub bank: Option<String>,
 }
 
+impl Barcode {
+    /// Whether this barcode names **one bill**, or only an account.
+    ///
+    /// A cobrança whose due factor and amount are both zero
+    /// (`… 3 00000000000000`) carries neither a date nor a value: it is the
+    /// card's own payment slip, and an issuer like Inter prints the very same
+    /// digits on every month's fatura — the payer chooses how much to pay,
+    /// whenever. Such a barcode cannot be the "same bill twice" key, so it is
+    /// exempt from the one-barcode-one-row rule. Mirrored in SQL by
+    /// `idx_tx_barcode` (migration 0013) and `trash::bill_held_by` — keep the
+    /// three in step.
+    pub fn names_one_bill(&self) -> bool {
+        !names_an_account(self.kind, &self.raw)
+    }
+}
+
+/// `raw` (the 44 digits) is a cobrança with no due factor and no amount —
+/// see [`Barcode::names_one_bill`].
+pub fn names_an_account(kind: Kind, raw: &str) -> bool {
+    kind == Kind::Cobranca && raw.get(5..19).is_some_and(|f| f.bytes().all(|b| b == b'0'))
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Error {
     /// Not 44, 47 or 48 digits after separators are stripped.
@@ -418,6 +440,30 @@ mod tests {
         let b = parse("26091234560000123450900012345005115950000000000", today()).unwrap();
         assert_eq!(b.amount, Amount::Open);
         assert_eq!(b.due, DueDate::Encoded(d(2026, 10, 10)));
+    }
+
+    #[test]
+    fn a_card_slip_with_no_date_and_no_amount_names_an_account_not_a_bill() {
+        // Synthetic, with valid check digits: bank 260, factor 0000, value
+        // zero — the shape Inter prints identically on every month's fatura.
+        let b = parse("26091234560001234500501234500005500000000000000", today()).unwrap();
+        assert_eq!(b.amount, Amount::Open);
+        assert_eq!(b.due, DueDate::Absent);
+        assert_eq!(b.raw, "26095000000000000001234500012345000123450000");
+        assert!(!b.names_one_bill());
+    }
+
+    #[test]
+    fn an_open_amount_with_a_due_date_still_names_one_bill() {
+        // Vector 2: the payer picks the amount, but the date is this month's.
+        let b = parse("26091234560000123450900012345005115950000000000", today()).unwrap();
+        assert!(b.names_one_bill());
+        // And a dated or valued bill always does.
+        let b = parse("34191790010104351004779102015009815700000034362", today()).unwrap();
+        assert!(b.names_one_bill());
+        // Arrecadação is never exempt: its zeros sit elsewhere.
+        let b = parse("846600000000000056780000000000000000000000000000", today()).unwrap();
+        assert!(b.names_one_bill());
     }
 
     #[test]

@@ -245,12 +245,18 @@ pub async fn deleted_file(pool: &SqlitePool, receipt_id: i64) -> sqlx::Result<Op
 /// deleted row whose bill has since been attached to another row cannot come
 /// back while that one holds it. Asked before restoring, so the answer can
 /// name the row in the way rather than failing on the index.
+///
+/// A card's payment slip with no date and no amount names an account, not a
+/// bill, and any number of rows may carry it (migration 0013,
+/// `boleto::names_an_account`) — so it never holds a restore up.
 pub async fn bill_held_by(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<String>> {
     sqlx::query_scalar!(
         r#"SELECT o.title AS "title!: String"
            FROM transactions t
            JOIN transactions o ON o.barcode_raw = t.barcode_raw AND o.id <> t.id
            WHERE t.id = ?1 AND t.barcode_raw IS NOT NULL AND o.deleted_at IS NULL
+             AND NOT (t.barcode_kind = 'cobranca'
+                      AND substr(t.barcode_raw, 6, 14) = '00000000000000')
            LIMIT 1"#,
         id
     )

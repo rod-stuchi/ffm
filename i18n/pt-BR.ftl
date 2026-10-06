@@ -595,6 +595,7 @@ status-received = chegou
 
 carousel-open-tab = Abrir em nova aba
 carousel-zoom-reset = Zerar o zoom
+carousel-size-title = Tamanho do arquivo
 carousel-view-pages = Páginas
 carousel-view-pdf = PDF
 carousel-view-title = Ver as páginas como imagens, ou abrir o PDF no visualizador do navegador

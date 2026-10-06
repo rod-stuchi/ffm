@@ -5,8 +5,11 @@
     them. Why not the browser's PDF viewer by default: see `files::FileView`.
 
     `v` swaps a PDF's pages for that viewer, on request: the file itself in an
-    <embed>, sharp at any size, zooming itself. -#}
-<div class="cpages">
+    <embed>, sharp at any size, zooming itself.
+
+    `data-size` is the file's size, read by the carousel into its bottom
+    bar — on this element so it arrives with every kind and every view. -#}
+<div class="cpages" data-size="{{ size }}">
   {%- if embed %}
   <embed class="cembed" src="{{ base }}{% if owed > 0 %}#page={{ owed }}{% endif %}" type="application/pdf">
   {%- endif %}
