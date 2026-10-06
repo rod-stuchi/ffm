@@ -685,6 +685,10 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("1 2 3 · h l", "inside P: jump to a file · step"),
                 k("+ - 0", "inside P: zoom in, out, reset"),
                 k("t", "inside P: trim or shrink the PDF on show"),
+                k(
+                    "v",
+                    "inside P: the PDF in the browser's own viewer, and back",
+                ),
             ],
         ),
         (

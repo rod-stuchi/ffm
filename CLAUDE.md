@@ -786,11 +786,15 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   reversing "the kind, the path and an icon, never the bytes", which could
   not do the job the carousel is full-viewport *for*: reading a boleto's
   digits, or holding a phone up to its QR code. **A PDF's pages are drawn
-  server-side by `pdftoppm`** (poppler, already required for `pdftotext`)
-  and shown as images; a photo is itself, a text file is text. The browser's
-  own PDF viewer was tried first, in a frame, and could not be zoomed from
-  the carousel reliably in either Chrome or Safari — a frame is somebody
-  else's program and answers to its own controls. "Open in new tab" still
+  server-side by `pdftoppm`** (poppler, already required for `pdftotext`),
+  at 300 dpi, and shown as images; a photo is itself, a text file is text.
+  The browser's own PDF viewer was tried first, in a frame, and could not be
+  zoomed from the carousel reliably in either Chrome or Safari — a frame is
+  somebody else's program and answers to its own controls. **It is offered
+  now as the second way, never the first:** `v` (a *Pages · PDF* switch)
+  swaps the images for an `<embed>` of the file, sharp at any size and
+  zooming itself, while every `P` still opens on the images, whose zoom and
+  keys work alike in both browsers. "Open in new tab" still
   hands over the real file. A bill shared across months scrolls to this
   month's page. See `design/spec.md`'s row-component
   section for the on-row badges and their keybindings.

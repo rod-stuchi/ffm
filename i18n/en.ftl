@@ -632,6 +632,9 @@ status-received = arrived
 
 carousel-open-tab = Open in new tab
 carousel-zoom-reset = Reset zoom
+carousel-view-pages = Pages
+carousel-view-pdf = PDF
+carousel-view-title = See the pages as images, or open the PDF in the browser's own viewer
 carousel-page-alt = page { $n }
 keymap-title = Keymap
 keymap-close = Close

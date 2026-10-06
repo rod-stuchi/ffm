@@ -497,9 +497,26 @@
     <template x-if="carousel">
       <div class="cstage">
         <div class="czoom">
-          <button class="btn" type="button" @click="zoom = Math.max(0.5, zoom - 0.25)">−</button>
-          <button class="btn" type="button" @click="zoom = 1" title="{{ t.carousel_zoom_reset() }}">0</button>
-          <button class="btn" type="button" @click="zoom = Math.min(4, zoom + 0.25)">+</button>
+          {#- A PDF is shown as page images, or — on request — in the
+              browser's own viewer, which is sharp at any size and zooms
+              itself (`files::FileView`). Absent on a photo or a text file,
+              which have nothing to switch. -#}
+          <span class="cviewsw" x-show="pdfOnShow()" title="{{ t.carousel_view_title() }}">
+            <button class="btn" type="button" :class="{ 'is-on': !pdfView }"
+                    :aria-pressed="(!pdfView).toString()"
+                    @click="pdfView && togglePdfView()">{{ t.carousel_view_pages() }}</button>
+            <button class="btn" type="button" :class="{ 'is-on': pdfView }"
+                    :aria-pressed="pdfView.toString()"
+                    @click="pdfView || togglePdfView()">{{ t.carousel_view_pdf() }} <kbd>v</kbd></button>
+          </span>
+          {#- The viewer zooms itself, so ours step aside while it is on show. -#}
+          <template x-if="!(pdfView && pdfOnShow())">
+            <span class="czoombtns">
+              <button class="btn" type="button" @click="zoom = Math.max(0.5, zoom - 0.25)">−</button>
+              <button class="btn" type="button" @click="zoom = 1" title="{{ t.carousel_zoom_reset() }}">0</button>
+              <button class="btn" type="button" @click="zoom = Math.min(4, zoom + 0.25)">+</button>
+            </span>
+          </template>
           {#- Filling the viewport leaves no backdrop to click away on, so the
               mouse gets the same way out `Esc` is — the rule pane's own
               `esc` button, the same word. -#}
@@ -924,6 +941,10 @@ function ledger() {
     carouselBuf: '',
     removeFileTitle: {{ remove_file_title|json|safe }},
     zoom: 1,
+    /// The carousel is showing a PDF in the browser's own viewer rather than
+    /// as page images (`v`). Every `P` starts on the images; the choice holds
+    /// while the carousel is open, across the row's files.
+    pdfView: false,
     keymap: false,
     monthsWord: {{ months_word|json|safe }},
     attaching: null,
@@ -1992,6 +2013,7 @@ function ledger() {
       if (!files.length) { this.say(this.noFiles, true); return; }
       this.zoom = 1;
       this.carouselBuf = '';
+      this.pdfView = false;
       this.carousel = {
         id: this.focusedId(),
         files,
@@ -2006,13 +2028,29 @@ function ledger() {
     /// already says `Bill · p.4`, and confirming which page is owed is the
     /// whole reason to open that file here.
     showFile(el, f) {
-      if (!f || el.dataset.src === f.href) return;
-      el.dataset.src = f.href;
+      // Which way it is shown is part of the key, so `v` really reloads.
+      const key = f && f.href + (this.pdfView ? '|pdf' : '');
+      if (!f || el.dataset.src === key) return;
+      el.dataset.src = key;
       el.innerHTML = '';
       const page = (f.page.match(/p\.\s*(\d+)/) || [])[1];
-      this.ajax('GET', f.href + '/view' + (page ? '?page=' + page : ''),
+      const query = [this.pdfView && 'pdf=1', page && 'page=' + page].filter(Boolean).join('&');
+      this.ajax('GET', f.href + '/view' + (query ? '?' + query : ''),
                 { target: el, swap: 'innerHTML' }, el)
         .then(() => el.querySelector('[data-owed]')?.scrollIntoView({ block: 'start' }));
+    },
+
+    /// The file on show is a PDF — the only kind with two ways to see it.
+    pdfOnShow() {
+      return !!this.carousel && /\.pdf$/i.test(this.carousel.current.path);
+    },
+
+    /// `v`: the page images ↔ the browser's own PDF viewer. The stage reloads
+    /// (`showFile` keys on it), and zoom starts over, as it does per file.
+    togglePdfView() {
+      if (!this.pdfOnShow()) return;
+      this.pdfView = !this.pdfView;
+      this.zoom = 1;
     },
 
     /// Clamped at either end rather than wrapping: the first file's previous
@@ -2063,6 +2101,7 @@ function ledger() {
 
     carouselKey(k) {
       if (k === 't') { this.carouselBuf = ''; this.trimCurrent(); return; }
+      if (k === 'v') { this.carouselBuf = ''; this.togglePdfView(); return; }
       // `dd` removes the file on show — the row's own delete gesture, pointed
       // at the file. The carousel reads its own keys, so the pending `d` lives
       // here; any other key drops it, the way `zq` drops the `z`.
@@ -2081,6 +2120,8 @@ function ledger() {
         this.zoom = 1;
       } else if (k === 'h') this.stepFile(-1);
       else if (k === 'l') this.stepFile(1);
+      // With the browser's viewer on show, it zooms itself.
+      else if (this.pdfView && this.pdfOnShow() && ['+', '=', '-', '0'].includes(k)) return;
       else if (k === '+' || k === '=') this.zoom = Math.min(4, this.zoom + 0.25);
       else if (k === '-') this.zoom = Math.max(0.5, this.zoom - 0.25);
       else if (k === '0') this.zoom = 1;

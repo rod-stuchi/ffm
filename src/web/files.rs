@@ -319,6 +319,14 @@ pub async fn open(
 /// thing on screen: images the carousel sizes itself, so zoom means one
 /// thing everywhere and works in every browser. "Open in new tab" still hands
 /// over the real file.
+///
+/// **The browser's viewer is still offered — beside the images, by choice.**
+/// An image has the resolution it was drawn at, and a PDF does not: the tab
+/// stays sharp at any size and lets text be selected. So `v` (or the corner's
+/// *PDF* button) swaps the pages for an `<embed>` of the file, zooming
+/// itself with its own controls. The images stay the default, because only
+/// they answer the carousel's zoom and keys the same way in every browser;
+/// the viewer, once clicked into, takes the keyboard.
 #[derive(Template)]
 #[template(path = "partials/file_view.html")]
 pub struct FileView {
@@ -334,12 +342,18 @@ pub struct FileView {
     image: bool,
     /// txt: the text, escaped by the template like any other content.
     text: Option<String>,
+    /// A PDF handed whole to the browser's own viewer (`?pdf=1`), opened on
+    /// `owed` when there is one.
+    embed: bool,
 }
 
 #[derive(serde::Deserialize)]
 pub struct ViewParams {
     #[serde(default, deserialize_with = "crate::web::form::blank_as_none")]
     page: Option<i64>,
+    /// `1`: the browser's PDF viewer instead of the page images.
+    #[serde(default, deserialize_with = "crate::web::form::blank_as_none")]
+    pdf: Option<i64>,
 }
 
 /// `GET /tx/{id}/file/{kind}/view` — the stage, as a fragment.
@@ -361,8 +375,15 @@ pub async fn view(
         owed: 0,
         image: false,
         text: None,
+        embed: false,
     };
     match ext.as_str() {
+        // The viewer draws every page itself; only the owed one is needed,
+        // for `#page=`.
+        "pdf" if p.pdf == Some(1) => {
+            view.embed = true;
+            view.owed = p.page.filter(|p| *p > 0).unwrap_or(0);
+        }
         "pdf" => {
             // A PDF poppler cannot count is still a file: one page is tried,
             // and a page that will not draw says so in its own place.
@@ -376,10 +397,18 @@ pub async fn view(
     crate::web::template::Html(view).into_response()
 }
 
-/// `GET /tx/{id}/file/{kind}/page/{n}` — one page of a PDF, as a PNG.
+/// How finely a PDF page is drawn for the carousel.
 ///
-/// 150 dpi: an A4 page comes out ~1240 px wide, which fills the stage at
-/// 100% and keeps a boleto's digits and QR code sharp when zoomed in.
+/// 300 dpi: an A4 page comes out ~2480 px wide, and a statement drawn small in
+/// PDF points (the Inter one is 446 pt wide, ~1860 px here) still fills the
+/// stage without being stretched. It was 150, which left that statement at
+/// 929 px and stretched it 2–4× — blurry beside the same file in a tab. A page
+/// is ~2.5× the bytes and the time (~1 MB, ~0.8 s for an A4 bill), which a
+/// household's LAN does not notice.
+const PAGE_DPI: &str = "300";
+
+/// `GET /tx/{id}/file/{kind}/page/{n}` — one page of a PDF, as a PNG, at
+/// [`PAGE_DPI`].
 pub async fn page(
     State(st): State<AppState>,
     auth: Auth,
@@ -396,7 +425,7 @@ pub async fn page(
     let out = tokio::task::spawn_blocking(move || {
         let n = n.to_string();
         std::process::Command::new("pdftoppm")
-            .args(["-f", &n, "-l", &n, "-r", "150", "-png", "-singlefile"])
+            .args(["-f", &n, "-l", &n, "-r", PAGE_DPI, "-png", "-singlefile"])
             .arg(&path)
             .output()
     })

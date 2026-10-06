@@ -464,7 +464,7 @@ receipt — without leaving the ledger behind it.
   path in a caption above it. It used to show only the icon and the path —
   "not the file's actual bytes" — which could not do the one job this modal
   is full-viewport for. **A PDF's pages are drawn by the server** with
-  `pdftoppm` at 150 dpi (`GET /tx/{id}/file/{kind}/page/{n}`) and stacked as
+  `pdftoppm` at 300 dpi (`GET /tx/{id}/file/{kind}/page/{n}`) and stacked as
   images, fitted to the width; a photo is shown as itself and a text file as
   text. The stage is one fragment per file (`…/view`), and a bill shared
   across months scrolls to this month's page. `+`/`-`/`0` set the pages'
@@ -474,6 +474,25 @@ receipt — without leaving the ledger behind it.
   up blank in Chrome, and widening the frame only zoomed while the viewer
   stayed fitted to the width — in Safari `+` slid the page sideways and `-`
   did nothing.
+- **300 dpi, not 150.** An image has the resolution it was drawn at: a
+  statement drawn small in PDF points (Inter's is 446 pt wide) came out
+  929 px at 150 dpi and was stretched 2–4× to fill the stage — blurry beside
+  the same file in a tab. At 300 an A4 page is ~2480 px and that statement
+  ~1860 px. A page costs ~2.5× the bytes and the time (~1 MB, ~0.8 s for an
+  A4 bill), which the household's LAN does not notice.
+- **`v` shows a PDF in the browser's own viewer instead** — a *Pages · PDF*
+  switch in the corner, beside the zoom buttons, only on a PDF. The viewer
+  is the file itself in an `<embed>`: sharp at any size, text selectable, a
+  shared bill opened on its page with `#page=N`. It zooms itself, so the
+  carousel's `+`/`-`/`0` step aside while it shows, and once clicked into it
+  takes the keyboard — `Esc`, `h`/`l` and `v` work again after a click
+  outside it. That is why it is offered and never the default: the frame
+  this section rejected above failed as the *only* view, because the
+  carousel's zoom had to drive it; as an opt-in it is free to zoom itself.
+  **Every `P` opens on the pages**; the choice holds while the carousel is
+  open, across the row's files, and is not remembered after it closes. An
+  SVG drawing of each page (`pdftocairo`) was tried as a third way and did
+  not fit as well as either.
 - **A row with zero files refuses outright** — `P` says "no files on this
   row" rather than opening an empty carousel with nothing to look at.
 - **The file on show can be removed from here** — a Remove button beside
@@ -666,6 +685,7 @@ to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
 | `0` | inside the carousel — reset zoom to 100% |
 | `dd` | inside the carousel — remove the file on show; confirms with `y`, never `Enter` |
 | `t` | inside the carousel — trim or shrink the PDF on show (see Trim and shrink, below) |
+| `v` | inside the carousel — the PDF on show in the browser's own viewer, and back to the page images |
 
 `gu` is "goto upload", a second step of the same `g`-prefix vocabulary rather
 than a new pattern — and it deliberately reuses `g1`/`g2`/`g3`'s numbering, so
