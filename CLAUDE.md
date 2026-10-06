@@ -831,10 +831,11 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   The browser's own PDF viewer was tried first, in a frame, and could not be
   zoomed from the carousel reliably in either Chrome or Safari — a frame is
   somebody else's program and answers to its own controls. **It is offered
-  now as the second way, never the first:** `v` (a *Pages · PDF* switch)
-  swaps the images for an `<embed>` of the file, sharp at any size and
-  zooming itself, while every `P` still opens on the images, whose zoom and
-  keys work alike in both browsers. "Open in new tab" still
+  now as the second way:** `v` (a *PNG ⇄ PDF* switch) swaps the images for
+  an `<embed>` of the file, sharp at any size and zooming itself. Which side
+  `P` opens on is the member's (`member_settings.pdf_view`, in `:profile`) —
+  amended from "every `P` opens on the images" — and PNG stays the default,
+  because the images' zoom and keys work alike in both browsers. "Open in new tab" still
   hands over the real file. A bill shared across months scrolls to this
   month's page. See `design/spec.md`'s row-component
   section for the on-row badges and their keybindings.

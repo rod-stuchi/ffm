@@ -372,6 +372,8 @@ struct LedgerPage {
     /// onto the shell; `row.css` reads it. Server-rendered so the first frame
     /// is already right, which is why writing it refreshes the page.
     density: String,
+    /// `png` | `pdf` — which side `P` opens a PDF on (`v` flips it there).
+    pdf_view: String,
     give_nobody: String,
     give_moved_key: String,
     details_none: String,
@@ -580,6 +582,7 @@ pub async fn ledger(
         month_already_current: t.month_already_current().to_string(),
         today_key: Period::of(today).to_string(),
         density: auth.settings.density.clone(),
+        pdf_view: auth.settings.pdf_view.clone(),
         give_nobody: t.give_nobody().to_string(),
         give_moved_key: t.give_moved_key().to_string(),
         details_none: t.details_none().to_string(),

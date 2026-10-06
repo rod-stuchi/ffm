@@ -485,8 +485,9 @@ receipt — without leaving the ledger behind it.
   the same file in a tab. At 300 an A4 page is ~2480 px and that statement
   ~1860 px. A page costs ~2.5× the bytes and the time (~1 MB, ~0.8 s for an
   A4 bill), which the household's LAN does not notice.
-- **`v` shows a PDF in the browser's own viewer instead** — a *Pages · PDF*
-  switch in the corner, beside the zoom buttons, only on a PDF. The viewer
+- **`v` shows a PDF in the browser's own viewer instead** — a *PNG ⇄ PDF*
+  switch in the corner, beside the zoom buttons, only on a PDF: one `.tog`
+  between the two names, the side on show in the ink. The viewer
   is the file itself in an `<embed>`: sharp at any size, text selectable, a
   shared bill opened on its page with `#page=N`. It zooms itself, so the
   carousel's `+`/`-`/`0` step aside while it shows, and once clicked into it
@@ -494,8 +495,14 @@ receipt — without leaving the ledger behind it.
   outside it. That is why it is offered and never the default: the frame
   this section rejected above failed as the *only* view, because the
   carousel's zoom had to drive it; as an opt-in it is free to zoom itself.
-  **Every `P` opens on the pages**; the choice holds while the carousel is
-  open, across the row's files, and is not remembered after it closes. An
+  **`P` opens on the member's side** — `member_settings.pdf_view`, a
+  `:profile` radio, `png` by default (amended from "every `P` opens on the
+  pages", which made a member who reads every bill in the viewer press `v`
+  each time). `v` flips it while the carousel is open, across the row's
+  files, and that flip is not remembered after it closes.
+- **The caption and the file-nav row are one low height** (`--cbar-h`,
+  34px), with the nav's buttons a size down: the bars frame the file, and
+  every pixel they take is the file's. An
   SVG drawing of each page (`pdftocairo`) was tried as a third way and did
   not fit as well as either.
 - **The bottom bar's left end shows the file's size** — `412 KB`,
@@ -2885,6 +2892,7 @@ ledger_show_delta       bool
 ledger_group            text  -- "none" | "bucket"
 group_fold_default      text  -- "expanded" | "collapsed"
 density                 text  -- "default" | "comfortable" | "compact"; see Density
+pdf_view                text  -- "png" | "pdf": which side `P` opens a PDF on (0015)
 default_visibility      text  -- NULL = follow the household's policy,
                               -- else "household" | "private"
 ```

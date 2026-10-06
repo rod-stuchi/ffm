@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE member_settings SET pdf_view = ?2 WHERE member_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b293cf68e87a944ee9e570088d84fbc7dffff5be9d7571d5b4d8eabcb3ddee04"
+}

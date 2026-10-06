@@ -37,6 +37,7 @@ pub enum MemberKey {
     GroupOrder,
     DefaultVisibility,
     Density,
+    PdfView,
 }
 
 impl MemberKey {
@@ -58,6 +59,7 @@ impl MemberKey {
             "group_order" => MemberKey::GroupOrder,
             "default_visibility" => MemberKey::DefaultVisibility,
             "density" => MemberKey::Density,
+            "pdf_view" => MemberKey::PdfView,
             _ => return None,
         })
     }
@@ -97,6 +99,9 @@ pub struct MemberSettings {
     /// value, Gmail's name for it, never "follow the household") |
     /// `comfortable` | `compact`. Applied in CSS off one attribute.
     pub density: String,
+    /// How `P` first shows a PDF: `png` (the server's page images) | `pdf`
+    /// (the browser's own viewer). `v` flips it while the carousel is open.
+    pub pdf_view: String,
 }
 
 impl Default for MemberSettings {
@@ -119,6 +124,7 @@ impl Default for MemberSettings {
             group_order: "appearance".into(),
             default_visibility: None,
             density: "comfortable".into(),
+            pdf_view: "png".into(),
         }
     }
 }
@@ -141,7 +147,8 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
                   group_fold_default AS "group_fold_default!: String",
                   group_order AS "group_order!: String",
                   default_visibility AS "default_visibility: String",
-                  density AS "density!: String"
+                  density AS "density!: String",
+                  pdf_view AS "pdf_view!: String"
            FROM member_settings WHERE member_id = ?1"#,
         member_id
     )
@@ -171,6 +178,7 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
             group_order: r.group_order,
             default_visibility: r.default_visibility,
             density: r.density,
+            pdf_view: r.pdf_view,
         })
         .unwrap_or_default())
 }
@@ -431,6 +439,17 @@ pub async fn set_member(
             let v = one_of("density", value, &DENSITIES)?;
             sqlx::query!(
                 "UPDATE member_settings SET density = ?2 WHERE member_id = ?1",
+                member_id,
+                v
+            )
+            .execute(pool)
+            .await
+            .map_err(db)?;
+        }
+        MemberKey::PdfView => {
+            let v = one_of("pdf_view", value, &["png", "pdf"])?;
+            sqlx::query!(
+                "UPDATE member_settings SET pdf_view = ?2 WHERE member_id = ?1",
                 member_id,
                 v
             )
@@ -784,6 +803,7 @@ mod tests {
             "group_order",
             "default_visibility",
             "density",
+            "pdf_view",
         ] {
             assert!(MemberKey::parse(k).is_some(), "{k}");
         }

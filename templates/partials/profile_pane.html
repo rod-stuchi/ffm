@@ -102,6 +102,19 @@
           </div>
         </div>
       </form>
+      {#- Which side `P` opens a PDF on; `v` still flips it there. The labels
+          are the switch's own, so the two say the same thing. -#}
+      <form class="setting" hx-post="/settings/member" hx-trigger="change" hx-swap="none">
+        <input type="hidden" name="key" value="pdf_view">
+        <div class="f">
+          <span class="k" id="k-pdfview">{{ t.profile_pdf_view() }}</span>
+          <div class="radios" role="radiogroup" aria-labelledby="k-pdfview">
+            {%- for c in pdf_views %}
+            <label><input type="radio" name="value" value="{{ c.code }}"{% if c.selected %} checked{% endif %}> {{ c.label }}</label>
+            {%- endfor %}
+          </div>
+        </div>
+      </form>
       {#- The same row `S` and the statusline cell write — three gestures,
           one setting. -#}
       <form class="setting" hx-post="/settings/member" hx-trigger="change" hx-swap="none">

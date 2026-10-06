@@ -122,6 +122,7 @@ struct ProfilePane {
     sorts: Vec<Choice>,
     scopes: Vec<Choice>,
     folds: Vec<Choice>,
+    pdf_views: Vec<Choice>,
     orders: Vec<Choice>,
     visibilities: Vec<Choice>,
     min_split: i64,
@@ -197,6 +198,15 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
                 ("collapsed", t.profile_fold_collapsed().to_string()),
             ],
             &s.group_fold_default,
+        ),
+        // Format names, not words: the catalog has them only so `P`'s switch
+        // and this radio cannot spell them differently.
+        pdf_views: choices(
+            &[
+                ("png", t.carousel_view_pages().to_string()),
+                ("pdf", t.carousel_view_pdf().to_string()),
+            ],
+            &s.pdf_view,
         ),
         orders: choices(
             &[
@@ -321,6 +331,8 @@ pub async fn set_member(
                     | MemberKey::LedgerGroup
                     | MemberKey::GroupOrder
                     | MemberKey::Density
+                    // The shell carries it (`data-pdf-view`) for `P` to open on.
+                    | MemberKey::PdfView
             );
             let mut res = crate::web::tx::say_only(&t.settings_saved(&form.key), false);
             if whole_page {

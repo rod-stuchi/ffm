@@ -2421,6 +2421,10 @@
 }
 
 .cstage {
+  /* Both bars are kept low: they frame the file, which is what the stage is
+   * for. One height, so the corner's controls (out of the flow) center on
+   * the caption they sit over. */
+  --cbar-h: 34px;
   position: relative;
   width: 100vw;
   height: 100%;
@@ -2434,39 +2438,46 @@
  * chosen so it does not compete with the file-nav row for space. */
 .czoom {
   position: absolute;
-  top: 8px;
+  top: 0;
+  height: var(--cbar-h);
   right: 12px;
   display: flex;
+  align-items: center;
   gap: 4px;
   z-index: 2;
 }
 
 .czoom .btn {
   font-family: var(--mono);
-  padding: 4px 10px;
+  font-size: 12px;
+  padding: 2px 8px;
 }
 
-/* Pages · PDF: how a PDF is shown — page images, or the browser's own viewer
- * (`files::FileView`). Like the zoom buttons it hides in PDF mode, it is only
- * a grouping, so its buttons sit in .czoom's own row; a gap sets the two
- * groups apart. The caption keeps clear of the wider corner while it shows. */
-.cviewsw,
+/* The zoom buttons are only a grouping, so they sit in .czoom's own row. */
 .czoombtns {
   display: contents;
 }
 
-.cviewsw .btn.is-on {
-  color: var(--ink);
-  border-color: var(--ink-3);
-  background: var(--surface-3);
+/* PNG ⇄ PDF: how a PDF is shown — page images, or the browser's own viewer
+ * (`files::FileView`). The `.tog` switch between its two names; the side on
+ * show is in the ink, the other faint. Its own item, set apart from the zoom
+ * buttons by a margin. The caption keeps clear of the wider corner while it
+ * shows. */
+.cviewsw {
+  white-space: nowrap;
+  gap: 7px;
+  margin-right: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-3);
 }
 
-.cviewsw .btn:last-child {
-  margin-right: 10px;
+.cviewsw .is-on {
+  color: var(--ink);
 }
 
 .cstage:has(.cviewsw:not([style*="none"])) .ccap {
-  padding-right: 340px;
+  padding-right: 320px;
 }
 
 /* The browser's own PDF viewer, filling the stage. It scrolls and zooms
@@ -2493,7 +2504,8 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 12px 210px 12px 16px;
+  height: var(--cbar-h);
+  padding: 0 210px 0 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-2);
 }
@@ -2585,9 +2597,16 @@
   gap: 8px;
   align-items: center;
   justify-content: center;
-  padding: 12px;
+  min-height: var(--cbar-h);
+  padding: 4px 12px;
   border-top: 1px solid var(--line);
   background: var(--surface-2);
+}
+
+.cnav .btn {
+  font-size: 12px;
+  padding: 4px 11px;
+  border-radius: 6px;
 }
 
 /* The file's size, at the bar's left end. Out of the flow, so the centered

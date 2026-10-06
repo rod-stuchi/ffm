@@ -78,7 +78,7 @@
 <script defer src="/static/js/alpine.min.js"></script>
 </head>
 <body>
-<div class="ledger-shell" data-period="{{ period_key }}" data-today="{{ today_key }}" data-density="{{ density }}" x-data="ledger()"
+<div class="ledger-shell" data-period="{{ period_key }}" data-today="{{ today_key }}" data-density="{{ density }}" data-pdf-view="{{ pdf_view }}" x-data="ledger()"
      :class="{ 'is-dragging': dragging }"
      @keydown.window="key($event)"
      @mousemove.window="mouseMoved($event)"
@@ -522,14 +522,15 @@
               browser's own viewer, which is sharp at any size and zooms
               itself (`files::FileView`). Absent on a photo or a text file,
               which have nothing to switch. -#}
-          <span class="cviewsw" x-show="pdfOnShow()" title="{{ t.carousel_view_title() }}">
-            <button class="btn" type="button" :class="{ 'is-on': !pdfView }"
-                    :aria-pressed="(!pdfView).toString()"
-                    @click="pdfView && togglePdfView()">{{ t.carousel_view_pages() }}</button>
-            <button class="btn" type="button" :class="{ 'is-on': pdfView }"
-                    :aria-pressed="pdfView.toString()"
-                    @click="pdfView || togglePdfView()">{{ t.carousel_view_pdf() }} <kbd>v</kbd></button>
-          </span>
+          {#- One switch between two named sides, PNG on the left, PDF on the
+              right — the side on show is in the ink, the other faint. Which
+              side `P` opens on is the member's (`:profile`). -#}
+          <label class="tog cviewsw" x-show="pdfOnShow()" title="{{ t.carousel_view_title() }}">
+            <span :class="{ 'is-on': !pdfView }">{{ t.carousel_view_pages() }}</span>
+            <input type="checkbox" :checked="pdfView" @change="togglePdfView()">
+            <span :class="{ 'is-on': pdfView }">{{ t.carousel_view_pdf() }}</span>
+            <kbd>v</kbd>
+          </label>
           {#- The viewer zooms itself, so ours step aside while it is on show. -#}
           <template x-if="!(pdfView && pdfOnShow())">
             <span class="czoombtns">
@@ -970,8 +971,9 @@ function ledger() {
     removeFileTitle: {{ remove_file_title|json|safe }},
     zoom: 1,
     /// The carousel is showing a PDF in the browser's own viewer rather than
-    /// as page images (`v`). Every `P` starts on the images; the choice holds
-    /// while the carousel is open, across the row's files.
+    /// as page images (`v`). Each `P` starts on the member's own side
+    /// (`data-pdf-view`, from `:profile`); `v` flips it while the carousel is
+    /// open, across the row's files.
     pdfView: false,
     /// The size of the file on show, `412 KB` — from the stage fragment's
     /// `data-size`, so it is the server's reading of the file on disk.
@@ -2053,7 +2055,8 @@ function ledger() {
       if (!files.length) { this.say(this.noFiles, true); return; }
       this.zoom = 1;
       this.carouselBuf = '';
-      this.pdfView = false;
+      // The member's own starting side (`:profile`); `v` flips it from there.
+      this.pdfView = this.shell().dataset.pdfView === 'pdf';
       this.carousel = {
         id: this.focusedId(),
         files,
