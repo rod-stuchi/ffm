@@ -184,8 +184,95 @@ pub struct Import {
     /// The barcode kind the issuer's profile declares — what a bill with no
     /// barcode is taken to be, for the binding check.
     pub issuer_kind: Option<String>,
+    /// Every CNPJ printed in the bill's text, 14 digits each, in order, each
+    /// once — read without any profile. A rule bound to an issuer's CNPJ
+    /// agrees with a bill that prints it anywhere.
+    pub cnpjs: Vec<String>,
     /// Why this still needs a person. Empty means it does not.
     pub unresolved: Vec<&'static str>,
+}
+
+/// Every CNPJ printed in a text — `18.236.120/0001-58`, `00.416.968\0001-01`
+/// or bare — as 14 digits, in order, each once.
+pub fn cnpjs_in(text: &str) -> Vec<String> {
+    use std::sync::LazyLock;
+    static CNPJ: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?:^|\D)(\d{2}\.?\d{3}\.?\d{3}[/\\]?\d{4}-?\d{2})(?:\D|$)").unwrap()
+    });
+    let mut out: Vec<String> = Vec::new();
+    for c in CNPJ.captures_iter(text) {
+        let d: String = c[1].chars().filter(char::is_ascii_digit).collect();
+        if cnpj_valid(&d) && !out.contains(&d) {
+            out.push(d);
+        }
+    }
+    out
+}
+
+/// A CNPJ's own two check digits (mod 11, weights 5…2 9…2 then 6…2 9…2).
+/// What tells a company's number apart from any other run of 14 digits on a
+/// bill — a barcode's fourteen zeros, an installation number.
+pub fn cnpj_valid(d: &str) -> bool {
+    let n: Vec<u32> = d.chars().filter_map(|c| c.to_digit(10)).collect();
+    if n.len() != 14 || n.iter().all(|&x| x == n[0]) {
+        return false;
+    }
+    let check = |len: usize| {
+        let weights = [6u32, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+        let w = &weights[13 - len..];
+        let sum: u32 = n[..len].iter().zip(w).map(|(a, b)| a * b).sum();
+        let r = sum % 11;
+        if r < 2 { 0 } else { 11 - r }
+    };
+    check(12) == n[12] && check(13) == n[13]
+}
+
+impl Issuer {
+    /// A rule's own recipe as a one-issuer profile, so the pipeline that reads
+    /// every bill reads this rule's with it. Detected by the recipe's CNPJ —
+    /// or, with none, always: the rule is already the one the person chose.
+    /// `optional`: a rule that learned to read a page can read one with no
+    /// barcode on it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_recipe(
+        cnpj: Option<&str>,
+        name: Option<&str>,
+        kind: Option<&str>,
+        amount: Option<&str>,
+        due: Option<&str>,
+        client: Option<&str>,
+        card: Option<&str>,
+    ) -> Issuer {
+        let rule = |r: Option<&str>, when: Option<&str>| {
+            r.map(|regex| Rule {
+                when: when.map(str::to_string),
+                regex: regex.to_string(),
+            })
+        };
+        let detect = match cnpj.filter(|c| c.len() == 14) {
+            Some(c) => vec![format!(
+                r"(?:^|\D){}\.?{}\.?{}[/\\]?{}-?{}(?:\D|$)",
+                &c[0..2],
+                &c[2..5],
+                &c[5..8],
+                &c[8..12],
+                &c[12..14]
+            )],
+            None => vec![r"(?s).".to_string()],
+        };
+        Issuer {
+            id: cnpj.unwrap_or("rule").to_string(),
+            name: name.unwrap_or_default().to_string(),
+            detect,
+            kind: kind.map(str::to_string),
+            recurring: None,
+            due_date: rule(due, Some("absent")),
+            amount: rule(amount, Some("open")),
+            client_code: rule(client, None),
+            barcode: BarcodeNeed::Optional,
+            card: rule(card, None),
+        }
+    }
 }
 
 /// Fills the holes the barcode left, and **only** those.
@@ -255,6 +342,7 @@ pub fn resolve(barcode: &Barcode, text: &str, profiles: &Profiles) -> Import {
             .and_then(|r| find_first_group(&r.regex, text)),
         cards: issuer.map(|i| cards(i, text)).unwrap_or_default(),
         issuer_kind: issuer.and_then(|i| i.kind.clone()),
+        cnpjs: cnpjs_in(text),
         unresolved,
     }
 }
@@ -295,6 +383,7 @@ pub fn resolve_text(text: &str, profiles: &Profiles) -> Result<Import, Option<St
             .and_then(|r| find_first_group(&r.regex, text)),
         cards: cards(i, text),
         issuer_kind: i.kind.clone(),
+        cnpjs: cnpjs_in(text),
         unresolved,
     })
 }
@@ -349,7 +438,7 @@ fn find_date(pattern: &str, text: &str) -> Option<NaiveDate> {
 /// pt-BR whatever the member's language — the app only ever *writes*
 /// dd/mm/yyyy. By hand rather than through a locale: chrono carries none here,
 /// on purpose.
-fn parse_bill_date(s: &str) -> Option<NaiveDate> {
+pub fn parse_bill_date(s: &str) -> Option<NaiveDate> {
     if let Ok(d) = NaiveDate::parse_from_str(s.trim(), "%d/%m/%Y") {
         return Some(d);
     }
@@ -503,6 +592,18 @@ regex = 'Total da fatura\s*R\$\s*([\d.,]+)'
     }
 
     #[test]
+    fn only_a_real_cnpj_is_read_as_one() {
+        assert!(cnpj_valid("18236120000158"), "Nu Pagamentos");
+        assert!(cnpj_valid("00416968000101"), "Banco Inter");
+        assert!(!cnpj_valid("00000000000000"), "a barcode's zeros");
+        assert!(!cnpj_valid("18236120000159"), "one digit off");
+        // A linha digitável's fourteen zeros sit right beside the real one.
+        let text = "07790.00116 01001.305208 01098.430570 3 00000000000000\n\
+                    BANCO INTER S/A CNPJ: 00.416.968\\0001-01";
+        assert_eq!(cnpjs_in(text), vec!["00416968000101".to_string()]);
+    }
+
+    #[test]
     fn a_bill_date_reads_in_both_shapes_brazilian_bills_print() {
         let d = |y, m, day| NaiveDate::from_ymd_opt(y, m, day);
         assert_eq!(parse_bill_date("09/01/2026"), d(2026, 1, 9));
@@ -517,7 +618,7 @@ regex = 'Total da fatura\s*R\$\s*([\d.,]+)'
 [[issuer]]
 id      = "cartao-sem-codigo"
 name    = "Cartão · Exemplo"
-detect  = ['\b11\.?222\.?333/?0001-?44\b']
+detect  = ['\b11\.?222\.?333/?0001-?81\b']
 kind    = "cobranca"
 barcode = "optional"
 
@@ -536,7 +637,7 @@ regex = 'CART[AÃ]O\s+\d{4}\*{4}(\d{4})'
     #[test]
     fn a_bill_with_no_barcode_is_read_from_its_text_when_the_issuer_sends_those() {
         let p: Profiles = toml::from_str(OPTIONAL).unwrap();
-        let text = "CNPJ 11.222.333/0001-44\nfatura no valor de R$ 1.234,56\n\
+        let text = "CNPJ 11.222.333/0001-81\nfatura no valor de R$ 1.234,56\n\
                     Vencimento: 09 JAN 2026\nCARTÃO 1111****2222\nCARTÃO 3333****4444\n\
                     CARTÃO 1111****2222";
         let got = resolve_text(text, &p).unwrap();
@@ -564,7 +665,7 @@ regex = 'CART[AÃ]O\s+\d{4}\*{4}(\d{4})'
         // An opted-in issuer whose amount cannot be found is not a bill this
         // app can read either.
         let p: Profiles = toml::from_str(OPTIONAL).unwrap();
-        assert!(resolve_text("CNPJ 11.222.333/0001-44, no total here", &p).is_err());
+        assert!(resolve_text("CNPJ 11.222.333/0001-81, no total here", &p).is_err());
     }
 
     #[test]
@@ -573,27 +674,52 @@ regex = 'CART[AÃ]O\s+\d{4}\*{4}(\d{4})'
         assert!(toml::from_str::<Profiles>(bad).is_err());
     }
 
-    /// The shipped `config/issuers.toml`, over statements shaped like the real
-    /// ones — the issuers' real CNPJs, made-up amounts and cards.
-    fn shipped() -> Profiles {
-        Profiles::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("config/issuers.toml")).unwrap()
+    /// Nubank's and Inter's recipes as the conversion of the retired
+    /// `config/issuers.toml` gives them — over statements shaped like the real
+    /// ones: the issuers' real CNPJs, made-up amounts and cards.
+    fn nubank() -> Profiles {
+        Profiles {
+            issuers: vec![Issuer::from_recipe(
+                Some("18236120000158"),
+                Some("Cartão · Nubank"),
+                Some("cobranca"),
+                Some(r"no valor de\s+R\$\s*([\d.]+,\d{2})"),
+                Some(r"Data de vencimento:\s*(\d{2}\s+\p{Lu}{3}\s+\d{4})"),
+                None,
+                None,
+            )],
+        }
+    }
+
+    fn inter() -> Profiles {
+        Profiles {
+            issuers: vec![Issuer::from_recipe(
+                Some("00416968000101"),
+                Some("Cartão · Inter"),
+                Some("cobranca"),
+                Some(r"Fatura atual\s+R\$\s*([\d.]+,\d{2})"),
+                Some(r"\d{4}\*{4}\d{4}\s+(\d{2}/\d{2}/\d{4})"),
+                None,
+                Some(r"CART[AÃ]O\s+\d{4}\*{4}(\d{4})"),
+            )],
+        }
     }
 
     #[test]
-    fn the_shipped_nubank_profile_reads_a_fatura_with_no_barcode() {
+    fn a_nubank_recipe_reads_a_fatura_with_no_barcode() {
         let text = "Olá, Fulana.\nEsta é a sua fatura de\njaneiro, no valor de\nR$ 1.234,56\n\n\n\
                     Data de vencimento: 09 JAN 2026\n\x0c       FULANA DE TAL\n\
                     Nu Pagamentos S.A.     CNPJ 18.236.120/0001-58\n\
                     Total a pagar   R$ 9.999,99\n";
-        let got = resolve_text(text, &shipped()).unwrap();
-        assert_eq!(got.issuer.as_deref(), Some("nubank-cartao"));
+        let got = resolve_text(text, &nubank()).unwrap();
+        assert_eq!(got.issuer.as_deref(), Some("18236120000158"));
         assert_eq!(got.amount, Some(Cents(123456)), "the headline figure");
         assert_eq!(got.due, NaiveDate::from_ymd_opt(2026, 1, 9));
         assert!(got.cards.is_empty(), "rotating virtual cards are not read");
     }
 
     #[test]
-    fn the_shipped_inter_profile_reads_the_total_not_the_limit() {
+    fn an_inter_recipe_reads_the_total_not_the_limit() {
         let b = boleto::parse("26091234560001234500501234500005500000000000000", today()).unwrap();
         let text = "         Total da sua fatura\n                              R$ 23.500,00\n\
                     \n         R$ 321,00                          Data de Vencimento\n\
@@ -602,10 +728,10 @@ regex = 'CART[AÃ]O\s+\d{4}\*{4}(\d{4})'
                     Fatura atual                                   R$ 321,00\n\
                     CARTÃO 1111****2222\n CARTÃO 1111****3333\n\
                     BENEFICIÁRIO   BANCO INTER S/A CNPJ: 00.416.968\\0001-01\n";
-        let got = resolve(&b, text, &shipped());
+        let got = resolve(&b, text, &inter());
         assert_eq!(
             got.issuer.as_deref(),
-            Some("inter-cartao"),
+            Some("00416968000101"),
             "the backslash CNPJ"
         );
         assert_eq!(

@@ -113,6 +113,20 @@ async fn main() {
         eprintln!("{e}");
         std::process::exit(1);
     }
+    // And `config/issuers.toml` retires: a rule still bound to one of its
+    // profiles gets it as its own recipe, bound by CNPJ. A no-op once done.
+    match ffm::db::recipes::convert_profiles(&pool, &cfg.issuers_path()).await {
+        Ok(c) if c.recipes > 0 || c.unbound > 0 => tracing::info!(
+            "issuers.toml · {} rule(s) given their recipe, {} unbound from a profile with no CNPJ",
+            c.recipes,
+            c.unbound
+        ),
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("✗ converting config/issuers.toml: {e}");
+            std::process::exit(1);
+        }
+    }
 
     // One pass now, then one an hour. Startup matters as much as the tick: a
     // process that was down across a month boundary has to catch up the moment

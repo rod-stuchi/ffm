@@ -147,6 +147,26 @@ pub fn result(
     keep: Option<&[u32]>,
     shrink: bool,
 ) -> Result<Outcome, String> {
+    result_with(token, member_id, keep, shrink, &|_| {})
+}
+
+/// A step [`result_with`] is about to do for real — not one it finds already
+/// done from an earlier size check.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Step {
+    Trim,
+    Shrink,
+}
+
+/// [`result`], saying each step as it starts — for the progress box above
+/// Save (`web::fidget`).
+pub fn result_with(
+    token: &str,
+    member_id: i64,
+    keep: Option<&[u32]>,
+    shrink: bool,
+    on_step: &dyn Fn(Step),
+) -> Result<Outcome, String> {
     let (dir, meta) = open(token, member_id).ok_or("that file is no longer here")?;
     let original = dir.join("original.pdf");
     let original_size = size(&original)?;
@@ -171,6 +191,7 @@ pub fn result(
     } else {
         let out = dir.join(format!("k{}.pdf", spec.replace(',', "-")));
         if !out.exists() {
+            on_step(Step::Trim);
             pdftrim::select(&original, &keep, &out)?;
         }
         out
@@ -198,6 +219,7 @@ pub fn result(
 
     let shrunk = dir.join(format!("k{}-s.pdf", spec.replace(',', "-")));
     if !shrunk.exists() {
+        on_step(Step::Shrink);
         pdftrim::shrink(&trimmed, &shrunk)?;
     }
     let shrunk_size = size(&shrunk)?;

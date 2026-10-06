@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE recurring_rules SET issuer_id = NULL\n         WHERE issuer_id IS NOT NULL\n           AND (length(issuer_id) <> 14 OR issuer_id GLOB '*[^0-9]*')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "ab27c05f5e6027996fcddc54854b57792c0ca538e92165b8a4ceeeda9f620c07"
+}

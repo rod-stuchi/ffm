@@ -36,7 +36,13 @@ creates the household and its first admin.
 - `ffm.toml` holds three paths — the database, the receipt vault, backups.
   Each can also be set with `FFM_DB_PATH`, `FFM_RECEIPTS_ROOT`,
   `FFM_BACKUP_DIR`; the environment wins.
-- `config/issuers.toml` is yours to edit: the bill issuers the importer knows.
+- **A bill assistant (optional).** A rule learns to read its bills on its
+  first one, from the `codex`, `claude` or `gemini` CLI on this machine, on
+  your own subscription — the admin picks which in `:household`. Install it
+  and log it in as the user that runs ffm: `codex login`, or
+  `claude setup-token` (then set `CLAUDE_CODE_OAUTH_TOKEN`). Only a bill's
+  first page is sent, with CPF and card numbers masked; every month after the
+  first is read here. Without one, what a barcode does not say, you type.
 
 **Keep it on your own network** (LAN, Tailscale). It is built for a household
 behind its own router, not for the open internet.

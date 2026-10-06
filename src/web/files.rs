@@ -86,6 +86,7 @@ pub(crate) async fn slot_for(
 pub async fn upload(
     State(st): State<AppState>,
     auth: Auth,
+    headers: axum::http::HeaderMap,
     Path((tx_id, kind)): Path<(i64, String)>,
     mut form: Multipart,
 ) -> Response {
@@ -100,14 +101,17 @@ pub async fn upload(
         return refused;
     }
     let password = rule_pdf_password(&st, tx_id).await;
+    let fidget = crate::web::fidget::Fidget::from(&headers, &st.live, auth.viewer.member_id);
 
     let mut filename = String::new();
     let mut bytes: Vec<u8> = Vec::new();
-    // The person answered `y` to "attach anyway?" — only a bill asks.
-    let mut anyway = false;
+    // What the person answered a bill's questions — only a bill asks.
+    let mut answers = crate::web::import::Answers::default();
     while let Ok(Some(field)) = form.next_field().await {
-        if field.name() == Some("attach_anyway") {
-            anyway = field.text().await.is_ok_and(|v| v == "1");
+        if let Some(name @ ("attach_anyway" | "recipe")) = field.name() {
+            let name = name.to_string();
+            let value = field.text().await.unwrap_or_default();
+            crate::web::import::Answers::read(&name, &value, &mut answers);
             continue;
         }
         if field.name() != Some("file") {
@@ -129,7 +133,7 @@ pub async fn upload(
     // unlocked copy is what the vault keeps, on every slot.
     let upload = crate::web::import::Upload { filename, bytes };
     let crate::web::import::Upload { filename, bytes } =
-        match crate::web::import::unlock_for(&t, upload, password.as_deref()) {
+        match crate::web::import::unlock_for(&t, upload, password.as_deref(), &fidget).await {
             Ok(u) => u,
             Err(crate::web::import::Refused(m)) => return crate::web::tx::say_only(&m, true),
         };
@@ -139,9 +143,11 @@ pub async fn upload(
     // `import::attach_on_row`. Scheduled and receipt stay plain files.
     if kind == Kind::Barcode {
         let upload = crate::web::import::Upload { filename, bytes };
-        return crate::web::import::attach_on_row(&st, &auth, tx_id, upload, anyway).await;
+        return crate::web::import::attach_on_row(&st, &auth, tx_id, upload, answers, &fidget)
+            .await;
     }
 
+    fidget.step(t.progress_file());
     match receipts::store(
         &st.pool,
         &st.cfg.receipts_root,

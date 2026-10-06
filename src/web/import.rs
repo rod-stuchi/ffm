@@ -17,6 +17,7 @@
 //! answer with a wrong one.
 
 use crate::db::changes::{Actor, Change, FileAction, TxAction, Value};
+use crate::db::recipes::{self, RuleRecipe};
 use crate::db::rules;
 use crate::domain::money::Cents;
 use crate::domain::period::Period;
@@ -25,12 +26,12 @@ use crate::services::boleto::Amount;
 use crate::services::import::{
     self, Binding, Gate, Ident, ImportError, Override, Parsed, binding_check, gate,
 };
-use crate::services::issuers::Profiles;
 use crate::services::pending;
 use crate::services::receipts;
 use crate::state::AppState;
 use crate::ui::fmt;
 use crate::ui::i18n::Catalog;
+use crate::web::fidget::Fidget;
 use crate::web::session::Auth;
 use crate::web::template::Html;
 use askama::Template;
@@ -97,13 +98,51 @@ impl From<Refused> for Halt {
 pub const ATTACHED_UNCONFIRMED: &str = "attached anyway — not confirmed as this rule's bill";
 pub const ATTACHED_MISMATCH: &str = "attached anyway — it names something else";
 
+/// What the person answered the questions an attach can ask — carried back
+/// on the re-send, every answer so far.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Answers {
+    /// `y` to "attach anyway?".
+    pub anyway: bool,
+    pub teach: Teach,
+}
+
+/// The answer to "teach this rule to read its bills?".
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Teach {
+    /// Not asked yet: the assistant may be.
+    #[default]
+    Ask,
+    /// `y`: the parked proposal under this token becomes the rule's recipe.
+    Approved(String),
+    /// Anything else: attach with what the bill gave, teach nothing.
+    Skip,
+}
+
+impl Answers {
+    /// Reads the `attach_anyway` and `recipe` fields, from either handler.
+    pub fn read(name: &str, value: &str, into: &mut Answers) -> bool {
+        match name {
+            "attach_anyway" => into.anyway = value == "1",
+            "recipe" => {
+                into.teach = match value {
+                    "" => Teach::Ask,
+                    "skip" => Teach::Skip,
+                    token => Teach::Approved(token.to_string()),
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+}
+
 /// An upload as the handlers read it.
 pub struct Incoming {
     pub upload: Upload,
     /// What the rule pane's PDF password field says right now.
     pub password: Option<String>,
-    /// The person answered `y` to "attach anyway?".
-    pub anyway: bool,
+    pub answers: Answers,
 }
 
 /// Reads the `file` field of a multipart body — and `pdf_password`, which the
@@ -115,10 +154,14 @@ async fn read_upload(t: &Catalog, form: &mut Multipart) -> Result<Incoming, Refu
     let mut filename = String::new();
     let mut bytes: Vec<u8> = Vec::new();
     let mut password = None;
-    let mut anyway = false;
+    let mut answers = Answers::default();
     while let Ok(Some(field)) = form.next_field().await {
         match field.name() {
-            Some("attach_anyway") => anyway = field.text().await.is_ok_and(|v| v == "1"),
+            Some(name @ ("attach_anyway" | "recipe")) => {
+                let name = name.to_string();
+                let value = field.text().await.unwrap_or_default();
+                Answers::read(&name, &value, &mut answers);
+            }
             Some("file") => {
                 filename = field.file_name().unwrap_or_default().to_string();
                 match field.bytes().await {
@@ -144,7 +187,7 @@ async fn read_upload(t: &Catalog, form: &mut Multipart) -> Result<Incoming, Refu
     Ok(Incoming {
         upload: Upload { filename, bytes },
         password,
-        anyway,
+        answers,
     })
 }
 
@@ -155,20 +198,40 @@ async fn read_upload(t: &Catalog, form: &mut Multipart) -> Result<Incoming, Refu
 /// Called on every way a file reaches a rule's row: the row's own slots, and
 /// `A`'s and `E`'s dropzone. A file this password does not open is refused
 /// here, so nothing downstream ever sees it.
-pub fn unlock_for(t: &Catalog, upload: Upload, password: Option<&str>) -> Result<Upload, Refused> {
+pub async fn unlock_for(
+    t: &Catalog,
+    upload: Upload,
+    password: Option<&str>,
+    fidget: &Fidget,
+) -> Result<Upload, Refused> {
     use crate::services::pdflock::{self, LockError};
-    match pdflock::unlock(&upload.filename, &upload.bytes, password) {
-        Ok(std::borrow::Cow::Borrowed(_)) => Ok(upload),
-        Ok(std::borrow::Cow::Owned(bytes)) => Ok(Upload {
-            filename: upload.filename,
-            bytes,
-        }),
+    if pdflock::looks_locked(&upload.filename, &upload.bytes) {
+        fidget.step(t.progress_unlock());
+    }
+    // `qpdf` is a child process: off the async worker, or the step just
+    // sent waits behind it (see [`read_bill_off`]).
+    let password = password.map(str::to_string);
+    let filename = upload.filename.clone();
+    let unlocked = tokio::task::spawn_blocking(move || {
+        match pdflock::unlock(&upload.filename, &upload.bytes, password.as_deref()) {
+            Ok(std::borrow::Cow::Borrowed(_)) => Ok(upload),
+            Ok(std::borrow::Cow::Owned(bytes)) => Ok(Upload {
+                filename: upload.filename,
+                bytes,
+            }),
+            Err(e) => Err(e),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| Err(LockError::Tool(e.to_string())));
+    match unlocked {
+        Ok(u) => Ok(u),
         Err(LockError::NeedsPassword) => Err(Refused(t.file_pdf_locked().to_string())),
         Err(LockError::WrongPassword) => Err(Refused(t.file_pdf_wrong_password().to_string())),
         Err(LockError::NoTool) => Err(Refused(t.file_pdf_no_tool().to_string())),
         // qpdf's own reason is for the log, not the statusline.
         Err(LockError::Tool(why)) => {
-            tracing::info!("could not open {}: {why}", upload.filename);
+            tracing::info!("could not open {filename}: {why}");
             Err(Refused(t.file_pdf_unreadable().to_string()))
         }
     }
@@ -176,8 +239,15 @@ pub fn unlock_for(t: &Catalog, upload: Upload, password: Option<&str>) -> Result
 
 /// Reads a bill. Pure: nothing lands in the vault or the database here —
 /// `pdftotext` takes a path, so the bytes visit a scratch file and leave.
-pub fn parse(st: &AppState, t: &Catalog, upload: &Upload) -> Result<Parsed, Refused> {
-    read_bill(st, upload).map_err(|e| Refused(unread_reason(t, &e)))
+/// `recipe` is the rule's own, when it has one — there is no global list of
+/// issuers any more.
+pub fn parse(
+    t: &Catalog,
+    upload: &Upload,
+    recipe: Option<&RuleRecipe>,
+    kind: Option<&str>,
+) -> Result<Parsed, Refused> {
+    read_bill(upload, recipe, kind).map_err(|e| Refused(unread_reason(t, &e)))
 }
 
 /// Why a file could not be read as a bill, in words.
@@ -196,27 +266,61 @@ pub fn unread_reason(t: &Catalog, e: &ImportError) -> String {
 }
 
 /// [`parse`], keeping why it failed.
-fn read_bill(st: &AppState, upload: &Upload) -> Result<Parsed, ImportError> {
+fn read_bill(
+    upload: &Upload,
+    recipe: Option<&RuleRecipe>,
+    kind: Option<&str>,
+) -> Result<Parsed, ImportError> {
+    let scratch = scratch_file(upload).map_err(|e| ImportError::Tool(e.to_string()))?;
+    let profiles = recipe.map(|r| r.profiles(kind)).unwrap_or_default();
+    // A misread is reported, never worked around: a number that failed its
+    // own checksum is not a number to fall back from.
+    import::import(&scratch.0, &profiles, crate::clock::today())
+}
+
+/// [`read_bill`] on a blocking thread. `pdftotext` is a child process, and a
+/// tokio worker blocked on it also holds back the task it just woke — a
+/// progress step sent to `/live` sits in that worker's own slot, out of reach
+/// of the others, until the read is over. So the box above Save named each
+/// step only once it had finished.
+async fn read_bill_off(
+    upload: &Upload,
+    recipe: Option<&RuleRecipe>,
+    kind: Option<&str>,
+) -> Result<Parsed, ImportError> {
+    let upload = Upload {
+        filename: upload.filename.clone(),
+        bytes: upload.bytes.clone(),
+    };
+    let (recipe, kind) = (recipe.cloned(), kind.map(str::to_string));
+    tokio::task::spawn_blocking(move || read_bill(&upload, recipe.as_ref(), kind.as_deref()))
+        .await
+        .unwrap_or_else(|e| Err(ImportError::Tool(e.to_string())))
+}
+
+/// The upload as a file in the temp dir, removed when this goes out of scope
+/// — `pdftotext` takes a path. The extension is kept: `import` reads a `.txt`
+/// as text and hands anything else to `pdftotext`, and it decides by the name.
+struct Scratch(std::path::PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+fn scratch_file(upload: &Upload) -> std::io::Result<Scratch> {
     let mut raw = [0u8; 8];
     rand::RngCore::fill_bytes(&mut rand::rng(), &mut raw);
     let tag: String = raw.iter().map(|b| format!("{b:02x}")).collect();
-    // The extension is kept: `import` reads a `.txt` as text and hands
-    // anything else to `pdftotext`, and it decides by the name.
     let ext = std::path::Path::new(&upload.filename)
         .extension()
         .and_then(|e| e.to_str())
         .filter(|e| e.chars().all(|c| c.is_ascii_alphanumeric()))
         .unwrap_or("pdf");
-    let scratch = std::env::temp_dir().join(format!("ffm-import-{tag}.{ext}"));
-    if let Err(e) = std::fs::write(&scratch, &upload.bytes) {
-        return Err(ImportError::Tool(e.to_string()));
-    }
-    let profiles = Profiles::load(&st.cfg.issuers_path()).unwrap_or_default();
-    let parsed = import::import(&scratch, &profiles, crate::clock::today());
-    let _ = std::fs::remove_file(&scratch);
-    // A misread is reported, never worked around: a number that failed its
-    // own checksum is not a number to fall back from.
-    parsed
+    let path = std::env::temp_dir().join(format!("ffm-import-{tag}.{ext}"));
+    std::fs::write(&path, &upload.bytes)?;
+    Ok(Scratch(path))
 }
 
 /// What a bill is recognized by, as the binding check reads it. A bill with
@@ -230,7 +334,8 @@ fn read_binding(parsed: &Parsed) -> Binding<'_> {
             .map(|b| b.kind.code())
             .or(parsed.import.issuer_kind.as_deref()),
         bank: barcode.and_then(|b| b.bank.as_deref()),
-        issuer: parsed.import.issuer.as_deref(),
+        issuer: None,
+        cnpjs: &parsed.import.cnpjs,
         cards: &parsed.import.cards,
     }
 }
@@ -243,27 +348,48 @@ fn rule_binding(rule: &rules::Rule) -> Binding<'_> {
         kind: rule.barcode_kind.as_deref(),
         bank: None,
         issuer: rule.issuer_id.as_deref(),
+        cnpjs: &[],
         cards: rule.card_last4.as_slice(),
     }
 }
 
 /// One side of a disagreement, in words: "company 0162", "bank 077",
-/// "Cartão · Inter", "card ending 7766".
-fn ident_label(t: &Catalog, profiles: &Profiles, id: &Ident) -> String {
+/// "Nu Pagamentos S.A.", "CNPJ 00.416.968/0001-01", "card ending 7766". An
+/// issuer is named when the rule's recipe knows its name, else shown by CNPJ.
+fn ident_label(t: &Catalog, recipe: Option<&RuleRecipe>, id: &Ident) -> String {
     match id {
         Ident::Account(c) => t.import_id_account(c),
         Ident::Company(c) => t.import_id_company(c),
         Ident::Bank(c) => t.import_id_bank(c),
         Ident::Kind(k) => kind_label(t, Some(k)).unwrap_or_else(|| k.clone()),
-        Ident::Issuer(i) => issuer_name(profiles, Some(i)).unwrap_or_else(|| i.clone()),
+        Ident::Issuer(i) => recipe
+            .filter(|r| r.cnpj.as_deref() == Some(i.as_str()))
+            .and_then(|r| r.issuer_name.clone())
+            .unwrap_or_else(|| t.import_id_cnpj(&fmt_cnpj(i))),
         Ident::Card(d) => t.import_id_card(d),
     }
+}
+
+/// `18.236.120/0001-58` from its 14 digits.
+pub fn fmt_cnpj(d: &str) -> String {
+    if d.len() != 14 || !d.chars().all(|c| c.is_ascii_digit()) {
+        return d.to_string();
+    }
+    format!(
+        "{}.{}.{}/{}-{}",
+        &d[0..2],
+        &d[2..5],
+        &d[5..8],
+        &d[8..12],
+        &d[12..14]
+    )
 }
 
 /// `POST /rules/{id}/barcode` — the dropzone in `E`.
 pub async fn attach(
     State(st): State<AppState>,
     auth: Auth,
+    headers: axum::http::HeaderMap,
     Path(rule_id): Path<i64>,
     Query(p): Query<Params>,
     mut form: Multipart,
@@ -279,15 +405,14 @@ pub async fn attach(
     }
     // The pane's field wins over the saved password: it is what the person
     // is looking at, and the Save that would store it may not have happened.
-    let (upload, anyway) = match read_upload(&t, &mut form).await.and_then(|i| {
-        let anyway = i.anyway;
-        unlock_for(
-            &t,
-            i.upload,
-            i.password.as_deref().or(rule.pdf_password.as_deref()),
-        )
-        .map(|u| (u, anyway))
-    }) {
+    let fidget = Fidget::from(&headers, &st.live, auth.viewer.member_id);
+    let input = match read_upload(&t, &mut form).await {
+        Ok(i) => i,
+        Err(Refused(m)) => return say(&m, true),
+    };
+    let answers = input.answers;
+    let password = input.password.as_deref().or(rule.pdf_password.as_deref());
+    let upload = match unlock_for(&t, input.upload, password, &fidget).await {
         Ok(u) => u,
         Err(Refused(m)) => return say(&m, true),
     };
@@ -295,7 +420,7 @@ pub async fn attach(
     let Some(tx_id) = occurrence_of(&st, rule_id, period).await else {
         return say(t.import_no_occurrence(), true);
     };
-    attach_bill(&st, &auth, &rule, tx_id, period, upload, anyway).await
+    attach_bill(&st, &auth, &rule, tx_id, period, upload, answers, &fidget).await
 }
 
 /// The row's own slot 1 — the file rail's `+` menu, a drop on target `1`,
@@ -316,7 +441,8 @@ pub async fn attach_on_row(
     auth: &Auth,
     tx_id: i64,
     upload: Upload,
-    anyway: bool,
+    answers: Answers,
+    fidget: &Fidget,
 ) -> Response {
     let t = auth.catalog();
     let say = |m: &str, bad: bool| crate::web::tx::say_only(m, bad);
@@ -338,11 +464,18 @@ pub async fn attach_on_row(
         return say(t.file_not_tracked(), true);
     };
 
-    attach_bill(st, auth, &rule, tx_id, period, upload, anyway).await
+    attach_bill(st, auth, &rule, tx_id, period, upload, answers, fidget).await
 }
 
 /// One bill onto one occurrence of a rule — the attach every gesture shares:
 /// `E`'s dropzone, and the row's own slot 1.
+///
+/// The bill is read with the rule's own **recipe**, when it has one. When it
+/// has none yet, or the recipe no longer reads what the bill leaves open, the
+/// household's assistant is asked to read it — and its proposal is a question
+/// for the person, `y` to keep it as the rule's recipe. Every later month is
+/// then read here, with no assistant at all.
+#[allow(clippy::too_many_arguments)]
 async fn attach_bill(
     st: &AppState,
     auth: &Auth,
@@ -350,37 +483,338 @@ async fn attach_bill(
     tx_id: i64,
     period: Period,
     upload: Upload,
-    anyway: bool,
+    answers: Answers,
+    fidget: &Fidget,
 ) -> Response {
     let t = auth.catalog();
-    match read_bill(st, &upload) {
+    let mut notes: Vec<String> = Vec::new();
+
+    // `y` to a proposal: it becomes the rule's recipe before the bill is read
+    // with it. A token already used (the same re-send asked something else
+    // next) is simply gone — the recipe is stored.
+    if let Teach::Approved(token) = &answers.teach
+        && let Some((source, recipe)) = claim_proposal(token, auth.viewer.member_id)
+    {
+        if recipes::store(
+            &st.pool,
+            Actor::User(auth.viewer.member_id),
+            rule.id,
+            &source,
+            &recipe,
+        )
+        .await
+        .is_err()
+        {
+            return crate::web::tx::say_only(t.error_not_written(), true);
+        }
+        notes.push(t.import_teach_kept(&rule.title));
+    }
+
+    let recipe = recipes::live(&st.pool, rule.id).await;
+    let kind = rule.barcode_kind.as_deref();
+    fidget.step(t.progress_read());
+    let read = read_bill_off(&upload, recipe.as_ref(), kind).await;
+
+    if answers.teach == Teach::Ask && wants_teaching(rule, recipe.as_ref(), &read) {
+        match teach(st, &t, &upload, kind, fidget).await {
+            Ok(Some(proposal))
+                if recipe
+                    .as_ref()
+                    .is_none_or(|r| !same_recipe(r, &proposal.recipe)) =>
+            {
+                return proposal.ask(&t, &rule.title).respond();
+            }
+            Ok(_) => {}
+            Err(why) => {
+                tracing::info!("assistant, rule {}: {why}", rule.id);
+                if why != crate::services::assistant::AssistantError::Off {
+                    notes.push(t.import_teach_failed().to_string());
+                }
+            }
+        }
+    }
+
+    let finish = |message: String| {
+        if notes.is_empty() {
+            message
+        } else {
+            format!("{message} · {}", notes.join(" · "))
+        }
+    };
+    match read {
         Ok(parsed) => {
-            match attach_to(st, auth, rule, tx_id, period, &upload, &parsed, anyway).await {
+            match attach_to(
+                st,
+                auth,
+                rule,
+                tx_id,
+                period,
+                &upload,
+                &parsed,
+                answers.anyway,
+                fidget,
+            )
+            .await
+            {
                 // The row is re-read through the pane query, so what comes back
                 // was decided by the database and the disk rather than by this
                 // handler.
                 Ok((member_id, message)) => {
-                    crate::web::tx::row_fragment(st, auth, tx_id, member_id, period, &message).await
+                    crate::web::tx::row_fragment(
+                        st,
+                        auth,
+                        tx_id,
+                        member_id,
+                        period,
+                        &finish(message),
+                    )
+                    .await
                 }
                 Err(halt) => halt.respond(),
             }
         }
         // Nothing can confirm an unreadable file is this rule's bill — so the
         // person is asked, rather than refused outright.
-        Err(e) if rule_binding(rule).is_bound() && !anyway => crate::web::tx::ask(
+        Err(e) if rule_binding(rule).is_bound() && !answers.anyway => crate::web::tx::ask(
             &t.import_ask_unreadable(&unread_reason(&t, &e), &rule.title),
             false,
         ),
         Err(_) => {
             let noted = rule_binding(rule).is_bound();
-            store_plain(st, auth, rule, tx_id, period, &upload, noted).await
+            store_plain(st, auth, rule, tx_id, period, &upload, noted, fidget).await
         }
     }
+}
+
+/// Whether a bill is worth asking the assistant about: a spend rule's bill
+/// the recipe could not finish — no amount, no due date, not read at all —
+/// or a rule with no recipe yet whose issuer one printed CNPJ cannot name.
+/// A utility bill whose barcode says everything never asks.
+fn wants_teaching(
+    rule: &rules::Rule,
+    recipe: Option<&RuleRecipe>,
+    read: &Result<Parsed, ImportError>,
+) -> bool {
+    if rule.kind != crate::domain::status::TxKind::Out || rule.no_barcode {
+        return false;
+    }
+    match read {
+        Err(ImportError::Misread(_)) => false,
+        Err(_) => true,
+        Ok(p) => {
+            p.import.amount.is_none()
+                || p.import.due.is_none()
+                || (recipe.is_none() && rule.issuer_id.is_none() && p.import.cnpjs.len() != 1)
+        }
+    }
+}
+
+fn same_recipe(live: &RuleRecipe, new: &crate::services::assistant::Recipe) -> bool {
+    live.cnpj == new.cnpj
+        && live.amount_regex == new.amount_regex
+        && live.due_regex == new.due_regex
+        && live.client_regex == new.client_regex
+        && live.card_regex == new.card_regex
+}
+
+/// A verified proposal, parked under a token until the person answers.
+pub struct Proposal {
+    pub source: &'static str,
+    pub recipe: crate::services::assistant::Recipe,
+    pub token: String,
+    /// What the bill reads as with it.
+    pub parsed: Option<Parsed>,
+    pub currency: crate::domain::money::Currency,
+}
+
+impl Proposal {
+    /// "Teach Nubank to read its bills?" — `y` keeps the recipe and attaches
+    /// with it; anything else attaches with what the bill gave without it.
+    fn ask(&self, t: &Catalog, rule: &str) -> crate::web::tx::Ask {
+        crate::web::tx::Ask {
+            title: Some(t.import_teach_title(rule)),
+            message: t.import_teach_message(self.source),
+            lines: self.lines(t),
+            yes_label: Some(t.import_teach_yes().to_string()),
+            mismatch: false,
+            yes: vec![("recipe", self.token.clone())],
+            no: Some(vec![("recipe", "skip".to_string())]),
+        }
+    }
+
+    /// What the proposal reads off this bill, one fact a line.
+    pub fn lines(&self, t: &Catalog) -> Vec<String> {
+        let mut out = Vec::new();
+        let r = &self.recipe;
+        let issuer = match (&r.issuer_name, &r.cnpj) {
+            (Some(n), Some(c)) => Some(format!("{n} · {}", fmt_cnpj(c))),
+            (Some(n), None) => Some(n.clone()),
+            (None, Some(c)) => Some(fmt_cnpj(c)),
+            (None, None) => None,
+        };
+        if let Some(i) = issuer {
+            out.push(format!("{} — {i}", t.import_meta_issuer()));
+        }
+        if let Some(p) = &self.parsed {
+            if let Some(a) = p.import.amount {
+                out.push(format!(
+                    "{} — {}",
+                    t.import_teach_amount(),
+                    fmt::money(a, self.currency)
+                ));
+            }
+            if let Some(d) = p.import.due {
+                out.push(format!("{} — {}", t.import_teach_due(), fmt::date(d)));
+            }
+            if let Some(c) = &p.import.client_code {
+                out.push(format!("{} — {c}", t.import_client_code()));
+            }
+            if let Some(c) = p.import.cards.first() {
+                out.push(format!(
+                    "{} — {}",
+                    t.import_meta_card(),
+                    t.import_meta_card_value(c)
+                ));
+            }
+        }
+        out
+    }
+}
+
+/// Asks the household's assistant to read a bill, checks what it says, and
+/// parks a proposal worth asking about. `Ok(None)`: it answered, and nothing
+/// it said held up.
+pub async fn teach(
+    st: &AppState,
+    t: &Catalog,
+    upload: &Upload,
+    kind: Option<&str>,
+    fidget: &Fidget,
+) -> Result<Option<Proposal>, crate::services::assistant::AssistantError> {
+    use crate::services::assistant::{self, AssistantError, Provider};
+    let provider = crate::db::settings::assistant(&st.pool).await;
+    if provider == Provider::None {
+        return Err(AssistantError::Off);
+    }
+    let up = Upload {
+        filename: upload.filename.clone(),
+        bytes: upload.bytes.clone(),
+    };
+    fidget.step(t.progress_ask(provider.code()));
+    let (proposal, text) = tokio::task::spawn_blocking(move || {
+        let scratch =
+            scratch_file(&up).map_err(|e| AssistantError::Failed(format!("scratch file: {e}")))?;
+        let page = assistant::page_one(&scratch.0);
+        let full = import::text_of(&scratch.0).ok();
+        let page = page.ok_or_else(|| AssistantError::Unreadable("no text on page 1".into()))?;
+        let proposal = assistant::ask(provider, &page)?;
+        Ok::<_, AssistantError>((proposal, full.unwrap_or(page)))
+    })
+    .await
+    .map_err(|e| AssistantError::Failed(e.to_string()))??;
+    fidget.step(t.progress_check());
+    let recipe = assistant::verify(&proposal, &text);
+    if recipe.is_empty() {
+        return Ok(None);
+    }
+    // What the bill reads as with it — the lines the person confirms.
+    let trial = RuleRecipe {
+        cnpj: recipe.cnpj.clone(),
+        issuer_name: recipe.issuer_name.clone(),
+        amount_regex: recipe.amount_regex.clone(),
+        due_regex: recipe.due_regex.clone(),
+        client_regex: recipe.client_regex.clone(),
+        card_regex: recipe.card_regex.clone(),
+        ..Default::default()
+    };
+    let parsed = read_bill_off(upload, Some(&trial), kind).await.ok();
+    let token = park_proposal(provider.code(), &recipe)
+        .map_err(|e| AssistantError::Failed(format!("parking the proposal: {e}")))?;
+    let currency = crate::db::ledger::household(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|h| h.currency)
+        .unwrap_or_default();
+    Ok(Some(Proposal {
+        source: provider.code(),
+        recipe,
+        token,
+        parsed,
+        currency,
+    }))
+}
+
+/// A proposal waiting for its answer, under a random token in the temp dir —
+/// the same posture as `services::pending`'s parked files.
+fn park_proposal(source: &str, r: &crate::services::assistant::Recipe) -> std::io::Result<String> {
+    let mut raw = [0u8; 16];
+    rand::RngCore::fill_bytes(&mut rand::rng(), &mut raw);
+    let token: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+    let json = serde_json::json!({
+        "source": source,
+        "cnpj": r.cnpj, "issuer_name": r.issuer_name,
+        "amount_regex": r.amount_regex, "due_regex": r.due_regex,
+        "client_regex": r.client_regex, "card_regex": r.card_regex,
+    });
+    let dir = std::env::temp_dir().join("ffm-proposals");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join(format!("{token}.json")), json.to_string())?;
+    Ok(token)
+}
+
+/// Reads a parked proposal without taking it.
+fn peek_proposal(token: &str) -> Option<(String, crate::services::assistant::Recipe)> {
+    let (source, recipe, _) = read_proposal(token)?;
+    Some((source, recipe))
+}
+
+/// Takes a parked proposal back, once. The member is not part of the token:
+/// whoever may write the rule may approve it, and the token is 128 random
+/// bits that only the page that was asked holds.
+pub fn claim_proposal(
+    token: &str,
+    _member: i64,
+) -> Option<(String, crate::services::assistant::Recipe)> {
+    let (source, recipe, path) = read_proposal(token)?;
+    let _ = std::fs::remove_file(&path);
+    Some((source, recipe))
+}
+
+fn read_proposal(
+    token: &str,
+) -> Option<(
+    String,
+    crate::services::assistant::Recipe,
+    std::path::PathBuf,
+)> {
+    if token.len() != 32 || !token.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let path = std::env::temp_dir()
+        .join("ffm-proposals")
+        .join(format!("{token}.json"));
+    let raw = std::fs::read_to_string(&path).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let s = |k: &str| v[k].as_str().map(str::to_string);
+    Some((
+        s("source")?,
+        crate::services::assistant::Recipe {
+            cnpj: s("cnpj"),
+            issuer_name: s("issuer_name"),
+            amount_regex: s("amount_regex"),
+            due_regex: s("due_regex"),
+            client_regex: s("client_regex"),
+            card_regex: s("card_regex"),
+        },
+        path,
+    ))
 }
 
 /// A file that is not a bill this app can read, filed under slot 1 as a plain
 /// document — on an unbound rule, or on a bound one after the person said
 /// `y`, which the log then notes.
+#[allow(clippy::too_many_arguments)]
 async fn store_plain(
     st: &AppState,
     auth: &Auth,
@@ -389,8 +823,10 @@ async fn store_plain(
     period: Period,
     upload: &Upload,
     noted: bool,
+    fidget: &Fidget,
 ) -> Response {
     let t = auth.catalog();
+    fidget.step(t.progress_file());
     let say = |m: &str| crate::web::tx::say_only(m, true);
     let Some((slot, _, member_id)) = crate::web::files::slot_for(st, auth, tx_id).await else {
         return say(t.file_not_tracked());
@@ -465,10 +901,11 @@ pub async fn attach_to(
     upload: &Upload,
     parsed: &Parsed,
     anyway: bool,
+    fidget: &Fidget,
 ) -> Result<(i64, String), Halt> {
     let t = auth.catalog();
     let not_written = || Halt::Refused(t.error_not_written().to_string());
-    let profiles = Profiles::load(&st.cfg.issuers_path()).unwrap_or_default();
+    let recipe = recipes::live(&st.pool, rule.id).await;
 
     // --- is this the right row? ---------------------------------------------
     let overridden = match gate(
@@ -479,9 +916,9 @@ pub async fn attach_to(
         Gate::Ask(Some(m)) => {
             return Err(Halt::Ask {
                 message: t.import_ask_mismatch(
-                    &ident_label(&t, &profiles, &m.found),
+                    &ident_label(&t, recipe.as_ref(), &m.found),
                     &rule.title,
-                    &ident_label(&t, &profiles, &m.known),
+                    &ident_label(&t, recipe.as_ref(), &m.known),
                 ),
                 mismatch: true,
             });
@@ -603,6 +1040,7 @@ pub async fn attach_to(
     let Some((slot, _, member_id)) = crate::web::files::slot_for(st, auth, tx_id).await else {
         return Err(Halt::Refused(t.file_not_tracked().to_string()));
     };
+    fidget.step(t.progress_file());
     if receipts::store(
         &st.pool,
         &st.cfg.receipts_root,
@@ -745,7 +1183,22 @@ pub async fn attach_to(
     };
     let amount_value = write_amount.map(|c| c.get());
     let due_value = write_due.map(|d| d.format("%Y-%m-%d").to_string());
-    let issuer = parsed.import.issuer.clone();
+    // The bill's issuer, as a CNPJ: the one the rule is bound to when the
+    // bill prints it; else the recipe's; else the bill's only CNPJ. A
+    // statement that prints several and names none is left unbound — the
+    // assistant is what tells them apart.
+    let cnpjs = &parsed.import.cnpjs;
+    let issuer = rule
+        .issuer_id
+        .clone()
+        .filter(|k| cnpjs.contains(k))
+        .or_else(|| {
+            recipe
+                .as_ref()
+                .and_then(|r| r.cnpj.clone())
+                .filter(|c| cnpjs.contains(c))
+        })
+        .or_else(|| (cnpjs.len() == 1).then(|| cnpjs[0].clone()));
 
     // A bill with no barcode replaces whatever barcode the row's last bill
     // had — a row holds a bill only while it holds the file — and the sources
@@ -877,8 +1330,8 @@ pub async fn attach_to(
         Some(Override::Mismatch(m)) => {
             entry = entry.note(format!(
                 "{ATTACHED_MISMATCH}: {} ≠ {}",
-                ident_label(&t, &profiles, &m.found),
-                ident_label(&t, &profiles, &m.known)
+                ident_label(&t, recipe.as_ref(), &m.found),
+                ident_label(&t, recipe.as_ref(), &m.known)
             ))
         }
         None => {}
@@ -986,18 +1439,19 @@ pub struct BarcodeMeta {
     /// `A` only: the parked file Create will attach.
     pub token: Option<String>,
     pub filename: Option<String>,
+    /// `A` only: the assistant's parked recipe, kept by Create — and the line
+    /// saying who read it.
+    pub recipe_token: Option<String>,
+    pub taught: Option<String>,
+    /// `A` only: what the recipe read off the bill, one fact a line.
+    pub taught_lines: Vec<String>,
 }
 
-fn issuer_name(profiles: &Profiles, id: Option<&str>) -> Option<String> {
-    let id = id?;
-    Some(
-        profiles
-            .issuers
-            .iter()
-            .find(|i| i.id == id)
-            .map(|i| i.name.clone())
-            .unwrap_or_else(|| id.to_string()),
-    )
+/// What a rule's issuer is called: its recipe's name, else its CNPJ.
+fn issuer_label(recipe: Option<&RuleRecipe>, cnpj: Option<&str>) -> Option<String> {
+    recipe
+        .and_then(|r| r.issuer_name.clone())
+        .or_else(|| cnpj.map(fmt_cnpj))
 }
 
 fn kind_label(t: &Catalog, code: Option<&str>) -> Option<String> {
@@ -1021,14 +1475,16 @@ impl BarcodeMeta {
             text_only: false,
             token: None,
             filename: None,
+            recipe_token: None,
+            taught: None,
+            taught_lines: Vec::new(),
         }
     }
 
-    pub fn of_rule(st: &AppState, t: Catalog, rule: &rules::Rule) -> BarcodeMeta {
-        let profiles = Profiles::load(&st.cfg.issuers_path()).unwrap_or_default();
+    pub fn of_rule(t: Catalog, rule: &rules::Rule, recipe: Option<&RuleRecipe>) -> BarcodeMeta {
         BarcodeMeta {
             rule_id: Some(rule.id),
-            issuer: issuer_name(&profiles, rule.issuer_id.as_deref()),
+            issuer: issuer_label(recipe, rule.issuer_id.as_deref()),
             kind: kind_label(&t, rule.barcode_kind.as_deref()),
             company: rule.barcode_company.clone(),
             client_code: rule.client_code.clone(),
@@ -1039,17 +1495,20 @@ impl BarcodeMeta {
             text_only: false,
             token: None,
             filename: None,
+            recipe_token: None,
+            taught: None,
+            taught_lines: Vec::new(),
             t,
         }
     }
 
     pub fn of_parsed(t: Catalog, parsed: &Parsed, token: String, filename: String) -> BarcodeMeta {
         BarcodeMeta {
-            issuer: parsed
-                .import
-                .issuer_name
-                .clone()
-                .or(parsed.import.issuer.clone()),
+            issuer: parsed.import.issuer_name.clone().or_else(|| {
+                // With no recipe yet, a bill printing exactly one CNPJ is
+                // that issuer's — it is what the rule will bind to.
+                (parsed.import.cnpjs.len() == 1).then(|| fmt_cnpj(&parsed.import.cnpjs[0]))
+            }),
             kind: kind_label(
                 &t,
                 parsed
@@ -1066,6 +1525,9 @@ impl BarcodeMeta {
                 .first()
                 .map(|d| t.import_meta_card_value(d)),
             text_only: parsed.barcode.is_none(),
+            recipe_token: None,
+            taught: None,
+            taught_lines: Vec::new(),
             rule_id: None,
             token: Some(token),
             filename: Some(filename),
@@ -1093,7 +1555,8 @@ pub async fn meta(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<i6
             if rule.visibility != crate::domain::status::Visibility::Private
                 || auth.viewer.sees_private_of(rule.member_id) =>
         {
-            Html(BarcodeMeta::of_rule(&st, t, &rule)).into_response()
+            let recipe = recipes::live(&st.pool, rule.id).await;
+            Html(BarcodeMeta::of_rule(t, &rule, recipe.as_ref())).into_response()
         }
         _ => Html(BarcodeMeta::empty(t)).into_response(),
     }
@@ -1104,52 +1567,106 @@ pub async fn meta(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<i6
 /// The rule does not exist yet, so nothing is attached: the bill is read,
 /// parked under a token, and the pane gets back what it says. Create carries
 /// the token and attaches it — see `services::pending`.
-pub async fn preview(State(st): State<AppState>, auth: Auth, mut form: Multipart) -> Response {
+pub async fn preview(
+    State(st): State<AppState>,
+    auth: Auth,
+    headers: axum::http::HeaderMap,
+    mut form: Multipart,
+) -> Response {
     let t = auth.catalog();
+    let fidget = Fidget::from(&headers, &st.live, auth.viewer.member_id);
     // No rule yet, so the only password is the one typed in the pane. What
     // is parked is the UNLOCKED copy, so Create attaches it as it is.
-    let upload = match read_upload(&t, &mut form)
-        .await
-        .and_then(|i| unlock_for(&t, i.upload, i.password.as_deref()))
-    {
+    let upload = match read_upload(&t, &mut form).await {
+        Ok(i) => unlock_for(&t, i.upload, i.password.as_deref(), &fidget).await,
+        Err(refused) => Err(refused),
+    };
+    let upload = match upload {
         Ok(u) => u,
         Err(Refused(m)) => return crate::web::tx::say_only(&m, true),
     };
-    let parsed = match parse(&st, &t, &upload) {
-        Ok(p) => p,
-        Err(Refused(m)) => return crate::web::tx::say_only(&m, true),
+    // A new rule has no recipe: when the bill leaves anything open — or its
+    // issuer cannot be told from one printed CNPJ — the assistant is asked,
+    // and what it read goes in the box, kept when the rule is created.
+    fidget.step(t.progress_read());
+    let first = read_bill_off(&upload, None, None).await;
+    let open = match &first {
+        Err(ImportError::Misread(_)) => false,
+        Err(_) => true,
+        Ok(p) => p.import.amount.is_none() || p.import.due.is_none() || p.import.cnpjs.len() != 1,
+    };
+    let mut proposal = None;
+    if open {
+        match teach(&st, &t, &upload, None, &fidget).await {
+            Ok(p) => proposal = p,
+            Err(why) => tracing::info!("assistant, new rule: {why}"),
+        }
+    }
+    let parsed = match (proposal.as_mut().and_then(|p| p.parsed.take()), first) {
+        (Some(p), _) | (None, Ok(p)) => p,
+        (None, Err(e)) => return crate::web::tx::say_only(&unread_reason(&t, &e), true),
     };
     let Ok(token) = pending::park(auth.viewer.member_id, &upload.filename, &upload.bytes) else {
         return crate::web::tx::say_only(t.error_not_written(), true);
     };
-    Html(BarcodeMeta::of_parsed(t, &parsed, token, upload.filename)).into_response()
+    let mut meta = BarcodeMeta::of_parsed(t, &parsed, token, upload.filename);
+    if let Some(p) = proposal {
+        p.into_meta(&t, parsed, &mut meta);
+    }
+    Html(meta).into_response()
+}
+
+impl Proposal {
+    /// Puts a proposal in `A`'s box: who read it, what it read, and the token
+    /// Create keeps it by.
+    fn into_meta(mut self, t: &Catalog, parsed: Parsed, meta: &mut BarcodeMeta) {
+        self.parsed = Some(parsed);
+        meta.taught = Some(t.import_meta_taught(self.source));
+        meta.taught_lines = self.lines(t);
+        meta.recipe_token = Some(self.token);
+    }
 }
 
 /// The same box for a parked bill, re-read — a rejected Create renders the
 /// pane again and must not lose what was dropped.
 pub fn meta_of_parked(
-    st: &AppState,
     t: Catalog,
     token: &str,
+    recipe_token: Option<&str>,
     member_id: i64,
 ) -> Option<BarcodeMeta> {
     let filename = pending::filename_of(token, member_id)?;
     let bytes = pending::peek(token, member_id)?;
-    let parsed = parse(
-        st,
-        &t,
-        &Upload {
-            filename: filename.clone(),
-            bytes,
-        },
-    )
-    .ok()?;
-    Some(BarcodeMeta::of_parsed(
-        t,
-        &parsed,
-        token.to_string(),
-        filename,
-    ))
+    let upload = Upload {
+        filename: filename.clone(),
+        bytes,
+    };
+    // The parked recipe is read, not claimed: Create still needs it.
+    let proposal = recipe_token.and_then(|tok| peek_proposal(tok).map(|(s, r)| (tok, s, r)));
+    let trial = proposal.as_ref().map(|(_, _, r)| RuleRecipe {
+        cnpj: r.cnpj.clone(),
+        issuer_name: r.issuer_name.clone(),
+        amount_regex: r.amount_regex.clone(),
+        due_regex: r.due_regex.clone(),
+        client_regex: r.client_regex.clone(),
+        card_regex: r.card_regex.clone(),
+        ..Default::default()
+    });
+    let parsed = parse(&t, &upload, trial.as_ref(), None).ok()?;
+    let mut meta = BarcodeMeta::of_parsed(t, &parsed, token.to_string(), filename);
+    if let Some((tok, source, recipe)) = proposal {
+        let p = Proposal {
+            source: crate::services::assistant::Provider::parse(&source)
+                .map(|p| p.code())
+                .unwrap_or("assistant"),
+            recipe,
+            token: tok.to_string(),
+            parsed: None,
+            currency: crate::domain::money::Currency::default(),
+        };
+        p.into_meta(&t, parsed, &mut meta);
+    }
+    Some(meta)
 }
 
 /// Clears what the rule is bound to — a narrow correction for "the wrong

@@ -135,6 +135,13 @@ fn stderr_of(out: &std::process::Output) -> String {
     String::from_utf8_lossy(&out.stderr).trim().to_string()
 }
 
+/// Whether [`unlock`] will have work to do — a PDF that names an encryption
+/// dictionary. Cheap: no `qpdf`, so a page can say "Opening the PDF" only
+/// when it is true.
+pub fn looks_locked(filename: &str, bytes: &[u8]) -> bool {
+    is_pdf(filename, bytes) && mentions_encrypt(bytes)
+}
+
 /// By its name, or by its header — which the spec allows anywhere in the
 /// first kilobyte, and which some scanners put a few bytes in.
 fn is_pdf(filename: &str, bytes: &[u8]) -> bool {

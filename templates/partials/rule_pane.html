@@ -413,18 +413,22 @@ function rulePane() {
     /// from the server ("attach anyway?") is put to the person outside the
     /// loader, and `y` sends the same file again with `attach_anyway` — the
     /// shell's own `askAttach`, so it is one modal whichever way a bill came.
-    sendNow(file, anyway = false) {
+    sendNow(file, extra = {}) {
       const shell = Alpine.$data(document.querySelector('.ledger-shell'));
-      return this.postNow(file, anyway).then(r =>
-        r && typeof r === 'object'
-          ? shell.askAttach(r).then(yes => yes ? this.sendNow(file, true) : false)
-          : r);
+      return this.postNow(file, extra).then(r => {
+        if (!r || typeof r !== 'object') { shell.fidgetEnd(r === true); return r; }
+        shell.fidgetEnd(false);
+        return shell.askAttach(r).then(yes => {
+          const more = shell.answerFields(r, yes);
+          return more ? this.sendNow(file, { ...extra, ...more }) : false;
+        });
+      });
     },
 
-    postNow(file, anyway) {
+    postNow(file, extra) {
       const body = new FormData();
       body.append('file', file);
-      if (anyway) body.append('attach_anyway', '1');
+      for (const [k, v] of Object.entries(extra)) body.append(k, v);
       // What the pane's PDF password says right now, saved or not: a locked
       // statement dropped right after typing it opens in one go.
       body.append('pdf_password', this.$root.querySelector('[name=pdf_password]')?.value || '');
@@ -434,7 +438,7 @@ function rulePane() {
       // The shell owns the loader; this pane is the anchor, so it shows in
       // the header beside the title, as every request from here does.
       const shell = Alpine.$data(document.querySelector('.ledger-shell'));
-      return shell.busyFetch(this.$root, fetch(url, { method: 'POST', body, headers: { 'HX-Request': 'true' } })
+      return shell.busyFetch(this.$root, fetch(url, { method: 'POST', body, headers: { 'HX-Request': 'true', 'X-FFM-Job': shell.fidgetJob() || shell.fidgetStart() } })
         .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
         .then(({ html, trigger }) => {
           if (html.trim()) {

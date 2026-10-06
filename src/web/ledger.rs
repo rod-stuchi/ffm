@@ -654,7 +654,10 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("e / E", "edit this row / its rule"),
                 k("J / K", "move the row down / up"),
                 k("s", "row order: manual · date · amount"),
-                k("ga", "give the row to another member — picked by name, admin only"),
+                k(
+                    "ga",
+                    "give the row to another member — picked by name, admin only",
+                ),
                 k("x", "select, for a batch operation"),
                 k("p", "toggle private"),
                 k("m", "mark paid by hand — untracked recurring bills"),

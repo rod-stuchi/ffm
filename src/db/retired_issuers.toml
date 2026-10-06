@@ -1,3 +1,9 @@
+# FROZEN — the last `config/issuers.toml` this app shipped, kept only so the
+# startup step that retired it (`db::recipes::convert_profiles`) can still turn
+# its profiles into rules' own recipes on a machine whose copy is gone. Never
+# read for anything else, and never edited: a rule's recipe lives in the
+# database now (migration 0016).
+#
 # Issuer profiles — the small amount of per-biller config that is genuinely
 # necessary. Data, not code: a new biller is an edit here, not a recompile.
 #

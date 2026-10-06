@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE rule_recipe SET retired_at = ?2 WHERE rule_id = ?1 AND retired_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "f9c9ddac90bfebb891f6eace5bed276b382e076d45418eb7f46873cc860ee917"
+}

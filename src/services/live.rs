@@ -43,6 +43,26 @@ impl LiveEvent {
 pub enum Signal {
     Row(LiveEvent),
     Sessions,
+    Progress(Progress),
+}
+
+/// A step of a long request — "Shrinking", "Asking codex to read the bill" —
+/// for the page that made it (`web::fidget`). Words, never data: no amount,
+/// name or file content travels here. Only the member's own streams forward
+/// it, and only the page that sent `job` shows it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Progress {
+    pub member_id: i64,
+    /// The page's own random id for this request (`X-FFM-Job`).
+    pub job: String,
+    /// Already in the member's language.
+    pub text: String,
+}
+
+impl Progress {
+    pub fn json(&self) -> String {
+        serde_json::json!({ "job": self.job, "text": self.text }).to_string()
+    }
 }
 
 /// The sender half every handler and task shares, plus the switch that ends
@@ -73,6 +93,12 @@ impl Live {
     /// gone is told so at once and sent to `/login` (`web::live::stream`).
     pub fn sessions_revoked(&self) {
         let _ = self.tx.send(Signal::Sessions);
+    }
+
+    /// A step of a long request, for the page that is waiting on it. Nobody
+    /// listening is not an error: the page may have no stream open.
+    pub fn progress(&self, p: Progress) {
+        let _ = self.tx.send(Signal::Progress(p));
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Signal> {

@@ -20,6 +20,18 @@
     {%- if text_only %}
     <span class="p2">{{ t.import_meta_text_only() }}</span>
     {%- endif %}
+    {%- if let Some(by) = taught %}
+    {#- `A`: the assistant read this bill; Create keeps how, as the rule's
+        recipe. What it read is listed, so creating the rule is approving it
+        with the facts in front of you. -#}
+    <ul class="bm-taught">
+      {%- for l in taught_lines %}<li>{{ l }}</li>{% endfor %}
+    </ul>
+    <span class="p2">{{ by }}</span>
+    {%- endif %}
+    {%- if let Some(rt) = recipe_token %}
+    <input type="hidden" name="recipe_token" value="{{ rt }}">
+    {%- endif %}
     {%- if let Some(tok) = token %}
     <span class="p2">{% if let Some(f) = filename %}<span class="mono">{{ f }}</span> · {% endif %}{{ t.import_meta_pending() }}</span>
     {#- Create carries this like any other field; the parked file is attached

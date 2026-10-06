@@ -40,6 +40,7 @@ pub async fn stream(
     let mut stop = st.live.stopped();
     let pool = st.pool.clone();
     let sid = auth.session.id.clone();
+    let member = auth.viewer.member_id;
 
     // One task per open page. It ends when the page goes away (the send
     // fails), when its session is revoked, or on shutdown — an SSE response
@@ -55,6 +56,17 @@ pub async fn stream(
                         let ev = Event::default().event("row").data(ev.json());
                         if out.send(Ok(ev)).await.is_err() {
                             return;
+                        }
+                        false
+                    }
+                    // Only this member's own steps: another member never
+                    // learns an upload is happening.
+                    Ok(Signal::Progress(p)) => {
+                        if p.member_id == member {
+                            let ev = Event::default().event("progress").data(p.json());
+                            if out.send(Ok(ev)).await.is_err() {
+                                return;
+                            }
                         }
                         false
                     }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE household_settings SET assistant = ?1, updated_at = ?2 WHERE id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "ae6858c3623769e1bafc314c875faeab3745cf39cf1e46d2ef527f9430551090"
+}

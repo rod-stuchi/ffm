@@ -626,10 +626,12 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     the earlier "flagged, not silently overwritten", which stored the file
     and noted the mismatch afterwards; it then softened from a refusal to a
     question (see *Never a dead end*, below). The binding, checked in this
-    order (`import::binding_check`): `client_code` when a profile could read
+    order (`import::binding_check`): `client_code` when a recipe could read
     one (it decides alone — two houses with the same water company share a
-    company code); the **issuer** a profile detected by CNPJ (`issuer_id`,
-    display-only until 0014); the **card's last four** (`card_last4`, 0014 —
+    company code); the **issuer's CNPJ** (`issuer_id`, 14 digits since 0016
+    — a bill agrees when its text prints it anywhere, read and checksummed
+    by `issuers::cnpjs_in` with no recipe at all); the **card's last four**
+    (`card_last4`, 0014 —
     a statement lists every card, so a later one agrees when it lists the
     bound card anywhere); the barcode `kind`; the arrecadação
     `barcode_company`. A value a bill did not carry proves nothing; a bound
@@ -647,14 +649,43 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     it (`ATTACHED_UNCONFIRMED` / `ATTACHED_MISMATCH: found ≠ known`, not
     localized, like `receipts::MOVED`), and after a **contradiction** the
     rule learns nothing from that bill.
-  - **A bill with no barcode is read from its text — when its issuer's
-    profile says it sends those** (`barcode = "optional"` in
-    `config/issuers.toml`; Nubank omits the boleto to push payment in its
-    app). The CNPJ vouches for the issuer, the amount and due date come off
-    the page (`issuers::resolve_text`, `when` ignored, dates in `09 JAN 2026`
-    form too), the row's `barcode_raw` goes NULL and its sources `text`. Any
-    other issuer's barcode-less file is still "no barcode" — never a total
-    guessed from the page — and on a bound rule that is a question too.
+  - **A rule learns to read its own bills — `config/issuers.toml` is
+    retired.** It was a hand-written file of per-biller patterns; now each
+    rule has a **recipe** (`rule_recipe`, 0016: the issuer's name and CNPJ,
+    and patterns for the amount, due date, account and card), applied
+    locally to every bill of that rule (`RuleRecipe::profiles` — the same
+    pipeline, a one-issuer profile). A bill with no barcode is read from its
+    text by its rule's recipe (`issuers::resolve_text`, dates in
+    `09 JAN 2026` form too), `barcode_raw` NULL and sources `text`.
+  - **The household's assistant writes the recipe** — a CLI on the server
+    (`services::assistant`: `codex exec`, `claude -p`, `gemini -p`), on the
+    subscription its login belongs to, chosen by the admin in `:household`
+    (`household_settings.assistant`, default `codex`, `none` works too). It
+    is asked only when a spend rule's bill leaves something open (no amount,
+    no due date, not readable), or a rule with no recipe cannot name its
+    issuer from one printed CNPJ: on the **first** bill, and again when a
+    redesigned layout stops the recipe reading (`web::import::wants_teaching`).
+    Every other month is read here, with no assistant.
+    - **What leaves the machine is page 1, redacted** (`assistant::redact`):
+      CPF-shaped numbers and full card numbers masked, a company's CNPJ kept.
+      Tools off, nothing persisted, a 120 s limit, run from a scratch dir.
+    - **Nothing it says is trusted until checked** (`assistant::verify`):
+      each pattern must compile, capture once, and find — first, in the
+      bill's own text — exactly the value claimed; the CNPJ must be valid and
+      printed. An assistant's `R\$\s*([\d.,]+)` reads a card's credit limit
+      as its total, and is dropped, never offered.
+    - **A person approves it.** The proposal is parked under a token and put
+      as a question (`tx::Ask` — the lines it read, *Keep and attach* `y`);
+      `y` stores it (`recipes::store`, retiring any old one — history kept,
+      logged "bill recipe taught by codex"), anything else attaches without
+      it. In `A` the box lists what it read and Create keeps it.
+    - **Retiring the file**: at startup, `recipes::convert_profiles` gives
+      every rule bound to one of the old profiles that profile as a
+      `migrated` recipe and re-binds it by CNPJ — from the operator's copy, or
+      the frozen last one shipped (`src/db/retired_issuers.toml`).
+    - A subscription is for the subscriber's own use: this is a household's
+      tool on its own server. Serving other people's bills would need API
+      keys.
   - **Every way a bill reaches a row is checked the same way** — `A`/`E`'s
     dropzone, and the row's own slot 1 (the `+` menu, a drop on target `1`,
     `gu1`). The row path used to store whatever it was given, so a
@@ -1395,6 +1426,11 @@ that will otherwise be re-proposed.
   another process (the console's `reset-link`) cannot ping, so each stream
   also re-checks every 30 seconds. The existing Server-Sent Events channel
   was enough: this signal only runs server to page, so no WebSocket.
+- **A long Save names its steps over the same stream.** A `progress` event
+  — trimming, shrinking, unlocking, reading, asking the assistant, filing —
+  tagged with a job id the page sent as `X-FFM-Job` (`web::fidget`), forwarded
+  only to the acting member's streams, and drawn as a fidget-style box above
+  Save. Words only, never bill content. See `design/spec.md`'s The loader.
 - **Sessions are server-side, not a bare signed cookie.** A `sessions` table
   (`id`, `member_id`, `created_at`, `last_seen_at`, `label`) backs an opaque
   `HttpOnly` session cookie, so a single lost/stolen device can be logged out
@@ -1522,7 +1558,7 @@ that will otherwise be re-proposed.
 - **`just release` builds a release; `just release-approve` tags it.**
   - `just release` writes `dist/v0.0.N/`: one folder and `.tar.gz` per
     platform — macOS arm64, Linux x86_64, Linux arm64 — each holding the
-    binary, `static/` (only what a page loads), `config/issuers.toml`,
+    binary, `static/` (only what a page loads),
     `ffm.example.toml`, and `start.sh` + `README.md` from `release/`. Plus
     `SHA256SUMS` and the `COMMIT` it was built from.
   - **The Linux builds are static musl, cross-compiled from the Mac** with
@@ -1815,6 +1851,14 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   `signedout` was `data("")`: curl printed it, the browser dropped it, and
   the page read the stream closing as a lost connection and reconnected —
   signed out, and still showing the ledger. Every event carries a payload.
+- **A message sent just before blocking work waits for that work.** The box
+  above Save named *Reading the bill* only once the bill had been read: the
+  handler sent the step, then ran `pdftotext` (and `qpdf`) synchronously on its
+  tokio worker. Sending wakes the `/live` stream's task, tokio parks a task
+  woken that way in the current worker's own LIFO slot, and no other worker
+  can steal from it — so the event left only when the handler next awaited.
+  A child process belongs in `spawn_blocking` (`import::read_bill_off`,
+  `unlock_for`) anyway; this is how it shows when it is not.
 - **Watch class-name collisions.** An `app.cfg` state class silently matched a
   leftover `.cfg { display: grid; align-items: start }` rule and broke the whole
   shell width. Namespace state classes (`is-`/`has-` prefix) and delete dead CSS.

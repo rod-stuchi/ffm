@@ -4,6 +4,7 @@ pub mod auth;
 pub mod changes;
 pub mod ledger;
 pub mod members;
+pub mod recipes;
 pub mod rules;
 pub mod settings;
 pub mod trash;

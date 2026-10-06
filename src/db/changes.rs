@@ -340,7 +340,7 @@ impl Change {
 
     /// Record a field **even when it did not move**.
     ///
-    /// The exception to the rule above, and it has two callers. A
+    /// The exception to the rule above, and it has three callers. A
     /// re-attribution's `sort_key`, which `u` needs verbatim to put the row
     /// back where it was. Two members' keys are generated independently, so
     /// the destination's appended key can happen to equal the source's — and
@@ -348,8 +348,11 @@ impl Change {
     /// only sometimes. This field is filtered out of what the log pane reads,
     /// so it stays plumbing rather than becoming something a reader sees.
     ///
-    /// And a rule's PDF password replaced by another: it is logged only as
+    /// A rule's PDF password replaced by another: it is logged only as
     /// whether one is set, so a change reads on → on, which `diff` would drop.
+    ///
+    /// And a rule's bill recipe replaced by a fix from the same issuer: the
+    /// log names the issuer, not the patterns, so it reads Nubank → Nubank.
     pub fn always(mut self, field: &str, old: Value, new: Value) -> Change {
         debug_assert_eq!(
             old.kind(),

@@ -111,13 +111,57 @@ pub fn say_only(message: &str, bad: bool) -> Response {
 /// the person whether to go ahead (`ffm:ask`, answered with `y` only). An
 /// empty body, like [`say_only`], so a page that does not know the event
 /// still treats it as "not taken".
-pub fn ask(message: &str, mismatch: bool) -> Response {
-    let mut res = (StatusCode::OK, HeaderMap::new(), String::new()).into_response();
-    let payload = serde_json::json!({ "ffm:ask": { "message": message, "mismatch": mismatch } });
-    if let Ok(v) = HeaderValue::from_str(&ascii_json(&payload.to_string())) {
-        res.headers_mut().insert("HX-Trigger", v);
+///
+/// The page re-sends the same upload with `yes`'s fields on `y`, and with
+/// `no`'s on anything else — or, with no `no`, leaves the file out.
+#[derive(Default)]
+pub struct Ask {
+    pub title: Option<String>,
+    pub message: String,
+    /// Shown as a list under the message — what a bill was read as.
+    pub lines: Vec<String>,
+    /// The `y` button's words; the page's own default when `None`.
+    pub yes_label: Option<String>,
+    /// A contradiction: the dialog wears the warning edge.
+    pub mismatch: bool,
+    pub yes: Vec<(&'static str, String)>,
+    pub no: Option<Vec<(&'static str, String)>>,
+}
+
+impl Ask {
+    pub fn respond(self) -> Response {
+        let fields = |f: &[(&'static str, String)]| {
+            f.iter()
+                .map(|(k, v)| ((*k).to_string(), serde_json::Value::String(v.clone())))
+                .collect::<serde_json::Map<_, _>>()
+        };
+        let mut res = (StatusCode::OK, HeaderMap::new(), String::new()).into_response();
+        let payload = serde_json::json!({ "ffm:ask": {
+            "title": self.title,
+            "message": self.message,
+            "lines": self.lines,
+            "yesLabel": self.yes_label,
+            "mismatch": self.mismatch,
+            "yes": fields(&self.yes),
+            "no": self.no.as_deref().map(fields),
+        } });
+        if let Ok(v) = HeaderValue::from_str(&ascii_json(&payload.to_string())) {
+            res.headers_mut().insert("HX-Trigger", v);
+        }
+        res
     }
-    res
+}
+
+/// "Attach anyway?" — `y` re-sends with `attach_anyway`, anything else leaves
+/// the bill out.
+pub fn ask(message: &str, mismatch: bool) -> Response {
+    Ask {
+        message: message.to_string(),
+        mismatch,
+        yes: vec![("attach_anyway", "1".to_string())],
+        ..Default::default()
+    }
+    .respond()
 }
 
 /// One row plus the totals it moved — the shape every row-level mutation

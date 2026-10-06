@@ -388,9 +388,36 @@ struct HouseholdPane {
     max_width: i64,
     gap: i64,
     densities: Vec<Choice>,
+    /// Which CLI teaches rules to read their bills, and whether this server
+    /// can run it right now.
+    assistants: Vec<Choice>,
+    assistant_status: String,
     db_path: String,
     receipts_root: String,
     backup_dir: String,
+}
+
+/// The line under the assistant setting: whether the server can run it, and
+/// what to type there if it cannot.
+fn assistant_status(
+    t: &Catalog,
+    p: crate::services::assistant::Provider,
+    s: crate::services::assistant::Status,
+) -> String {
+    use crate::services::assistant::{Provider, Status};
+    let login = match p {
+        Provider::Codex => "codex login",
+        Provider::Claude => "claude setup-token",
+        Provider::Gemini => "gemini",
+        Provider::None => "",
+    };
+    match s {
+        Status::Off => t.household_assistant_off().to_string(),
+        Status::NotFound => t.household_assistant_not_found(p.code()),
+        Status::LoggedOut => t.household_assistant_logged_out(p.code(), login),
+        Status::Ready => t.household_assistant_ready(p.code()),
+        Status::Installed => t.household_assistant_installed(p.code()),
+    }
 }
 
 pub async fn household(State(st): State<AppState>, auth: Auth) -> Response {
@@ -407,8 +434,31 @@ pub async fn household(State(st): State<AppState>, auth: Auth) -> Response {
     let d = settings::member_defaults(&st.pool)
         .await
         .unwrap_or_default();
+    // Runs the CLI's own `--version` and login check — a second, off the
+    // async runtime.
+    let provider = settings::assistant(&st.pool).await;
+    let status = tokio::task::spawn_blocking(move || crate::services::assistant::status(provider))
+        .await
+        .unwrap_or(crate::services::assistant::Status::NotFound);
 
     Html(HouseholdPane {
+        assistants: crate::services::assistant::Provider::ALL
+            .iter()
+            .map(|p| Choice {
+                code: p.code().to_string(),
+                label: match p {
+                    crate::services::assistant::Provider::None => {
+                        t.household_assistant_none().to_string()
+                    }
+                    // Product names, not copy.
+                    crate::services::assistant::Provider::Codex => "Codex · ChatGPT".to_string(),
+                    crate::services::assistant::Provider::Claude => "Claude".to_string(),
+                    crate::services::assistant::Provider::Gemini => "Gemini".to_string(),
+                },
+                selected: *p == provider,
+            })
+            .collect(),
+        assistant_status: assistant_status(&t, provider, status),
         themes: swatches(d.theme),
         panes: pane_choices(&d.panes),
         min_split: d.min_split,

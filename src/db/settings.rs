@@ -502,6 +502,8 @@ pub enum HouseholdKey {
     DefaultMaxWidth,
     DefaultGap,
     DefaultDensity,
+    /// Which CLI on the server teaches a rule how to read its bills.
+    Assistant,
 }
 
 impl HouseholdKey {
@@ -519,6 +521,7 @@ impl HouseholdKey {
             "default_layout_max_width" => HouseholdKey::DefaultMaxWidth,
             "default_layout_gap" => HouseholdKey::DefaultGap,
             "default_density" => HouseholdKey::DefaultDensity,
+            "assistant" => HouseholdKey::Assistant,
             _ => return None,
         })
     }
@@ -641,6 +644,21 @@ pub async fn adopt_member_defaults(pool: &SqlitePool, member_id: i64) -> sqlx::R
     Ok(())
 }
 
+/// The assistant the household chose — `none` when the row is missing, which
+/// is the safe answer: nothing leaves the machine.
+pub async fn assistant(pool: &SqlitePool) -> crate::services::assistant::Provider {
+    use crate::services::assistant::Provider;
+    sqlx::query_scalar!(
+        r#"SELECT assistant AS "assistant!: String" FROM household_settings WHERE id = 1"#
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|a| Provider::parse(&a))
+    .unwrap_or(Provider::None)
+}
+
 /// Writes one household setting. **Admin only** — enforced by the caller,
 /// because "may this viewer" is a question about the session, not about the
 /// value.
@@ -747,6 +765,22 @@ pub async fn set_household(
             let v = gap_value(value)?;
             sqlx::query!("UPDATE household_settings SET default_layout_gap = ?1, updated_at = ?2 WHERE id = 1", v, at)
                 .execute(pool).await.map_err(db)?;
+        }
+        HouseholdKey::Assistant => {
+            let v = crate::services::assistant::Provider::parse(value)
+                .ok_or(Invalid {
+                    key: "assistant",
+                    problem: "is not one this app runs".into(),
+                })?
+                .code();
+            sqlx::query!(
+                "UPDATE household_settings SET assistant = ?1, updated_at = ?2 WHERE id = 1",
+                v,
+                at
+            )
+            .execute(pool)
+            .await
+            .map_err(db)?;
         }
         HouseholdKey::DefaultDensity => {
             let v = one_of("density", value, &DENSITIES)?;

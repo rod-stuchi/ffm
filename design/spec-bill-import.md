@@ -175,7 +175,35 @@ value that failed its own checksum — report the misread and ask.
 
 ---
 
-## 6. Issuer profiles
+## 6. Issuer profiles — now each rule's own recipe
+
+**`config/issuers.toml` is retired** (migration 0016). Every rule now carries
+its own **recipe** — the same rules this section describes (who, due date,
+amount, client code, card), for the one issuer that rule pays — stored in
+`rule_recipe` and applied locally to every bill of the rule. Nobody writes it
+by hand:
+
+- **The household's assistant writes it on the rule's first bill** that
+  leaves something open — a CLI on the server (`codex exec`, `claude -p`,
+  `gemini -p`), on the subscription it is logged into, chosen by the admin in
+  `:household`. It reads **page 1, redacted** (CPF and card numbers masked)
+  and answers JSON in a fixed schema: each value as printed, and a pattern
+  anchored on its label.
+- **The app checks it before anyone sees it**: every pattern must compile,
+  capture once, and find exactly the claimed value first in the bill's own
+  text — `R\$\s*([\d.,]+)` reads a credit limit and is dropped. A CNPJ must
+  be valid and printed.
+- **A person approves it** (*Teach Nubank to read its bills?* — `y`), and
+  every later month is read with no assistant. When a redesigned layout stops
+  it reading, the assistant is asked again and its fix approved again; the old
+  recipe is retired, not overwritten.
+- **The issuer binding is a CNPJ**, read from the text with its check digits
+  (`cnpjs_in`) — no profile needed to tell Nubank from Inter.
+- The file's last shipped profiles were converted at startup into the
+  recipes of the rules bound to them, and frozen in
+  `src/db/retired_issuers.toml` for that conversion only.
+
+What follows is the shape a recipe has — written as the old file's TOML.
 
 Per-issuer config is real and necessary, but it should be **small**, because the
 barcode structure is universal. A profile declares rules **only for the holes the

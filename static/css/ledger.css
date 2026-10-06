@@ -866,6 +866,18 @@
   z-index: 80;
 }
 
+/* What a bill was read as — an assistant's proposal, or `A`'s box after one —
+ * one fact a line, in mono since each is a value to check. */
+.ask-lines,
+.bm-taught {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
 /* A bill that contradicts the rule's binding — "wrong row?" — wears the
  * warning edge; one that merely could not be confirmed does not. */
 .modal.is-warn .card {
@@ -2747,6 +2759,85 @@
   inset: 0 0 var(--status-h) 0;
   z-index: 70;
   background: var(--paper);
+}
+
+/* What a long Save is doing, after neovim's fidget.nvim: a small translucent
+ * box at the right, just above the trim view's foot — above its Save button —
+ * and in the same spot for an upload with no trim view open. Above the trim
+ * view (70), below the question dialog (80). */
+.fidget {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--status-h) + 66px);
+  z-index: 75;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.fidget.is-leaving {
+  opacity: 0;
+  transition-delay: 0.6s;
+}
+
+.fg-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.fg-step.is-done {
+  color: var(--ink-2);
+}
+
+/* The running step: a small ring turning in the accent — "here" — and, once
+ * done, a tick in --pos. */
+.fg-mark {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: fg-spin 0.8s linear infinite;
+}
+
+.fg-step.is-done .fg-mark {
+  border: none;
+  animation: none;
+  width: auto;
+  height: auto;
+  color: var(--pos);
+}
+
+.fg-step.is-done .fg-mark::before {
+  content: "✓";
+}
+
+@keyframes fg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A phone's foot wraps onto two lines; the box stays above it. */
+@media (max-width: 700px) {
+  .fidget {
+    bottom: calc(var(--status-h) + 112px);
+  }
 }
 
 .prepare {

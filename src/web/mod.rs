@@ -5,6 +5,7 @@ pub mod commands;
 pub mod csrf;
 #[cfg(feature = "dev-reload")]
 pub mod dev_reload;
+pub mod fidget;
 pub mod files;
 pub mod form;
 pub mod import;

@@ -185,7 +185,14 @@ async fn stage_bytes(
     // Unlocked first, with the rule's password: the pages have to be drawn,
     // and the scratch copy should never need the password again.
     let upload = crate::web::import::Upload { filename, bytes };
-    let upload = match crate::web::import::unlock_for(t, upload, ctx.password.as_deref()) {
+    let upload = match crate::web::import::unlock_for(
+        t,
+        upload,
+        ctx.password.as_deref(),
+        &crate::web::fidget::Fidget::off(),
+    )
+    .await
+    {
         Ok(u) => u,
         Err(crate::web::import::Refused(m)) => return crate::web::tx::refuse(&m, true),
     };
@@ -331,14 +338,34 @@ pub async fn size(
 
 /// `GET /prepare/{token}/file` — the finished PDF, which the page sends on
 /// through the upload it was headed for.
-pub async fn file(auth: Auth, Path(token): Path<String>, Query(sel): Query<Selection>) -> Response {
+pub async fn file(
+    State(st): State<AppState>,
+    auth: Auth,
+    headers: axum::http::HeaderMap,
+    Path(token): Path<String>,
+    Query(sel): Query<Selection>,
+) -> Response {
+    let t = auth.catalog();
     let member = auth.viewer.member_id;
     let keep = sel.keep();
     let shrink = sel.shrink == Some(1);
     let tok = token.clone();
-    let outcome =
-        tokio::task::spawn_blocking(move || stage::result(&tok, member, keep.as_deref(), shrink))
-            .await;
+    // Each step named as it starts, in the box above Save — only the ones
+    // the size check had not already done.
+    let fidget = crate::web::fidget::Fidget::from(&headers, &st.live, member);
+    let (trim, shrinking) = (
+        t.progress_trim().to_string(),
+        t.progress_shrink().to_string(),
+    );
+    let outcome = tokio::task::spawn_blocking(move || {
+        stage::result_with(&tok, member, keep.as_deref(), shrink, &|step| {
+            fidget.step(match step {
+                stage::Step::Trim => trim.clone(),
+                stage::Step::Shrink => shrinking.clone(),
+            })
+        })
+    })
+    .await;
     let Ok(Ok(outcome)) = outcome else {
         return StatusCode::UNPROCESSABLE_ENTITY.into_response();
     };

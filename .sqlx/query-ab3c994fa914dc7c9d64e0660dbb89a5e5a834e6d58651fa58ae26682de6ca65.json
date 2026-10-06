@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO rule_recipe\n               (rule_id, created_at, created_by, source, cnpj, issuer_name,\n                amount_regex, due_regex, client_regex, card_regex)\n           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)\n           RETURNING id AS \"id!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "ab3c994fa914dc7c9d64e0660dbb89a5e5a834e6d58651fa58ae26682de6ca65"
+}

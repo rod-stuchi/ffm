@@ -444,7 +444,7 @@ md:
 # --- release -----------------------------------------------------------------
 
 # Build a release into dist/v0.0.N/ — one folder and one .tar.gz per platform,
-# each holding the binary, static/, config/issuers.toml, ffm.example.toml,
+# each holding the binary, static/, ffm.example.toml,
 # start.sh and README.md (from release/): everything a fresh machine needs
 # besides poppler and qpdf.
 #
@@ -496,14 +496,13 @@ release:
         fi
         name="ffm-$tag-$plat"
         dir="$out/$name"
-        mkdir -p "$dir/static/css" "$dir/static/fonts" "$dir/config"
+        mkdir -p "$dir/static/css" "$dir/static/fonts"
         cp "$tdir/$t/release/ffm" "$dir/ffm"
         # Only what a page loads: build.css already inlines every source
         # stylesheet, and the sandbox's does not exist in a release build.
         cp static/css/build.css "$dir/static/css/"
         cp -R static/js static/icons "$dir/static/"
         cp static/fonts/*.woff2 static/fonts/OFL-*.txt "$dir/static/fonts/"
-        cp config/issuers.toml "$dir/config/"
         cp ffm.example.toml release/start.sh release/README.md "$dir/"
         echo "$tag" > "$dir/VERSION"
         tar -czf "$out/$name.tar.gz" -C "$out" "$name"

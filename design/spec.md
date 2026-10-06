@@ -231,6 +231,31 @@ nothing until the answer landed, which reads as a key that did not work.
   `data-busy="none"` or `'none'`.
 - **A dropped connection says so** in the statusline, since a loader that
   vanishes with nothing changed is the same confusion again.
+- **A long Save names its steps**, in a small translucent box above it —
+  fidget.nvim's shape: *Keeping the pages you chose*, *Shrinking the file*,
+  *Opening the locked PDF*, *Reading the bill*, *Asking codex to read it*,
+  *Checking what it read*, *Filing it*. Each line spins while it runs and
+  ticks when the next starts; after success the box fades, and on a refusal
+  or a question it goes at once, because the statusline or the dialog says
+  what happened.
+  - **Over the `/live` stream, not a WebSocket.** It only runs server to
+    page, and the stream is already open on every page. The page makes a
+    random job id per Save and sends it as `X-FFM-Job` on each request the
+    Save makes (the trim view's file build, then the upload), so one box
+    covers the chain; a step goes out as a `progress` event tagged with that
+    id (`web::fidget`).
+  - **Your steps reach only your pages, and only the page that asked shows
+    them.** A stream forwards only its own member's steps, so another member
+    never learns an upload is happening; a second tab ignores a job it did
+    not start.
+  - **Words, never data.** No amount, name or line of the bill travels this
+    way: the steps are catalog messages, in the member's language.
+  - **Only steps really done are named.** The trim view's size line builds the
+    trimmed and shrunk file as you choose pages, so a Save usually starts at
+    *Reading the bill*; trimming and shrinking show only when the Save has to
+    do them itself.
+  - The houses loader in the button stays: with no `/live` there is no box,
+    and nothing else changes.
 - **The edit row is locked while its Save is in flight** — `inert`, the same
   as the pre-auth forms: nothing is typed into a value already sent, and a
   second Enter cannot post twice. Lifted when the answer lands, with focus
@@ -2407,10 +2432,18 @@ UI-facing:
   edge; an unconfirmed bill does not. `y` skips only that check — a
   duplicate is still refused — and the log notes what was overridden. See
   CLAUDE.md's Recurring rules.
-- **A fatura with no barcode is read from its text** when its issuer's
-  profile allows it (`barcode = "optional"` — Nubank): the statusline says
-  *read R$ 8.843,57 due 09/01/2026 from the bill's text*, and the same file
-  dropped on another month is *already on 01/2026*, by its text fingerprint.
+- **A fatura with no barcode is read from its text** by its rule's recipe:
+  the statusline says *read R$ 8.843,57 due 09/01/2026 from the bill's
+  text*, and the same file dropped on another month is *already on
+  01/2026*, by its text fingerprint.
+- **A rule's first bill teaches it to read the rest.** When the bill leaves
+  something open, the household's assistant (`:household`) reads page 1 —
+  redacted — and the answer is a question: *Teach Nubank to read its bills?*
+  with what it read listed (issuer and CNPJ, amount, due date, account,
+  card), `y` *Keep and attach*; anything else attaches without it. From then
+  on every month is read here, instantly; a redesigned layout that stops the
+  recipe reading asks again. In `A` the Bill on file box lists what was
+  read, and Create keeps it.
 - **A bill removed from one row can go on another.** A row holds a bill
   only while it holds the file: attaching the same PDF elsewhere takes it
   over, and the statusline says *moved from Moto CG 09/2026*. The old row's

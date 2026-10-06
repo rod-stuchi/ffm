@@ -283,7 +283,7 @@ Esta é a sua fatura de
 janeiro, no valor de
 R$ 2.345,67
 Data de vencimento: 09 JAN 2026
-CNPJ 11.222.333/0001-44
+CNPJ 11.222.333/0001-81
 ";
 
     fn card_profiles() -> Profiles {
@@ -292,7 +292,7 @@ CNPJ 11.222.333/0001-44
 [[issuer]]
 id = "cartao-sem-codigo"
 name = "Cartão · Exemplo"
-detect = ['\b11\.?222\.?333/?0001-?44\b']
+detect = ['\b11\.?222\.?333/?0001-?81\b']
 kind = "cobranca"
 barcode = "optional"
 
@@ -518,10 +518,13 @@ pub struct Binding<'a> {
     /// one bank issues slips for a hundred billers — and used only to *name*
     /// what a refused bill was.
     pub bank: Option<&'a str>,
-    /// The issuer a profile recognized from the bill's CNPJ. A binding since
-    /// migration 0014: a Nubank fatura on a rule bound to Inter is another
-    /// card's bill, barcode or not.
+    /// The issuer's CNPJ, 14 digits — on the RULE's side: what it is bound
+    /// to (migrations 0014, 0016). A Nubank fatura on a rule bound to Inter is
+    /// another card's bill, barcode or not.
     pub issuer: Option<&'a str>,
+    /// Every CNPJ the BILL prints (`issuers::cnpjs_in`). The bound issuer
+    /// agrees when it is among them; a bill that prints none says nothing.
+    pub cnpjs: &'a [String],
     /// Cards' last four digits. A bill lists every card on its statement; a
     /// rule holds the one it is bound to (a one-element slice). They agree
     /// when the statement lists the bound card anywhere.
@@ -606,10 +609,12 @@ pub fn binding_check(bound: Binding<'_>, read: Binding<'_>) -> Result<Verdict, M
         };
     }
     let mut compared = false;
-    if let (Some(k), Some(f)) = (bound.issuer, read.issuer) {
+    if let Some(k) = bound.issuer
+        && let Some(first) = read.cnpjs.first()
+    {
         compared = true;
-        if k != f {
-            return fail(Ident::Issuer(f.into()), Ident::Issuer(k.into()));
+        if !read.cnpjs.iter().any(|c| c == k) {
+            return fail(Ident::Issuer(first.clone()), Ident::Issuer(k.into()));
         }
     }
     if let Some(k) = bound.cards.first()
@@ -687,10 +692,21 @@ mod binding_tests {
         }
     }
 
+    /// A card rule bound to `issuer` (a CNPJ) and `cards`.
     fn card<'a>(issuer: Option<&'a str>, cards: &'a [String]) -> Binding<'a> {
         Binding {
             kind: Some("cobranca"),
             issuer,
+            cards,
+            ..Default::default()
+        }
+    }
+
+    /// A card bill printing `cnpjs` and `cards`.
+    fn bill<'a>(cnpjs: &'a [String], cards: &'a [String]) -> Binding<'a> {
+        Binding {
+            kind: Some("cobranca"),
+            cnpjs,
             cards,
             ..Default::default()
         }
@@ -760,15 +776,28 @@ mod binding_tests {
         );
     }
 
+    const NUBANK: &str = "18236120000158";
+    const INTER: &str = "00416968000101";
+
     #[test]
-    fn another_issuer_is_another_bill() {
+    fn a_bill_that_does_not_print_the_bound_cnpj_is_another_bill() {
         let none: [String; 0] = [];
-        let m = binding_check(card(Some("nubank"), &none), card(Some("inter"), &none)).unwrap_err();
-        assert_eq!(m.found, Ident::Issuer("inter".into()));
-        assert_eq!(m.known, Ident::Issuer("nubank".into()));
+        let inter = [INTER.to_string()];
+        let m = binding_check(card(Some(NUBANK), &none), bill(&inter, &none)).unwrap_err();
+        assert_eq!(m.found, Ident::Issuer(INTER.into()));
+        assert_eq!(m.known, Ident::Issuer(NUBANK.into()));
+        // A statement prints merchants' CNPJs too: the bound one anywhere
+        // among them agrees.
+        let several = ["11222333000181".to_string(), NUBANK.to_string()];
         assert_eq!(
-            binding_check(card(Some("nubank"), &none), card(Some("nubank"), &none)),
+            binding_check(card(Some(NUBANK), &none), bill(&several, &none)),
             Ok(Verdict::Agrees)
+        );
+        // A bill that prints no CNPJ at all says nothing about the issuer.
+        assert_eq!(
+            binding_check(card(Some(NUBANK), &none), bill(&none, &none)),
+            Ok(Verdict::Agrees),
+            "the kind still agreed"
         );
     }
 
@@ -779,26 +808,27 @@ mod binding_tests {
         let other = ["1234".to_string()];
         let none: [String; 0] = [];
         assert_eq!(
-            binding_check(card(None, &bound), card(None, &both)),
+            binding_check(card(None, &bound), bill(&none, &both)),
             Ok(Verdict::Agrees)
         );
-        let m = binding_check(card(None, &bound), card(None, &other)).unwrap_err();
+        let m = binding_check(card(None, &bound), bill(&none, &other)).unwrap_err();
         assert_eq!(m.found, Ident::Card("1234".into()));
         assert_eq!(m.known, Ident::Card("7766".into()));
         // A statement that prints no card digits proves nothing about them.
-        assert!(binding_check(card(None, &bound), card(None, &none)).is_ok());
+        assert!(binding_check(card(None, &bound), bill(&none, &none)).is_ok());
     }
 
     #[test]
     fn the_client_code_still_decides_alone() {
         let none: [String; 0] = [];
+        let inter = [INTER.to_string()];
         let bound = Binding {
             client_code: Some("1"),
-            ..card(Some("nubank"), &none)
+            ..card(Some(NUBANK), &none)
         };
         let read = Binding {
             client_code: Some("1"),
-            ..card(Some("inter"), &none)
+            ..bill(&inter, &none)
         };
         assert_eq!(binding_check(bound, read), Ok(Verdict::Agrees));
     }
@@ -808,14 +838,15 @@ mod binding_tests {
         // A bill with no barcode takes its profile's kind, so a card fatura
         // still disagrees with a rule bound to utility company 0162.
         let none: [String; 0] = [];
-        assert!(binding_check(b(None, Some("0162")), card(Some("nubank"), &none)).is_err());
+        let nubank = [NUBANK.to_string()];
+        assert!(binding_check(b(None, Some("0162")), bill(&nubank, &none)).is_err());
     }
 
     #[test]
     fn the_gate_asks_unless_told_to_go_ahead() {
         let m = Mismatch {
-            found: Ident::Issuer("inter".into()),
-            known: Ident::Issuer("nubank".into()),
+            found: Ident::Issuer(INTER.into()),
+            known: Ident::Issuer(NUBANK.into()),
         };
         assert_eq!(gate(Ok(Verdict::Unbound), false), Gate::Pass(None));
         assert_eq!(

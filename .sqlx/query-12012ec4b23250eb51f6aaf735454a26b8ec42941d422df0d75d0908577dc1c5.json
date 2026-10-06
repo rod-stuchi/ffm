@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE recurring_rules SET issuer_id = coalesce(issuer_id, ?2)\n         WHERE id = ?1 AND kind = 'out' AND no_barcode = 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "12012ec4b23250eb51f6aaf735454a26b8ec42941d422df0d75d0908577dc1c5"
+}

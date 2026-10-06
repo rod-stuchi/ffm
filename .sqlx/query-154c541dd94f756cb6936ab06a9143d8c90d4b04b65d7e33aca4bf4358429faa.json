@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE recurring_rules SET issuer_id = ?2 WHERE id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "154c541dd94f756cb6936ab06a9143d8c90d4b04b65d7e33aca4bf4358429faa"
+}

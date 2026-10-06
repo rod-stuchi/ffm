@@ -343,6 +343,7 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
     if let Err(refused) = crate::web::tx::may_write(&st, &auth, r.member_id).await {
         return refused;
     }
+    let recipe = crate::db::recipes::live(&st.pool, r.id).await;
 
     Html(RulePane {
         id: Some(r.id),
@@ -395,7 +396,7 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         },
         private: r.visibility == Visibility::Private,
         vault: vault_of(&st, r.member_id).await,
-        meta: BarcodeMeta::of_rule(&st, t, &r),
+        meta: BarcodeMeta::of_rule(t, &r, recipe.as_ref()),
         missing_bucket: t.rule_path_missing_bucket().to_string(),
         estimates: estimates_of(&st, &auth, &r).await,
         no_history: t.estimate_no_history().to_string(),
@@ -563,6 +564,9 @@ pub struct RuleFormInput {
     /// Create — see `services::pending`.
     #[serde(default)]
     barcode_token: Option<String>,
+    /// `A` only: the assistant's recipe for that bill, kept by this Create.
+    #[serde(default)]
+    recipe_token: Option<String>,
 }
 
 /// An unchecked checkbox sends nothing at all, so presence is the value.
@@ -749,9 +753,17 @@ pub async fn create(
     let headline = t.rule_created(created as i64);
 
     let attached = match input.barcode_token.as_deref() {
-        Some(tok) if !tok.is_empty() => {
-            Some(attach_parked(&st, &auth, rule_id, &input.period, tok).await)
-        }
+        Some(tok) if !tok.is_empty() => Some(
+            attach_parked(
+                &st,
+                &auth,
+                rule_id,
+                &input.period,
+                tok,
+                input.recipe_token.as_deref().filter(|r| !r.is_empty()),
+            )
+            .await,
+        ),
         _ => None,
     };
 
@@ -773,6 +785,7 @@ async fn attach_parked(
     rule_id: i64,
     period: &str,
     token: &str,
+    recipe_token: Option<&str>,
 ) -> (String, bool) {
     let t = auth.catalog();
     let Some(parked) = crate::services::pending::claim(token, auth.viewer.member_id) else {
@@ -789,13 +802,41 @@ async fn attach_parked(
         filename: parked.filename,
         bytes: parked.bytes,
     };
-    let parsed = match crate::web::import::parse(st, &t, &upload) {
-        Ok(p) => p,
-        Err(crate::web::import::Refused(m)) => return (m, true),
-    };
+    // The recipe the assistant wrote for this bill in `A`, seen in the box
+    // before Create — creating the rule is keeping it.
+    if let Some(tok) = recipe_token
+        && let Some((source, recipe)) =
+            crate::web::import::claim_proposal(tok, auth.viewer.member_id)
+    {
+        let _ = crate::db::recipes::store(
+            &st.pool,
+            crate::db::changes::Actor::User(auth.viewer.member_id),
+            rule_id,
+            &source,
+            &recipe,
+        )
+        .await;
+    }
+    let recipe = crate::db::recipes::live(&st.pool, rule_id).await;
+    let parsed =
+        match crate::web::import::parse(&t, &upload, recipe.as_ref(), rule.barcode_kind.as_deref())
+        {
+            Ok(p) => p,
+            Err(crate::web::import::Refused(m)) => return (m, true),
+        };
     // A rule just created has nothing bound, so there is nothing to ask.
-    match crate::web::import::attach_to(st, auth, &rule, tx_id, period, &upload, &parsed, false)
-        .await
+    match crate::web::import::attach_to(
+        st,
+        auth,
+        &rule,
+        tx_id,
+        period,
+        &upload,
+        &parsed,
+        false,
+        &crate::web::fidget::Fidget::off(),
+    )
+    .await
     {
         Ok((_, m)) => (m, false),
         Err(halt) => (halt.message(), true),
@@ -916,11 +957,17 @@ async fn rejected(
         // A dropped-but-not-yet-created bill survives the round trip: the
         // token is still parked, so the box is rebuilt from it.
         meta: match (&rule, input.barcode_token.as_deref()) {
-            (Some(r), _) => BarcodeMeta::of_rule(st, t, r),
-            (None, Some(tok)) => {
-                crate::web::import::meta_of_parked(st, t, tok, auth.viewer.member_id)
-                    .unwrap_or_else(|| BarcodeMeta::empty(t))
+            (Some(r), _) => {
+                let recipe = crate::db::recipes::live(&st.pool, r.id).await;
+                BarcodeMeta::of_rule(t, r, recipe.as_ref())
             }
+            (None, Some(tok)) => crate::web::import::meta_of_parked(
+                t,
+                tok,
+                input.recipe_token.as_deref(),
+                auth.viewer.member_id,
+            )
+            .unwrap_or_else(|| BarcodeMeta::empty(t)),
             (None, None) => BarcodeMeta::empty(t),
         },
         missing_bucket: t.rule_path_missing_bucket().to_string(),
@@ -1127,6 +1174,7 @@ mod tests {
             months: String::new(),
             period: "2026-09".into(),
             barcode_token: None,
+            recipe_token: None,
         }
     }
 

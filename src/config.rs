@@ -93,9 +93,9 @@ struct Resolved {
 }
 
 impl Config {
-    /// Where the issuer profiles live — beside `ffm.toml`, because they are
-    /// the same tier: data an operator edits, read at the moment it is needed
-    /// rather than held in memory.
+    /// Where the retired issuer profiles lived — beside `ffm.toml`. Read only
+    /// by the startup step that turns them into rules' own recipes
+    /// (`db::recipes::convert_profiles`); bills are no longer read with it.
     pub fn issuers_path(&self) -> std::path::PathBuf {
         self.file
             .as_ref()
