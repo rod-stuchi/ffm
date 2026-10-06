@@ -194,6 +194,21 @@ barcode leaves open**:
 
 If the barcode answered it, the profile must not restate it.
 
+**The one exception: a bill with no barcode at all**, from an issuer whose
+profile says it sends those — `barcode = "optional"`. Nubank omits the boleto
+on some faturas to push payment in its app. There is no checksummed number to
+defer to, so `issuers::resolve_text` applies the amount and due-date rules
+*whatever their `when` says*, with source `text`; an amount is required. The
+CNPJ that detected the issuer is what vouches for the bill. Any other issuer's
+barcode-less file is still "no barcode" (§8) — never a total guessed from the
+page.
+
+A profile can also read **every card's last four digits** (`[issuer.card]`,
+all matches, in order): one statement lists the holder's card and any extra
+one, and a rule bound to a card agrees with a later statement that lists it
+anywhere. Leave it out for an issuer whose printed digits rotate (Nubank's
+per-purchase virtual cards).
+
 ### Detect on CNPJ, not the trade name
 
 Layouts get redesigned and brands get renamed; the CNPJ in the footer does not
@@ -221,21 +236,28 @@ regex = 'Vencimento\s*(\d{2}/\d{2}/\d{4})'
 regex = 'N[uú]mero do Cliente\s*[:\-]?\s*([\d.\-]+)'
 
 [[issuer]]
-id     = "nubank-cartao"
-name   = "Cartão · Nubank"
-detect = ['\bNU PAGAMENTOS\b', '\b\d{2}\.?\d{3}\.?\d{3}/?0001-?\d{2}\b']
-kind   = "cobranca"
+id      = "nubank-cartao"
+name    = "Cartão · Nubank"
+detect  = ['\b18\.?236\.?120/?0001-?58\b']   # Nu Pagamentos S.A.
+kind    = "cobranca"
+barcode = "optional"           # some faturas carry no boleto at all
+# no [issuer.card]: the digits it prints are rotating virtual cards
 
 [issuer.amount]
-when    = "open"               # barcode is zeros — two payable numbers exist in the text
-choose  = true                 # genuinely ambiguous → always ask, never guess
-total   = 'Valor total\s*R\$\s*([\d.,]+)'
-minimum = 'Pagamento m[ií]nimo\s*R\$\s*([\d.,]+)'
+when  = "open"                 # ignored for a bill with no barcode
+regex = 'no valor de\s+R\$\s*([\d.]+,\d{2})'
 
 [issuer.due_date]
 when  = "absent"
-regex = 'Vencimento\s*(\d{2}/\d{2}/\d{4})'
+regex = 'Data de vencimento:\s*(\d{2}\s+\p{Lu}{3}\s+\d{4})'   # "09 JAN 2026"
+
+[issuer.card]                  # (Inter's profile) every card on the statement
+regex = 'CART[AÃ]O\s+\d{4}\*{4}(\d{4})'
 ```
+
+The shipped file (`config/issuers.toml`) holds the real Nubank and Inter
+profiles. Dates read both `09/01/2026` and `09 JAN 2026` (Portuguese month
+abbreviations) — input parsing, pt-BR permanently, like money below.
 
 **Amount `when` values:** `open` · `reference` · `always` (override the barcode —
 requires an explicit reason in a comment).
@@ -286,6 +308,8 @@ pick. Prefill both.
 
 **(b) Extraction failure — the system could not read something.**
 No barcode found, DV failed, unknown issuer, or a hole with no profile rule.
+"No barcode" is **not** a failure for an issuer whose profile opted in to
+`barcode = "optional"` (§6): that bill is read from its text.
 
 > **Couldn't read the due date.** The barcode doesn't carry one and there's no
 > rule for this issuer yet. *(field prefilled with whatever was found)*
@@ -388,12 +412,12 @@ different: it's the same number every period, because it identifies the
   not one that opens for editing. Absent for a rule with no file attached
   yet, same as `instance` is absent when a rule doesn't need one.
 - **A newly-attached file that decodes to a *different* client code than
-  the one already on file is flagged, not silently overwritten** — same
-  principle as a failed check digit (§5) or an out-of-window barcode page
-  (`CLAUDE.md`'s multi-page barcode section): a mismatch here means either
-  the household got sent a different account's bill, or the wrong file was
-  attached, and both are worth a human glance before the number on file
-  quietly changes.
+  the one already on file is asked about before anything is written** —
+  *"wrong row?"*, and only `y` attaches it (and then teaches the rule
+  nothing). It was "flagged, not silently overwritten", then a hard refusal;
+  a question is what keeps it from being a dead end. The same goes for a
+  different issuer or card (below), and for a bill nothing can confirm. See
+  CLAUDE.md's *Never a dead end*.
 - **Unlinkable independently of the rule itself.** A dedicated control
   clears just the code — not `tracked`, `bucket`, `bill_name` or `pattern`
   — for correcting "the wrong file got attached the first time" without
@@ -406,6 +430,12 @@ different: it's the same number every period, because it identifies the
 It is the natural **idempotency key**: re-uploading the same bill must not create a
 second row. It also lets value and due date be re-derived later without keeping the
 PDF parsed, and gives the fixtures something stable to assert against.
+
+**Except where it cannot tell bills apart**: a bill with no barcode at all, or
+a card's payment slip with no date and no amount, which an issuer like Inter
+prints identically every month (migration 0013). There the **text** is the
+key — a fingerprint of the bill's letters and digits, blake3, on the file's
+`receipts.text_hash` (0014), the same for a trimmed or shrunk copy.
 
 ### Suggested columns
 
@@ -428,6 +458,10 @@ no_barcode         BOOLEAN -- true = this bill never has one (PIX/TED/wire
 client_code        TEXT    -- subscriber/account number; nullable until a
                             -- file is attached; null again if unlinked;
                             -- always null when no_barcode is true
+issuer_id          TEXT    -- the profile a bill's CNPJ detected (0007);
+                            -- compared since 0014
+card_last4         TEXT    -- the card's last four digits (0014); a later
+                            -- statement agrees when it lists it anywhere
 ```
 
 Recording *where each value came from* is what lets you audit a wrong number later

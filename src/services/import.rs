@@ -26,16 +26,26 @@ use std::process::Command;
 /// What came out, and how far it got.
 #[derive(Debug)]
 pub struct Parsed {
-    pub barcode: Barcode,
+    /// `None` is a **text-only bill**: no barcode at all, from an issuer whose
+    /// profile says it sends those, read entirely from the page
+    /// (`issuers::resolve_text`).
+    pub barcode: Option<Barcode>,
     pub import: Import,
+    /// The bill's text, reduced to a fingerprint ([`fingerprint`]) — what
+    /// tells the same bill attached twice apart when no barcode can.
+    pub fingerprint: String,
 }
 
 #[derive(Debug)]
 pub enum ImportError {
     /// No text at all — a scan or a photo. This is where OCR would go.
     NoText,
-    /// Text, but nothing in it looks like a barcode.
-    NoBarcode,
+    /// Text, but nothing in it looks like a barcode — and no profile that
+    /// reads this issuer's bills without one. `issuer` names who it was, when
+    /// a profile recognized it.
+    NoBarcode {
+        issuer: Option<String>,
+    },
     /// Every candidate failed its own check digits. **Not** a cue to read the
     /// amount off the page: a number that failed its checksum is a misread,
     /// and reporting it is the only honest move.
@@ -47,7 +57,7 @@ impl std::fmt::Display for ImportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ImportError::NoText => write!(f, "this file has no text to read — a scan needs OCR"),
-            ImportError::NoBarcode => write!(f, "no barcode found in this bill"),
+            ImportError::NoBarcode { .. } => write!(f, "no barcode found in this bill"),
             ImportError::Misread(e) => write!(f, "{e}"),
             ImportError::Tool(e) => write!(f, "{e}"),
         }
@@ -125,30 +135,71 @@ pub fn candidates(text: &str) -> Vec<String> {
 /// wins: a bill's text contains plenty of long numbers, and a checksum is
 /// exactly what tells a barcode apart from an account number that happens to
 /// be the same length.
+///
+/// With no barcode at all, a bill is still read when its issuer's profile says
+/// it sends those (`barcode = "optional"`) — a **text-only bill**. A misread is
+/// never worked around that way: a number that failed its own checksum is a
+/// misread, not a missing barcode.
 pub fn parse_text(
     text: &str,
     profiles: &Profiles,
     reference: NaiveDate,
 ) -> Result<Parsed, ImportError> {
+    let fingerprint = fingerprint(text);
+    match first_valid_barcode(text, reference) {
+        Ok(barcode) => Ok(Parsed {
+            import: issuers::resolve(&barcode, text, profiles),
+            barcode: Some(barcode),
+            fingerprint,
+        }),
+        Err(ImportError::NoBarcode { .. }) => match issuers::resolve_text(text, profiles) {
+            Ok(import) => Ok(Parsed {
+                barcode: None,
+                import,
+                fingerprint,
+            }),
+            Err(issuer) => Err(ImportError::NoBarcode { issuer }),
+        },
+        Err(e) => Err(e),
+    }
+}
+
+/// The first candidate whose check digits pass.
+fn first_valid_barcode(text: &str, reference: NaiveDate) -> Result<Barcode, ImportError> {
     let found = candidates(text);
     if found.is_empty() {
-        return Err(ImportError::NoBarcode);
+        return Err(ImportError::NoBarcode { issuer: None });
     }
-
     let mut last = None;
     for candidate in found {
         match boleto::parse(&candidate, reference) {
-            Ok(barcode) => {
-                let import = issuers::resolve(&barcode, text, profiles);
-                return Ok(Parsed { barcode, import });
-            }
+            Ok(barcode) => return Ok(barcode),
             Err(e) => last = Some(e),
         }
     }
     Err(match last {
         Some(e @ boleto::Error::CheckDigit { .. }) => ImportError::Misread(e),
-        _ => ImportError::NoBarcode,
+        _ => ImportError::NoBarcode { issuer: None },
     })
+}
+
+/// A bill's text reduced to what identifies it: its letters and digits,
+/// lowercased, hashed with blake3 (as `:prune` hashes files).
+///
+/// What is left out is what shrinking or re-saving a PDF changes without
+/// changing the bill — spacing, line breaks, page breaks, punctuation the
+/// text layer renders differently — so a trimmed or shrunk copy of a bill
+/// still fingerprints the same. It is for comparison only: two live rows
+/// holding the same fingerprint hold the same bill twice.
+pub fn fingerprint(text: &str) -> String {
+    let mut h = blake3::Hasher::new();
+    let mut buf = [0u8; 4];
+    for c in text.chars().filter(|c| c.is_alphanumeric()) {
+        for l in c.to_lowercase() {
+            h.update(l.encode_utf8(&mut buf).as_bytes());
+        }
+    }
+    h.finalize().to_hex().to_string()
 }
 
 /// The whole pipeline, from a file on disk.
@@ -205,7 +256,7 @@ regex = 'N[uú]mero do cliente:?\s*(\d[\d-]+)'
         // numbers, protocol codes. The checksum is what tells the barcode
         // apart from all of them.
         let parsed = parse_text(BILL, &profiles(), today()).unwrap();
-        assert_eq!(parsed.barcode.amount, Amount::Fixed(Cents(34362)));
+        assert_eq!(parsed.barcode.unwrap().amount, Amount::Fixed(Cents(34362)));
         assert_eq!(parsed.import.issuer.as_deref(), Some("enel-sp"));
         assert_eq!(parsed.import.client_code.as_deref(), Some("987654-3"));
         assert_eq!(parsed.import.amount_source, Some("barcode"));
@@ -215,10 +266,79 @@ regex = 'N[uú]mero do cliente:?\s*(\d[\d-]+)'
     #[test]
     fn a_bill_with_no_barcode_says_so_rather_than_reading_the_total() {
         let text = "ENEL\nCNPJ 12.345.678/0001-99\nTotal a pagar R$ 343,62";
+        // Enel's profile never opted in to bills without a barcode, so its
+        // total is not guessed from the page — and the refusal says who it was.
+        match parse_text(text, &profiles(), today()) {
+            Err(ImportError::NoBarcode { issuer }) => {
+                assert_eq!(issuer.as_deref(), Some("Energia · Enel SP"))
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// The shape of a Nubank fatura with no boleto, made up: no barcode, the
+    /// issuer recognized by its CNPJ, which opts in to `barcode = "optional"`.
+    const CARD_NO_BARCODE: &str = "\
+Esta é a sua fatura de
+janeiro, no valor de
+R$ 2.345,67
+Data de vencimento: 09 JAN 2026
+CNPJ 11.222.333/0001-44
+";
+
+    fn card_profiles() -> Profiles {
+        toml::from_str(
+            r#"
+[[issuer]]
+id = "cartao-sem-codigo"
+name = "Cartão · Exemplo"
+detect = ['\b11\.?222\.?333/?0001-?44\b']
+kind = "cobranca"
+barcode = "optional"
+
+[issuer.amount]
+when = "open"
+regex = 'no valor de\s+R\$\s*([\d.]+,\d{2})'
+
+[issuer.due_date]
+when = "absent"
+regex = 'Data de vencimento:\s*(\d{2}\s+\p{Lu}{3}\s+\d{4})'
+"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_bill_with_no_barcode_is_read_from_its_text_when_the_issuer_opted_in() {
+        let parsed = parse_text(CARD_NO_BARCODE, &card_profiles(), today()).unwrap();
+        assert!(parsed.barcode.is_none(), "a text-only bill");
+        assert_eq!(parsed.import.amount, Some(Cents(234567)));
+        assert_eq!(parsed.import.amount_source, Some("text"));
+        assert_eq!(parsed.import.due, NaiveDate::from_ymd_opt(2026, 1, 9));
+        assert_eq!(parsed.import.issuer.as_deref(), Some("cartao-sem-codigo"));
+    }
+
+    #[test]
+    fn a_misread_barcode_is_never_read_as_a_text_only_bill() {
+        // A number that failed its own checksum is a misread, not a missing
+        // barcode — even from an issuer that opted in.
+        let text =
+            format!("{CARD_NO_BARCODE}\n83660000004-5 43621234202-2 60715000000-0 00000000000-0");
         assert!(matches!(
-            parse_text(text, &profiles(), today()),
-            Err(ImportError::NoBarcode)
+            parse_text(&text, &card_profiles(), today()),
+            Err(ImportError::Misread(_))
         ));
+    }
+
+    #[test]
+    fn a_fingerprint_ignores_what_shrinking_a_pdf_changes() {
+        let a = fingerprint("Fatura  de janeiro\n\x0cR$ 2.345,67 — Vencimento: 09 JAN 2026");
+        let b = fingerprint("fatura de\njaneiro R$2345,67 Vencimento 09 jan 2026");
+        assert_eq!(a, b, "spacing, page breaks, punctuation and case");
+        assert_ne!(
+            a,
+            fingerprint("fatura de fevereiro R$ 2.345,67 vencimento 09 fev 2026")
+        );
     }
 
     #[test]
@@ -398,6 +518,14 @@ pub struct Binding<'a> {
     /// one bank issues slips for a hundred billers — and used only to *name*
     /// what a refused bill was.
     pub bank: Option<&'a str>,
+    /// The issuer a profile recognized from the bill's CNPJ. A binding since
+    /// migration 0014: a Nubank fatura on a rule bound to Inter is another
+    /// card's bill, barcode or not.
+    pub issuer: Option<&'a str>,
+    /// Cards' last four digits. A bill lists every card on its statement; a
+    /// rule holds the one it is bound to (a one-element slice). They agree
+    /// when the statement lists the bound card anywhere.
+    pub cards: &'a [String],
 }
 
 /// One side of a disagreement, for the message: what the bill is for, or
@@ -408,6 +536,10 @@ pub enum Ident {
     Company(String),
     Bank(String),
     Kind(String),
+    /// A profile's id; the message shows its name.
+    Issuer(String),
+    /// A card's last four digits.
+    Card(String),
 }
 
 impl Binding<'_> {
@@ -416,6 +548,7 @@ impl Binding<'_> {
         self.company
             .map(|c| Ident::Company(c.into()))
             .or(self.bank.map(|b| Ident::Bank(b.into())))
+            .or(self.issuer.map(|i| Ident::Issuer(i.into())))
             .or(self.kind.map(|k| Ident::Kind(k.into())))
             .or(self.client_code.map(|c| Ident::Account(c.into())))
     }
@@ -423,7 +556,11 @@ impl Binding<'_> {
     /// Whether anything is bound at all. An unbound rule accepts any bill —
     /// that first attach is what binds it.
     pub fn is_bound(&self) -> bool {
-        self.client_code.is_some() || self.company.is_some() || self.kind.is_some()
+        self.client_code.is_some()
+            || self.company.is_some()
+            || self.kind.is_some()
+            || self.issuer.is_some()
+            || !self.cards.is_empty()
     }
 }
 
@@ -435,36 +572,106 @@ pub struct Mismatch {
     pub known: Ident,
 }
 
+/// What the identity check concluded, short of a disagreement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Verdict {
+    /// The rule has nothing bound yet — this bill will bind it.
+    Unbound,
+    /// Something the rule is bound to was compared, and it agreed.
+    Agrees,
+    /// The rule is bound, but the bill carried nothing to compare it with —
+    /// a file with no barcode, from an issuer no profile recognizes.
+    Unconfirmed,
+}
+
 /// Whether a bill belongs to a rule, before anything is written.
 ///
-/// **Refuse on a positive disagreement.** The client code is consulted first
+/// A **positive disagreement** is `Err`. The client code is consulted first
 /// and, when both sides have one, decides alone: two houses with the same
 /// water company share a company code and are still two different bills.
-/// Then the barcode kind — a bank slip is never a utility bill. Then the
-/// company code. A value the bill simply did not carry proves nothing, and a
-/// rule with nothing bound yet accepts anything.
-pub fn binding_check(bound: Binding<'_>, read: Binding<'_>) -> Result<(), Mismatch> {
+/// Then the issuer, then the card (the bound one listed anywhere on the
+/// statement), then the barcode kind — a bank slip is never a utility bill —
+/// then the company code. A value the bill simply did not carry proves
+/// nothing; a bound rule that could compare nothing at all is `Unconfirmed`.
+pub fn binding_check(bound: Binding<'_>, read: Binding<'_>) -> Result<Verdict, Mismatch> {
     let fail = |found: Ident, known: Ident| Err(Mismatch { found, known });
+    if !bound.is_bound() {
+        return Ok(Verdict::Unbound);
+    }
     if let (Some(k), Some(f)) = (bound.client_code, read.client_code) {
         return if k == f {
-            Ok(())
+            Ok(Verdict::Agrees)
         } else {
             fail(Ident::Account(f.into()), Ident::Account(k.into()))
         };
     }
-    if let (Some(k), Some(f)) = (bound.kind, read.kind)
-        && k != f
-    {
-        let found = read.ident().unwrap_or(Ident::Kind(f.into()));
-        let known = bound.ident().unwrap_or(Ident::Kind(k.into()));
-        return fail(found, known);
+    let mut compared = false;
+    if let (Some(k), Some(f)) = (bound.issuer, read.issuer) {
+        compared = true;
+        if k != f {
+            return fail(Ident::Issuer(f.into()), Ident::Issuer(k.into()));
+        }
     }
-    if let (Some(k), Some(f)) = (bound.company, read.company)
-        && k != f
+    if let Some(k) = bound.cards.first()
+        && let Some(first) = read.cards.first()
     {
-        return fail(Ident::Company(f.into()), Ident::Company(k.into()));
+        compared = true;
+        if !read.cards.contains(k) {
+            return fail(Ident::Card(first.clone()), Ident::Card(k.clone()));
+        }
     }
-    Ok(())
+    if let (Some(k), Some(f)) = (bound.kind, read.kind) {
+        compared = true;
+        if k != f {
+            let found = read.ident().unwrap_or(Ident::Kind(f.into()));
+            let known = bound.ident().unwrap_or(Ident::Kind(k.into()));
+            return fail(found, known);
+        }
+    }
+    if let (Some(k), Some(f)) = (bound.company, read.company) {
+        compared = true;
+        if k != f {
+            return fail(Ident::Company(f.into()), Ident::Company(k.into()));
+        }
+    }
+    Ok(if compared {
+        Verdict::Agrees
+    } else {
+        Verdict::Unconfirmed
+    })
+}
+
+/// What a person agreed to when they attached a bill anyway.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Override {
+    /// Nothing could confirm it was this rule's bill.
+    Unconfirmed,
+    /// It names something else than the rule is bound to.
+    Mismatch(Mismatch),
+}
+
+/// Whether an attach goes ahead, or a person is asked first.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Gate {
+    /// Go ahead — carrying what was overridden, if anything, for the log.
+    Pass(Option<Override>),
+    /// Ask before writing anything. `None` is "could not confirm".
+    Ask(Option<Mismatch>),
+}
+
+/// **Never a dead end.** A bill that cannot be confirmed, or that contradicts
+/// the rule, is a question for the person — not a refusal. `anyway` is their
+/// `y`: it turns the question into a pass that remembers what was overridden.
+/// A bill whose identity agrees ignores it, so nothing is noted that was not
+/// actually overridden.
+pub fn gate(verdict: Result<Verdict, Mismatch>, anyway: bool) -> Gate {
+    match verdict {
+        Ok(Verdict::Unbound | Verdict::Agrees) => Gate::Pass(None),
+        Ok(Verdict::Unconfirmed) if anyway => Gate::Pass(Some(Override::Unconfirmed)),
+        Ok(Verdict::Unconfirmed) => Gate::Ask(None),
+        Err(m) if anyway => Gate::Pass(Some(Override::Mismatch(m))),
+        Err(m) => Gate::Ask(Some(m)),
+    }
 }
 
 #[cfg(test)]
@@ -476,7 +683,16 @@ mod binding_tests {
             client_code: client,
             company,
             kind: company.map(|_| "consumo"),
-            bank: None,
+            ..Default::default()
+        }
+    }
+
+    fn card<'a>(issuer: Option<&'a str>, cards: &'a [String]) -> Binding<'a> {
+        Binding {
+            kind: Some("cobranca"),
+            issuer,
+            cards,
+            ..Default::default()
         }
     }
 
@@ -524,6 +740,98 @@ mod binding_tests {
 
     #[test]
     fn a_value_the_bill_did_not_carry_proves_nothing() {
-        assert!(binding_check(b(Some("1"), Some("0048")), Binding::default()).is_ok());
+        // Nothing contradicts — but nothing confirms either, so a person is
+        // asked rather than the bill attached on faith.
+        assert_eq!(
+            binding_check(b(Some("1"), Some("0048")), Binding::default()),
+            Ok(Verdict::Unconfirmed)
+        );
+    }
+
+    #[test]
+    fn an_unbound_rule_says_so_and_an_agreeing_bill_says_so() {
+        assert_eq!(
+            binding_check(Binding::default(), slip("077")),
+            Ok(Verdict::Unbound)
+        );
+        assert_eq!(
+            binding_check(b(None, Some("0048")), b(None, Some("0048"))),
+            Ok(Verdict::Agrees)
+        );
+    }
+
+    #[test]
+    fn another_issuer_is_another_bill() {
+        let none: [String; 0] = [];
+        let m = binding_check(card(Some("nubank"), &none), card(Some("inter"), &none)).unwrap_err();
+        assert_eq!(m.found, Ident::Issuer("inter".into()));
+        assert_eq!(m.known, Ident::Issuer("nubank".into()));
+        assert_eq!(
+            binding_check(card(Some("nubank"), &none), card(Some("nubank"), &none)),
+            Ok(Verdict::Agrees)
+        );
+    }
+
+    #[test]
+    fn the_bound_card_listed_anywhere_on_the_statement_agrees() {
+        let bound = ["7766".to_string()];
+        let both = ["3190".to_string(), "7766".to_string()];
+        let other = ["1234".to_string()];
+        let none: [String; 0] = [];
+        assert_eq!(
+            binding_check(card(None, &bound), card(None, &both)),
+            Ok(Verdict::Agrees)
+        );
+        let m = binding_check(card(None, &bound), card(None, &other)).unwrap_err();
+        assert_eq!(m.found, Ident::Card("1234".into()));
+        assert_eq!(m.known, Ident::Card("7766".into()));
+        // A statement that prints no card digits proves nothing about them.
+        assert!(binding_check(card(None, &bound), card(None, &none)).is_ok());
+    }
+
+    #[test]
+    fn the_client_code_still_decides_alone() {
+        let none: [String; 0] = [];
+        let bound = Binding {
+            client_code: Some("1"),
+            ..card(Some("nubank"), &none)
+        };
+        let read = Binding {
+            client_code: Some("1"),
+            ..card(Some("inter"), &none)
+        };
+        assert_eq!(binding_check(bound, read), Ok(Verdict::Agrees));
+    }
+
+    #[test]
+    fn a_text_only_card_bill_on_a_utility_rule_is_the_wrong_row() {
+        // A bill with no barcode takes its profile's kind, so a card fatura
+        // still disagrees with a rule bound to utility company 0162.
+        let none: [String; 0] = [];
+        assert!(binding_check(b(None, Some("0162")), card(Some("nubank"), &none)).is_err());
+    }
+
+    #[test]
+    fn the_gate_asks_unless_told_to_go_ahead() {
+        let m = Mismatch {
+            found: Ident::Issuer("inter".into()),
+            known: Ident::Issuer("nubank".into()),
+        };
+        assert_eq!(gate(Ok(Verdict::Unbound), false), Gate::Pass(None));
+        assert_eq!(
+            gate(Ok(Verdict::Agrees), true),
+            Gate::Pass(None),
+            "nothing overridden"
+        );
+        assert_eq!(gate(Ok(Verdict::Unconfirmed), false), Gate::Ask(None));
+        assert_eq!(
+            gate(Ok(Verdict::Unconfirmed), true),
+            Gate::Pass(Some(Override::Unconfirmed))
+        );
+        assert_eq!(gate(Err(m.clone()), false), Gate::Ask(Some(m.clone())));
+        assert_eq!(
+            gate(Err(m.clone()), true),
+            Gate::Pass(Some(Override::Mismatch(m)))
+        );
     }
 }

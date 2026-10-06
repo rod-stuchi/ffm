@@ -14,6 +14,12 @@
 //! **If the barcode answered it, the profile must not restate it.** That is
 //! not tidiness: a profile that can override a checksummed number is a profile
 //! that can quietly post the wrong one.
+//!
+//! **The one exception is a bill with no barcode at all**, from an issuer whose
+//! profile says it sends those (`barcode = "optional"` — Nubank omits it to
+//! push payment in its app). There is no checksummed number to defer to, so
+//! [`resolve_text`] reads the amount and the due date off the page, and the
+//! CNPJ that detected the issuer is what vouches for the bill.
 
 use crate::domain::money::Cents;
 use crate::services::boleto::{Amount, Barcode, DueDate, Kind};
@@ -52,6 +58,27 @@ pub struct Issuer {
     pub amount: Option<Rule>,
     #[serde(default)]
     pub client_code: Option<Rule>,
+    /// Whether this issuer may send a bill with no barcode at all. Opt-in:
+    /// for any other issuer a barcode-less file is still "no barcode", never
+    /// a total guessed from the page.
+    #[serde(default)]
+    pub barcode: BarcodeNeed,
+    /// The card's last four digits, read from **every** match: one statement
+    /// can list the holder's card and an extra one. A rule binds the first and
+    /// a later bill agrees when its statement lists it anywhere. Omitted for an
+    /// issuer whose printed digits rotate (Nubank's per-purchase virtual
+    /// cards), where it would only ever disagree.
+    #[serde(default)]
+    pub card: Option<Rule>,
+}
+
+/// Whether a profile's bills always carry a barcode.
+#[derive(Deserialize, Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum BarcodeNeed {
+    #[default]
+    Required,
+    Optional,
 }
 
 /// One hole-filling rule: when it applies, and the pattern that fills it.
@@ -116,6 +143,7 @@ impl Profiles {
                 .chain(issuer.due_date.iter().map(|r| &r.regex))
                 .chain(issuer.amount.iter().map(|r| &r.regex))
                 .chain(issuer.client_code.iter().map(|r| &r.regex))
+                .chain(issuer.card.iter().map(|r| &r.regex))
             {
                 Regex::new(pattern).map_err(|e| LoadError::Regex {
                     issuer: issuer.id.clone(),
@@ -150,6 +178,12 @@ pub struct Import {
     pub due: Option<NaiveDate>,
     pub due_source: Option<&'static str>,
     pub client_code: Option<String>,
+    /// The cards' last four digits, in the order the statement lists them,
+    /// each once. Empty when the profile reads none.
+    pub cards: Vec<String>,
+    /// The barcode kind the issuer's profile declares — what a bill with no
+    /// barcode is taken to be, for the binding check.
+    pub issuer_kind: Option<String>,
     /// Why this still needs a person. Empty means it does not.
     pub unresolved: Vec<&'static str>,
 }
@@ -219,8 +253,81 @@ pub fn resolve(barcode: &Barcode, text: &str, profiles: &Profiles) -> Import {
         client_code: issuer
             .and_then(|i| i.client_code.as_ref())
             .and_then(|r| find_first_group(&r.regex, text)),
+        cards: issuer.map(|i| cards(i, text)).unwrap_or_default(),
+        issuer_kind: issuer.and_then(|i| i.kind.clone()),
         unresolved,
     }
+}
+
+/// A bill with **no barcode**, read entirely from its text — only for an
+/// issuer whose profile says it sends those (`barcode = "optional"`).
+///
+/// There is no checksummed number to defer to, so the amount and due-date
+/// rules apply whatever their `when` says, and the sources are `text`. The
+/// amount is required: a bill this app cannot put a figure on is not one it
+/// can read. `Err` carries the detected issuer's name, if any, so the refusal
+/// can say who it was.
+pub fn resolve_text(text: &str, profiles: &Profiles) -> Result<Import, Option<String>> {
+    let issuer = profiles.detect(text);
+    let Some(i) = issuer.filter(|i| i.barcode == BarcodeNeed::Optional) else {
+        return Err(issuer.map(|i| i.name.clone()));
+    };
+    let amount = i
+        .amount
+        .as_ref()
+        .and_then(|r| find_money(&r.regex, text))
+        .ok_or_else(|| Some(i.name.clone()))?;
+    let due = i.due_date.as_ref().and_then(|r| find_date(&r.regex, text));
+    let mut unresolved = Vec::new();
+    if due.is_none() {
+        unresolved.push("due date");
+    }
+    Ok(Import {
+        issuer: Some(i.id.clone()),
+        issuer_name: Some(i.name.clone()),
+        amount: Some(amount),
+        amount_source: Some("text"),
+        due,
+        due_source: due.map(|_| "text"),
+        client_code: i
+            .client_code
+            .as_ref()
+            .and_then(|r| find_first_group(&r.regex, text)),
+        cards: cards(i, text),
+        issuer_kind: i.kind.clone(),
+        unresolved,
+    })
+}
+
+/// Every card the statement lists, last four digits, in order, each once.
+fn cards(issuer: &Issuer, text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for found in issuer
+        .card
+        .as_ref()
+        .map(|r| find_all_groups(&r.regex, text))
+        .unwrap_or_default()
+    {
+        let digits: String = found.chars().filter(char::is_ascii_digit).collect();
+        if digits.len() < 4 {
+            continue;
+        }
+        let last4 = digits[digits.len() - 4..].to_string();
+        if !out.contains(&last4) {
+            out.push(last4);
+        }
+    }
+    out
+}
+
+fn find_all_groups(pattern: &str, text: &str) -> Vec<String> {
+    let Ok(re) = Regex::new(pattern) else {
+        return Vec::new();
+    };
+    re.captures_iter(text)
+        .filter_map(|c| c.get(1).or_else(|| c.get(0)))
+        .map(|m| m.as_str().trim().to_string())
+        .collect()
 }
 
 fn find_first_group(pattern: &str, text: &str) -> Option<String> {
@@ -234,10 +341,32 @@ fn find_first_group(pattern: &str, text: &str) -> Option<String> {
 }
 
 fn find_date(pattern: &str, text: &str) -> Option<NaiveDate> {
-    let found = find_first_group(pattern, text)?;
-    // dd/mm/yyyy is the only shape a Brazilian bill prints, and the only one
-    // this app writes.
-    NaiveDate::parse_from_str(&found, "%d/%m/%Y").ok()
+    parse_bill_date(&find_first_group(pattern, text)?)
+}
+
+/// A date as a Brazilian bill prints it: `09/01/2026`, or `09 JAN 2026` with
+/// the Portuguese month abbreviation (Nubank). This reads *input* and stays
+/// pt-BR whatever the member's language — the app only ever *writes*
+/// dd/mm/yyyy. By hand rather than through a locale: chrono carries none here,
+/// on purpose.
+fn parse_bill_date(s: &str) -> Option<NaiveDate> {
+    if let Ok(d) = NaiveDate::parse_from_str(s.trim(), "%d/%m/%Y") {
+        return Some(d);
+    }
+    const MONTHS: [&str; 12] = [
+        "JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ",
+    ];
+    let mut parts = s
+        .split(|c: char| c.is_whitespace() || c == '/' || c == '-')
+        .filter(|p| !p.is_empty());
+    let day: u32 = parts.next()?.parse().ok()?;
+    let month = parts.next()?.to_uppercase();
+    let month = MONTHS.iter().position(|m| *m == month)? as u32 + 1;
+    let year: i32 = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    NaiveDate::from_ymd_opt(year, month, day)
 }
 
 fn find_money(pattern: &str, text: &str) -> Option<Cents> {
@@ -371,6 +500,121 @@ regex = 'Total da fatura\s*R\$\s*([\d.,]+)'
             Some(Cents(34362)),
             "the amount is still trusted"
         );
+    }
+
+    #[test]
+    fn a_bill_date_reads_in_both_shapes_brazilian_bills_print() {
+        let d = |y, m, day| NaiveDate::from_ymd_opt(y, m, day);
+        assert_eq!(parse_bill_date("09/01/2026"), d(2026, 1, 9));
+        assert_eq!(parse_bill_date("09 JAN 2026"), d(2026, 1, 9));
+        assert_eq!(parse_bill_date("15 mai 2026"), d(2026, 5, 15));
+        assert_eq!(parse_bill_date("31 DEZ 2025"), d(2025, 12, 31));
+        assert_eq!(parse_bill_date("09 XYZ 2026"), None);
+        assert_eq!(parse_bill_date("31 FEV 2026"), None, "no such day");
+    }
+
+    const OPTIONAL: &str = r#"
+[[issuer]]
+id      = "cartao-sem-codigo"
+name    = "Cartão · Exemplo"
+detect  = ['\b11\.?222\.?333/?0001-?44\b']
+kind    = "cobranca"
+barcode = "optional"
+
+[issuer.amount]
+when  = "open"
+regex = 'no valor de\s+R\$\s*([\d.]+,\d{2})'
+
+[issuer.due_date]
+when  = "absent"
+regex = 'Vencimento:\s*(\d{2}\s+\p{Lu}{3}\s+\d{4})'
+
+[issuer.card]
+regex = 'CART[AÃ]O\s+\d{4}\*{4}(\d{4})'
+"#;
+
+    #[test]
+    fn a_bill_with_no_barcode_is_read_from_its_text_when_the_issuer_sends_those() {
+        let p: Profiles = toml::from_str(OPTIONAL).unwrap();
+        let text = "CNPJ 11.222.333/0001-44\nfatura no valor de R$ 1.234,56\n\
+                    Vencimento: 09 JAN 2026\nCARTÃO 1111****2222\nCARTÃO 3333****4444\n\
+                    CARTÃO 1111****2222";
+        let got = resolve_text(text, &p).unwrap();
+        assert_eq!(got.issuer.as_deref(), Some("cartao-sem-codigo"));
+        // `when` is ignored: there is no barcode to defer to.
+        assert_eq!(got.amount, Some(Cents(123456)));
+        assert_eq!(got.amount_source, Some("text"));
+        assert_eq!(got.due, NaiveDate::from_ymd_opt(2026, 1, 9));
+        assert_eq!(got.due_source, Some("text"));
+        // Every card, in order, each once.
+        assert_eq!(got.cards, vec!["2222".to_string(), "4444".to_string()]);
+        assert_eq!(got.issuer_kind.as_deref(), Some("cobranca"));
+    }
+
+    #[test]
+    fn only_an_issuer_that_opted_in_is_read_without_a_barcode() {
+        // Enel's profile says nothing about it, so its total is never guessed
+        // from the page — the refusal names who it was.
+        let text = "CNPJ 12.345.678/0001-99\nTotal da fatura R$ 343,62";
+        assert_eq!(
+            resolve_text(text, &profiles()).unwrap_err().as_deref(),
+            Some("Energia · Enel SP")
+        );
+        assert_eq!(resolve_text("nobody we know", &profiles()), Err(None));
+        // An opted-in issuer whose amount cannot be found is not a bill this
+        // app can read either.
+        let p: Profiles = toml::from_str(OPTIONAL).unwrap();
+        assert!(resolve_text("CNPJ 11.222.333/0001-44, no total here", &p).is_err());
+    }
+
+    #[test]
+    fn an_unknown_barcode_need_is_a_config_error() {
+        let bad = "[[issuer]]\nid = \"x\"\nname = \"x\"\ndetect = ['x']\nbarcode = \"maybe\"\n";
+        assert!(toml::from_str::<Profiles>(bad).is_err());
+    }
+
+    /// The shipped `config/issuers.toml`, over statements shaped like the real
+    /// ones — the issuers' real CNPJs, made-up amounts and cards.
+    fn shipped() -> Profiles {
+        Profiles::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("config/issuers.toml")).unwrap()
+    }
+
+    #[test]
+    fn the_shipped_nubank_profile_reads_a_fatura_with_no_barcode() {
+        let text = "Olá, Fulana.\nEsta é a sua fatura de\njaneiro, no valor de\nR$ 1.234,56\n\n\n\
+                    Data de vencimento: 09 JAN 2026\n\x0c       FULANA DE TAL\n\
+                    Nu Pagamentos S.A.     CNPJ 18.236.120/0001-58\n\
+                    Total a pagar   R$ 9.999,99\n";
+        let got = resolve_text(text, &shipped()).unwrap();
+        assert_eq!(got.issuer.as_deref(), Some("nubank-cartao"));
+        assert_eq!(got.amount, Some(Cents(123456)), "the headline figure");
+        assert_eq!(got.due, NaiveDate::from_ymd_opt(2026, 1, 9));
+        assert!(got.cards.is_empty(), "rotating virtual cards are not read");
+    }
+
+    #[test]
+    fn the_shipped_inter_profile_reads_the_total_not_the_limit() {
+        let b = boleto::parse("26091234560001234500501234500005500000000000000", today()).unwrap();
+        let text = "         Total da sua fatura\n                              R$ 23.500,00\n\
+                    \n         R$ 321,00                          Data de Vencimento\n\
+                    \x0c                 FULANA DE TAL\n\
+                    1111****2222           07/01/2026              R$ 321,00\n\
+                    Fatura atual                                   R$ 321,00\n\
+                    CARTÃO 1111****2222\n CARTÃO 1111****3333\n\
+                    BENEFICIÁRIO   BANCO INTER S/A CNPJ: 00.416.968\\0001-01\n";
+        let got = resolve(&b, text, &shipped());
+        assert_eq!(
+            got.issuer.as_deref(),
+            Some("inter-cartao"),
+            "the backslash CNPJ"
+        );
+        assert_eq!(
+            got.amount,
+            Some(Cents(32100)),
+            "never the R$ 23.500,00 limit"
+        );
+        assert_eq!(got.due, NaiveDate::from_ymd_opt(2026, 1, 7));
+        assert_eq!(got.cards, vec!["2222".to_string(), "3333".to_string()]);
     }
 
     #[test]

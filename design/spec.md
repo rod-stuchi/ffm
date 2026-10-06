@@ -1109,11 +1109,13 @@ editing. So:
   a rule can be created and saved with tracking on and no file yet, the
   same way an amount or due date can be filled in later.
 - **A bound rule shows a "Bill on file" box**, above the upload field —
-  issuer, barcode kind, company code and client code, each only when the
-  bill carried it, with its own **Unlink** button and no input box. Never
-  the amount or the due date: they change every period, and this box is
-  about the identity that does not — the one a later bill is checked
-  against, and refused as *"wrong row?"* when it disagrees. Every value
+  issuer, barcode kind, company code, client code and card (*ending 7766*),
+  each only when the bill carried it, with its own **Unlink** button and no
+  input box. Never the amount or the due date: they change every period,
+  and this box is about the identity that does not — the one a later bill is
+  checked against, and asked about as *"wrong row?"* when it disagrees. A
+  bill dropped in `A` with no barcode says so under the list: *read from
+  its text*. Every value
   came off a bill (see Bill import, below), never off a keyboard, so there
   is nothing here to edit; a rule with no bill yet shows no box at all, the
   same "absent, not a blank field" treatment `instance` gets. In `A` the
@@ -2355,6 +2357,20 @@ UI-facing:
   focused, same as `a`/`i`/`:add`) — it just never decides which rule a
   dropped file belongs to, because a drop no longer resolves to a rule at
   all.
+- **A bill that cannot be confirmed, or that contradicts the rule, is a
+  question — never a dead end.** *"Wrong row? this bill is from Cartão ·
+  Inter, but Nubank is bound to Cartão · Nubank — attach it anyway?"*, or
+  *"nothing on this bill confirms it is Nubank's…"*. The modal is the `dd`
+  shape: only `y` attaches; Enter, Esc and any other key leave it out with
+  nothing written — so the trim view's second Enter can never attach it, and
+  the trim view stays open on "no" to fix. A contradiction wears the warning
+  edge; an unconfirmed bill does not. `y` skips only that check — a
+  duplicate is still refused — and the log notes what was overridden. See
+  CLAUDE.md's Recurring rules.
+- **A fatura with no barcode is read from its text** when its issuer's
+  profile allows it (`barcode = "optional"` — Nubank): the statusline says
+  *read R$ 8.843,57 due 09/01/2026 from the bill's text*, and the same file
+  dropped on another month is *already on 01/2026*, by its text fingerprint.
 - **A bill removed from one row can go on another.** A row holds a bill
   only while it holds the file: attaching the same PDF elsewhere takes it
   over, and the statusline says *moved from Moto CG 09/2026*. The old row's

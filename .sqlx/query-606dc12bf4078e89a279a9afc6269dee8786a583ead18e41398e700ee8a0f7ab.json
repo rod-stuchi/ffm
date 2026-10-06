@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE receipts SET text_hash = ?2\n             WHERE transaction_id = ?1 AND kind = 'barcode' AND deleted_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "606dc12bf4078e89a279a9afc6269dee8786a583ead18e41398e700ee8a0f7ab"
+}

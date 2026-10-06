@@ -622,25 +622,48 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     hand: no form field, shown read-only once set, absent until a file has
     been attached.
   - **The first bill attached BINDS the rule, and a later bill that
-    disagrees is refused as the wrong row — before anything is written.**
-    This hardens the earlier "flagged, not silently overwritten", which
-    stored the file and noted the mismatch afterwards: a bill for another
-    account on this row is the wrong file, not a note. The binding is
-    `client_code` when a profile could read one (it decides alone — two
-    houses with the same water company share a company code), else the
-    arrecadação `barcode_company` straight off the barcode; `issuer_id` and
-    `barcode_kind` are kept for display. A value a bill did not carry proves
-    nothing and is never a refusal. A cobrança bank code is deliberately not
-    a binding: it names the bank, and one bank issues slips for a hundred
-    billers.
+    disagrees is ASKED about — before anything is written.** This hardened
+    the earlier "flagged, not silently overwritten", which stored the file
+    and noted the mismatch afterwards; it then softened from a refusal to a
+    question (see *Never a dead end*, below). The binding, checked in this
+    order (`import::binding_check`): `client_code` when a profile could read
+    one (it decides alone — two houses with the same water company share a
+    company code); the **issuer** a profile detected by CNPJ (`issuer_id`,
+    display-only until 0014); the **card's last four** (`card_last4`, 0014 —
+    a statement lists every card, so a later one agrees when it lists the
+    bound card anywhere); the barcode `kind`; the arrecadação
+    `barcode_company`. A value a bill did not carry proves nothing; a bound
+    rule that could compare **nothing at all** is *unconfirmed*, and asked
+    about too. Only what is empty is filled. A cobrança bank code is
+    deliberately not a binding: it names the bank, and one bank issues slips
+    for a hundred billers.
+  - **Never a dead end.** A bill that contradicts the binding ("wrong
+    row?"), or that nothing can confirm, is a **question**, not a refusal:
+    the server answers `ffm:ask` (`tx::ask`), the page raises the
+    `dd`-shaped modal — only `y` attaches; Enter, Esc and anything else
+    leave it out, nothing written — and `y` re-sends the same upload with
+    `attach_anyway`. It skips **only** the identity check: a duplicate, a
+    locked or too-large file, permissions, all still refuse. The log notes
+    it (`ATTACHED_UNCONFIRMED` / `ATTACHED_MISMATCH: found ≠ known`, not
+    localized, like `receipts::MOVED`), and after a **contradiction** the
+    rule learns nothing from that bill.
+  - **A bill with no barcode is read from its text — when its issuer's
+    profile says it sends those** (`barcode = "optional"` in
+    `config/issuers.toml`; Nubank omits the boleto to push payment in its
+    app). The CNPJ vouches for the issuer, the amount and due date come off
+    the page (`issuers::resolve_text`, `when` ignored, dates in `09 JAN 2026`
+    form too), the row's `barcode_raw` goes NULL and its sources `text`. Any
+    other issuer's barcode-less file is still "no barcode" — never a total
+    guessed from the page — and on a bound rule that is a question too.
   - **Every way a bill reaches a row is checked the same way** — `A`/`E`'s
     dropzone, and the row's own slot 1 (the `+` menu, a drop on target `1`,
     `gu1`). The row path used to store whatever it was given, so a
     credit-card statement replaced a bound utility bill unchecked. A
     different barcode *kind* is a mismatch on its own: a bank slip is never
     a utility bill, even though it carries no company code to compare. A file
-    with no readable barcode is refused on a bound rule — nothing could
-    confirm it — and filed as a plain document on an unbound one.
+    with no readable barcode is asked about on a bound rule — nothing could
+    confirm it; `y` files it as a plain document, noted — and filed as a
+    plain document on an unbound one, from `E` as from the row.
   - **A row holds a bill only while it holds the file.** Removing the bill
     leaves its barcode on the row, and that used to refuse the same PDF on
     every other row — "already on Moto CG", about a row showing no bill.
@@ -662,6 +685,13 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     `bill_held_by`. The test is `boleto::names_an_account` — positions 6–19
     of the 44 digits all zero on a cobrança — and the SQL repeats it; keep
     them in step. Every other barcode keeps the rule.
+  - **Where no barcode can tell bills apart, the text does.** A text-only
+    bill, or a card's slip that is the same every month, gets a
+    **fingerprint**: its text reduced to letters and digits, lowercased,
+    blake3 (`import::fingerprint`), on its `receipts` row (`text_hash`,
+    0014). Spacing, page breaks and punctuation are left out, so a trimmed or
+    shrunk copy fingerprints the same. The same fingerprint on another live
+    row is *"already on 01/2026"* — a refusal `y` never lifts.
   - **A bill's amount replaces the row's amount, whoever set it.** The
     checksummed barcode is the evidence of what is owed, so it wins over a
     seed from the materializer *and* over a figure somebody typed with `e` —

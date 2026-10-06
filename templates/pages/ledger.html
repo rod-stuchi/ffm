@@ -407,6 +407,27 @@
     </div>
   </div>
 
+  {#- "Attach anyway?" — a bill that nothing can confirm as this rule's, or
+      that contradicts what the rule is bound to. **Never a dead end**: the
+      server asks instead of refusing, and only an explicit `y` re-sends it
+      with `attach_anyway`. Enter, Esc and every other key leave it out, so
+      a second Enter after Save in the trim view can never attach it. Above
+      the trim view, which stays open behind it. -#}
+  <div class="modal is-over is-top" :class="{ 'is-warn': attachAsk && attachAsk.mismatch }"
+       x-show="attachAsk" x-cloak @click.self="answerAttach(false)">
+    <div class="card" style="max-width:min(520px,100%)">
+      <div class="ch"><h1 x-text='attachAsk && attachAsk.mismatch ? {{ t.import_ask_title_mismatch()|json|safe }} : {{ t.import_ask_title()|json|safe }}'></h1></div>
+      <div class="cb">
+        <p style="margin-top:0" x-text="attachAsk && attachAsk.message"></p>
+        <p class="hint">{{ t.import_ask_hint() }}</p>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="answerAttach(false)">{{ t.row_cancel() }} <kbd>esc</kbd></button>
+          <button class="btn" type="button" @click="answerAttach(true)">{{ t.import_ask_yes() }} <kbd>y</kbd></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" x-show="confirming" x-cloak @click.self="confirming = null">
     <div class="card" style="max-width:min(460px,100%)">
       <div class="ch"><h1>{{ t.row_delete_confirm() }}</h1></div>
@@ -941,6 +962,9 @@ function ledger() {
     prep: null,
     /// The file the carousel is asking to remove: `{ id, kind, label }`.
     removingFile: null,
+    /// "Attach anyway?": `{ message, mismatch, resolve }` while the server's
+    /// question is on screen. See `askAttach`.
+    attachAsk: null,
     /// `d` pressed once inside the carousel, waiting for the second.
     carouselBuf: '',
     removeFileTitle: {{ remove_file_title|json|safe }},
@@ -1051,6 +1075,7 @@ function ledger() {
     prepNotPdf: {{ t.prepare_not_pdf()|json|safe }},
     prepKeepOne: {{ t.prepare_keep_one()|json|safe }},
     prepFailed: {{ t.prepare_failed()|json|safe }},
+    askDeclined: {{ t.import_ask_declined()|json|safe }},
     prepTimer: null,
     notACommand: {{ not_a_command|json|safe }},
     groupOrder: {{ group_order|json|safe }},
@@ -1367,6 +1392,14 @@ function ledger() {
       // stayed lit beside the cursor's on every j/k. Cleared by `mouseMoved`.
       if (!typing) document.body.classList.add('kbd-nav');
 
+      // "Attach anyway?" sits above even the trim view. Only `y` attaches;
+      // every other key — Enter included — leaves the bill out.
+      if (this.attachAsk) {
+        if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
+        e.preventDefault();
+        this.answerAttach(e.key === 'y');
+        return;
+      }
       // The trim-and-shrink view sits above everything, the carousel included.
       if (this.prep) {
         if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
@@ -3460,11 +3493,38 @@ function ledger() {
       return this.prepare(file, { tx: id }, f => this.sendUpload(id, kind, f));
     },
 
-    /// The upload itself — today's request, unchanged. Resolves to whether
-    /// the file was taken: a refusal answers no body, only the statusline.
-    sendUpload(id, kind, file) {
+    /// The server's "attach anyway?" — resolves to whether the person said
+    /// `y`. One question at a time; a second one answers the first with no.
+    askAttach(payload) {
+      if (this.attachAsk) this.answerAttach(false);
+      return new Promise(resolve => {
+        this.attachAsk = { message: payload.message, mismatch: !!payload.mismatch, resolve };
+      });
+    },
+
+    answerAttach(yes) {
+      const ask = this.attachAsk;
+      if (!ask) return;
+      this.attachAsk = null;
+      if (!yes) this.say(this.askDeclined, false);
+      ask.resolve(yes);
+    },
+
+    /// The upload itself. Resolves to whether the file was taken: a refusal
+    /// answers no body, only the statusline. A question (`ffm:ask`) is put to
+    /// the person outside the loader, and `y` sends the same file again with
+    /// `attach_anyway`.
+    sendUpload(id, kind, file, anyway = false) {
+      return this.postUpload(id, kind, file, anyway).then(r =>
+        r && typeof r === 'object'
+          ? this.askAttach(r).then(yes => yes ? this.sendUpload(id, kind, file, true) : false)
+          : r);
+    },
+
+    postUpload(id, kind, file, anyway) {
       const body = new FormData();
       body.append('file', file);
+      if (anyway) body.append('attach_anyway', '1');
       // htmx.ajax cannot carry a FormData body, so this one request is a plain
       // fetch and the response is swapped by hand. It still speaks the same
       // contract: a row fragment back, and the statusline in HX-Trigger.
@@ -3482,11 +3542,11 @@ function ledger() {
             const target = document.querySelector('#row-' + id);
             if (target) htmx.swap(target, html, { swapStyle: 'outerHTML' });
           }
-          if (trigger) {
-            const payload = JSON.parse(trigger)['ffm:say'];
-            if (payload) this.say(payload.message, payload.bad);
-          }
+          const events = trigger ? JSON.parse(trigger) : {};
+          if (events['ffm:say']) this.say(events['ffm:say'].message, events['ffm:say'].bad);
           this.paint();
+          // A question is answered by the caller, outside the loader.
+          if (!html.trim() && events['ffm:ask']) return events['ffm:ask'];
           return !!html.trim();
         }));
     },

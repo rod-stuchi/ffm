@@ -99,12 +99,17 @@ pub struct Rule {
     /// occurrence: the same account every period. Populated only by attaching
     /// a file; there is no form field for it.
     pub client_code: Option<String>,
-    /// The rest of what the rule's bill is bound to — see migration 0007.
-    /// `barcode_company` is the fallback binding when no profile could read a
-    /// client code; `issuer_id` and `barcode_kind` are only ever displayed.
+    /// The rest of what the rule's bill is bound to — see migrations 0007 and
+    /// 0014. `barcode_company` is the fallback binding when no profile could
+    /// read a client code. `issuer_id` — the profile a bill's CNPJ detected —
+    /// is compared too since 0014, barcode or not; `barcode_kind` decides a
+    /// bank slip is never a utility bill.
     pub issuer_id: Option<String>,
     pub barcode_company: Option<String>,
     pub barcode_kind: Option<String>,
+    /// The card's last four digits, from the statement's text (0014). A later
+    /// statement agrees when it lists this card anywhere.
+    pub card_last4: Option<String>,
     pub spans_period: bool,
     pub window_size: Option<i64>,
     pub window_start: Option<Period>,
@@ -549,6 +554,7 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
                   issuer_id AS "issuer_id: String",
                   barcode_company AS "barcode_company: String",
                   barcode_kind AS "barcode_kind: String",
+                  card_last4 AS "card_last4: String",
                   spans_period AS "spans_period!: i64",
                   window_size AS "window_size: i64",
                   window_start AS "window_start: String",
@@ -588,6 +594,7 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {
             issuer_id: r.issuer_id,
             barcode_company: r.barcode_company,
             barcode_kind: r.barcode_kind,
+            card_last4: r.card_last4,
             spans_period: r.spans_period != 0,
             window_size: r.window_size,
             window_start: r.window_start.as_deref().and_then(Period::parse),

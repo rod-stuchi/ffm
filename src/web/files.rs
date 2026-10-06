@@ -103,7 +103,13 @@ pub async fn upload(
 
     let mut filename = String::new();
     let mut bytes: Vec<u8> = Vec::new();
+    // The person answered `y` to "attach anyway?" — only a bill asks.
+    let mut anyway = false;
     while let Ok(Some(field)) = form.next_field().await {
+        if field.name() == Some("attach_anyway") {
+            anyway = field.text().await.is_ok_and(|v| v == "1");
+            continue;
+        }
         if field.name() != Some("file") {
             continue;
         }
@@ -133,7 +139,7 @@ pub async fn upload(
     // `import::attach_on_row`. Scheduled and receipt stay plain files.
     if kind == Kind::Barcode {
         let upload = crate::web::import::Upload { filename, bytes };
-        return crate::web::import::attach_on_row(&st, &auth, tx_id, upload).await;
+        return crate::web::import::attach_on_row(&st, &auth, tx_id, upload, anyway).await;
     }
 
     match receipts::store(

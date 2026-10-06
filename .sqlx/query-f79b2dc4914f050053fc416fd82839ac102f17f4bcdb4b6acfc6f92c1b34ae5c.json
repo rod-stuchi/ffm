@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE recurring_rules SET client_code = ?2, barcode_company = ?3,\n                    issuer_id = ?4, barcode_kind = ?5, card_last4 = ?6\n             WHERE id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "f79b2dc4914f050053fc416fd82839ac102f17f4bcdb4b6acfc6f92c1b34ae5c"
+}

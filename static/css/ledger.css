@@ -856,6 +856,19 @@
   z-index: 60;
 }
 
+/* "Attach anyway?" is asked from inside the trim view (z 70) as often as
+ * from a row, so it sits above that too. */
+.modal.is-top {
+  z-index: 80;
+}
+
+/* A bill that contradicts the rule's binding — "wrong row?" — wears the
+ * warning edge; one that merely could not be confirmed does not. */
+.modal.is-warn .card {
+  border-color: var(--neg);
+  box-shadow: 0 0 0 1px var(--neg);
+}
+
 .modal-actions {
   display: flex;
   gap: 8px;

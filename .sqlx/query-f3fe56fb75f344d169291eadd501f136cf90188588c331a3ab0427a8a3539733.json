@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                      t.title AS \"title!: String\",\n                      t.amount_cents AS \"amount_cents: i64\", t.member_id AS \"member_id!: i64\",\n                      t.visibility AS \"visibility!: String\"\n               FROM receipts r JOIN transactions t ON t.id = r.transaction_id\n               WHERE r.text_hash = ?1 AND r.kind = 'barcode' AND r.deleted_at IS NULL\n                 AND t.deleted_at IS NULL AND t.id <> ?2\n               LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "f3fe56fb75f344d169291eadd501f136cf90188588c331a3ab0427a8a3539733"
+}

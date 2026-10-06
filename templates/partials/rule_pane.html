@@ -409,10 +409,22 @@ function rulePane() {
       }, f => this.sendNow(f));
     },
 
-    /// The upload itself. Resolves to whether the bill was taken.
-    sendNow(file) {
+    /// The upload itself. Resolves to whether the bill was taken. A question
+    /// from the server ("attach anyway?") is put to the person outside the
+    /// loader, and `y` sends the same file again with `attach_anyway` — the
+    /// shell's own `askAttach`, so it is one modal whichever way a bill came.
+    sendNow(file, anyway = false) {
+      const shell = Alpine.$data(document.querySelector('.ledger-shell'));
+      return this.postNow(file, anyway).then(r =>
+        r && typeof r === 'object'
+          ? shell.askAttach(r).then(yes => yes ? this.sendNow(file, true) : false)
+          : r);
+    },
+
+    postNow(file, anyway) {
       const body = new FormData();
       body.append('file', file);
+      if (anyway) body.append('attach_anyway', '1');
       // What the pane's PDF password says right now, saved or not: a locked
       // statement dropped right after typing it opens in one go.
       body.append('pdf_password', this.$root.querySelector('[name=pdf_password]')?.value || '');
@@ -442,10 +454,9 @@ function rulePane() {
               if (fresh && box) { box.replaceWith(fresh); htmx.process(fresh); }
             }
           }
-          if (trigger) {
-            const payload = JSON.parse(trigger)['ffm:say'];
-            if (payload) shell.say(payload.message, payload.bad);
-          }
+          const events = trigger ? JSON.parse(trigger) : {};
+          if (events['ffm:say']) shell.say(events['ffm:say'].message, events['ffm:say'].bad);
+          if (!html.trim() && events['ffm:ask']) return events['ffm:ask'];
           return !!html.trim();
         }));
     },

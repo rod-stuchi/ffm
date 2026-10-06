@@ -107,6 +107,19 @@ pub fn say_only(message: &str, bad: bool) -> Response {
     )
 }
 
+/// A question instead of a refusal: nothing was written, and the page asks
+/// the person whether to go ahead (`ffm:ask`, answered with `y` only). An
+/// empty body, like [`say_only`], so a page that does not know the event
+/// still treats it as "not taken".
+pub fn ask(message: &str, mismatch: bool) -> Response {
+    let mut res = (StatusCode::OK, HeaderMap::new(), String::new()).into_response();
+    let payload = serde_json::json!({ "ffm:ask": { "message": message, "mismatch": mismatch } });
+    if let Ok(v) = HeaderValue::from_str(&ascii_json(&payload.to_string())) {
+        res.headers_mut().insert("HX-Trigger", v);
+    }
+    res
+}
+
 /// One row plus the totals it moved — the shape every row-level mutation
 /// answers with, exposed so the file handlers use the identical path rather
 /// than a second one that renders "the same" row slightly differently.

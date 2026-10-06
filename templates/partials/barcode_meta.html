@@ -3,8 +3,9 @@
     Create is exactly what you will see in `E` afterwards.
 
     No amount and no due date: they change every period, and this box is about
-    the identity that does not. That identity is what refuses a later bill for
-    another account — "wrong row?" — before anything is written. -#}
+    the identity that does not. That identity is what a later bill is checked
+    against — one that contradicts it is a question, "wrong row?", before
+    anything is written. -#}
 <div id="barcodemeta">
   {%- if !is_empty() %}
   <div class="notebox barcodemeta">
@@ -14,7 +15,11 @@
       {%- if let Some(v) = kind %}<dt>{{ t.import_meta_kind() }}</dt><dd>{{ v }}</dd>{% endif %}
       {%- if let Some(v) = company %}<dt>{{ t.import_meta_company() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
       {%- if let Some(v) = client_code %}<dt>{{ t.import_client_code() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
+      {%- if let Some(v) = card %}<dt>{{ t.import_meta_card() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
     </dl>
+    {%- if text_only %}
+    <span class="p2">{{ t.import_meta_text_only() }}</span>
+    {%- endif %}
     {%- if let Some(tok) = token %}
     <span class="p2">{% if let Some(f) = filename %}<span class="mono">{{ f }}</span> · {% endif %}{{ t.import_meta_pending() }}</span>
     {#- Create carries this like any other field; the parked file is attached

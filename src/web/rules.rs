@@ -789,13 +789,16 @@ async fn attach_parked(
         filename: parked.filename,
         bytes: parked.bytes,
     };
-    let parsed = match crate::web::import::parse(st, &upload) {
+    let parsed = match crate::web::import::parse(st, &t, &upload) {
         Ok(p) => p,
         Err(crate::web::import::Refused(m)) => return (m, true),
     };
-    match crate::web::import::attach_to(st, auth, &rule, tx_id, period, &upload, &parsed).await {
+    // A rule just created has nothing bound, so there is nothing to ask.
+    match crate::web::import::attach_to(st, auth, &rule, tx_id, period, &upload, &parsed, false)
+        .await
+    {
         Ok((_, m)) => (m, false),
-        Err(crate::web::import::Refused(m)) => (m, true),
+        Err(halt) => (halt.message(), true),
     }
 }
 

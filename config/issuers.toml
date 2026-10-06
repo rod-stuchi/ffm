@@ -41,6 +41,56 @@ recurring = "agua"
 [issuer.client_code]
 regex = 'Matr[ií]cula:?\s*([\d-]{6,})'
 
+# --- card faturas -------------------------------------------------------------
+#
+# Before `cartao-exemplo`: detection takes the FIRST profile that matches. The
+# ids are stored on rules (`recurring_rules.issuer_id`) and compared on every
+# later bill, so they are permanent — never rename one.
+
+# Nubank sometimes sends a fatura with NO barcode at all, to push payment in
+# its app. `barcode = "optional"` lets such a bill be read from its text: the
+# CNPJ vouches for the issuer, and the amount and due date come off the page.
+# No [issuer.card]: the digits it prints are per-purchase virtual cards that
+# rotate, so a bound one would only ever disagree.
+[[issuer]]
+id      = "nubank-cartao"
+name    = "Cartão · Nubank"
+detect  = ['\b18\.?236\.?120/?0001-?58\b']   # Nu Pagamentos S.A.
+kind    = "cobranca"
+barcode = "optional"
+
+[issuer.amount]
+when  = "open"
+regex = 'no valor de\s+R\$\s*([\d.]+,\d{2})'
+
+[issuer.due_date]
+when  = "absent"
+regex = 'Data de vencimento:\s*(\d{2}\s+\p{Lu}{3}\s+\d{4})'   # "09 JAN 2026"
+
+# Inter always carries a barcode today — an open cobrança, identical every
+# month (0013) — but `optional` costs nothing if it stops.
+[[issuer]]
+id      = "inter-cartao"
+name    = "Cartão · Inter"
+detect  = ['\b00\.?416\.?968[/\\]?0001-?01\b']   # printed "00.416.968\0001-01"
+kind    = "cobranca"
+barcode = "optional"
+
+# NOT "Total da sua fatura": in the text layer the credit limit sits between
+# that label and the figure, and would be read as the amount.
+[issuer.amount]
+when  = "open"
+regex = 'Fatura atual\s+R\$\s*([\d.]+,\d{2})'
+
+# The holder's card line: "5364****7766   07/01/2026".
+[issuer.due_date]
+when  = "absent"
+regex = '\d{4}\*{4}\d{4}\s+(\d{2}/\d{2}/\d{4})'
+
+# Every card on the statement — the holder's first, then any extra one.
+[issuer.card]
+regex = 'CART[AÃ]O\s+\d{4}\*{4}(\d{4})'
+
 [[issuer]]
 id        = "cartao-exemplo"
 name      = "Cartão"
