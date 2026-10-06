@@ -83,11 +83,20 @@
   text-align: center;
 }
 
+/* Centered, not stretched: stretched, `.htot` took the badge's height and its
+ * figures sat at the top of it, above the buttons' middle. */
 .htotals {
   margin-left: auto;
   display: flex;
+  align-items: center;
   gap: 16px;
-  font-size: 12px;
+  font-size: 13px;
+}
+
+.htot {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
 }
 
 .htotals i,
@@ -327,8 +336,6 @@
   .htot {
     order: 9;
     margin-left: auto;
-    display: flex;
-    gap: 16px;
   }
 
   /* A figure is one thing: `R$` on a line above its digits reads as two. */
@@ -2739,13 +2746,31 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  flex: 1;
+  /* Its content as the basis, not `flex: 1`'s zero: from a zero basis the
+   * foot never wrapped, it squeezed this instead, and the switch ran over
+   * the size line. */
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+/* The switch never breaks — `Shrink` over its key-cap read as two controls —
+ * and the hint gives way with an ellipsis rather than wrapping the foot. */
+.pz-controls .tog {
+  flex: none;
+  white-space: nowrap;
+}
+
+.pz-controls .hint {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pz-size {
   font-size: 12.5px;
   color: var(--ink-2);
+  white-space: nowrap;
 }
 
 .pz-orig {
