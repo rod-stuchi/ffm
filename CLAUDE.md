@@ -755,7 +755,11 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     writing the old figure back; and it is written after the upload's
     entry, so `u` puts the old amount back first and takes the file away
     second. **The due date keeps the older rule**: a date set with `e`
-    (`due_date_source = 'user'`) is kept and the difference flagged.
+    (`due_date_source = 'user'`) is kept and the difference flagged. A date
+    the bill *does* replace is a field on the same `import` entry, beside
+    the amount, so `u` puts both back — it used to log only the amount, and a
+    drop that replaced a wrong date (Vivo's 30/05/2022, read off a QR code)
+    could not have its date undone.
   - **`A` takes the bill too, not only `E`.** The rule does not exist yet, so
     the drop is read and parked (`services::pending`) and the pane shows what
     it will bind to; Create carries a token and attaches it to the occurrence

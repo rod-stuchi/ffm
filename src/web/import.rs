@@ -1374,11 +1374,14 @@ pub async fn attach_to(
     }
     let _ = entry.write(&mut tx).await;
 
-    // The amount, as an entry of its own rather than one field folded inside
-    // "file attached · 3 fields": the one change a person needs to see is that
-    // the row's figure moved, and why. Written after the upload's entry, so
-    // `u` puts the old amount back before it takes the file away.
-    let amount_entry = Change::transaction(
+    // What the bill changed on the row — its amount, and its due date — as an
+    // entry of its own rather than fields folded inside "file attached · 3
+    // fields": the one change a person needs to see is that the row's figures
+    // moved, and why. Written after the upload's entry, so `u` puts them back
+    // before it takes the file away. The due date was left out at first, so a
+    // bill that replaced a wrong date could have its amount undone and not
+    // its date.
+    let read_entry = Change::transaction(
         Actor::Import(Some(auth.viewer.member_id)),
         TxAction::Import,
         tx_id,
@@ -1389,8 +1392,13 @@ pub async fn attach_to(
         "amount",
         Value::Money(existing_amount),
         Value::Money(write_amount.or(existing_amount)),
+    )
+    .diff(
+        "due_date",
+        Value::Date(existing_due),
+        Value::Date(write_due.or(existing_due)),
     );
-    if !amount_entry.is_empty() && amount_entry.write(&mut tx).await.is_err() {
+    if !read_entry.is_empty() && read_entry.write(&mut tx).await.is_err() {
         return Err(not_written());
     }
     if tx.commit().await.is_err() {

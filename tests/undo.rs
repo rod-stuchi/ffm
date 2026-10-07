@@ -536,3 +536,57 @@ async fn u_after_a_bill_drop_puts_the_amount_back() {
     );
     assert_eq!(amount(&pool, row).await, 1000);
 }
+
+#[tokio::test]
+async fn u_after_a_bill_drop_puts_the_due_date_back_too() {
+    // The bill's entry carries the due date it replaced as well as the
+    // amount. It used to carry only the amount, so a drop that replaced a
+    // wrong date (Vivo's 30/05/2022, read off a QR code) could have its
+    // amount undone and not its date.
+    use ffm::db::changes::{Change, TxAction, Value};
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let row = add(&pool, me, me, sep(), "Internet").await;
+    sqlx::query("UPDATE transactions SET due_date = '2026-09-25' WHERE id = ?")
+        .bind(row)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut t = pool.begin().await.unwrap();
+    sqlx::query(
+        "UPDATE transactions SET amount_cents = 16099, due_date = '2026-10-10' WHERE id = ?",
+    )
+    .bind(row)
+    .execute(&mut *t)
+    .await
+    .unwrap();
+    Change::transaction(Actor::Import(Some(me)), TxAction::Import, row)
+        .in_period(sep())
+        .diff(
+            "amount",
+            Value::Money(Some(Cents(1000))),
+            Value::Money(Some(Cents(16099))),
+        )
+        .diff(
+            "due_date",
+            Value::Date(chrono::NaiveDate::from_ymd_opt(2026, 9, 25)),
+            Value::Date(chrono::NaiveDate::from_ymd_opt(2026, 10, 10)),
+        )
+        .write(&mut t)
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+
+    assert_eq!(
+        step(&pool, pane(me, me, sep()), Direction::Undo).await,
+        Some(("import".into(), row))
+    );
+    assert_eq!(amount(&pool, row).await, 1000);
+    let due: String = sqlx::query_scalar("SELECT due_date FROM transactions WHERE id = ?")
+        .bind(row)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(due, "2026-09-25");
+}
