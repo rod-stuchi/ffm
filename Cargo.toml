@@ -1,6 +1,6 @@
 [package]
 name = "ffm"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2024"
 
 # The whole dependency tree is resolved here up front — including crates phase 1
