@@ -400,3 +400,276 @@ pub async fn cancel(auth: Auth, Path(token): Path<String>) -> Response {
     stage::discard(&token, auth.viewer.member_id);
     StatusCode::NO_CONTENT.into_response()
 }
+
+// ---------------------------------------------------------------------------
+// P's "Add barcode" and "Append PDF": a longer PDF, into the same trim view
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Deserialize)]
+pub struct CodeForm {
+    code: String,
+}
+
+/// `POST /tx/{id}/file/{kind}/prepare/barcode` — the PDF on show, with one
+/// more page: the barcode drawn from a typed code, and what the code says.
+///
+/// Nothing is filed here. The longer file opens in the trim view, whose Save
+/// sends it through the upload the file came from, so the bill's checks, the
+/// supersede into the trash and `u` all hold — exactly as `t` does.
+pub async fn stage_barcode(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path((tx_id, kind)): Path<(i64, String)>,
+    axum::Form(form): axum::Form<CodeForm>,
+) -> Response {
+    let t = auth.catalog();
+    let ctx = match row_context(&st, &auth, tx_id).await {
+        Ok(c) => c,
+        Err(res) => return res,
+    };
+    let Some((path, ext)) = crate::web::files::on_disk(&st, &auth, tx_id, &kind).await else {
+        return crate::web::tx::refuse(t.error_not_written(), true);
+    };
+    if ext != "pdf" {
+        return crate::web::tx::refuse(t.carousel_only_pdf(), true);
+    }
+    // Every check digit, and the digits the standard fixes, before anything
+    // is drawn: a mistyped code must never become a scannable barcode for
+    // somebody else's bill.
+    let barcode = match crate::services::boleto::parse(&form.code, crate::clock::today()) {
+        Ok(b) => b,
+        Err(e) => return crate::web::tx::refuse(&code_refusal(&t, &e), true),
+    };
+    let currency = crate::db::ledger::household(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|h| h.currency)
+        .unwrap_or_default();
+    let info = page_info(&t, &barcode, &form.code, ctx.row.as_deref(), currency);
+    // The size of the page it follows, so the file stays one size.
+    let (w, h) = crate::services::pdftrim::last_page_size(&path)
+        .unwrap_or(crate::services::barcode_page::A4);
+    let Some(page) = crate::services::barcode_page::page(&info, w, h) else {
+        return crate::web::tx::refuse(t.error_not_written(), true);
+    };
+    appended(&auth, &t, &path, page, &ctx).await
+}
+
+/// `POST /tx/{id}/file/{kind}/prepare/append` — the PDF on show with another
+/// PDF's pages after it, into the trim view. A locked one is opened with the
+/// rule's password first, as every upload to the row is.
+pub async fn stage_append(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path((tx_id, kind)): Path<(i64, String)>,
+    mut form: Multipart,
+) -> Response {
+    let t = auth.catalog();
+    let ctx = match row_context(&st, &auth, tx_id).await {
+        Ok(c) => c,
+        Err(res) => return res,
+    };
+    let Some((path, ext)) = crate::web::files::on_disk(&st, &auth, tx_id, &kind).await else {
+        return crate::web::tx::refuse(t.error_not_written(), true);
+    };
+    if ext != "pdf" {
+        return crate::web::tx::refuse(t.carousel_only_pdf(), true);
+    }
+    let mut filename = String::new();
+    let mut bytes = Vec::new();
+    while let Ok(Some(field)) = form.next_field().await {
+        if field.name() == Some("file") {
+            filename = field.file_name().unwrap_or_default().to_string();
+            match field.bytes().await {
+                Ok(b) if b.len() <= MAX_BYTES => bytes = b.to_vec(),
+                Ok(_) => return crate::web::tx::refuse(t.file_too_big(), true),
+                Err(_) => return crate::web::tx::refuse(t.error_not_written(), true),
+            }
+        }
+    }
+    if !bytes.starts_with(b"%PDF") {
+        return crate::web::tx::refuse(t.carousel_append_not_pdf(), true);
+    }
+    let upload = crate::web::import::Upload {
+        filename,
+        bytes,
+        ..Default::default()
+    };
+    let upload = match crate::web::import::unlock_for(
+        &t,
+        upload,
+        ctx.password.as_deref(),
+        &crate::web::fidget::Fidget::off(),
+    )
+    .await
+    {
+        Ok(u) => u,
+        Err(crate::web::import::Refused(m)) => return crate::web::tx::refuse(&m, true),
+    };
+    appended(&auth, &t, &path, upload.bytes, &ctx).await
+}
+
+/// `stored` with `extra`'s pages after it, staged for the trim view under the
+/// stored file's own name.
+async fn appended(
+    auth: &Auth,
+    t: &Catalog,
+    stored: &std::path::Path,
+    extra: Vec<u8>,
+    ctx: &Context,
+) -> Response {
+    let dir = std::env::temp_dir().join(format!("ffm-append-{:016x}", rand::random::<u64>()));
+    let base = stored.to_path_buf();
+    let merged = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let extra_path = dir.join("extra.pdf");
+        let out = dir.join("out.pdf");
+        std::fs::write(&extra_path, &extra).map_err(|e| e.to_string())?;
+        let done = crate::services::pdftrim::append(&base, &extra_path, &out)
+            .and_then(|()| std::fs::read(&out).map_err(|e| e.to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+        done
+    })
+    .await;
+    let bytes = match merged {
+        Ok(Ok(b)) => b,
+        Ok(Err(e)) => {
+            tracing::warn!("append: {e}");
+            return crate::web::tx::refuse(t.file_pdf_unreadable(), true);
+        }
+        Err(_) => return crate::web::tx::refuse(t.error_not_written(), true),
+    };
+    let filename = stored
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file.pdf".into());
+    stage_bytes(auth, t, filename, bytes, ctx, true).await
+}
+
+/// Why a typed code was refused, in the member's language.
+fn code_refusal(t: &Catalog, e: &crate::services::boleto::Error) -> String {
+    use crate::services::boleto::Error;
+    match e {
+        Error::Length(n) => t.barcode_code_length(*n as i64),
+        Error::CheckDigit { at } => t.barcode_code_digit(at),
+        Error::NotDigits
+        | Error::UnknownValueKind(_)
+        | Error::Currency(_)
+        | Error::NotArrecadacao => t.barcode_code_not().to_string(),
+    }
+}
+
+/// What the generated page says: the code's kind, what it pays, to whom and
+/// when — every value formatted the way the ledger formats it.
+fn page_info(
+    t: &Catalog,
+    b: &crate::services::boleto::Barcode,
+    typed: &str,
+    row: Option<&str>,
+    currency: crate::domain::money::Currency,
+) -> crate::services::barcode_page::PageInfo {
+    use crate::services::boleto::{Amount, Kind};
+    let mut details = Vec::new();
+    details.push((
+        t.barcode_page_value().to_string(),
+        match b.amount {
+            Amount::Fixed(c) => fmt::money(c, currency),
+            Amount::Open => t.barcode_page_open().to_string(),
+            Amount::Reference(n) => t.barcode_page_reference(&n.to_string()),
+        },
+    ));
+    if let Some(c) = &b.company {
+        details.push((t.barcode_page_company().to_string(), c.clone()));
+    }
+    if b.kind == Kind::Arrecadacao {
+        let segment = b
+            .raw
+            .chars()
+            .nth(1)
+            .and_then(|c| c.to_digit(10))
+            .unwrap_or(0);
+        details.push((
+            t.barcode_page_segment().to_string(),
+            segment_name(t, segment),
+        ));
+    }
+    if let Some(bank) = &b.bank {
+        details.push((t.barcode_page_bank().to_string(), bank.clone()));
+    }
+    if let Some(d) = b.due.date() {
+        details.push((t.barcode_page_due().to_string(), fmt::date(d)));
+    }
+    crate::services::barcode_page::PageInfo {
+        heading: match b.kind {
+            Kind::Arrecadacao => t.barcode_page_heading_consumo().to_string(),
+            Kind::Cobranca => t.barcode_page_heading_cobranca().to_string(),
+        },
+        details,
+        typed: grouped(typed),
+        barcode: b.raw.clone(),
+        footer: t.barcode_page_footer(row.unwrap_or(""), &fmt::date(crate::clock::today())),
+    }
+}
+
+/// FEBRABAN's segments, position 2 of a utility payment code.
+fn segment_name(t: &Catalog, n: u32) -> String {
+    match n {
+        1 => t.barcode_segment_1(),
+        2 => t.barcode_segment_2(),
+        3 => t.barcode_segment_3(),
+        4 => t.barcode_segment_4(),
+        5 => t.barcode_segment_5(),
+        6 => t.barcode_segment_6(),
+        7 => t.barcode_segment_7(),
+        _ => t.barcode_segment_other(),
+    }
+    .to_string()
+}
+
+/// The code as a person types it, in the groups a bill prints: four blocks
+/// of `11-1` for 48 digits, the five fields of a bank slip for 47. Anything
+/// else is shown as it came.
+fn grouped(typed: &str) -> String {
+    let d: String = typed.chars().filter(char::is_ascii_digit).collect();
+    match d.len() {
+        48 => d
+            .as_bytes()
+            .chunks(12)
+            .map(|c| {
+                let s = std::str::from_utf8(c).unwrap_or_default();
+                format!("{}-{}", &s[..11], &s[11..])
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        47 => format!(
+            "{}.{} {}.{} {}.{} {} {}",
+            &d[0..5],
+            &d[5..10],
+            &d[10..15],
+            &d[15..21],
+            &d[21..26],
+            &d[26..32],
+            &d[32..33],
+            &d[33..47]
+        ),
+        _ => d,
+    }
+}
+
+#[cfg(test)]
+mod barcode_tests {
+    use super::grouped;
+
+    #[test]
+    fn a_code_is_shown_in_the_groups_a_bill_prints() {
+        assert_eq!(
+            grouped("826600000002053100240018000976822015102026200034"),
+            "82660000000-2 05310024001-8 00097682201-5 10202620003-4"
+        );
+        assert_eq!(
+            grouped("34191.79001 01043.510047 91020.150008 1 15700000034362"),
+            "34191.79001 01043.510047 91020.150008 1 15700000034362"
+        );
+    }
+}

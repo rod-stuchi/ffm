@@ -64,6 +64,14 @@ pub fn router(state: AppState) -> Router {
         .route("/tx/{id}/file/{kind}", get(files::open).post(files::upload))
         .route("/tx/{id}/file/{kind}/delete", post(files::delete))
         .route("/tx/{id}/file/{kind}/prepare", post(prepare::stage_stored))
+        .route(
+            "/tx/{id}/file/{kind}/prepare/barcode",
+            post(prepare::stage_barcode),
+        )
+        .route(
+            "/tx/{id}/file/{kind}/prepare/append",
+            post(prepare::stage_append),
+        )
         .route("/prepare", post(prepare::stage_upload))
         .route("/prepare/{token}/cancel", post(prepare::cancel))
         .route("/rules", post(rules::create))

@@ -871,6 +871,11 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     same bill dropped again. `A` parks the unshrunk bytes with the shrink
     still to do (`pending`), and Create does it. No unshrunk copy is kept —
     the household's originals live in its email.
+  - **`P` can make a PDF longer, through the same view**: `b` adds a page
+    with a barcode drawn from a typed code (`services::itf`,
+    `services::barcode_page` — a hand-written PDF page, nothing embedded),
+    `a` appends another PDF. Both stage the longer file and open the trim
+    view on it, so Save files it through the slot's upload like `t` does.
   - **Ghostscript is optional.** Without `gs` on the server the Shrink
     switch is absent and trimming still works; `qpdf` was already required.
   - **A shrink that does not come out smaller is thrown away** — an already

@@ -408,6 +408,29 @@
     </div>
   </div>
 
+  {#- `b` in the carousel: a payment code, typed or pasted, becomes a last
+      page on the PDF on show — the barcode drawn at the page's full width,
+      and what the code says. It goes through the trim view, like `t`, so
+      nothing is filed until Save there. A form, so Enter submits and the
+      field takes every key; above the carousel, which stays open. -#}
+  <div class="modal is-over" x-show="codeFor" x-cloak @click.self="codeFor = null">
+    <form class="card" style="max-width:min(600px,100%)" @submit.prevent="addBarcode()">
+      <div class="ch"><h1>{{ t.carousel_code_title() }}</h1></div>
+      <div class="cb">
+        <label class="f">
+          <span class="k">{{ t.carousel_code_label() }}</span>
+          <input class="i mono" x-ref="codeinput" x-model="code" inputmode="numeric"
+                 autocomplete="off" spellcheck="false">
+        </label>
+        <p class="hint">{{ t.carousel_code_hint() }}</p>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="codeFor = null">{{ t.row_cancel() }} <kbd>esc</kbd></button>
+          <button class="btn pri" type="submit">{{ t.carousel_code_add() }} <kbd>&#9166;</kbd></button>
+        </div>
+      </div>
+    </form>
+  </div>
+
   {#- "Attach anyway?" — a bill that nothing can confirm as this rule's, or
       that contradicts what the rule is bound to. **Never a dead end**: the
       server asks instead of refusing, and only an explicit `y` re-sends it
@@ -613,6 +636,15 @@
               replaces the file — the old one goes to the trash. -#}
           <button class="btn" type="button" x-show="/\.pdf$/i.test(carousel.current.path)"
                   @click="trimCurrent()">{{ t.prepare_trim() }} <kbd>t</kbd></button>
+          {#- More pages for the PDF on show: a barcode drawn from a code
+              (`b`), or another PDF's pages (`a`, Vim's append). Both open
+              the trim view on the longer file, so Save there files it. -#}
+          <button class="btn" type="button" x-show="/\.pdf$/i.test(carousel.current.path)"
+                  @click="askBarcode()">{{ t.carousel_add_barcode() }} <kbd>b</kbd></button>
+          <button class="btn" type="button" x-show="/\.pdf$/i.test(carousel.current.path)"
+                  @click="pickAppend()">{{ t.carousel_append_pdf() }} <kbd>a</kbd></button>
+          <input type="file" accept="application/pdf,.pdf" x-ref="appendpick" hidden
+                 @change="appendPdf($event)">
         </div>
       </div>
     </template>
@@ -1049,6 +1081,14 @@ function ledger() {
     prep: null,
     /// The file the carousel is asking to remove: `{ id, kind, label }`.
     removingFile: null,
+    /// `b` in the carousel: the row and slot a typed code is for, while its
+    /// box is open, and what is typed in it.
+    codeFor: null,
+    code: '',
+    /// `a` in the carousel: the row and slot the file picker is for. Its own
+    /// flag, never the one that says a box is open (see CLAUDE.md's gotcha
+    /// about `@click.outside` and a file picker).
+    appendFor: null,
     /// "Attach anyway?": `{ message, mismatch, resolve }` while the server's
     /// question is on screen. See `askAttach`.
     attachAsk: null,
@@ -1175,6 +1215,7 @@ function ledger() {
     paidRefusedOneOff: {{ paid_refused_one_off|json|safe }},
     errorNotWritten: {{ error_not_written|json|safe }},
     prepNotPdf: {{ t.prepare_not_pdf()|json|safe }},
+    onlyPdf: {{ t.carousel_only_pdf()|json|safe }},
     prepKeepOne: {{ t.prepare_keep_one()|json|safe }},
     prepFailed: {{ t.prepare_failed()|json|safe }},
     askDeclined: {{ t.import_ask_declined()|json|safe }},
@@ -1516,6 +1557,12 @@ function ledger() {
         if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
         e.preventDefault();
         this.prepKey(e.key);
+        return;
+      }
+      // The code box is a form above the carousel: its field takes every key
+      // (Enter submits it), and only Esc is the box's own.
+      if (this.codeFor) {
+        if (e.key === 'Escape') { e.preventDefault(); this.codeFor = null; }
         return;
       }
       if (this.removingFile) {
@@ -2261,6 +2308,8 @@ function ledger() {
 
     carouselKey(k) {
       if (k === 't') { this.carouselBuf = ''; this.trimCurrent(); return; }
+      if (k === 'b') { this.carouselBuf = ''; this.askBarcode(); return; }
+      if (k === 'a') { this.carouselBuf = ''; this.pickAppend(); return; }
       if (k === 'v') { this.carouselBuf = ''; this.togglePdfView(); return; }
       // `dd` removes the file on show — the row's own delete gesture, pointed
       // at the file — and `gg` goes to the top, as in the ledger. The carousel
@@ -4130,18 +4179,77 @@ function ledger() {
       const c = this.carousel;
       if (!c || !c.current) return;
       if (!/\.pdf$/i.test(c.current.path || '')) { this.say(this.prepNotPdf, true); return; }
-      const kind = c.current.kind;
-      const id = c.id;
-      this.prepOpen(fetch('/tx/' + id + '/file/' + kind + '/prepare',
-                          { method: 'POST', headers: { 'HX-Request': 'true' } }),
+      this.prepStored(fetch('/tx/' + c.id + '/file/' + c.current.kind + '/prepare',
+                            { method: 'POST', headers: { 'HX-Request': 'true' } }),
+                      c.id, c.current.kind);
+    },
+
+    /// A stored file, reworked on the server, into the trim view: Save there
+    /// sends it through the slot's own upload, which replaces the stored copy
+    /// (the old one to the trash, `u` brings it back), and the carousel then
+    /// shows it as it now is. `t`, `b` and `a` all end here.
+    prepStored(request, id, kind) {
+      this.prepOpen(request,
         (f, extra) => this.sendUpload(id, kind, f, extra).then(ok => {
-          // The carousel shows the file again, as it now is.
           if (ok && this.carousel) {
             const el = document.querySelector('.cviewin');
             if (el) { el.dataset.src = ''; this.showFile(el, this.carousel.current); }
           }
           return ok;
         }));
+    },
+
+    /// The PDF on show, or a statusline refusal saying only a PDF can take
+    /// more pages.
+    pdfSlot() {
+      const c = this.carousel;
+      if (!c || !c.current) return null;
+      if (!/\.pdf$/i.test(c.current.path || '')) { this.say(this.onlyPdf, true); return null; }
+      return { id: c.id, kind: c.current.kind };
+    },
+
+    /// `b`: the box for a payment code.
+    askBarcode() {
+      const slot = this.pdfSlot();
+      if (!slot) return;
+      this.code = '';
+      this.codeFor = slot;
+      this.focusSoon(this.$refs.codeinput);
+    },
+
+    /// The box's Add: the server checks every digit, draws the page and opens
+    /// the trim view on the longer file — or says why the code is wrong, and
+    /// nothing is staged.
+    addBarcode() {
+      const f = this.codeFor;
+      if (!f) return;
+      this.codeFor = null;
+      this.prepStored(fetch('/tx/' + f.id + '/file/' + f.kind + '/prepare/barcode', {
+        method: 'POST',
+        headers: { 'HX-Request': 'true', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ code: this.code }),
+      }), f.id, f.kind);
+    },
+
+    /// `a`: a PDF to put after the one on show.
+    pickAppend() {
+      const slot = this.pdfSlot();
+      if (!slot) return;
+      this.appendFor = slot;
+      this.$refs.appendpick.click();
+    },
+
+    appendPdf(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      const f = this.appendFor;
+      this.appendFor = null;
+      if (!file || !f) return;
+      const body = new FormData();
+      body.append('file', file);
+      this.prepStored(fetch('/tx/' + f.id + '/file/' + f.kind + '/prepare/append', {
+        method: 'POST', headers: { 'HX-Request': 'true' }, body,
+      }), f.id, f.kind);
     },
 
     prepOpen(request, onSave) {

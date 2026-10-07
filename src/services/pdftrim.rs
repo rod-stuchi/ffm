@@ -100,6 +100,48 @@ pub fn shrink_bytes(bytes: &[u8]) -> Result<Option<Vec<u8>>, String> {
 
 /// Runs a command to completion or `TIMEOUT`, whichever comes first — killed
 /// on the timeout, never left running behind a request that gave up on it.
+/// `base`'s pages, then `extra`'s, into `out` — `P`'s *Append PDF* and *Add
+/// barcode*, which then go through the trim view like any other PDF.
+pub fn append(base: &Path, extra: &Path, out: &Path) -> Result<(), String> {
+    let mut cmd = Command::new("qpdf");
+    cmd.arg("--empty")
+        .arg("--pages")
+        .arg(base)
+        .arg(extra)
+        .arg("--")
+        .arg(out);
+    run(cmd, "qpdf", &[0, 3])
+}
+
+/// The size of a PDF's last page in points — what a page appended after it
+/// matches, so the file stays one size. `None` when `pdfinfo` cannot say.
+pub fn last_page_size(path: &Path) -> Option<(f32, f32)> {
+    let info = |args: &[&str]| -> Option<String> {
+        let out = Command::new("pdfinfo").args(args).arg(path).output().ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    };
+    let pages: u32 = info(&[])?
+        .lines()
+        .find_map(|l| l.strip_prefix("Pages:"))?
+        .trim()
+        .parse()
+        .ok()?;
+    let n = pages.to_string();
+    // `Page    3 size: 595.28 x 841.89 pts (A4)`
+    let line = info(&["-f", &n, "-l", &n])?
+        .lines()
+        .find(|l| l.starts_with("Page") && l.contains(" size:"))?
+        .to_string();
+    let dims = line.split(" size:").nth(1)?;
+    let mut parts = dims.split_whitespace();
+    let w: f32 = parts.next()?.parse().ok()?;
+    let _x = parts.next()?;
+    let h: f32 = parts.next()?.parse().ok()?;
+    (w > 0.0 && h > 0.0).then_some((w, h))
+}
+
 fn run(mut cmd: Command, name: &str, ok: &[i32]) -> Result<(), String> {
     let mut child = cmd
         .stdout(Stdio::null())
@@ -177,6 +219,33 @@ trailer<</Root 1 0 R>>\n%%EOF\n";
             .output()
             .unwrap();
         String::from_utf8_lossy(&out.stdout).trim().parse().unwrap()
+    }
+
+    #[test]
+    fn append_puts_the_extra_pages_after_and_the_size_is_read() {
+        if !have("qpdf") || !have("pdfinfo") {
+            return;
+        }
+        let dir = scratch();
+        let base = pages(3, &dir);
+        assert_eq!(last_page_size(&base), Some((200.0, 200.0)));
+
+        // A generated barcode page, at the size of the page it follows.
+        let info = crate::services::barcode_page::PageInfo {
+            heading: "x".into(),
+            barcode: "82660000000053100240010009768220110202620003".into(),
+            ..Default::default()
+        };
+        let extra = dir.join("barcode.pdf");
+        std::fs::write(
+            &extra,
+            crate::services::barcode_page::page(&info, 200.0, 200.0).unwrap(),
+        )
+        .unwrap();
+        let out = dir.join("out.pdf");
+        append(&base, &extra, &out).unwrap();
+        assert_eq!(count(&out), 4);
+        assert_eq!(last_page_size(&out), Some((200.0, 200.0)));
     }
 
     fn scratch() -> std::path::PathBuf {

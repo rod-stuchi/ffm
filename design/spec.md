@@ -568,6 +568,27 @@ receipt — without leaving the ledger behind it.
   through (see Trim and shrink, under Receipt tracking & files), on the
   stored file; saving replaces it, and the carousel then shows the new copy.
   On a photo or a text file the button is absent and `t` says why.
+- **A PDF on show can take more pages** — *Add barcode* (`b`) and *Append
+  PDF* (`a`), beside Trim, on a PDF only. Both open **the same trim view** on
+  the longer file, so nothing is filed until Save there: the pages are seen
+  first, any can be dropped, and Save replaces the stored file — the old one
+  to the trash, `u` brings it back. A locked PDF being appended is opened
+  with the rule's password, as every upload to the row is.
+  - **`b` draws a barcode from a code** typed or pasted into a small box (47
+    or 48 digits as printed, or the 44 the bars encode). Every check digit
+    and the digits the standard fixes are checked first, and a code that
+    fails is refused with the reason — a typo must never become a scannable
+    barcode for somebody else's bill. The new last page matches the size of
+    the page it follows (A4 if that cannot be read): the bars, Interleaved 2
+    of 5 at the full width inside the margins (`services::itf`), the 44
+    digits under them, and above, what the code says — kind, value,
+    company or bank, segment, due date — with a footer naming the row and
+    that ffm made it from a typed code. A PDF written by hand, standard fonts
+    only (`services::barcode_page`), no dependency.
+  - **The page is a readable bill.** The code is printed as text, so the
+    app's own reader finds it in the page, exactly as on a bill a company
+    issued — Save files it through the same bill checks.
+  - **`a` puts another PDF's pages last** (`qpdf --empty --pages`).
 - **A bill whose rule spans several periods (`spans_period`) shows its page
   prominently in the stage**, not just in the file rail's small label —
   "One file, 10 pages — this month is page **4**" sits right under the
@@ -794,6 +815,8 @@ whole keymap was out of reach: there was no field to focus.
 | `gg` / `G` | inside the carousel — the top of the first page, the end of the last · inside the trim view — the first / last page |
 | `dd` | inside the carousel — remove the file on show; confirms with `y`, never `Enter` |
 | `t` | inside the carousel — trim or shrink the PDF on show (see Trim and shrink, below) |
+| `b` | inside the carousel — add a last page to the PDF on show: the barcode drawn from a typed code, and what the code says |
+| `a` | inside the carousel — append another PDF's pages to the one on show |
 | `v` | inside the carousel — the PDF on show in the browser's own viewer, and back to the page images |
 
 `gu` is "goto upload", a second step of the same `g`-prefix vocabulary rather

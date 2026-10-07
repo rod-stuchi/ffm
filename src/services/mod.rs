@@ -2,9 +2,11 @@
 
 pub mod assistant;
 pub mod backup;
+pub mod barcode_page;
 pub mod boleto;
 pub mod import;
 pub mod issuers;
+pub mod itf;
 pub mod live;
 pub mod materializer;
 pub mod pdflock;

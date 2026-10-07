@@ -695,6 +695,8 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("J K", "inside P: next / previous page"),
                 k("gg G", "inside P: first page, the end of the last"),
                 k("t", "inside P: trim or shrink the PDF on show"),
+                k("b", "inside P: add a page with a barcode drawn from a code"),
+                k("a", "inside P: append another PDF's pages"),
                 k(
                     "v",
                     "inside P: the PDF in the browser's own viewer, and back",
