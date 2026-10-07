@@ -9,24 +9,55 @@
 
 use tokio::sync::{broadcast, watch};
 
-/// One row to re-fetch. `disk` is set when the change came from the vault by
-/// hand rather than through the app, which the statusline says.
+/// Something on a ledger changed. Either **one row** to re-fetch, or — when
+/// rows came, went or moved (`pane`) — **a whole pane** to re-render.
+/// `disk` is set when the change came from the vault by hand rather than
+/// through the app, which the statusline says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LiveEvent {
+    /// The row; 0 for a pane event.
     pub id: i64,
+    /// The row's (or pane's) member; 0 for "every pane" — a re-attribution,
+    /// which moves a row between two of them.
     pub member_id: i64,
-    /// `YYYY-MM` — a page only cares about rows in the month it shows.
-    pub period: String,
+    /// `YYYY-MM` — a page only cares about the month it shows. `None` for a
+    /// change that reaches every month (a rule's).
+    pub period: Option<String>,
     pub disk: bool,
+    pub pane: bool,
 }
 
 impl LiveEvent {
+    /// One row re-fetched.
+    pub fn row(id: i64, member_id: i64, period: impl Into<String>) -> LiveEvent {
+        LiveEvent {
+            id,
+            member_id,
+            period: Some(period.into()),
+            disk: false,
+            pane: false,
+        }
+    }
+
+    /// One member's pane re-rendered — `period: None` for every month,
+    /// `member_id: 0` for every member.
+    pub fn pane(member_id: i64, period: Option<String>) -> LiveEvent {
+        LiveEvent {
+            id: 0,
+            member_id,
+            period,
+            disk: false,
+            pane: true,
+        }
+    }
+
     pub fn json(&self) -> String {
         serde_json::json!({
             "id": self.id,
             "member": self.member_id,
             "period": self.period,
             "disk": self.disk,
+            "pane": self.pane,
         })
         .to_string()
     }

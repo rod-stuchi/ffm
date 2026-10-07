@@ -23,7 +23,6 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use std::convert::Infallible;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
-use tokio_stream::Stream;
 use tokio_stream::wrappers::ReceiverStream;
 
 /// How often a stream re-checks its session with no signal at all. A revoke
@@ -31,10 +30,7 @@ use tokio_stream::wrappers::ReceiverStream;
 /// this one's channel, so it is caught here instead, within this long.
 const RECHECK: Duration = Duration::from_secs(30);
 
-pub async fn stream(
-    State(st): State<AppState>,
-    auth: Auth,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+pub async fn stream(State(st): State<AppState>, auth: Auth) -> impl axum::response::IntoResponse {
     let (out, events) = mpsc::channel::<Result<Event, Infallible>>(32);
     let mut signals = st.live.subscribe();
     let mut stop = st.live.stopped();
@@ -91,7 +87,12 @@ pub async fn stream(
         }
     });
 
-    Sse::new(ReceiverStream::new(events)).keep_alive(KeepAlive::default())
+    // `X-Accel-Buffering: no` — an nginx in front buffers proxied responses
+    // by default, which would hold every event back until its buffer filled.
+    (
+        [("x-accel-buffering", "no")],
+        Sse::new(ReceiverStream::new(events)).keep_alive(KeepAlive::default()),
+    )
 }
 
 /// Whether this stream's session still exists. A database error answers yes:

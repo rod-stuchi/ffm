@@ -200,6 +200,24 @@ pub async fn pane_fragment(
     }
 }
 
+/// `GET /panes/{member}/{period}` — one member's pane re-rendered, rows and
+/// totals out of band: what an open page fetches when the live channel says
+/// rows came, went or moved there (`services::live_feed`). The same fragment
+/// every mutation answers with, as this viewer may see it.
+pub async fn pane_get(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path((member_id, period)): Path<(i64, String)>,
+) -> Response {
+    let Some(period) = Period::parse(&period) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    match pane_rows(&st, &auth, member_id, period).await {
+        Some(rows) => Html(rows).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
 /// The body [`pane_fragment`] answers with, unwrapped — for an answer that
 /// carries more than one pane (the trash restoring rows into several).
 pub(crate) async fn pane_rows(

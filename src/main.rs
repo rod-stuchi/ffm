@@ -190,6 +190,9 @@ async fn main() {
     // Files changed by hand: watched from now on, and caught up on for the
     // time the process was down. Both are their own tasks, started after the
     // bind, so the server answers from the first moment.
+    // Every change in the log, to every open page — the watcher only adds
+    // what it finds changed by hand.
+    ffm::services::live_feed::spawn(state_pool.clone(), live.clone());
     ffm::services::watch::spawn(state_pool.clone(), receipts_root.clone(), live.clone());
     ffm::services::watch::catch_up(state_pool.clone(), receipts_root, live);
 

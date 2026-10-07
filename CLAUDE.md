@@ -792,9 +792,23 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   is kept: an app write updates its row in the same handler, so reconcile
   finds nothing. It never moves a file — a hand-filed receipt does **not**
   supersede the scheduled one. Startup catches up on what changed while the
-  process was down, in its own task. Every affected row is pushed over
+  process was down, in its own task. What it finds is pushed over
   Server-Sent Events as **ids only**; each page re-fetches the row as itself,
   never swapping a row open in `e` (its kept copy goes stale instead).
+- **Every change reaches every open page — announced from the change log,
+  not by each handler** (`services::live_feed`). A receipt uploaded on one
+  computer used to show paid there and nowhere else: only the watcher
+  announced anything, and a burst of row fetches from one page was cut to its
+  last by htmx. Every write already appends to `change`, so once a second the
+  feed reads the new entries and publishes what they reach — an edit, the paid
+  tick, privacy, an import or a file is **its row**; a create, delete, restore
+  or reorder **its member's pane** (`GET /panes/{member}/{period}`); a
+  re-attribution **every pane** of the month; a rule **its member's pane in
+  every month**. No handler can forget to announce. The page coalesces a
+  burst for 250ms, fetches each row with its own element as the htmx source,
+  keeps the cursor on its row by id, and holds a pane with a row open in `e`
+  until that form closes. The watcher now announces only what it found by
+  hand, for *updated from disk*.
 - **`receipts` is also the extension index, and that is its real second job.**
   The path ends in `.{ext}`, and the extension is whatever was uploaded, so the
   path cannot be *constructed* without reading `receipts.ext`. That makes the

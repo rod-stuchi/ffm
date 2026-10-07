@@ -1142,6 +1142,11 @@ function ledger() {
     liveFromDisk: {{ t.live_from_disk()|json|safe }},
     // `refreshDot`'s debounce: a burst of events is one re-fetch.
     dotTimer: null,
+    /// Live events waiting out their 250ms, and panes waiting for a form to
+    /// close before they are re-rendered (`flushLive`).
+    liveQueue: [],
+    liveTimer: null,
+    livePanes: {},
     liveUnderEdit: {{ t.live_under_edit()|json|safe }},
     addSpend: {{ t.row_add_spend()|json|safe }},
     addIncome: {{ t.row_add_income()|json|safe }},
@@ -1386,31 +1391,94 @@ function ledger() {
           this.fidgetStep(p.job, p.text);
         } catch (_) { /* not ours to read */ }
       });
+      // Every change, from the change log (`services::live_feed`) — a row to
+      // re-fetch, or a pane where rows came, went or moved. Queued for 250ms
+      // and acted on once each: a burst used to fire one request per row at
+      // once, from the same source element, and htmx kept only the last —
+      // so a receipt uploaded on another computer showed paid there and not
+      // here.
       es.addEventListener('row', (e) => {
         let ev;
         try { ev = JSON.parse(e.data); } catch (_) { return; }
         // Any month, not only the one on screen: the dot is about the OTHER
         // months, and a receipt filed by hand in August is what clears it.
         this.refreshDot();
-        const period = document.querySelector('.ledger-shell')?.dataset.period;
-        const id = String(ev.id);
-        if (ev.period !== period || !document.getElementById('row-' + id)) return;
+        this.liveQueue.push(ev);
+        clearTimeout(this.liveTimer);
+        this.liveTimer = setTimeout(() => this.flushLive(), 250);
+      });
+    },
+
+    /// Acts on the queued live events: each pane once, each row once — a row
+    /// inside a pane that is re-rendered anyway needs no fetch of its own.
+    flushLive() {
+      const period = this.shell().dataset.period;
+      const events = this.liveQueue.splice(0);
+      const rows = new Map();
+      for (const ev of events) {
+        if (ev.period && ev.period !== period) continue;
+        if (ev.pane) {
+          // Member 0 is every pane: a row moved between two of them.
+          const members = ev.member
+            ? [String(ev.member)]
+            : [...document.querySelectorAll('.rows[id^="rows-"]')].map(r => r.id.slice(5));
+          members
+            .filter(m => document.getElementById('rows-' + m))
+            .forEach(m => { this.livePanes[m] = true; });
+        } else {
+          const id = String(ev.id);
+          rows.set(id, rows.get(id) || !!ev.disk);
+        }
+      }
+      for (const [id, disk] of rows) {
+        const el = document.getElementById('row-' + id);
+        if (!el) continue;
+        const pane = el.closest('.rows[id^="rows-"]');
+        if (pane && this.livePanes[pane.id.slice(5)]) continue;
         // The row being edited is never swapped under the form: `savedSwap`
         // would read the swap as a finished save and throw the draft away.
         // Its kept copy goes stale instead, so Esc fetches the new one.
         if (String(this.editing) === id) {
           ffmRowHtml.delete(id);
-          if (ev.disk) this.say(this.liveUnderEdit, false);
-          return;
+          if (disk) this.say(this.liveUnderEdit, false);
+          continue;
         }
-        this.ajax('GET', '/tx/' + id, { target: '#row-' + id, swap: 'outerHTML' }, 'none')
+        // Its own element as the source, so one row's request never cancels
+        // another's.
+        this.ajax('GET', '/tx/' + id, { source: el, target: el, swap: 'outerHTML' }, 'none')
           .then(() => {
             this.markDrafts();
             this.paintSelection();
             this.paint();
-            if (ev.disk) this.say(this.liveFromDisk, false);
+            if (disk) this.say(this.liveFromDisk, false);
           });
-      });
+      }
+      this.refreshPanes();
+    },
+
+    /// Re-renders the panes the live channel named. A pane with a row open in
+    /// `e` waits — swapping its rows would take the form, and what is typed
+    /// in it, with them — until the form closes (the `editing` watch in
+    /// `init`).
+    refreshPanes() {
+      const period = this.shell().dataset.period;
+      for (const member of Object.keys(this.livePanes)) {
+        const rowsEl = document.getElementById('rows-' + member);
+        if (!rowsEl) { delete this.livePanes[member]; continue; }
+        if (this.editing && rowsEl.querySelector('#row-' + this.editing)) continue;
+        delete this.livePanes[member];
+        // The cursor stays on its row, by id: the rows around it may have
+        // come, gone or moved.
+        const keep = this.focusedId();
+        this.ajax('GET', '/panes/' + member + '/' + period,
+                  { source: rowsEl, target: rowsEl, swap: 'none' }, 'none')
+          .then(() => {
+            if (keep) this.cursorTo(keep);
+            this.markDrafts();
+            this.paintSelection();
+            this.paint();
+          });
+      }
     },
 
     /// The month picker's trigger and its dot, re-rendered alone
@@ -4490,6 +4558,11 @@ function ledger() {
     },
 
     init() {
+      // A pane the live channel left alone because a row in it was open in
+      // `e` is re-rendered the moment that form closes — saved, canceled or
+      // parked. Not a retry timer: a background tab throttles those to one
+      // a minute, and the form closing is the event being waited for.
+      this.$watch('editing', (v) => { if (!v) this.refreshPanes(); });
       // `?row=` is a `:grep` hit landing from another month. Read once and
       // dropped from the URL, so a refresh does not blink the row again;
       // `?pane=` has already put the right member in focus server-side.

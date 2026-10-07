@@ -2257,10 +2257,40 @@ found out on their next load. A file deleted by hand even stayed "live" in
   rendered per viewer, so each page that has it on screen re-fetches it
   (`GET /tx/{id}`) as itself, totals included. The row open in `e` is never
   swapped under the form; its kept copy goes stale, the statusline says so,
-  and Esc shows the new one. Every affected row is pushed, so another
-  member's upload through the app shows live too; *updated from disk* is said
-  only for a hand change. The stream ends on shutdown, or graceful shutdown
-  would wait on it forever.
+  and Esc shows the new one. *updated from disk* is said only for a hand
+  change. The stream ends on shutdown, or graceful shutdown would wait on it
+  forever. `X-Accel-Buffering: no` keeps a proxy from holding events back.
+
+### Every change, live
+
+A receipt uploaded on one computer showed paid there and stayed unpaid on the
+other: only the watcher announced anything. Now every change does, read off
+the change log (`services::live_feed`), which every write already appends to
+— so no handler can forget. Once a second the new entries become events:
+
+| entry | event | the page |
+|---|---|---|
+| transaction `edit` · `import` · `privacy` · `materialize`, any file entry | **row** — its id, owner, month | re-fetches the row (`GET /tx/{id}`) |
+| transaction `create` · `delete` · `restore` · `reorder` | **pane** — its member, its month | re-renders the pane (`GET /panes/{member}/{period}`), totals included |
+| transaction `reattribute` | **every pane** of its month | re-renders each pane on screen |
+| any rule entry | **its member's pane, every month** | re-renders it, whatever month is on screen |
+| account actions | nothing | — |
+
+- **The owner and month are the row's now**, never the actor's: an admin's
+  edit in Ana's pane names Ana's pane.
+- **A batch is coalesced** on both ends: one `dd` of a row with three files is
+  one pane event, and the page waits 250ms and acts once per row and pane. A
+  row inside a pane being re-rendered is not fetched as well.
+- **Each row is fetched with its own element as the htmx source.** A burst
+  from one source keeps only the last request — the bug that hid the upload.
+- **The cursor stays on its row by id** across a pane re-render, the way it
+  does after `J`/`K`; parked drafts and the selection are redrawn.
+- **A pane with a row open in `e` waits** until the form closes — saved,
+  canceled or parked — and then re-renders. Swapping it would take the form
+  and what is typed in it. It waits on the form, not a timer: a background
+  tab throttles timers to one a minute.
+- The page that made the change hears its own echo too, and re-fetches what
+  it already shows. Harmless, and simpler than telling pages apart.
 
 ### Pruning duplicates (`:prune`)
 

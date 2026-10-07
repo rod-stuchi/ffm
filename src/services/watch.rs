@@ -78,10 +78,14 @@ pub fn locate(root: &Path, path: &Path) -> Option<(String, Option<Period>)> {
 }
 
 /// Reconciles one member's rows — of one month, or all of them — and pushes
-/// each to the open pages. Within a month every row is pushed, so another
-/// member's page catches up with an upload made through the app too; across a
-/// whole member only the rows that actually changed are, rather than a page's
-/// worth of re-fetches for nothing.
+/// the ones a hand edit changed to the open pages, marked `disk` for the
+/// statusline.
+///
+/// It used to push every row of the month after ANY file change, so that an
+/// upload through the app reached the other open pages too. That job is the
+/// change log's now (`services::live_feed`, which announces every write
+/// exactly once), and the burst of a month's worth of re-fetches it caused is
+/// what lost rows on the page: htmx kept only the last request of the burst.
 async fn settle(pool: &SqlitePool, root: &Path, live: &Live, slug: &str, period: Option<Period>) {
     let rows = match receipts::tracked_in(pool, slug, period).await {
         Ok(r) => r,
@@ -105,12 +109,10 @@ async fn settle(pool: &SqlitePool, root: &Path, live: &Live, slug: &str, period:
                 done.removed
             );
         }
-        if period.is_some() || done.changed() {
+        if done.changed() {
             live.publish(LiveEvent {
-                id,
-                member_id,
-                period: p,
-                disk: done.changed(),
+                disk: true,
+                ..LiveEvent::row(id, member_id, p)
             });
         }
     }
@@ -198,10 +200,8 @@ pub fn catch_up(pool: SqlitePool, root: PathBuf, live: Live) {
                     removed += d.removed;
                     if d.changed() {
                         live.publish(LiveEvent {
-                            id,
-                            member_id,
-                            period,
                             disk: true,
+                            ..LiveEvent::row(id, member_id, period)
                         });
                     }
                 }

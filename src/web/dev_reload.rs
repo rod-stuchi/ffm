@@ -21,7 +21,6 @@ use std::convert::Infallible;
 use std::sync::LazyLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
-use tokio_stream::Stream;
 use tokio_stream::wrappers::ReceiverStream;
 
 /// This process, by when it started. Any value that differs between two runs
@@ -34,9 +33,7 @@ static BOOT: LazyLock<String> = LazyLock::new(|| {
 });
 
 /// No session: the pre-auth pages and the sandbox reload too.
-pub async fn stream(
-    State(st): State<AppState>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+pub async fn stream(State(st): State<AppState>) -> impl axum::response::IntoResponse {
     let (out, events) = mpsc::channel::<Result<Event, Infallible>>(1);
     let mut stop = st.live.stopped();
     let boot = Event::default()
@@ -55,5 +52,10 @@ pub async fn stream(
             _ = out.closed() => {}
         }
     });
-    Sse::new(ReceiverStream::new(events)).keep_alive(KeepAlive::default())
+    // `X-Accel-Buffering: no` — an nginx in front buffers proxied responses
+    // by default, which would hold every event back until its buffer filled.
+    (
+        [("x-accel-buffering", "no")],
+        Sse::new(ReceiverStream::new(events)).keep_alive(KeepAlive::default()),
+    )
 }

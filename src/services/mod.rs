@@ -9,6 +9,7 @@ pub mod installments;
 pub mod issuers;
 pub mod itf;
 pub mod live;
+pub mod live_feed;
 pub mod materializer;
 pub mod pdflock;
 pub mod pdftrim;
