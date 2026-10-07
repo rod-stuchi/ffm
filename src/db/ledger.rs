@@ -235,6 +235,8 @@ pub async fn pane_with_vault(
             t.manual_paid        AS "manual_paid!: i64",
 
             r.tracked            AS "tracked?: i64",
+            r.bucket             AS "rule_bucket?: String",
+            r.bill_name          AS "rule_bill_name?: String",
             r.instance           AS "instance?: String",
             r.total_installments AS "total_installments?: i64",
             r.spans_period       AS "spans_period?: i64",
@@ -362,6 +364,8 @@ pub async fn pane_with_vault(
             bill_name: r.bill_name,
             manual_paid: r.manual_paid != 0,
 
+            file_bucket: r.rule_bucket,
+            file_bill_name: r.rule_bill_name,
             tracked: r.tracked.unwrap_or(0) != 0,
             instance: r.instance,
             total_installments: r.total_installments.map(|n| n as u16),
@@ -427,7 +431,7 @@ pub async fn pane_with_vault(
         let fallback = rule_amount_of.get(i).copied().flatten().map(Cents);
         let Some(rule_id) = row.rule_id else { continue };
 
-        let history = confirmed_history(pool, root, member, rule_id, row.period, window).await?;
+        let history = confirmed_history(pool, root, rule_id, row.period, window).await?;
         if let Some(p) = estimate::project(&history, basis, window, fallback) {
             row.estimate_cents = Some(p.amount);
         }
@@ -438,19 +442,11 @@ pub async fn pane_with_vault(
     // file under and is skipped entirely.
     if let Some(root) = root {
         for row in out.iter_mut().filter(|r| r.tracked) {
-            let (Some(bucket), Some(bill_name)) = (row.bucket.clone(), row.bill_name.clone())
-            else {
+            // The path is `slot_of`'s, the one place it is decided — never
+            // rebuilt here from the row's own bucket, which is how the ledger
+            // came to look in one folder while uploads wrote to another.
+            let Ok(Some((slot, _))) = crate::services::receipts::slot_of(pool, row.id).await else {
                 continue;
-            };
-            let slot = crate::services::receipts::Slot {
-                transaction_id: row.id,
-                vault: crate::domain::receipt_path::vault(&member.slug),
-                bucket,
-                bill_name,
-                instance: row.instance.clone(),
-                period: row.period,
-                amount: row.amount_cents.map(|c| (c, ctx.currency)),
-                amount_in_filename: row.amount_in_filename,
             };
             if let Ok(found) = crate::services::receipts::presence(pool, root, &slot).await {
                 row.files = found;
@@ -491,7 +487,6 @@ pub async fn pane_with_vault(
 async fn confirmed_history(
     pool: &SqlitePool,
     root: Option<&std::path::Path>,
-    member: &Member,
     rule_id: i64,
     before: Period,
     window: usize,
@@ -505,10 +500,7 @@ async fn confirmed_history(
         r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
                   t.amount_cents AS "amount_cents: i64",
                   t.manual_paid AS "manual_paid!: i64",
-                  t.bucket AS "bucket: String", t.bill_name AS "bill_name: String",
-                  r.tracked AS "tracked!: i64",
-                  r.instance AS "instance: String",
-                  r.amount_in_filename AS "amount_in_filename!: i64"
+                  r.tracked AS "tracked!: i64"
            FROM transactions t
            JOIN recurring_rules r ON r.id = t.rule_id
            WHERE t.rule_id = ?1 AND t.period < ?2 AND t.deleted_at IS NULL
@@ -529,24 +521,17 @@ async fn confirmed_history(
         }
         let amount = Cents(r.amount_cents.unwrap_or(0));
         let confirmed = if r.tracked != 0 {
-            // No manual tick for a tracked rule, ever — the disk answers.
-            match (root, r.bucket.as_deref(), r.bill_name.as_deref()) {
-                (Some(root), Some(bucket), Some(bill_name)) => {
-                    let slot = crate::services::receipts::Slot {
-                        transaction_id: r.id,
-                        vault: crate::domain::receipt_path::vault(&member.slug),
-                        bucket: bucket.to_string(),
-                        bill_name: bill_name.to_string(),
-                        instance: r.instance.clone(),
-                        period: Period::parse(&r.period).unwrap_or(before),
-                        amount: Some((amount, Currency::default())),
-                        amount_in_filename: r.amount_in_filename != 0,
-                    };
-                    crate::services::receipts::presence(pool, root, &slot)
+            // No manual tick for a tracked rule, ever — the disk answers, at
+            // the path `slot_of` decides (it used to be rebuilt here from the
+            // row's bucket, and with a hardcoded currency in the filename).
+            match root {
+                Some(root) => match crate::services::receipts::slot_of(pool, r.id).await {
+                    Ok(Some((slot, _))) => crate::services::receipts::presence(pool, root, &slot)
                         .await
                         .map(|p| p.receipt.is_some())
-                        .unwrap_or(false)
-                }
+                        .unwrap_or(false),
+                    _ => false,
+                },
                 // No vault to consult: nothing is confirmed, which is the
                 // honest answer rather than a convenient one.
                 _ => false,
@@ -698,15 +683,9 @@ pub async fn unresolved_months(
     // Tracked, overdue, and not in the month already on screen — the badge is
     // about somewhere ELSE needing attention.
     let rows = sqlx::query!(
-        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
-                  t.amount_cents AS "amount_cents: i64",
-                  t.bucket AS "bucket: String", t.bill_name AS "bill_name: String",
-                  r.instance AS "instance: String",
-                  r.amount_in_filename AS "amount_in_filename!: i64",
-                  m.slug AS "slug!: String"
+        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String"
            FROM transactions t
            JOIN recurring_rules r ON r.id = t.rule_id
-           JOIN members m ON m.id = t.member_id
            WHERE r.tracked = 1
              AND t.deleted_at IS NULL
              AND t.period >= ?1
@@ -739,26 +718,18 @@ pub async fn unresolved_months(
 
         // The disk decides, here as everywhere: a receipt on disk resolves it,
         // whatever the database thinks.
-        let resolved = match (root, r.bucket.as_deref(), r.bill_name.as_deref()) {
-            (Some(root), Some(bucket), Some(bill_name)) => {
-                let slot = crate::services::receipts::Slot {
-                    transaction_id: r.id,
-                    vault: crate::domain::receipt_path::vault(&r.slug),
-                    bucket: bucket.to_string(),
-                    bill_name: bill_name.to_string(),
-                    instance: r.instance.clone(),
-                    period,
-                    amount: r.amount_cents.map(|c| (Cents(c), Currency::default())),
-                    amount_in_filename: r.amount_in_filename != 0,
-                };
-                crate::services::receipts::presence(pool, root, &slot)
+        // The path is `slot_of`'s, as everywhere.
+        let resolved = match root {
+            Some(root) => match crate::services::receipts::slot_of(pool, r.id).await {
+                Ok(Some((slot, _))) => crate::services::receipts::presence(pool, root, &slot)
                     .await
                     .map(|p| p.receipt.is_some())
-                    .unwrap_or(false)
-            }
+                    .unwrap_or(false),
+                _ => false,
+            },
             // No vault to consult: nothing is resolved, which is the honest
             // answer rather than a convenient one.
-            _ => false,
+            None => false,
         };
         if resolved {
             continue;

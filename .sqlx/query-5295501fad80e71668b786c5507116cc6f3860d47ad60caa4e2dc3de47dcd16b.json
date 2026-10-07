@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\"\n           FROM transactions t\n           JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE r.tracked = 1\n             AND t.deleted_at IS NULL\n             AND t.period >= ?1\n             AND t.due_date IS NOT NULL\n             AND t.due_date < ?2\n             AND (t.visibility = 'household' OR t.member_id = ?3 OR ?4)\n             -- Nor a month the member was inactive in: nothing there is shown.\n             AND NOT EXISTS (SELECT 1 FROM member_inactive i\n                             WHERE i.member_id = t.member_id AND i.from_period <= t.period\n                               AND (i.until_period IS NULL OR t.period < i.until_period))\n           ORDER BY t.period",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "5295501fad80e71668b786c5507116cc6f3860d47ad60caa4e2dc3de47dcd16b"
+}

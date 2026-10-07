@@ -228,6 +228,12 @@ rule-past-note = Os meses anteriores, e este depois de pago, ficam como foram re
 rule-created = regra criada · { $n } mês(es) gerado(s)
 rule-saved = regra salva
 rule-moved-due = a linha deste mês agora vence em { $date }
+files-refiled =
+    { $n ->
+        [one] 1 arquivo movido para a nova pasta
+       *[other] { $n } arquivos movidos para a nova pasta
+    }
+files-refile-blocked = não movido — já há um arquivo em { $path }
 rule-deleted = regra excluída · as linhas continuam
 rule-none-on-row = não vem de uma regra recorrente
 rule-deleted-on-row = a regra desta linha foi excluída · arquivos e situação continuam valendo
@@ -449,6 +455,7 @@ log-field-tracked = guardar comprovante
 log-field-path = caminho
 log-field-kind = tipo
 log-field-original-filename = nome original
+log-field-rows = linhas renomeadas junto
 log-on = ligado
 log-off = desligado
 moved-down = para baixo

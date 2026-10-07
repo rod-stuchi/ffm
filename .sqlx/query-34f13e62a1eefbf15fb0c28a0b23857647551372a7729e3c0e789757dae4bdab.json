@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                  t.bucket AS \"bucket: String\", t.bill_name AS \"bill_name: String\",\n                  t.amount_cents AS \"amount_cents: i64\", t.member_id AS \"member_id!: i64\",\n                  m.slug AS \"slug!: String\",\n                  r.instance AS \"instance: String\",\n                  r.amount_in_filename AS \"amount_in_filename!: i64\"\n           FROM transactions t\n           JOIN recurring_rules r ON r.id = t.rule_id\n           JOIN members m ON m.id = t.member_id\n           WHERE t.id = ?1 AND t.deleted_at IS NULL AND r.tracked = 1",
+  "query": "SELECT t.id AS \"id!: i64\", t.period AS \"period!: String\",\n                  r.bucket AS \"bucket: String\", r.bill_name AS \"bill_name: String\",\n                  t.amount_cents AS \"amount_cents: i64\", t.member_id AS \"member_id!: i64\",\n                  m.slug AS \"slug!: String\",\n                  r.instance AS \"instance: String\",\n                  r.amount_in_filename AS \"amount_in_filename!: i64\"\n           FROM transactions t\n           JOIN recurring_rules r ON r.id = t.rule_id\n           JOIN members m ON m.id = t.member_id\n           WHERE t.id = ?1 AND t.deleted_at IS NULL AND r.tracked = 1",
   "describe": {
     "columns": [
       {
@@ -64,5 +64,5 @@
       false
     ]
   },
-  "hash": "f02b389d4c64c64ba29126339c008b229a2e239c2dad0bdbbaf23e2ed70a045f"
+  "hash": "34f13e62a1eefbf15fb0c28a0b23857647551372a7729e3c0e789757dae4bdab"
 }

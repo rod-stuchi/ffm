@@ -1396,6 +1396,10 @@ pub async fn attach_to(
     if tx.commit().await.is_err() {
         return Err(not_written());
     }
+    // A receipt named with its amount follows the amount the bill set.
+    if write_amount.is_some() {
+        crate::web::files::refile(st, tx_id).await;
+    }
 
     // What actually happened, in one line — and where the figure came from:
     // a bill with no barcode, or one whose barcode carries no amount (a card's

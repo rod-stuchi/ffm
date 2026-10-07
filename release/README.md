@@ -59,8 +59,9 @@ prints a one-time link to set a new one, run on this machine.
 
 1. Stop the server.
 2. Copy `ffm`, `static/` and `start.sh` from the new release over these.
-   Keep `ffm.toml`, `config/`, `ffm.db`, `receipts/` and `backups/` — they are
-   the household's.
+   Keep `ffm.toml`, `ffm.db`, `receipts/` and `backups/` — they are the
+   household's. (A `config/` folder left by v0.0.4 or earlier can stay; it is
+   read once, on the first start, and then retired.)
 3. Start it. Database changes are applied on start.
 
 The version is on the first line of `:profile`, and in the boot log.

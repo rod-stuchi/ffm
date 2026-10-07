@@ -410,6 +410,8 @@ async fn deleted_row(
         bucket: None,
         bill_name: None,
         manual_paid: false,
+        file_bucket: None,
+        file_bill_name: None,
         tracked: false,
         instance: None,
         total_installments: None,
@@ -778,6 +780,11 @@ async fn apply(st: &AppState, auth: &Auth, f: UndoForm, dir: tx::Direction) -> R
         match u.action.as_str() {
             "delete" if ok => files_follow_row(st, actor, u.entity_id, true).await,
             "create" | "restore" if ok => files_follow_row(st, actor, u.entity_id, false).await,
+            // A row given back to its member, or an amount put back, moves
+            // where its files belong — they follow, as they did forwards.
+            "reattribute" | "edit" | "import" if ok => {
+                crate::web::files::refile(st, u.entity_id).await;
+            }
             _ => {}
         }
         ok
@@ -1275,15 +1282,23 @@ pub async fn save_edit(
     .await;
 
     match ok {
-        Ok(tx::Saved::Ok) => match tx::one(&st.pool, id).await {
-            Ok(Some((member_id, period, _))) if derived_view(&auth) => {
-                pane_at(&st, &auth, id, member_id, period, t.edit_saved()).await
+        Ok(tx::Saved::Ok) => {
+            // A receipt named with its amount follows a new amount.
+            let refiled = crate::web::files::refile(&st, id).await;
+            let saved = match crate::web::files::refiled_note(&t, &refiled) {
+                Some(note) => format!("{} · {note}", t.edit_saved()),
+                None => t.edit_saved().to_string(),
+            };
+            match tx::one(&st.pool, id).await {
+                Ok(Some((member_id, period, _))) if derived_view(&auth) => {
+                    pane_at(&st, &auth, id, member_id, period, &saved).await
+                }
+                Ok(Some((member_id, period, _))) => {
+                    row_fragment(&st, &auth, id, member_id, period, &saved).await
+                }
+                _ => say_only(t.error_not_written(), true),
             }
-            Ok(Some((member_id, period, _))) => {
-                row_fragment(&st, &auth, id, member_id, period, t.edit_saved()).await
-            }
-            _ => say_only(t.error_not_written(), true),
-        },
+        }
         // Somebody saved this row while the form was open. Nothing was
         // written; the row comes back read-only showing THEIR version, and
         // the draft stays parked so nothing typed is lost. The marker header
@@ -1535,10 +1550,15 @@ pub async fn reattribute(
     {
         Ok(true) => match tx::one(&st.pool, id).await {
             Ok(Some((_, period, _))) => {
+                // Its files live in its member's folder, so they go too.
+                let refiled = crate::web::files::refile(&st, id).await;
                 // Both panes changed, so the whole month comes back rather
                 // than one row: the row left one pane and joined another, and
                 // a single fragment could only tell half of that.
-                let msg = t.row_reattributed(&to_name);
+                let mut msg = t.row_reattributed(&to_name);
+                if let Some(note) = crate::web::files::refiled_note(&t, &refiled) {
+                    msg = format!("{msg} · {note}");
+                }
                 let mut res = pane_fragment(&st, &auth, form.to, period, &msg).await;
                 res.headers_mut()
                     .insert("HX-Refresh", axum::http::HeaderValue::from_static("true"));

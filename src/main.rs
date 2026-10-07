@@ -113,6 +113,17 @@ async fn main() {
         eprintln!("{e}");
         std::process::exit(1);
     }
+    // And every file where its row now looks: a rule renamed, or a row given
+    // to another member, by v0.0.5 or earlier left its files behind. A no-op
+    // once done; a file whose new path is taken stays put and is logged.
+    match ffm::services::vault::refile_all(&pool, &cfg.receipts_root).await {
+        Ok((0, _)) => {}
+        Ok((n, blocked)) => tracing::info!(
+            "vault · {n} file(s) re-filed where their row now looks, {} left in place",
+            blocked.len()
+        ),
+        Err(e) => tracing::warn!("{e}"),
+    }
     // And `config/issuers.toml` retires: a rule still bound to one of its
     // profiles gets it as its own recipe, bound by CNPJ. A no-op once done.
     match ffm::db::recipes::convert_profiles(&pool, &cfg.issuers_path()).await {

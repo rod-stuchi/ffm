@@ -319,6 +319,28 @@ pub async fn edit_reporting(
 
     record_window(&mut tx, id, form, &now()).await?;
 
+    // **A renamed bucket or bill name reaches every row of the rule**, in
+    // every month: the rows are what `:group bucket` folds by, and a rule
+    // whose rows still said the old name grouped in one place while its files
+    // lived in another. Recorded on this entry — not one per row — so `u`,
+    // which walks rows, cannot undo half a rename; editing the rule back is
+    // the way back, and it moves everything back the same way.
+    let renamed = old.bucket != form.bucket || old.bill_name != form.bill_name;
+    let rows_followed = if renamed {
+        sqlx::query!(
+            "UPDATE transactions SET bucket = ?2, bill_name = ?3, version = version + 1
+             WHERE rule_id = ?1 AND (bucket IS NOT ?2 OR bill_name IS NOT ?3)",
+            id,
+            form.bucket,
+            form.bill_name,
+        )
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
+    } else {
+        0
+    };
+
     let entry = Change::rule(actor, RuleAction::Edit, id)
         .diff("title", Value::text(&old.title), Value::text(&form.title))
         .diff(
@@ -362,6 +384,15 @@ pub async fn edit_reporting(
             Value::Bool(form.tracked),
         );
     let entry = password_field(entry, &old.pdf_password, &form.pdf_password);
+    let entry = if rows_followed > 0 {
+        entry.always(
+            "rows",
+            Value::Text(None),
+            Value::text(rows_followed.to_string()),
+        )
+    } else {
+        entry
+    };
 
     // A save that changed nothing writes nothing: a log full of empty edits is
     // a log nobody reads.

@@ -17,7 +17,6 @@ use crate::db::rules::{self, RuleForm};
 use crate::domain::money::Cents;
 use crate::domain::months::{Months, MonthsError};
 use crate::domain::period::Period;
-use crate::domain::slug::slugify;
 use crate::domain::status::{TxKind, Visibility};
 use crate::services::materializer;
 use crate::state::AppState;
@@ -868,9 +867,14 @@ pub async fn save(
     };
     match rules::edit_reporting(&st.pool, Actor::User(auth.viewer.member_id), id, &form).await {
         Ok(Some(edited)) => {
+            // A renamed bucket, bill name or instance moves where the rule's
+            // files belong, so they follow it — before the panes re-render,
+            // which read the disk at the new path.
+            let refiled = crate::web::files::refile_rule(&st, id).await;
             // A new due day that reached this month's row says so: the row
-            // moving is the part of the save a person sees.
-            let message = match edited.moved_due {
+            // moving is the part of the save a person sees. So do files that
+            // moved, or could not.
+            let mut message = match edited.moved_due {
                 Some(d) => format!(
                     "{} · {}",
                     t.rule_saved(),
@@ -878,6 +882,9 @@ pub async fn save(
                 ),
                 None => t.rule_saved().to_string(),
             };
+            if let Some(note) = crate::web::files::refiled_note(&t, &refiled) {
+                message = format!("{message} · {note}");
+            }
             // The pane to re-render is the rule's owner's, read from the
             // database — never from a hidden field somebody could change.
             finish(&st, &auth, rule.member_id, &input.period, message).await
@@ -1135,12 +1142,17 @@ pub fn computed_path(
     instance: &str,
     period: Period,
 ) -> String {
-    let mut parts = vec![vault.to_string(), slugify(bucket), slugify(bill_name)];
-    if !instance.trim().is_empty() {
-        parts.push(slugify(instance));
-    }
-    parts.push(period.path_year());
-    format!("{}/{}.pdf", parts.join("/"), period.path_month())
+    // `receipt_path` builds it, as it builds every other path — a second
+    // builder here is how a preview comes to promise a folder files never
+    // reach.
+    use crate::domain::receipt_path::{self, Kind, Taxonomy};
+    let tax = Taxonomy {
+        vault,
+        bucket,
+        bill_name,
+        instance: Some(instance),
+    };
+    receipt_path::file(&tax, period, Kind::Receipt, "pdf", None)
 }
 
 /// Never used by a handler — the pane's JavaScript recomputes the same string

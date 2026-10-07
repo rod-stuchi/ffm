@@ -525,7 +525,19 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   paths pointing into it, once at startup; `domain::receipt_path::vault` is
   the one place the folder name is decided. Slugified
   (lowercase, spaces → `_`). Renaming a rule's taxonomy fields must move its
-  existing files to the new path — it isn't just a label edit.
+  existing files to the new path — it isn't just a label edit. **It does
+  now, and the path has one builder:** `receipts::slot_of` — the **rule's**
+  bucket, bill name and instance, the row's member and amount — read by the
+  upload, the ledger's mark, the carousel and the watcher alike. Any write
+  that moves the computed path (a rule saved, a row given to another member,
+  an amount in a filename changed, and the undo of each) calls
+  `receipts::refile_row`, which moves the live files there, never over
+  another file, logged as the system (*re-filed where its row now points*)
+  so `u` treats it as part of the change that caused it; a startup pass
+  (`vault::refile_all`) re-files whatever a crash or an older version left.
+  A rule's bucket or bill-name edit also renames every one of its rows, so
+  `:group bucket` folds where the files are; recorded once, on the
+  `rule_edit` entry. A restore puts a file back where its row looks *now*.
   `bucket`/`bill_name`/`instance` may not slugify to `delete` or start with
   `.` — reserved for the soft-delete folder below.
 - **Three file kinds per period, each a separate fact:**
@@ -1770,6 +1782,14 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   parked drafts must sit on a container *outside* every `hx-target`, or the
   swap must preserve it (`hx-preserve`, or a morph swap). A fragment that both
   holds draft state and is its own swap target cannot work.
+- **Two path builders that agree today are a vault the app cannot see
+  tomorrow.** v0.0.5 computed a row's file path in five places: uploads from
+  the rule's bucket, the ledger's mark from the row's own. They agreed until a
+  rule's bucket was renamed — then every upload landed where the rule said,
+  the ledger looked where the row said, and the row showed no bill however
+  many times it was uploaded (Damha III, in production). A path is decided in
+  `receipts::slot_of` and nowhere else; a new reader takes a `Slot` from it,
+  never a bucket from whatever row it happens to have.
 - **A scan for forbidden content must read the content, not the prose about
   it.** Bitten three times already, in three different tools: `build.rs`'s
   currency-glyph gate (scan Fluent text elements, never raw bytes — a comment

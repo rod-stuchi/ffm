@@ -54,7 +54,7 @@ impl Slot {
         }
     }
 
-    fn path(&self, kind: Kind, ext: &str) -> String {
+    pub(crate) fn path(&self, kind: Kind, ext: &str) -> String {
         receipt_path::file(
             &self.taxonomy(),
             self.period,
@@ -438,6 +438,15 @@ pub async fn restore(
         // disk goes on deciding what it shows, as it does everywhere.
         return restore_row_only(pool, actor, receipt_id, &rel, undo_of).await;
     };
+    // Back where its row looks NOW, not where it was deleted from: a copy
+    // deleted before the rule's bucket was renamed would otherwise come back
+    // to a folder the row no longer reads, and show as missing. The copy is
+    // still found by its old path — that is what its trash name is built
+    // from.
+    let rel = match current_path(pool, receipt_id).await? {
+        Some(now) => now,
+        None => rel,
+    };
     let to = root.join(&rel);
     // Restoring over a live file would be the hard delete this module exists
     // to prevent, pointed the other way.
@@ -457,9 +466,11 @@ pub async fn restore(
     let mut tx = pool.begin().await.map_err(db)?;
     sqlx::query!(
         r#"UPDATE receipts SET deleted_at = NULL, deleted_by = NULL,
-                               delete_reason = NULL, deleted_from_path = NULL
+                               delete_reason = NULL, deleted_from_path = NULL,
+                               path = ?2
            WHERE id = ?1"#,
-        receipt_id
+        receipt_id,
+        rel
     )
     .execute(&mut *tx)
     .await
@@ -476,6 +487,28 @@ pub async fn restore(
     entry.write(&mut tx).await.map_err(db)?;
     tx.commit().await.map_err(db)?;
     Ok(true)
+}
+
+/// Where one file record belongs now: its row's computed path for its kind
+/// and extension. `None` when its row has nothing to file under — untracked,
+/// or deleted — and the old path is all there is.
+async fn current_path(pool: &SqlitePool, receipt_id: i64) -> Result<Option<String>, StoreError> {
+    let row = sqlx::query!(
+        r#"SELECT transaction_id AS "tx!: i64", kind AS "kind!: String", ext AS "ext!: String"
+           FROM receipts WHERE id = ?1"#,
+        receipt_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(db)?;
+    let Some(row) = row else { return Ok(None) };
+    let Some(kind) = Kind::parse(&row.kind) else {
+        return Ok(None);
+    };
+    Ok(slot_of(pool, row.tx)
+        .await
+        .map_err(db)?
+        .map(|(slot, _)| slot.path(kind, &row.ext)))
 }
 
 /// Puts a deleted file back even when its slot is taken, by moving the live
@@ -834,16 +867,23 @@ impl Reconciled {
     }
 }
 
-/// The slot of one tracked occurrence, from the same columns the pane reads —
-/// the transaction's bucket and bill name, the rule's instance and
-/// amount-in-filename, the member's folder — so a reconcile and the row's
-/// own mark can never disagree about where its files belong. `None` for a
-/// row with nothing to file under, or one that is deleted (its files went to
-/// the trash with it).
+/// The slot of one tracked occurrence — **the one place a row's file path is
+/// decided.** The upload, the ledger's mark, the carousel, the watcher and the
+/// re-filing all read it, so none of them can look somewhere another wrote.
+///
+/// The taxonomy is the **rule's** — bucket, bill name, instance and
+/// amount-in-filename — because a tracked rule is what files live under; the
+/// folder is the row's member's, and the amount the row's own. It used to be
+/// built in five places, two of them from the row's own bucket: after a rule's
+/// bucket was renamed, every upload landed where the rule said and the ledger
+/// looked where the row said, so no upload ever showed (v0.0.5, Damha III).
+///
+/// `None` for a row with nothing to file under, or one that is deleted (its
+/// files went to the trash with it).
 pub async fn slot_of(pool: &SqlitePool, transaction_id: i64) -> sqlx::Result<Option<(Slot, i64)>> {
     let row = sqlx::query!(
         r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
-                  t.bucket AS "bucket: String", t.bill_name AS "bill_name: String",
+                  r.bucket AS "bucket: String", r.bill_name AS "bill_name: String",
                   t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
                   m.slug AS "slug!: String",
                   r.instance AS "instance: String",
@@ -890,8 +930,9 @@ pub async fn slot_of(pool: &SqlitePool, transaction_id: i64) -> sqlx::Result<Opt
 /// - A live row whose file is at neither the path the row would compute now
 ///   nor the path it was stored at was **removed by hand**: the row is marked
 ///   deleted and a `file_delete` entry written. Checking the stored path is
-///   what keeps a rule rename or a re-attribution — which move the computed
-///   path, never the file — from reading as a removal.
+///   what keeps a file not yet re-filed — a rename or a re-attribution whose
+///   [`refile_row`] has not run, or was blocked by a file already at the new
+///   path — from reading as a removal.
 ///
 /// It never moves or deletes a file. An app write changes the row in the same
 /// handler that touches the disk, so after it the two already agree and this
@@ -987,6 +1028,135 @@ pub async fn reconcile_row(
             .await?;
         tx.commit().await?;
         out.found += 1;
+    }
+    Ok(out)
+}
+
+/// The note on a file the app moved because the path its row computes moved
+/// under it — a rule's bucket or bill name renamed, the row given to another
+/// member, an amount in the filename that changed. Logged as the system,
+/// which `u` never reaches: the move is part of the change that caused it.
+pub const REFILED: &str = "re-filed where its row now points";
+
+/// What re-filing one row did.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Refiled {
+    /// `(from, to)`, relative to the vault.
+    pub moved: Vec<(String, String)>,
+    /// Left where they were: something already sits at the new path, and a
+    /// move never overwrites.
+    pub blocked: Vec<String>,
+}
+
+impl Refiled {
+    pub fn absorb(&mut self, other: Refiled) {
+        self.moved.extend(other.moved);
+        self.blocked.extend(other.blocked);
+    }
+}
+
+/// Moves a row's **live** files to the path its row computes now
+/// ([`slot_of`]), wherever they were stored.
+///
+/// The path is a function of the rule's taxonomy, the row's member and — for
+/// a receipt with the amount in its name — the row's amount, so renaming a
+/// bucket, re-attributing a row or changing an amount moves the path while
+/// the file stays put. Left there, the row reads as having no file (the disk
+/// decides, at the computed path) while its record says it has one. This is
+/// what `CLAUDE.md`'s "renaming taxonomy must move its files" promised and
+/// nothing did until v0.0.6.
+///
+/// - The record first, inside a transaction; the file while it is open; the
+///   commit last — a failed rename rolls the record back, a failed commit
+///   renames the file back. The same order `vault::drop_uuid_prefix` keeps.
+/// - **Never overwrites.** A file already at the new path is left alone and
+///   this one stays where it is, reported as `blocked`.
+/// - A record whose file is not on disk is left for [`reconcile_row`], which
+///   is what reports a file removed by hand.
+/// - Trash copies stay where they are: they are named after the path they
+///   were deleted from, which is how [`deleted_copy`] finds them, and
+///   [`restore`] puts one back at the row's *current* path.
+pub async fn refile_row(
+    pool: &SqlitePool,
+    root: &Path,
+    transaction_id: i64,
+) -> Result<Refiled, StoreError> {
+    let mut out = Refiled::default();
+    let Some((slot, _)) = slot_of(pool, transaction_id).await.map_err(db)? else {
+        return Ok(out);
+    };
+    let live = sqlx::query!(
+        r#"SELECT id AS "id!: i64", kind AS "kind!: String", ext AS "ext!: String",
+                  path AS "path!: String"
+           FROM receipts WHERE transaction_id = ?1 AND deleted_at IS NULL"#,
+        transaction_id
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(db)?;
+
+    for row in live {
+        let Some(kind) = Kind::parse(&row.kind) else {
+            continue;
+        };
+        let to = slot.path(kind, &row.ext);
+        if to == row.path {
+            continue;
+        }
+        let from_full = root.join(&row.path);
+        let to_full = root.join(&to);
+        if !from_full.exists() {
+            continue;
+        }
+        if to_full.exists() {
+            out.blocked.push(row.path);
+            continue;
+        }
+
+        let mut tx = pool.begin().await.map_err(db)?;
+        sqlx::query!("UPDATE receipts SET path = ?2 WHERE id = ?1", row.id, to)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        Change::file(Actor::System, FileAction::Upload, row.id)
+            .in_period(slot.period)
+            .diff("path", Value::path(&row.path), Value::path(&to))
+            .note(REFILED)
+            .write(&mut tx)
+            .await
+            .map_err(db)?;
+        if let Some(parent) = to_full.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| StoreError::Io(e.to_string()))?;
+        }
+        std::fs::rename(&from_full, &to_full).map_err(|e| StoreError::Io(e.to_string()))?;
+        if let Err(e) = tx.commit().await {
+            let _ = std::fs::rename(&to_full, &from_full);
+            return Err(db(e));
+        }
+        prune_empty(root, &row.path);
+        tracing::info!("vault · re-filed {} → {}", row.path, to);
+        out.moved.push((row.path, to));
+    }
+    Ok(out)
+}
+
+/// Every live occurrence of one rule — what a rule save re-files.
+pub async fn refile_rule(
+    pool: &SqlitePool,
+    root: &Path,
+    rule_id: i64,
+) -> Result<Refiled, StoreError> {
+    let ids: Vec<i64> = sqlx::query_scalar!(
+        r#"SELECT id AS "id!: i64" FROM transactions
+           WHERE rule_id = ?1 AND deleted_at IS NULL"#,
+        rule_id
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(db)?;
+    let mut out = Refiled::default();
+    for id in ids {
+        out.absorb(refile_row(pool, root, id).await?);
     }
     Ok(out)
 }

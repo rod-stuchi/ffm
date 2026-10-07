@@ -53,6 +53,8 @@ pub fn base(ctx: RowCtx) -> LedgerRow {
         visibility: Visibility::Household,
         bucket: Some("Consumption".into()),
         bill_name: Some("Power".into()),
+        file_bucket: Some("Consumption".into()),
+        file_bill_name: Some("Power".into()),
         manual_paid: false,
         tracked: true,
         instance: None,

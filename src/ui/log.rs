@@ -198,6 +198,7 @@ fn field_label(field: &str, t: &Catalog) -> String {
         "path" => t.log_field_path(),
         "kind" => t.log_field_kind(),
         "original_filename" => t.log_field_original_filename(),
+        "rows" => t.log_field_rows(),
         other => return other.replace('_', " "),
     }
     .to_string()

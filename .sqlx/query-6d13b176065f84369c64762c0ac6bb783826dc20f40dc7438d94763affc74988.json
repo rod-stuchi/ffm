@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE transactions SET bucket = ?2, bill_name = ?3, version = version + 1\n             WHERE rule_id = ?1 AND (bucket IS NOT ?2 OR bill_name IS NOT ?3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6d13b176065f84369c64762c0ac6bb783826dc20f40dc7438d94763affc74988"
+}

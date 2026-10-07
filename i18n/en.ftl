@@ -263,6 +263,12 @@ rule-past-note = Earlier months, and this month once it is paid, keep what they 
 rule-created = rule created · { $n } period(s) materialized
 rule-saved = rule saved
 rule-moved-due = this month's row now due { $date }
+files-refiled =
+    { $n ->
+        [one] 1 file moved to its new folder
+       *[other] { $n } files moved to their new folder
+    }
+files-refile-blocked = not moved — a file is already at { $path }
 rule-deleted = rule deleted · its rows stay
 rule-none-on-row = not generated from a recurring rule
 rule-deleted-on-row = the rule behind this row was deleted · its files and status still hold
@@ -486,6 +492,7 @@ log-field-tracked = track receipt
 log-field-path = path
 log-field-kind = kind
 log-field-original-filename = original filename
+log-field-rows = rows renamed with it
 log-on = on
 log-off = off
 moved-down = down

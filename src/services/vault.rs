@@ -204,3 +204,38 @@ pub async fn tidy_trash(pool: &SqlitePool, root: &Path) -> Result<usize, VaultEr
     }
     Ok(moved)
 }
+
+/// Re-files every live file the app holds to the path its row computes now
+/// (`receipts::refile_row`), at startup. Idempotent: once the vault agrees,
+/// it is one path comparison per file.
+///
+/// It exists for a vault left by v0.0.5 and earlier, where renaming a rule's
+/// bucket, bill name or instance — or giving a row to another member —
+/// moved the computed path and left the file behind, so the row read as
+/// having no file while its record said it had one. It never overwrites: a
+/// file whose new path is taken stays where it is, and is named in the log
+/// for the operator to sort out by hand.
+///
+/// Returns how many files moved, and the paths left where they were.
+pub async fn refile_all(
+    pool: &SqlitePool,
+    root: &Path,
+) -> Result<(usize, Vec<String>), VaultError> {
+    use crate::services::receipts;
+    let rows = receipts::all_tracked(pool)
+        .await
+        .map_err(|e| VaultError::Db(e.to_string()))?;
+    let mut all = receipts::Refiled::default();
+    for (id, _, _) in rows {
+        // One file that cannot move is that file's problem, logged — not a
+        // reason to keep the household out of its ledger.
+        match receipts::refile_row(pool, root, id).await {
+            Ok(r) => all.absorb(r),
+            Err(e) => tracing::warn!("vault · files of row {id} not re-filed: {e}"),
+        }
+    }
+    for b in &all.blocked {
+        tracing::warn!("vault · not re-filed, its new path is taken: {b}");
+    }
+    Ok((all.moved.len(), all.blocked))
+}

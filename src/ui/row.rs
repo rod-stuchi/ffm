@@ -271,6 +271,12 @@ pub struct LedgerRow {
     pub manual_paid: bool,
 
     // --- rule facts, joined on and read-only here -------------------------
+    /// The RULE's bucket and bill name: where a tracked row's files live.
+    /// `bucket` / `bill_name` above are the row's own, for grouping — a path
+    /// built from those looked in a folder uploads never wrote to, once a
+    /// rule's bucket had been renamed.
+    pub file_bucket: Option<String>,
+    pub file_bill_name: Option<String>,
     pub tracked: bool,
     pub instance: Option<String>,
     pub total_installments: Option<u16>,
@@ -540,8 +546,8 @@ impl LedgerRow {
         let vault = crate::domain::receipt_path::vault(&self.member_slug);
         let tax = receipt_path::Taxonomy {
             vault: &vault,
-            bucket: self.bucket.as_deref()?,
-            bill_name: self.bill_name.as_deref()?,
+            bucket: self.file_bucket.as_deref()?,
+            bill_name: self.file_bill_name.as_deref()?,
             instance: self.instance.as_deref(),
         };
         Some(receipt_path::file(
@@ -610,8 +616,8 @@ impl LedgerRow {
         let vault = crate::domain::receipt_path::vault(&self.member_slug);
         let tax = receipt_path::Taxonomy {
             vault: &vault,
-            bucket: self.bucket.as_deref()?,
-            bill_name: self.bill_name.as_deref()?,
+            bucket: self.file_bucket.as_deref()?,
+            bill_name: self.file_bill_name.as_deref()?,
             instance: self.instance.as_deref(),
         };
         self.tracked.then(|| {
@@ -1119,6 +1125,8 @@ mod tests {
             visibility: Visibility::Household,
             bucket: Some("Consumption".into()),
             bill_name: Some("Power".into()),
+            file_bucket: Some("Consumption".into()),
+            file_bill_name: Some("Power".into()),
             manual_paid: false,
             tracked: true,
             instance: None,
