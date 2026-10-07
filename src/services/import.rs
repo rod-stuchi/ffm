@@ -107,10 +107,27 @@ pub fn candidates(text: &str) -> Vec<String> {
     // cross lines swallows whatever number sits above it: on a real Enel bill
     // that is the client code, and the joined digits then parse as nothing.
     let re = Regex::new(r"[0-9][0-9.\t -]{42,}[0-9]").expect("a constant pattern");
-    let mut out = Vec::new();
+    let mut out: Vec<String> = Vec::new();
+    let mut offer = |c: String| {
+        if !out.contains(&c) {
+            out.push(c);
+        }
+    };
 
     for m in re.find_iter(text) {
         let digits: String = m.as_str().chars().filter(char::is_ascii_digit).collect();
+        // A QR code (or a barcode) drawn in a font comes out of `pdftotext` as
+        // rows of 0s and 1s — Vivo's bill has thirty of them, 65 digits each.
+        // No real code is binary, and cut into windows those rows are dozens
+        // of chances for a check digit to pass by luck.
+        if digits.chars().all(|c| c == '0' || c == '1') {
+            continue;
+        }
+        // The run as printed first: a linha that is exactly a linha beats a
+        // window cut out of a longer number.
+        if matches!(digits.len(), 44 | 47 | 48) {
+            offer(digits.clone());
+        }
         for len in [44, 47, 48] {
             if digits.len() < len {
                 continue;
@@ -118,14 +135,15 @@ pub fn candidates(text: &str) -> Vec<String> {
             // Junk can sit at either end of the run — a protocol number
             // before it, a page number after — so both ends are offered and
             // the check digits decide.
-            out.push(digits[..len].to_string());
-            out.push(digits[digits.len() - len..].to_string());
+            offer(digits[..len].to_string());
+            offer(digits[digits.len() - len..].to_string());
         }
-        out.push(digits);
+        offer(digits);
     }
 
-    out.sort();
-    out.dedup();
+    // In the order the bill prints them, NOT sorted. The first candidate that
+    // validates wins, and sorting put every `0000…` run ahead of a real code
+    // starting `8466…` — which is how a QR row became a R$ 10 million bill.
     out
 }
 
@@ -350,6 +368,75 @@ regex = 'Data de vencimento:\s*(\d{2}\s+\p{Lu}{3}\s+\d{4})'
             Err(ImportError::Misread(_)) => {}
             other => panic!("{other:?}"),
         }
+    }
+
+    /// A valid 48-digit arrecadação linha for `cents`, built with the app's
+    /// own check digits — segment 6 (telecom), value kind 6 (mod 10). Made
+    /// up, so no household's account number lives in the repo.
+    fn telecom_linha(cents: u64) -> String {
+        use crate::services::boleto::mod10;
+        let mut d: Vec<u32> = vec![8, 6, 6, 0];
+        d.extend(
+            format!("{cents:011}")
+                .chars()
+                .map(|c| c.to_digit(10).unwrap()),
+        );
+        d.extend([0, 0, 8, 0]);
+        d.extend(
+            "1234567890123456789012345"
+                .chars()
+                .map(|c| c.to_digit(10).unwrap()),
+        );
+        let mut body = d[0..3].to_vec();
+        body.extend_from_slice(&d[4..]);
+        d[3] = mod10(&body);
+        let mut out = String::new();
+        for block in d.chunks(11) {
+            for x in block {
+                out.push(char::from_digit(*x, 10).unwrap());
+            }
+            out.push(char::from_digit(mod10(block), 10).unwrap());
+            out.push(' ');
+        }
+        out.trim_end().to_string()
+    }
+
+    /// The 44 digits a QR row on Vivo's bill offered in production: bank
+    /// `000`, currency `0`, and a mod-11 digit that passes by luck.
+    const QR_JUNK: &str = "00001000110111000000100011011100000110111101";
+
+    #[test]
+    fn a_qr_code_drawn_as_text_is_never_read_as_the_barcode() {
+        // Vivo draws its Pix QR code as rows of 0/1 characters, and the rows
+        // came out of `pdftotext` ahead of — and sorted ahead of — the real
+        // linha. One of them passed mod-11 and the bill read as R$ 10
+        // million, due 30/05/2022. Worst case here: the junk comes first.
+        let qr_row = format!("{QR_JUNK}111001111110110110000");
+        let text = format!(
+            "TELEFONICA\n{qr}\n{qr}\n{qr}\n\n{linha} via Pix\n\nTotal a pagar 160,99\n",
+            qr = qr_row,
+            linha = telecom_linha(16099),
+        );
+        let parsed = parse_text(&text, &Profiles::default(), today()).unwrap();
+        let barcode = parsed.barcode.expect("the linha, not the QR rows");
+        assert_eq!(barcode.kind, crate::services::boleto::Kind::Arrecadacao);
+        assert_eq!(barcode.amount, Amount::Fixed(Cents(16099)));
+    }
+
+    #[test]
+    fn candidates_skip_binary_runs_and_keep_the_bills_order() {
+        let linha = telecom_linha(16099);
+        let found = candidates(&format!("{linha}\n{QR_JUNK}0000\n"));
+        assert!(
+            !found.iter().any(|c| c.starts_with(&QR_JUNK[..20])),
+            "a run of 0s and 1s offers nothing: {found:?}"
+        );
+        let digits: String = linha.chars().filter(char::is_ascii_digit).collect();
+        assert_eq!(
+            found.first(),
+            Some(&digits),
+            "the run as printed comes first"
+        );
     }
 
     #[test]

@@ -173,6 +173,20 @@ dead code.
 **A failed check digit is a hard stop.** Do not fall back to text extraction for a
 value that failed its own checksum — report the misread and ask.
 
+**A passed check digit is not proof.** It is a one-in-ten (mod 10) or one-in-eleven
+(mod 11) filter, and a bill's text offers many tries. Vivo draws its Pix QR code
+in the text layer as thirty rows of 65 `0`/`1` characters; cut into 44-digit
+windows, one passed mod 11 and read as a R$ 10 million bank slip due 30/05/2022
+(v0.0.6). So the digits the standard **fixes** are checked before the DV:
+
+| Kind | Fixed digit |
+|---|---|
+| Cobrança | pos 4, currency — `9` (real), nothing else in use |
+| Arrecadação | pos 1, product — `8`; pos 2, segment — never `0` |
+
+A number that fails these is "not a barcode" and the next candidate is tried —
+not a misread.
+
 ---
 
 ## 6. Issuer profiles — now each rule's own recipe
@@ -311,7 +325,7 @@ Run in order; stop as soon as every field is resolved.
 | Tier | Step | Produces | Confidence |
 |---|---|---|---|
 | 0 | `pdftotext -layout` | text layer | — |
-| 1 | regex for 47/48-digit runs, strip separators | candidate barcodes | — |
+| 1 | regex for 47/48-digit runs, strip separators — in the order the bill prints them, the run as printed before windows cut from it, and runs of only `0`/`1` (a QR or barcode drawn in a font) skipped | candidate barcodes | — |
 | 2 | classify kind, validate DV, parse | value, due date | **certain** if DV passes |
 | 3 | `detect` regexes against text | issuer, recurring binding | high |
 | 4 | profile regexes for remaining holes | due date and/or amount | medium |

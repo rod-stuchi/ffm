@@ -128,6 +128,15 @@ pub enum Error {
     },
     /// Position 3 of an arrecadação barcode is outside 6–9.
     UnknownValueKind(char),
+    /// A cobrança whose currency digit (position 4) is not `9`, the real.
+    /// FEBRABAN has no other currency in use, so this is not a bill — it is a
+    /// number that happens to be 44 digits long. A QR code drawn as rows of
+    /// 0/1 characters in a bill's text is exactly that, and one window in
+    /// eleven of it passes the mod-11 digit by chance (Vivo, v0.0.6).
+    Currency(u32),
+    /// An arrecadação whose product digit (position 1) is not `8`, or whose
+    /// segment (position 2) is `0`. Same reasoning: the standard fixes them.
+    NotArrecadacao,
 }
 
 impl std::fmt::Display for Error {
@@ -139,6 +148,10 @@ impl std::fmt::Display for Error {
             Error::UnknownValueKind(c) => {
                 write!(f, "position 3 says `{c}`, which is not a value kind")
             }
+            Error::Currency(d) => {
+                write!(f, "position 4 says `{d}`; a bank slip in reais says 9")
+            }
+            Error::NotArrecadacao => write!(f, "that is not a utility payment code"),
         }
     }
 }
@@ -316,6 +329,12 @@ fn number(d: &[u32]) -> u64 {
 }
 
 fn cobranca(d: &[u32], reference: NaiveDate) -> Result<Barcode, Error> {
+    // The currency first: it is fixed by the standard, so a number without
+    // it is not a bank slip at all — checked before the DV, which a random
+    // run passes one time in eleven.
+    if d[3] != 9 {
+        return Err(Error::Currency(d[3]));
+    }
     // The DV geral covers every digit except itself.
     let mut without_dv: Vec<u32> = Vec::with_capacity(43);
     without_dv.extend_from_slice(&d[0..4]);
@@ -346,6 +365,11 @@ fn cobranca(d: &[u32], reference: NaiveDate) -> Result<Barcode, Error> {
 }
 
 fn arrecadacao(d: &[u32]) -> Result<Barcode, Error> {
+    // Product 8, and a segment 1–9: fixed by the standard. A 48-digit linha
+    // reaches here through `from_linha_48`, which checks only its blocks.
+    if d[0] != 8 || d[1] == 0 {
+        return Err(Error::NotArrecadacao);
+    }
     let value_kind = char::from_digit(d[2], 10).unwrap_or('?');
 
     // Position 3 decides BOTH what the value means and which algorithm
@@ -431,6 +455,36 @@ mod tests {
         assert_eq!(b.amount, Amount::Fixed(Cents(34362)));
         assert_eq!(b.due, DueDate::Encoded(d(2026, 9, 15)));
         assert_eq!(b.bank.as_deref(), Some("341"));
+    }
+
+    #[test]
+    fn a_number_without_the_real_s_currency_digit_is_not_a_bank_slip() {
+        // A row of Vivo's QR code, drawn in its text. Its mod-11 digit passes
+        // by chance — one window in eleven does — and it read as R$ 10
+        // million, due 30/05/2022. Position 4 is the currency, and the real is
+        // 9: nothing else is a bank slip.
+        assert_eq!(
+            parse("00001000110111000000100011011100000110111101", today()),
+            Err(Error::Currency(0))
+        );
+    }
+
+    #[test]
+    fn a_48_digit_linha_that_is_not_product_8_is_not_a_utility_payment() {
+        // Valid blocks, so only the product digit can refuse it.
+        let mut d = vec![
+            3, 6, 6, 0, 0, 0, 0, 0, 0, 1, 6, 0, 9, 9, 0, 0, 8, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1,
+            2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6,
+        ];
+        let mut body = d[0..3].to_vec();
+        body.extend_from_slice(&d[4..]);
+        d[3] = mod10(&body);
+        let mut linha = String::new();
+        for block in d.chunks(11) {
+            linha.extend(block.iter().map(|x| char::from_digit(*x, 10).unwrap()));
+            linha.push(char::from_digit(mod10(block), 10).unwrap());
+        }
+        assert_eq!(parse(&linha, today()), Err(Error::NotArrecadacao));
     }
 
     #[test]

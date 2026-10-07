@@ -1782,6 +1782,16 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   parked drafts must sit on a container *outside* every `hx-target`, or the
   swap must preserve it (`hx-preserve`, or a morph swap). A fragment that both
   holds draft state and is its own swap target cannot work.
+- **A check digit is a one-in-ten filter, not proof.** The first candidate
+  whose DV passed became the bill, candidates were tried in *sorted* order,
+  and Vivo's bill draws its Pix QR code as thirty rows of `0`/`1` characters
+  in its text layer: one 44-digit window of one row passed mod 11, sorted
+  ahead of the real `8466…` linha, and the row read R$ 10.111.000,00 due
+  30/05/2022 — and bound the rule as a bank slip, so the right bill would
+  then have been refused as the wrong kind. Check the digits the standard
+  fixes (a cobrança's currency `9`, an arrecadação's product `8`) before the
+  DV, try candidates in the order the bill prints them, and skip runs of only
+  0s and 1s. See `design/spec-bill-import.md` §5.
 - **Two path builders that agree today are a vault the app cannot see
   tomorrow.** v0.0.5 computed a row's file path in five places: uploads from
   the rule's bucket, the ledger's mark from the row's own. They agreed until a
