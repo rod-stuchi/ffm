@@ -14,6 +14,14 @@
     <b>{% if stored %}{{ t.prepare_title_stored() }}{% else %}{{ t.prepare_title() }}{% endif %}</b>
     <span class="mono pz-name">{{ filename }}</span>
     {%- if let Some(r) = row %}<span class="pz-for">{{ t.prepare_for(r) }}</span>{% endif %}
+    {#- Fit height ⇄ fit width — `f`, the carousel's switch and key. -#}
+    <label class="tog cviewsw pz-fit" title="{{ t.page_fit_title() }}">
+      <span :class="{ 'is-on': prep && prep.fit === 'height' }">{{ t.page_fit_height() }}</span>
+      <input type="checkbox" :checked="prep && prep.fit === 'width'"
+             @change="prepFit()">
+      <span :class="{ 'is-on': prep && prep.fit === 'width' }">{{ t.page_fit_width() }}</span>
+      <kbd>f</kbd>
+    </label>
   </div>
 
   <div class="pz-body">
@@ -38,7 +46,8 @@
     </ol>
 
     {#- The focused page, large enough to read a barcode's digits. -#}
-    <div class="pz-stage">
+    <div class="pz-stage" :data-fit="prep ? prep.fit : 'height'"
+         :style="'--z: ' + (prep ? prep.zoom : 1)">
       <img class="pz-big" :src="prep ? '/prepare/{{ token }}/page/' + (prep.focus + 1) + '?big=1' : ''"
            :class="{ 'is-dropped': prep && !prep.keep[prep.focus] }" alt="">
     </div>

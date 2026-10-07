@@ -271,7 +271,7 @@ pub async fn page(
     if n == 0 {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let dpi = if p.big == Some(1) { "110" } else { "36" };
+    let dpi = if p.big == Some(1) { "150" } else { "36" };
     let out = tokio::task::spawn_blocking(move || {
         let n = n.to_string();
         std::process::Command::new("pdftoppm")

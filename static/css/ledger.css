@@ -2544,6 +2544,11 @@
   padding-right: 320px;
 }
 
+/* Two switches — PNG ⇄ PDF and the fit — in the corner at once. */
+.cstage:has(.cviewsw:not(.cfitsw):not([style*="none"])):has(.cfitsw:not([style*="none"])) .ccap {
+  padding-right: 470px;
+}
+
 /* The browser's own PDF viewer, filling the stage. It scrolls and zooms
  * itself, so the stage's padding and the --z width step aside for it. */
 .cviewin:has(.cembed),
@@ -2623,6 +2628,9 @@
   min-height: 0;
   overflow: auto;
   background: var(--paper);
+  /* A size container, so a page can be fitted to its height in CSS (`cqh`)
+   * with nothing measured in script. */
+  container-type: size;
 }
 
 .cviewin {
@@ -2643,6 +2651,20 @@
   height: auto;
   border: 1px solid var(--line);
   border-radius: 4px;
+}
+
+/* Fit height — how the carousel opens: each page whole in the view, `--z`
+ * on top of it. Fit width (`f`) is the rules above: as wide as the view,
+ * read with `j`/`k` and `H`/`M`/`L`. 32px is `.cviewin`'s padding. */
+.cviewin[data-fit="height"] .cpages {
+  width: auto;
+  justify-items: safe center;
+}
+
+.cviewin[data-fit="height"] .cpg {
+  width: auto;
+  max-width: none;
+  height: calc((100cqh - 32px) * var(--z));
 }
 
 .ctext {
@@ -2871,6 +2893,16 @@
 }
 
 /* The row the file is going to — said before anything is filed. */
+.pz-stage[data-fit="width"] .pz-big {
+  width: calc(var(--z) * 100%);
+  height: auto;
+}
+
+.pz-fit {
+  margin-left: auto;
+  margin-right: 0;
+}
+
 .pz-for {
   color: var(--ink-2);
   font-size: 13px;
@@ -2941,16 +2973,23 @@
 }
 
 .pz-stage {
+  --z: 1;
   overflow: auto;
   padding: 16px;
   display: grid;
-  justify-items: center;
+  justify-items: safe center;
   align-items: start;
+  container-type: size;
 }
 
+/* The page as the carousel shows one: fitted to height first, `f` for width,
+ * `--z` on top of either. The stage is its own container and its padding is
+ * its own, so `100cqh` is already the room inside it — unlike the carousel,
+ * whose padding sits on `.cviewin`, inside the container. */
 .pz-big {
-  max-width: 100%;
-  height: auto;
+  max-width: none;
+  height: calc(100cqh * var(--z));
+  width: auto;
   background: var(--paper);
   box-shadow: 0 1px 6px color-mix(in srgb, var(--ink) 18%, transparent);
 }

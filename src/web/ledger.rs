@@ -690,10 +690,18 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("P", "preview this row's files"),
                 k("1 2 3 · h l", "inside P: jump to a file · step"),
                 k("+ - 0", "inside P: zoom in, out, reset"),
+                k("j k · f", "inside P: scroll · fit height / width"),
+                k("H M L", "inside P: top, middle, bottom of the page"),
+                k("J K", "inside P: next / previous page"),
+                k("gg G", "inside P: first page, the end of the last"),
                 k("t", "inside P: trim or shrink the PDF on show"),
                 k(
                     "v",
                     "inside P: the PDF in the browser's own viewer, and back",
+                ),
+                k(
+                    "h l · J K · gg G · j k · x · s",
+                    "trim view: pages · scroll · keep / drop · shrink",
                 ),
             ],
         ),

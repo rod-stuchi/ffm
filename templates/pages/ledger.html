@@ -547,9 +547,18 @@
           {#- The viewer zooms itself, so ours step aside while it is on show. -#}
           <template x-if="!(pdfView && pdfOnShow())">
             <span class="czoombtns">
-              <button class="btn" type="button" @click="zoom = Math.max(0.5, zoom - 0.25)">−</button>
+              {#- Fit height (how every page opens) ⇄ fit width — `f`. The
+                  same two-sided switch as PNG ⇄ PDF. Not on a text file,
+                  which has no page to fit. -#}
+              <label class="tog cviewsw cfitsw" x-show="imageOnShow()" title="{{ t.page_fit_title() }}">
+                <span :class="{ 'is-on': pageFit === 'height' }">{{ t.page_fit_height() }}</span>
+                <input type="checkbox" :checked="pageFit === 'width'" @change="flipFit()">
+                <span :class="{ 'is-on': pageFit === 'width' }">{{ t.page_fit_width() }}</span>
+                <kbd>f</kbd>
+              </label>
+              <button class="btn" type="button" @click="setZoom(Math.max(0.5, zoom - 0.25))">−</button>
               <button class="btn" type="button" @click="zoom = 1" title="{{ t.carousel_zoom_reset() }}">0</button>
-              <button class="btn" type="button" @click="zoom = Math.min(4, zoom + 0.25)">+</button>
+              <button class="btn" type="button" @click="setZoom(Math.min(4, zoom + 0.25))">+</button>
             </span>
           </template>
           {#- Filling the viewport leaves no backdrop to click away on, so the
@@ -573,7 +582,7 @@
             wide the pages are, so 100% is fitted to the width and the view
             scrolls to reach the rest when zoomed in. -#}
         <div class="cview">
-          <div class="cviewin" :style="'--z: ' + zoom"
+          <div class="cviewin" :style="'--z: ' + zoom" :data-fit="pageFit"
                x-effect="showFile($el, carousel.current)"></div>
         </div>
         <div class="cnav">
@@ -1049,6 +1058,10 @@ function ledger() {
     fidgetTimer: null,
     /// `d` pressed once inside the carousel, waiting for the second.
     carouselBuf: '',
+    /// How the carousel's page images are fitted: `height` — every page
+    /// whole, how the carousel opens — or `width`, read with `j`/`k` and
+    /// `H`/`M`/`L`. `f` flips it.
+    pageFit: 'height',
     removeFileTitle: {{ remove_file_title|json|safe }},
     zoom: 1,
     /// The carousel is showing a PDF in the browser's own viewer rather than
@@ -2152,6 +2165,7 @@ function ledger() {
       }));
       if (!files.length) { this.say(this.noFiles, true); return; }
       this.zoom = 1;
+      this.pageFit = 'height';
       this.carouselBuf = '';
       // The member's own starting side (`:profile`); `v` flips it from there.
       this.pdfView = this.shell().dataset.pdfView === 'pdf';
@@ -2249,12 +2263,25 @@ function ledger() {
       if (k === 't') { this.carouselBuf = ''; this.trimCurrent(); return; }
       if (k === 'v') { this.carouselBuf = ''; this.togglePdfView(); return; }
       // `dd` removes the file on show — the row's own delete gesture, pointed
-      // at the file. The carousel reads its own keys, so the pending `d` lives
-      // here; any other key drops it, the way `zq` drops the `z`.
-      const armed = this.carouselBuf === 'd';
+      // at the file — and `gg` goes to the top, as in the ledger. The carousel
+      // reads its own keys, so a pending `d` or `g` lives here; any other key
+      // drops it, the way `zq` drops the `z`.
+      const armed = this.carouselBuf;
       this.carouselBuf = '';
       if (k === 'd') {
-        if (armed) this.askRemoveFile(); else this.carouselBuf = 'd';
+        if (armed === 'd') this.askRemoveFile(); else this.carouselBuf = 'd';
+        return;
+      }
+      const view = document.querySelector('.carousel .cview');
+      // `gg` / `G`: the very top and the very end — page 1, and the last
+      // page's foot. Text scrolls too; the browser's viewer moves itself.
+      if (k === 'g') {
+        if (armed !== 'g') { this.carouselBuf = 'g'; return; }
+        if (!(this.pdfView && this.pdfOnShow())) this.pageEnd(view, -1);
+        return;
+      }
+      if (k === 'G') {
+        if (!(this.pdfView && this.pdfOnShow())) this.pageEnd(view, 1);
         return;
       }
       if (['1', '2', '3'].includes(k)) {
@@ -2266,13 +2293,150 @@ function ledger() {
         this.zoom = 1;
       } else if (k === 'h') this.stepFile(-1);
       else if (k === 'l') this.stepFile(1);
-      // With the browser's viewer on show, it zooms itself.
-      else if (this.pdfView && this.pdfOnShow() && ['+', '=', '-', '0'].includes(k)) return;
-      else if (k === '+' || k === '=') this.zoom = Math.min(4, this.zoom + 0.25);
-      else if (k === '-') this.zoom = Math.max(0.5, this.zoom - 0.25);
-      else if (k === '0') this.zoom = 1;
+      // With the browser's viewer on show, it zooms and scrolls itself.
+      else if (this.pdfView && this.pdfOnShow()
+               && ['+', '=', '-', '0', 'j', 'k', 'J', 'K', 'ArrowDown', 'ArrowUp', 'f', 'H', 'M', 'L'].includes(k)) return;
+      else if (k === 'j' || k === 'ArrowDown') this.pageScroll(view, 1);
+      else if (k === 'k' || k === 'ArrowUp') this.pageScroll(view, -1);
+      else if (k === 'J' || k === 'K') { if (this.imageOnShow()) this.pageStep(view, k === 'J' ? 1 : -1); }
+      else if (k === 'f') { if (this.imageOnShow()) this.flipFit(); }
+      else if (k === 'H' || k === 'M' || k === 'L') {
+        if (this.imageOnShow()) this.pageJump(view, { H: 'top', M: 'middle', L: 'bottom' }[k]);
+      }
+      else if (k === '+' || k === '=') this.setZoom(Math.min(4, this.zoom + 0.25));
+      else if (k === '-') this.setZoom(Math.max(0.5, this.zoom - 0.25));
+      else if (k === '0') this.setZoom(1);
       else if (k === 'Escape') this.carousel = null;
     },
+
+    /// Whether the carousel's file is drawn as page images — a PDF on the
+    /// PNG side, or a photo. A text file has no page to fit or jump in.
+    imageOnShow() {
+      const f = this.carousel && this.carousel.current;
+      return !!f && !/\.txt$/i.test(f.path || '') && !(this.pdfView && this.pdfOnShow());
+    },
+
+    flipFit() {
+      this.keepPage(document.querySelector('.carousel .cview'), () => {
+        this.pageFit = this.pageFit === 'height' ? 'width' : 'height';
+        this.zoom = 1;
+        this.paintPages();
+      }, false);
+    },
+
+    setZoom(z) {
+      this.keepPage(document.querySelector('.carousel .cview'), () => {
+        this.zoom = z;
+        this.paintPages();
+      }, true);
+    },
+
+    /// The carousel's fit and zoom, on the DOM now — `keepPage` measures the
+    /// new sizes in this same turn, before Alpine's own binding catches up
+    /// (and writes the same values).
+    paintPages() {
+      const inner = document.querySelector('.carousel .cviewin');
+      if (!inner) return;
+      inner.dataset.fit = this.pageFit;
+      inner.style.setProperty('--z', String(this.zoom));
+    },
+
+    /// Resizes the pages — `change` sets the fit or the zoom, on the DOM too
+    /// — keeping the page on show where it was. The sizes change and the
+    /// scroll offset does not, so left alone the view showed whatever now sat
+    /// at the old offset: on the last page, `f` landed on page 3. So the page
+    /// is noted first and put back after: a fit change at its top, a zoom
+    /// (`keepPoint`) with the same point of the page at the top of the view.
+    /// `change` must apply the size to the DOM itself — measuring after
+    /// Alpine's next flush is the race CLAUDE.md's `$nextTick` gotcha
+    /// describes.
+    keepPage(view, change, keepPoint) {
+      const page = view && this.pageAt(view);
+      let frac = 0;
+      if (page && keepPoint) {
+        const r = page.getBoundingClientRect();
+        frac = Math.max(0, (view.getBoundingClientRect().top - r.top) / (r.height || 1));
+      }
+      change();
+      if (!page) return;
+      const box = view.getBoundingClientRect();
+      const r = page.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(page.closest('.cviewin') || view).paddingTop) || 0;
+      const top = view.scrollTop + (r.top - box.top);
+      const to = frac > 0 ? top + frac * r.height : top - pad;
+      view.scrollTo({ top: Math.max(0, Math.round(to)) });
+    },
+
+    // --- page images: the carousel's PNG side and the trim view's page ---
+    //
+    // One set of keys wherever a page is shown as an image: `j`/`k` scroll,
+    // `H`/`M`/`L` put the page on show at its top / middle / bottom, as Vim's
+    // do for the screen, and `f` flips fit height ⇄ fit width. Fit height is
+    // how both open — a whole page at a glance; fit width is for reading one,
+    // which is what these keys are for.
+
+    /// A step of the view's own height, instantly — a held `j` repeats.
+    pageScroll(view, dir) {
+      if (!view) return;
+      view.scrollBy({ top: dir * Math.max(40, Math.round(view.clientHeight * 0.15)) });
+    },
+
+    /// The page image under the middle of the view, or the nearest one.
+    pageAt(view) {
+      const pages = [...view.querySelectorAll('img.cpg, img.pz-big')];
+      if (!pages.length) return null;
+      const box = view.getBoundingClientRect();
+      const mid = box.top + box.height / 2;
+      let best = null;
+      for (const p of pages) {
+        const r = p.getBoundingClientRect();
+        if (r.top <= mid && r.bottom >= mid) return p;
+        const d = Math.min(Math.abs(r.top - mid), Math.abs(r.bottom - mid));
+        if (!best || d < best.d) best = { p, d };
+      }
+      return best.p;
+    },
+
+    /// `gg` / `G`: the top of the first page, the foot of the last.
+    pageEnd(view, dir) {
+      if (!view) return;
+      view.scrollTo({ top: dir < 0 ? 0 : view.scrollHeight });
+    },
+
+    /// `J` / `K`: the next / previous page, its top at the view's top — at
+    /// fit height a whole page per press, landing whole, where scrolling a
+    /// view's height would drift by the gap between pages. Partway into a
+    /// page, `K` goes to that page's own top first, as Vim's `{` goes to the
+    /// start of the paragraph it is in. Clamped at either end.
+    pageStep(view, dir) {
+      const page = view && this.pageAt(view);
+      if (!page) return;
+      const pages = [...view.querySelectorAll('img.cpg, img.pz-big')];
+      const box = view.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(page.closest('.cviewin') || view).paddingTop) || 0;
+      const topOf = p => view.scrollTop + (p.getBoundingClientRect().top - box.top) - pad;
+      const at = pages.indexOf(page);
+      const partway = page.getBoundingClientRect().top - box.top < pad - 1;
+      const to = dir < 0 && partway ? page : pages[at + dir];
+      if (!to) return;
+      view.scrollTo({ top: Math.max(0, Math.round(topOf(to))) });
+    },
+
+    /// `H` / `M` / `L`: the page's top at the view's top, its middle at the
+    /// middle, its bottom at the bottom — measured, with the view's padding.
+    pageJump(view, where) {
+      const page = view && this.pageAt(view);
+      if (!page) return;
+      const box = view.getBoundingClientRect();
+      const r = page.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(page.closest('.cviewin') || view).paddingTop) || 0;
+      const top = view.scrollTop + (r.top - box.top);
+      const to = where === 'top' ? top - pad
+        : where === 'bottom' ? top + r.height - view.clientHeight + pad
+        : top + r.height / 2 - view.clientHeight / 2;
+      view.scrollTo({ top: Math.max(0, Math.round(to)) });
+    },
+
 
     /// `gt` / `gT`. With no count it is the next/previous tab, wrapping; with
     /// one it is that tab by number, which is what `2gt` means in Vim.
@@ -4002,6 +4166,11 @@ function ledger() {
             gs: !!root.dataset.gs,
             spans: !!root.dataset.spans,
             shrink: !!root.dataset.gs,
+            // The large page, as the carousel shows one: fitted to height
+            // first, `f` for width, `+`/`-`/`0` on top of either.
+            fit: 'height',
+            zoom: 1,
+            buf: '',
             onSave,
           };
           this.prepSize();
@@ -4028,9 +4197,38 @@ function ledger() {
       }, 150);
     },
 
+    /// The trim view's fit and zoom, keeping the page where it was — the same
+    /// `keepPage` the carousel uses.
+    prepFit() {
+      const p = this.prep, stage = document.querySelector('.pz-stage');
+      if (!p) return;
+      this.keepPage(stage, () => {
+        p.fit = p.fit === 'height' ? 'width' : 'height';
+        p.zoom = 1;
+        if (stage) { stage.dataset.fit = p.fit; stage.style.setProperty('--z', '1'); }
+      }, false);
+    },
+
+    prepZoom(z) {
+      const p = this.prep, stage = document.querySelector('.pz-stage');
+      if (!p) return;
+      this.keepPage(stage, () => {
+        p.zoom = z;
+        if (stage) stage.style.setProperty('--z', String(z));
+      }, true);
+    },
+
     prepFocus(i) {
       if (!this.prep) return;
-      this.prep.focus = Math.max(0, Math.min(this.prep.pages - 1, i));
+      const at = Math.max(0, Math.min(this.prep.pages - 1, i));
+      if (at !== this.prep.focus) {
+        // Another page starts at its top, at 100% of the fit — as each file
+        // does in the carousel.
+        this.prep.zoom = 1;
+        const stage = document.querySelector('.pz-stage');
+        if (stage) stage.scrollTop = 0;
+      }
+      this.prep.focus = at;
       document.querySelectorAll('.pz-thumb')[this.prep.focus]?.scrollIntoView({ block: 'nearest' });
     },
 
@@ -4052,10 +4250,36 @@ function ledger() {
 
     prepKey(k) {
       const p = this.prep;
+      // A pending `g`, for `gg` — any other key drops it.
+      const armed = p.buf;
+      p.buf = '';
       if (k === 'Escape') return this.prepCancel();
       if (k === 'Enter') return this.prepSave();
-      if (k === 'h' || k === 'ArrowLeft' || k === 'k' || k === 'ArrowUp') return this.prepFocus(p.focus - 1);
-      if (k === 'l' || k === 'ArrowRight' || k === 'j' || k === 'ArrowDown') return this.prepFocus(p.focus + 1);
+      // Pages sideways, the page itself up and down — `j`/`k` scroll, as they
+      // do in the carousel.
+      if (k === 'h' || k === 'ArrowLeft') return this.prepFocus(p.focus - 1);
+      if (k === 'l' || k === 'ArrowRight') return this.prepFocus(p.focus + 1);
+      // One page is on show here, so the next page IS the next page.
+      if (k === 'J') return this.prepFocus(p.focus + 1);
+      if (k === 'K') return this.prepFocus(p.focus - 1);
+      // `gg` / `G`: the first / last page — one page is on show here, as
+      // with `J` / `K`.
+      if (k === 'g') {
+        if (armed !== 'g') { p.buf = 'g'; return; }
+        this.prepFocus(0);
+        const stage = document.querySelector('.pz-stage');
+        if (stage) stage.scrollTop = 0;
+        return;
+      }
+      if (k === 'G') return this.prepFocus(p.pages - 1);
+      const stage = document.querySelector('.pz-stage');
+      if (k === 'j' || k === 'ArrowDown') return this.pageScroll(stage, 1);
+      if (k === 'k' || k === 'ArrowUp') return this.pageScroll(stage, -1);
+      if (k === 'H' || k === 'M' || k === 'L') return this.pageJump(stage, { H: 'top', M: 'middle', L: 'bottom' }[k]);
+      if (k === 'f') return this.prepFit();
+      if (k === '+' || k === '=') return this.prepZoom(Math.min(4, p.zoom + 0.25));
+      if (k === '-') return this.prepZoom(Math.max(0.5, p.zoom - 0.25));
+      if (k === '0') return this.prepZoom(1);
       if (k === 'x' || k === ' ') return this.prepToggle();
       if (k === 's') return this.prepShrink(!p.shrink);
     },

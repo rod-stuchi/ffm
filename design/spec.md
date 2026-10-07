@@ -504,6 +504,21 @@ receipt — without leaving the ledger behind it.
   up blank in Chrome, and widening the frame only zoomed while the viewer
   stayed fitted to the width — in Safari `+` slid the page sideways and `-`
   did nothing.
+- **A page opens fitted to its height, `f` fits it to the width.** Fitted to
+  the width, a tall statement opened zoomed in, a third of its first page on
+  screen and no key to move down it — the carousel took every key and used
+  none of them for scrolling. Now the whole page shows first; `f` flips to
+  the width for reading it, `j`/`k` scroll, and `H`/`M`/`L` put the page on
+  show at its top, middle or bottom, as Vim's do for the screen. `J`/`K`
+  go a whole page down or up, landing on the next page's top — at fit height
+  one page per press, which `j`'s small steps took seven of.
+  `+`/`-`/`0` zoom on top of either fit, which is kept from file to file
+  while the carousel is open and starts at height every time it opens. The
+  fit is CSS: the stage is a size container and a page is
+  `100cqh` tall, so nothing is measured in script. A photo fits the same
+  way; a text file has no page, and only scrolls. The trim view's large
+  page has the same keys and switch — one set of keys wherever a page is
+  an image — drawn at 150 dpi there so fit width stays readable.
 - **300 dpi, not 150.** An image has the resolution it was drawn at: a
   statement drawn small in PDF points (Inter's is 446 pt wide) came out
   929 px at 150 dpi and was stretched 2–4× to fill the stage — blurry beside
@@ -772,6 +787,11 @@ whole keymap was out of reach: there was no field to focus.
 | `h` / `l` | inside the carousel — previous / next file |
 | `+` / `-` | inside the carousel — zoom in / out |
 | `0` | inside the carousel — reset zoom to 100% |
+| `j` / `k` | inside the carousel or the trim view — scroll the page down / up |
+| `f` | inside the carousel or the trim view — fit height ⇄ fit width |
+| `H` / `M` / `L` | inside the carousel or the trim view — the top / middle / bottom of the page on show |
+| `J` / `K` | inside the carousel or the trim view — the next / previous page, at its top |
+| `gg` / `G` | inside the carousel — the top of the first page, the end of the last · inside the trim view — the first / last page |
 | `dd` | inside the carousel — remove the file on show; confirms with `y`, never `Enter` |
 | `t` | inside the carousel — trim or shrink the PDF on show (see Trim and shrink, below) |
 | `v` | inside the carousel — the PDF on show in the browser's own viewer, and back to the page images |
@@ -2386,9 +2406,11 @@ already stored.
 
 - **Full viewport, like `P`**, because the reason to look is to tell an
   advert from the page with the barcode, which needs the page large.
-- **Keys:** `h`/`l` (or `j`/`k`, or the arrows) move between pages, `x` or
-  Space keeps or removes the one in focus, `s` switches the shrink, `Enter`
-  saves and `Esc` cancels. A click on a thumbnail focuses it; its button
+- **Keys:** `h`/`l` (or ←/→) move between pages, `x` or Space keeps or
+  removes the one in focus, `s` switches the shrink, `Enter` saves and `Esc`
+  cancels. The large page is read as in the carousel: fitted to height
+  first, `f` for width, `j`/`k` (or ↑/↓) scroll, `H`/`M`/`L` top / middle /
+  bottom, `+`/`-`/`0` zoom — so `j`/`k` no longer change page here. A click on a thumbnail focuses it; its button
   keeps or removes it. Removing the last page is refused — a file with no
   pages is not a file.
 - **The size line is worked out by the server**, on every change (debounced),
