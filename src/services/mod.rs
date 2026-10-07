@@ -5,6 +5,7 @@ pub mod backup;
 pub mod barcode_page;
 pub mod boleto;
 pub mod import;
+pub mod installments;
 pub mod issuers;
 pub mod itf;
 pub mod live;

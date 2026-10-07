@@ -80,8 +80,9 @@ pub struct RulePane {
     tracked: bool,
     no_barcode: bool,
     spans_period: bool,
-    window_size: String,
-    window_start: String,
+    /// What the attached file holds, when the bill covers several months: *10
+    /// installments · Jan–Oct · R$ 121,62 each* (`db::bill_codes`).
+    spans_readback: Option<String>,
     carry_forward: bool,
     varies: bool,
     estimate_basis: String,
@@ -280,8 +281,7 @@ pub async fn new_rule(
         tracked: false,
         no_barcode: false,
         spans_period: false,
-        window_size: String::new(),
-        window_start: String::new(),
+        spans_readback: None,
         // Checked by default: most bills drift slowly, and a household that
         // wants an explicit number every period says so.
         carry_forward: true,
@@ -376,8 +376,7 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         tracked: r.tracked,
         no_barcode: r.no_barcode,
         spans_period: r.spans_period,
-        window_size: r.window_size.map(|n| n.to_string()).unwrap_or_default(),
-        window_start: r.window_start.map(|p| p.to_string()).unwrap_or_default(),
+        spans_readback: spans_readback(&st, &t, r.id).await,
         carry_forward: r.carry_forward_amount,
         varies: r.varies,
         estimate_basis: r.estimate_basis.clone(),
@@ -403,6 +402,31 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         t,
     })
     .into_response()
+}
+
+/// What a covering bill's file holds, in the words the attach used:
+/// *10 installments · 01/2026–10/2026 · R$ 121,62 each*.
+async fn spans_readback(st: &AppState, t: &Catalog, rule_id: i64) -> Option<String> {
+    let s = crate::db::bill_codes::summary(&st.pool, rule_id)
+        .await
+        .ok()
+        .flatten()?;
+    let first = crate::ui::fmt::period(s.first);
+    let last = crate::ui::fmt::period(s.last);
+    Some(match s.amount {
+        Some(a) => {
+            let currency = crate::db::ledger::household(&st.pool)
+                .await
+                .ok()
+                .flatten()
+                .map(|h| h.currency)
+                .unwrap_or_default();
+            // (count, first, amount, last): the accessor's order is the
+            // message's, and its singular variant names `$amount` first.
+            t.import_installments_each(s.count, &first, &crate::ui::fmt::money(a, currency), &last)
+        }
+        None => t.import_installments(s.count, &first, &last),
+    })
 }
 
 /// The confirmed periods behind a varying income, formatted for the pane.
@@ -538,10 +562,6 @@ pub struct RuleFormInput {
     no_barcode: Option<String>,
     #[serde(default)]
     spans_period: Option<String>,
-    #[serde(default, deserialize_with = "crate::web::form::blank_as_none")]
-    window_size: Option<i64>,
-    #[serde(default)]
-    window_start: String,
     #[serde(default)]
     carry_forward: Option<String>,
     #[serde(default)]
@@ -648,6 +668,7 @@ impl RuleFormInput {
                     .and_then(|n| rules::end_from_installments(start, self.cadence_months, n))
             });
         let tracked = tracked_now;
+        let spans = tracked && !kind.is_income() && !on(&self.no_barcode) && on(&self.spans_period);
 
         if errors.is_bad() {
             return Err(errors);
@@ -687,17 +708,18 @@ impl RuleFormInput {
             // The whole barcode apparatus is spend-only: money arriving has no
             // boleto to scan, and the schema has a CHECK saying so.
             no_barcode: !kind.is_income() && on(&self.no_barcode),
-            // A window belongs to a tracked SPEND with a barcode: the schema
-            // has a CHECK for each of those, and building the form value the
-            // same way means a contradictory rule never reaches it.
-            spans_period: tracked
-                && !kind.is_income()
-                && !on(&self.no_barcode)
-                && on(&self.spans_period)
-                && self.window_size.is_some()
-                && !self.window_start.trim().is_empty(),
-            window_size: self.window_size.filter(|n| (1..=120).contains(n)),
-            window_start: Period::parse(self.window_start.trim()),
+            // Covering several months belongs to a tracked SPEND with a
+            // barcode: the schema has a CHECK for each of those, and building
+            // the form value the same way means a contradictory rule never
+            // reaches it.
+            spans_period: spans,
+            // Retired: each month now takes the code due in it
+            // (`services::installments`), so nothing reads these. The rule's
+            // CHECK still wants both set while `spans_period` is on, and
+            // rebuilding the table to drop it is not worth it — so they are
+            // filled here, with values that claim nothing.
+            window_size: spans.then_some(1),
+            window_start: spans.then(|| Period::of(start)),
             varies: kind.is_income() && on(&self.varies),
             estimate_basis: match self.estimate_basis.as_str() {
                 "average" | "last" => self.estimate_basis.clone(),
@@ -829,15 +851,16 @@ async fn attach_parked(
             Ok(p) => p,
             Err(crate::web::import::Refused(m)) => return (m, true),
         };
-    // A rule just created has nothing bound, so there is nothing to ask.
-    match crate::web::import::attach_to(
+    // A rule just created has nothing bound, so there is nothing to ask. A
+    // bill covering several months fills every month it has a code for.
+    match crate::web::import::attach_covering(
         st,
         auth,
         &rule,
         tx_id,
         period,
         &upload,
-        &parsed,
+        parsed,
         false,
         &crate::web::fidget::Fidget::off(),
     )
@@ -948,8 +971,10 @@ async fn rejected(
         tracked: on(&input.tracked),
         no_barcode: on(&input.no_barcode),
         spans_period: on(&input.spans_period),
-        window_size: input.window_size.map(|n| n.to_string()).unwrap_or_default(),
-        window_start: input.window_start.clone(),
+        spans_readback: match id {
+            Some(id) => spans_readback(st, &t, id).await,
+            None => None,
+        },
         carry_forward: on(&input.carry_forward),
         varies: on(&input.varies),
         estimate_basis: if input.estimate_basis.is_empty() {
@@ -1180,8 +1205,6 @@ mod tests {
             tracked: tracked.then(|| "on".into()),
             no_barcode: None,
             spans_period: None,
-            window_size: None,
-            window_start: String::new(),
             carry_forward: Some("on".into()),
             varies: None,
             estimate_basis: String::new(),
@@ -1205,7 +1228,7 @@ mod tests {
         use axum::extract::FromRequest;
         let body = "member_id=4&kind=out&period=2026-09&amount=450%2C32&title=Moto&bucket=\
                     &cadence_months=1&start=2026-09-23&due_day=&end=&installments=\
-                    &carry_forward=on&tracked=on&window_size=&window_start=&months=";
+                    &carry_forward=on&tracked=on&estimate_window=&months=";
         let req = axum::http::Request::builder()
             .method("POST")
             .header("content-type", "application/x-www-form-urlencoded")
@@ -1214,7 +1237,7 @@ mod tests {
         let Ok(Form(input)) = Form::<RuleFormInput>::from_request(req, &()).await else {
             panic!("the form body was refused before validation");
         };
-        assert_eq!(input.window_size, None);
+        assert_eq!(input.estimate_window, None);
     }
 
     /// The shape of the "Create does nothing" report: tracked, no bucket. It

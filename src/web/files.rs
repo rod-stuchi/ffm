@@ -287,12 +287,21 @@ pub(crate) async fn on_disk(
     let present = receipts::presence(&st.pool, &st.cfg.receipts_root, &slot)
         .await
         .ok()?;
-    let ext = match kind {
+    let own = match kind {
         Kind::Barcode => present.bill,
         Kind::Scheduled => present.scheduled,
         Kind::Receipt => present.receipt,
-    }?;
-    Some((st.cfg.receipts_root.join(slot.path(kind, &ext)), ext))
+    };
+    if let Some(ext) = own {
+        return Some((st.cfg.receipts_root.join(slot.path(kind, &ext)), ext));
+    }
+    // A bill covering several months is one file, stored on the month it was
+    // dropped on: every other month it has a code for opens that one.
+    if kind == Kind::Barcode {
+        let shared = receipts::shared_bill(&st.pool, &st.cfg.receipts_root, tx_id).await?;
+        return Some((st.cfg.receipts_root.join(shared.path), shared.ext));
+    }
+    None
 }
 
 /// `GET /tx/{id}/file/{kind}` — the file itself, in a new browser tab.

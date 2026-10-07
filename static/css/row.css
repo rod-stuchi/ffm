@@ -319,20 +319,6 @@ body:not(.kbd-nav) .row:hover .entry {
   color: var(--ink);
 }
 
-/* A multi-period bill whose computed page falls outside the uploaded file's
- * page count: the window ran out and needs a fresh upload. Same warning channel
- * as scheduled-overdue — not a new color meaning. */
-.fbadge.is-warn {
-  border-color: var(--neg);
-  color: var(--neg);
-}
-.fbadge.is-warn:hover,
-.fbadge.is-warn:focus-visible {
-  border-color: var(--neg);
-  color: var(--neg);
-  background: var(--neg-soft);
-}
-
 .fbadge kbd {
   flex: none;
   font-family: var(--mono);

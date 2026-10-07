@@ -210,8 +210,6 @@ pub async fn create(pool: &SqlitePool, actor: Actor, form: &RuleForm) -> sqlx::R
     .fetch_one(&mut *tx)
     .await?;
 
-    record_window(&mut tx, id, form, &at).await?;
-
     Change::rule(actor, RuleAction::Create, id)
         .diff("title", Value::Text(None), Value::text(&form.title))
         .diff("amount", Value::Money(None), Value::Money(form.amount))
@@ -316,8 +314,6 @@ pub async fn edit_reporting(
     )
     .execute(&mut *tx)
     .await?;
-
-    record_window(&mut tx, id, form, &now()).await?;
 
     // **A renamed bucket or bill name reaches every row of the rule**, in
     // every month: the rows are what `:group bucket` folds by, and a rule
@@ -503,67 +499,6 @@ pub async fn soft_delete(pool: &SqlitePool, actor: Actor, id: i64) -> sqlx::Resu
         .await?;
     tx.commit().await?;
     Ok(true)
-}
-
-/// Records the rule's current barcode window as a row, retiring whatever was
-/// live before it.
-///
-/// This is what closes the KNOWN HOLE: the page an occurrence shows is derived
-/// from the window that covered **its own** period, so renewing a cyclic
-/// bill's window no longer rewrites last year's rows into "page −11, outside
-/// this file". Re-entering the two fields *is* the renewal — there is no
-/// separate control, and none is needed.
-async fn record_window(
-    tx: &mut Transaction<'_, Sqlite>,
-    rule_id: i64,
-    form: &RuleForm,
-    at: &str,
-) -> sqlx::Result<()> {
-    let (Some(size), Some(start)) = (form.window_size, form.window_start) else {
-        return Ok(());
-    };
-    if !form.spans_period {
-        return Ok(());
-    }
-    let start = start.to_string();
-
-    // Unchanged is not a renewal: an ordinary save must not retire the live
-    // window and insert an identical one, or every edit would add a row.
-    let live: Option<(String, i64)> = sqlx::query_as(
-        "SELECT window_start, window_size FROM rule_barcode_window
-          WHERE rule_id = ?1 AND retired_at IS NULL",
-    )
-    .bind(rule_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    if live
-        .as_ref()
-        .is_some_and(|(s, n)| *s == start && *n == size)
-    {
-        return Ok(());
-    }
-
-    sqlx::query!(
-        "UPDATE rule_barcode_window SET retired_at = ?2
-          WHERE rule_id = ?1 AND retired_at IS NULL",
-        rule_id,
-        at
-    )
-    .execute(&mut **tx)
-    .await?;
-
-    sqlx::query!(
-        r#"INSERT INTO rule_barcode_window
-               (rule_id, window_start, window_size, uploaded_at)
-           VALUES (?1, ?2, ?3, ?4)"#,
-        rule_id,
-        start,
-        size,
-        at,
-    )
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
 }
 
 pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Rule>> {

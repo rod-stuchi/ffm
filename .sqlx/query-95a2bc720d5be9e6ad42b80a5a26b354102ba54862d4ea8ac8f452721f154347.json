@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT receipt_id AS \"receipt_id!: i64\", barcode_raw AS \"barcode_raw!: String\",\n                  kind AS \"kind!: String\", amount_cents AS \"amount_cents: i64\",\n                  due_date AS \"due_date: String\", page AS \"page!: i64\"\n           FROM rule_bill_code\n           WHERE rule_id = ?1 AND period = ?2 AND retired_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "receipt_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "barcode_raw!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "due_date: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "page!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "95a2bc720d5be9e6ad42b80a5a26b354102ba54862d4ea8ac8f452721f154347"
+}

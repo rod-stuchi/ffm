@@ -354,6 +354,14 @@ async fn insert_occurrence(pool: &SqlitePool, o: Occurrence<'_>) -> sqlx::Result
         .await?;
 
     tx.commit().await?;
+
+    // A month a covering bill already has a code for — a loan's carnê, or a
+    // cycle attached before its months came round — starts with that code's
+    // amount and due date, the way every month did when the file was attached.
+    // The bill's import, not the materializer's guess: logged as one.
+    if let Some(code) = crate::db::bill_codes::for_period(pool, o.rule_id, o.period).await? {
+        crate::db::bill_codes::stamp(pool, Actor::Import(None), id, &code).await?;
+    }
     Ok(true)
 }
 

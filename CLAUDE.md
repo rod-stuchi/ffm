@@ -549,56 +549,47 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     out of balance — scheduling is a promise, not a required step.
   - `{month}.{ext}` — the definitive proof of payment. Its presence is `paid`,
     full stop.
-- **A barcode can cover several periods from one upload instead of a fresh
-  file every month** — a city tax office issuing one PDF with 10 barcodes
-  for the whole Jan–Oct cycle, or a bank issuing one document with a loan's
-  full run of installments. Opt-in per rule (`spans_period`, alongside
-  `window_size` and `window_start`); off by default, since most bills
-  genuinely do get a new file each period. When on, `{month}_barcode.{ext}`
-  stops being computed per period — every occurrence inside the window
-  points at the **same** uploaded file, and the app computes which page is
-  theirs from `window_start` and their own period (`window_start`'s month
-  is page 1, the next month page 2, and so on). This is a property of the
-  barcode specifically: `{month}_scheduled.{ext}` and `{month}.{ext}` stay
-  genuinely per-period regardless — each installment is still scheduled and
-  paid on its own, only the *bill document* is shared.
-  - **Renewing a window used to rewrite history; it no longer does.** The
-    page was derived from the rule's *current* `window_start`, and a cyclic
-    bill renews by re-entering it — so the moment the 2027 window was set,
-    January 2026's row stopped reading "page 1" and started reading "page
-    −11, outside this file's 10 pages", flagging history that was never
-    wrong. Closed by `rule_barcode_window(rule_id, window_start,
-    window_size, file_path, uploaded_at, retired_at)`: an occurrence
-    resolves against the window that covered **its own** period, and
-    re-entering the two fields retires the live window rather than
-    overwriting it. "Derived, never stored" still holds — the page number is
-    computed; it is the **window** that persists. The rule's own
-    `spans_period`/`window_size`/`window_start` stay as its *current*
-    window, which is what the editor writes and what a new upload sets.
-  - **This applies whether the rule itself is finite or cyclic — the window
-    doesn't have to span the rule's entire life.** A fixed-length loan gets
-    exactly one window for its whole run (`window_size` = its
-    `total_installments`, uploaded once, never replaced — when it's done,
-    it's done). A cyclic bill like an annual property tax gets a **new**
-    window every cycle: the same rule, re-opened each January with a fresh
-    `window_start` and `window_size` when that year's document arrives,
-    which is what resets the page count back to 1 for the new file without
-    touching anything else about the rule. Re-entering those two fields
-    *is* the "I got a new file" action — there's no separate upload flow
-    modeled for this yet, same as barcode/scheduled/receipt uploads
-    generally (see Upload, below).
-  - **This is independent of, and doesn't resolve, the still-open cyclic/
-    seasonal rule design** (`months`-of-year allow-list — see Open items,
-    below). A cyclic rule already skips materializing outside its active
-    months by whatever mechanism eventually lands there; the barcode window
-    just needs *a* start period and size to compute pages from, and doesn't
-    care how the rule decided which periods are active.
-  - **An occurrence whose period falls outside the current window's page
-    count is flagged, not silently wrong** — same warning channel as
-    scheduled-overdue, both on the file badge and in the `P` preview
-    carousel: "page 11 — outside this file's 10 pages, a new upload is
-    needed for this month." That's the signal a fresh file needs
-    uploading (a new tax year, a refinanced loan), not a bug to chase.
+- **A bill can cover several months from one upload instead of a fresh
+  file every month** — a city's IPTU (one PDF holding the single payment and
+  ten installments), or a bank's carnê with a loan's whole run. Opt-in per
+  rule (`spans_period`, *Barcode covers multiple months*); off by default,
+  since most bills genuinely do get a new file each period. Only the **bill**
+  is shared: `{month}_scheduled.{ext}` and `{month}.{ext}` stay per month —
+  each installment is still scheduled and paid on its own.
+  - **Each month takes the code due in it** (`services::installments`). Every
+    utility code carries its due date in its free field and every bank slip
+    in its date factor, so attaching the file reads every code in it, keeps
+    one per month in `rule_bill_code` (migration 0017) with the page it is
+    printed on, and **stamps every existing month** with its own amount,
+    due date and code — logged as one `import` entry per row, so `u` puts
+    each back. A month the materializer creates later is stamped from its
+    code when it appears. **Whichever way the file arrives** — `E`'s
+    dropzone, a row's slot 1, or `A`'s before Create — it goes through one
+    function (`import::attach_covering`); `A`'s Create used to skip it and
+    stamp only the current month, with the ÚNICA. A month whose code another
+    live row already holds still takes its amount and date, sourced `text`
+    (a `barcode` source needs the code on the row — a CHECK says so).
+  - **Toggle on, the installments; toggle off, the single payment.** Two codes
+    due in one month (the IPTU's ÚNICA and installment 1) resolve to the one
+    whose value repeats in the file. With the toggle off the bill is read
+    like any other — its first code, which on an IPTU is the ÚNICA.
+  - **Every covered month shows the one file**, stored on the row it was
+    dropped on: slot 1 on January opens it on January's page
+    (`receipts::shared_bill`, *Bill · p.1*). A month the file has no code
+    for shows nothing from it.
+  - **No page count, no first month — reversed.** The first design asked for
+    *Pages in this file* and *First page covers* and derived "page N is month
+    N". A real IPTU holds eleven codes on three pages, so neither field could
+    describe it, and the window's `file_path` was never written — no month
+    but the one the file was dropped on ever showed it. The two fields are
+    gone from the pane; the rule's `window_size`/`window_start` columns and
+    `rule_barcode_window` stay unread (the rule's CHECK still wants the two
+    columns set while `spans_period` is on, so the form fills them).
+  - **Codes with no date** go, in the order the file prints them, to the
+    rule's active months (`months`) of the year — a value that appears only
+    once is left out first, so a single payment does not take January.
+  - **A new file retires the last file's codes** rather than overwriting
+    them, so history keeps the code it was billed with.
 - **A bill dropped anywhere on the page goes to the row of the rule that
   already knows it — recognized, never bound.** This reverses "a panel drop
   binds nothing — it's a notifier" (which was never built: a drop outside a

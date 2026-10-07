@@ -454,30 +454,32 @@ async fn every_upload_and_delete_is_in_the_append_only_log() {
 }
 
 // ---------------------------------------------------------------------------
-// the multi-period barcode window — the KNOWN HOLE, closed
+// a bill covering several months — each month takes the code due in it
 // ---------------------------------------------------------------------------
 
-/// Builds a tracked, window-carrying rule and materializes a year of it.
-async fn cyclic_rule(pool: &SqlitePool, me: i64, window_start: &str, size: i64) -> i64 {
+/// A tracked rule whose bill covers several months, materialized through
+/// `today`.
+async fn covering_rule(pool: &SqlitePool, me: i64, today: NaiveDate) -> i64 {
     let form = RuleForm {
         member_id: me,
         kind: TxKind::Out,
         title: "IPTU".into(),
-        amount: Some(Cents(21000)),
+        amount: None,
         cadence_months: 1,
         due_day: Some(10),
         start_date: d(2026, 1, 1),
         end_date: None,
         total_installments: None,
-        carry_forward_amount: true,
+        carry_forward_amount: false,
         tracked: true,
         bucket: Some("Casa".into()),
         bill_name: Some("IPTU".into()),
         instance: None,
         no_barcode: false,
         spans_period: true,
-        window_size: Some(size),
-        window_start: Period::parse(window_start),
+        // Retired fields the schema's CHECK still wants set.
+        window_size: Some(1),
+        window_start: Period::parse("2026-01"),
         varies: false,
         estimate_basis: "lowest".into(),
         estimate_window: 3,
@@ -486,10 +488,94 @@ async fn cyclic_rule(pool: &SqlitePool, me: i64, window_start: &str, size: i64) 
         visibility: Visibility::Household,
         pdf_password: None,
     };
-    rules::create(pool, Actor::User(me), &form).await.unwrap()
+    let rule = rules::create(pool, Actor::User(me), &form).await.unwrap();
+    materializer::reconcile(pool, today).await.unwrap();
+    rule
 }
 
-async fn page_of(pool: &SqlitePool, me: i64, period: &str) -> Option<(i32, bool)> {
+/// A made-up utility code for `cents`, due `yyyymmdd`, built with the app's
+/// own check digits — what `services::installments` reads off a real file.
+fn code(cents: u64, ymd: &str, serial: u32) -> ffm::services::installments::FoundCode {
+    use ffm::services::boleto::{self, mod10};
+    let mut digits: Vec<u32> = vec![8, 1, 6, 0];
+    digits.extend(
+        format!("{cents:011}")
+            .chars()
+            .map(|c| c.to_digit(10).unwrap()),
+    );
+    digits.extend([0, 3, 0, 6]);
+    digits.extend(
+        format!("{ymd}{serial:017}")
+            .chars()
+            .map(|c| c.to_digit(10).unwrap()),
+    );
+    let mut body = digits[0..3].to_vec();
+    body.extend_from_slice(&digits[4..]);
+    digits[3] = mod10(&body);
+    let raw: String = digits
+        .iter()
+        .map(|x| char::from_digit(*x, 10).unwrap())
+        .collect();
+    ffm::services::installments::FoundCode {
+        barcode: boleto::parse(&raw, d(2026, 10, 7)).unwrap(),
+        page: 1 + serial / 4,
+    }
+}
+
+/// The ten installments of a made-up IPTU, January to October.
+fn plan(cents: u64) -> Vec<(Period, ffm::services::installments::FoundCode)> {
+    (1..=10u32)
+        .map(|m| {
+            let p = Period::new(2026, m).unwrap();
+            (p, code(cents, &format!("2026{m:02}10"), m))
+        })
+        .collect()
+}
+
+async fn row_in(pool: &SqlitePool, rule: i64, period: &str) -> i64 {
+    sqlx::query_scalar("SELECT id FROM transactions WHERE rule_id = ?1 AND period = ?2")
+        .bind(rule)
+        .bind(period)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// The shared file, stored on `row` as an upload would, and its record id.
+async fn shared_file(pool: &SqlitePool, root: &std::path::Path, me: i64, row: i64) -> i64 {
+    let (slot, _) = receipts::slot_of(pool, row).await.unwrap().unwrap();
+    receipts::store(
+        pool,
+        root,
+        Actor::User(me),
+        &slot,
+        Kind::Barcode,
+        "iptu.pdf",
+        b"%PDF-",
+    )
+    .await
+    .unwrap();
+    sqlx::query_scalar("SELECT id FROM receipts WHERE transaction_id = ?1 AND deleted_at IS NULL")
+        .bind(row)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn keep(
+    pool: &SqlitePool,
+    rule: i64,
+    receipt: i64,
+    plan: &[(Period, ffm::services::installments::FoundCode)],
+) {
+    let mut tx = pool.begin().await.unwrap();
+    ffm::db::bill_codes::replace(&mut tx, rule, receipt, plan, "2026-10-07T12:00:00Z")
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+}
+
+async fn page_of(pool: &SqlitePool, root: &std::path::Path, me: i64, period: &str) -> Option<u32> {
     use ffm::db::ledger;
     use ffm::domain::viewer::Viewer;
     use ffm::ui::row::RowCtx;
@@ -501,7 +587,7 @@ async fn page_of(pool: &SqlitePool, me: i64, period: &str) -> Option<(i32, bool)
         .find(|m| m.id == me)
         .unwrap();
     let ctx = RowCtx {
-        today: d(2027, 3, 1),
+        today: d(2026, 10, 7),
         sort: Default::default(),
         currency: Currency::Brl,
         show_recurring: true,
@@ -509,156 +595,171 @@ async fn page_of(pool: &SqlitePool, me: i64, period: &str) -> Option<(i32, bool)
         narrow: false,
         line_numbers: Default::default(),
     };
-    let pane = ledger::pane(
+    let pane = ledger::pane_with_vault(
         pool,
         &member,
         Period::parse(period).unwrap(),
         ctx,
         Viewer::new(me, true),
+        Some(root),
     )
     .await
     .unwrap();
-    pane.rows
-        .first()
-        .and_then(|r| r.barcode_page())
-        .map(|p| (p.page, p.in_window))
+    let row = pane.rows.first()?;
+    row.files.bill.as_ref()?;
+    row.barcode_page().map(|p| p.page)
 }
 
 #[tokio::test]
-async fn renewing_a_window_does_not_rewrite_last_years_pages() {
-    // The recorded KNOWN HOLE: the page was derived from the rule's CURRENT
-    // window_start, and a cyclic bill renews by re-entering it — so setting
-    // the 2027 window turned January 2026 into "page -11, outside this file's
-    // 10 pages", flagging history that was never wrong.
+async fn every_covered_month_shows_the_one_file_on_its_codes_page() {
     let pool = pool().await;
+    let root = vault();
     let me = household(&pool).await;
-    let rule = cyclic_rule(&pool, me, "2026-01", 10).await;
-    materializer::reconcile(&pool, d(2026, 6, 15))
+    let rule = covering_rule(&pool, me, d(2026, 10, 7)).await;
+    let october = row_in(&pool, rule, "2026-10").await;
+    let receipt = shared_file(&pool, &root, me, october).await;
+    keep(&pool, rule, receipt, &plan(12162)).await;
+
+    // January's row holds no file of its own, and shows October's — on the
+    // page its own code is printed on.
+    assert_eq!(page_of(&pool, &root, me, "2026-01").await, Some(1));
+    assert_eq!(page_of(&pool, &root, me, "2026-06").await, Some(2));
+    assert_eq!(page_of(&pool, &root, me, "2026-10").await, Some(3));
+}
+
+#[tokio::test]
+async fn each_month_is_stamped_with_its_own_code_and_a_later_month_too() {
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let rule = covering_rule(&pool, me, d(2026, 8, 15)).await;
+    let august = row_in(&pool, rule, "2026-08").await;
+    let receipt = shared_file(&pool, &root, me, august).await;
+    let plan = plan(12162);
+    keep(&pool, rule, receipt, &plan).await;
+
+    for (p, _) in &plan {
+        let Ok(id) = sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM transactions WHERE rule_id = ?1 AND period = ?2",
+        )
+        .bind(rule)
+        .bind(p.to_string())
+        .fetch_one(&pool)
         .await
-        .unwrap();
-
-    assert_eq!(page_of(&pool, me, "2026-01").await, Some((1, true)));
-    assert_eq!(page_of(&pool, me, "2026-04").await, Some((4, true)));
-
-    // Next January the tax office sends a new document, and the household
-    // re-enters the two fields. That IS the renewal — there is no separate
-    // control, and none is needed.
-    let mut next = rules::get(&pool, rule).await.unwrap().unwrap();
-    next.window_start = Period::parse("2027-01");
-    let form = RuleForm {
-        member_id: next.member_id,
-        kind: next.kind,
-        title: next.title.clone(),
-        amount: next.amount,
-        cadence_months: next.cadence_months,
-        due_day: next.due_day,
-        start_date: next.start_date,
-        end_date: next.end_date,
-        total_installments: next.total_installments,
-        carry_forward_amount: next.carry_forward_amount,
-        tracked: next.tracked,
-        bucket: next.bucket.clone(),
-        bill_name: next.bill_name.clone(),
-        instance: next.instance.clone(),
-        no_barcode: next.no_barcode,
-        spans_period: true,
-        window_size: Some(10),
-        window_start: Period::parse("2027-01"),
-        varies: next.varies,
-        estimate_basis: next.estimate_basis.clone(),
-        estimate_window: next.estimate_window,
-        amount_in_filename: next.amount_in_filename,
-        months: None,
-        visibility: next.visibility,
-        pdf_password: None,
-    };
-    rules::edit(&pool, Actor::User(me), rule, &form)
-        .await
-        .unwrap();
-    materializer::reconcile(&pool, d(2027, 3, 1)).await.unwrap();
-
-    // Last year still reads the way it always did...
-    assert_eq!(
-        page_of(&pool, me, "2026-01").await,
-        Some((1, true)),
-        "history resolves against the window that covered IT"
-    );
-    assert_eq!(page_of(&pool, me, "2026-04").await, Some((4, true)));
-    // ...and the new cycle counts from 1 again.
-    assert_eq!(page_of(&pool, me, "2027-01").await, Some((1, true)));
-    assert_eq!(page_of(&pool, me, "2027-03").await, Some((3, true)));
-
-    // Exactly one live window, with the old one retired rather than deleted.
-    let windows: Vec<(String, Option<String>)> = sqlx::query_as(
-        "SELECT window_start, retired_at FROM rule_barcode_window ORDER BY window_start",
+        else {
+            continue;
+        };
+        let code = ffm::db::bill_codes::for_period(&pool, rule, *p)
+            .await
+            .unwrap()
+            .unwrap();
+        ffm::db::bill_codes::stamp(&pool, Actor::Import(Some(me)), id, &code)
+            .await
+            .unwrap();
+    }
+    let (amount, due): (i64, String) = sqlx::query_as(
+        "SELECT amount_cents, due_date FROM transactions WHERE rule_id = ?1 AND period = '2026-03'",
     )
-    .fetch_all(&pool)
+    .bind(rule)
+    .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(windows.len(), 2);
-    assert!(windows[0].1.is_some(), "2026 retired");
-    assert!(windows[1].1.is_none(), "2027 live");
+    assert_eq!((amount, due.as_str()), (12162, "2026-03-10"));
+
+    // October did not exist when the file came: the materializer stamps it
+    // from its code when it does.
+    materializer::reconcile(&pool, d(2026, 10, 7))
+        .await
+        .unwrap();
+    let (amount, due): (i64, String) = sqlx::query_as(
+        "SELECT amount_cents, due_date FROM transactions WHERE rule_id = ?1 AND period = '2026-10'",
+    )
+    .bind(rule)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((amount, due.as_str()), (12162, "2026-10-10"));
 }
 
 #[tokio::test]
-async fn a_period_past_the_windows_page_count_is_flagged_not_silently_wrong() {
+async fn a_month_whose_code_another_row_holds_still_gets_its_amount() {
+    // The same IPTU attached to a second rule while the first rule's rows
+    // still hold its codes: the code stays where it is (one barcode, one
+    // row), and the month still takes its amount and due date — read off the
+    // bill's text, since a `barcode` source needs a code on the row.
     let pool = pool().await;
     let me = household(&pool).await;
-    cyclic_rule(&pool, me, "2026-01", 10).await;
-    materializer::reconcile(&pool, d(2026, 12, 20))
-        .await
-        .unwrap();
-
-    // November is page 11 of a ten-page file: the cue that a fresh document
-    // needs uploading, not a bug to chase.
-    assert_eq!(page_of(&pool, me, "2026-11").await, Some((11, false)));
-}
-
-#[tokio::test]
-async fn an_ordinary_save_does_not_pile_up_windows() {
-    let pool = pool().await;
-    let me = household(&pool).await;
-    let rule = cyclic_rule(&pool, me, "2026-01", 10).await;
-    let r = rules::get(&pool, rule).await.unwrap().unwrap();
-
-    let form = RuleForm {
-        member_id: r.member_id,
-        kind: r.kind,
-        title: "IPTU 2026".into(),
-        amount: r.amount,
-        cadence_months: r.cadence_months,
-        due_day: r.due_day,
-        start_date: r.start_date,
-        end_date: r.end_date,
-        total_installments: r.total_installments,
-        carry_forward_amount: r.carry_forward_amount,
-        tracked: r.tracked,
-        bucket: r.bucket.clone(),
-        bill_name: r.bill_name.clone(),
-        instance: r.instance.clone(),
-        no_barcode: r.no_barcode,
-        spans_period: true,
-        window_size: r.window_size,
-        window_start: r.window_start,
-        varies: r.varies,
-        estimate_basis: r.estimate_basis.clone(),
-        estimate_window: r.estimate_window,
-        amount_in_filename: r.amount_in_filename,
-        months: None,
-        visibility: r.visibility,
-        pdf_password: None,
-    };
-    rules::edit(&pool, Actor::User(me), rule, &form)
-        .await
-        .unwrap();
-
-    // Renaming the rule is not a new document: unchanged values must not
-    // retire the live window and insert an identical one.
-    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM rule_barcode_window")
+    let first = covering_rule(&pool, me, d(2026, 3, 15)).await;
+    let second = covering_rule(&pool, me, d(2026, 3, 15)).await;
+    let plan = plan(12162);
+    let march = Period::parse("2026-03").unwrap();
+    let mut held = Vec::new();
+    for rule in [first, second] {
+        let row = row_in(&pool, rule, "2026-03").await;
+        let receipt: i64 = sqlx::query_scalar(
+            "INSERT INTO receipts (transaction_id, kind, path, ext, original_filename, uploaded_by, uploaded_at)
+             VALUES (?1, 'barcode', 'x/2026/03_barcode.pdf', 'pdf', 'iptu.pdf', ?2, '2026-03-15T12:00:00Z')
+             RETURNING id",
+        )
+        .bind(row)
+        .bind(me)
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(n, 1);
+        keep(&pool, rule, receipt, &plan).await;
+        let code = ffm::db::bill_codes::for_period(&pool, rule, march)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            ffm::db::bill_codes::stamp(&pool, Actor::Import(Some(me)), row, &code)
+                .await
+                .unwrap()
+        );
+        let got: (i64, String, Option<String>, String) = sqlx::query_as(
+            "SELECT amount_cents, due_date, barcode_raw, amount_source FROM transactions WHERE id = ?1",
+        )
+        .bind(row)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        held.push(got);
+    }
+    assert_eq!(held[0].0, 12162);
+    assert!(held[0].2.is_some());
+    assert_eq!(held[0].3, "barcode");
+    assert_eq!((held[1].0, held[1].1.as_str()), (12162, "2026-03-10"));
+    assert_eq!(held[1].2, None, "the code stays on the row that holds it");
+    assert_eq!(held[1].3, "text");
+}
+
+#[tokio::test]
+async fn a_new_file_retires_the_last_files_codes() {
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let rule = covering_rule(&pool, me, d(2026, 10, 7)).await;
+    let october = row_in(&pool, rule, "2026-10").await;
+    let receipt = shared_file(&pool, &root, me, october).await;
+    keep(&pool, rule, receipt, &plan(12162)).await;
+    keep(&pool, rule, receipt, &plan(13000)).await;
+
+    let (live, retired): (i64, i64) = sqlx::query_as(
+        "SELECT sum(retired_at IS NULL), sum(retired_at IS NOT NULL) FROM rule_bill_code",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (live, retired),
+        (10, 10),
+        "history keeps the codes it was billed with"
+    );
+    let code = ffm::db::bill_codes::for_period(&pool, rule, Period::parse("2026-05").unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(code.amount, Some(Cents(13000)));
 }
 
 #[tokio::test]

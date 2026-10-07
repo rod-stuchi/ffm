@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS (SELECT 1 FROM transactions\n                          WHERE barcode_raw = ?1 AND id <> ?2 AND deleted_at IS NULL)\n             AS \"taken!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "taken!: bool",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2335cbe28666f43123c2cc4af91a7d57bab70331d87724b4448bc7f1208521a3"
+}

@@ -189,28 +189,19 @@
       {%- endif %}
 
       {%- if !income %}
-      {#- One uploaded document covering several periods: a tax office sending
-          ten barcodes for a Jan–Oct cycle, or a bank sending a loan's whole
-          run up front. Only the BARCODE is shared — scheduled and the receipt
-          stay per period, because each installment is still paid on its own. -#}
+      {#- One uploaded document covering several months: a city's IPTU (a
+          single payment and ten installments in one PDF), or a loan's carnê.
+          Each month takes the code due in it — read off the file when it is
+          attached, so there is nothing to type here: no page count, no first
+          month. Only the BILL is shared; scheduled and the receipt stay per
+          month, because each installment is still paid on its own. -#}
       <label class="tog" x-show="tracked && !noBarcode" x-cloak>
         <input type="checkbox" name="spans_period"{% if spans_period %} checked{% endif %} x-model="spans">
         <span>{{ t.rule_spans_period() }}</span>
       </label>
-      <div class="fgrid" x-show="tracked && !noBarcode && spans" x-cloak>
-        <label class="f">
-          <span class="k">{{ t.rule_window_size() }}</span>
-          <input class="i" name="window_size" value="{{ window_size }}" inputmode="numeric"
-                 @beforeinput="digitsOnly($event)">
-        </label>
-        <label class="f">
-          {#- Re-entering these two IS the renewal: a cyclic bill gets a new
-              window each cycle, and history keeps resolving against the one
-              that covered it. -#}
-          <span class="k">{{ t.rule_window_start() }}</span>
-          <input class="i" type="month" name="window_start" value="{{ window_start }}">
-        </label>
-      </div>
+      <p class="hint" x-show="tracked && !noBarcode && spans" x-cloak>
+        {%- if let Some(r) = spans_readback %}{{ r }}{% else %}{{ t.rule_spans_hint() }}{% endif -%}
+      </p>
       {%- endif %}
 
       <label class="tog" x-show="tracked" x-cloak>

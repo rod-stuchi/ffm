@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT path AS \"path!: String\", ext AS \"ext!: String\"\n           FROM receipts WHERE id = ?1 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "path!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "ext!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8d63d85e4b4b58fccfff7048e7621e18e21d7e7b3e78fdc16a2d0f2809b3aed1"
+}

@@ -240,8 +240,6 @@ pub async fn pane_with_vault(
             r.instance           AS "instance?: String",
             r.total_installments AS "total_installments?: i64",
             r.spans_period       AS "spans_period?: i64",
-            r.window_size        AS "window_size?: i64",
-            r.window_start       AS "window_start?: String",
             r.amount_in_filename AS "amount_in_filename?: i64",
             r.varies             AS "varies?: i64",
             r.cadence_months     AS "cadence_months?: i64",
@@ -266,22 +264,6 @@ pub async fn pane_with_vault(
                 AND p.deleted_at IS NULL
               ORDER BY p.sort_key
               LIMIT 1)           AS "prev_amount_cents: i64",
-
-            -- The barcode window that covered THIS period, not the rule's
-            -- current one. A cyclic bill renews by re-entering the window, and
-            -- reading the current values would silently rewrite history: the
-            -- moment the 2027 window is set, January 2026 stops reading
-            -- "page 1" and starts reading "page -11, outside this file".
-            -- "Derived, never stored" still holds — the page is computed, it
-            -- is the window that persists.
-            (SELECT w.window_start FROM rule_barcode_window w
-              WHERE w.rule_id = t.rule_id AND w.window_start <= t.period
-              ORDER BY w.window_start DESC LIMIT 1)
-                               AS "hist_window_start?: String",
-            (SELECT w.window_size FROM rule_barcode_window w
-              WHERE w.rule_id = t.rule_id AND w.window_start <= t.period
-              ORDER BY w.window_start DESC LIMIT 1)
-                               AS "hist_window_size?: i64",
 
             -- The `7/12` badge. Counts occurrences of this rule up to and
             -- including this period, so it reads as position in the run.
@@ -370,15 +352,9 @@ pub async fn pane_with_vault(
             instance: r.instance,
             total_installments: r.total_installments.map(|n| n as u16),
             spans_period: r.spans_period.unwrap_or(0) != 0,
-            // The historical window wins where there is one; the rule's own
-            // columns are the fallback for a rule whose window predates this
-            // table, and the editor's current values for a brand-new one.
-            window_size: r.hist_window_size.or(r.window_size).map(|n| n as u16),
-            window_start: r
-                .hist_window_start
-                .as_deref()
-                .or(r.window_start.as_deref())
-                .and_then(Period::parse),
+            // Filled with the files below, from the month's code.
+            bill_page: None,
+            bill_path: None,
             amount_in_filename: r.amount_in_filename.unwrap_or(0) != 0,
             varies: r.varies.unwrap_or(0) != 0,
             cadence_months: r.cadence_months,
@@ -450,6 +426,18 @@ pub async fn pane_with_vault(
             };
             if let Ok(found) = crate::services::receipts::presence(pool, root, &slot).await {
                 row.files = found;
+            }
+            // A bill covering several months is one file on one row: every
+            // month it has a code for shows it, on that code's page.
+            if row.spans_period
+                && let Some(shared) =
+                    crate::services::receipts::shared_bill(pool, root, row.id).await
+            {
+                row.bill_page = Some(shared.page);
+                if row.files.bill.is_none() {
+                    row.files.bill = Some(shared.ext);
+                    row.bill_path = Some(shared.path);
+                }
             }
         }
     }

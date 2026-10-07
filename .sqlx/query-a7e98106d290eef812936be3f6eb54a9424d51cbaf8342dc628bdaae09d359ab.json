@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\" FROM receipts\n           WHERE transaction_id = ?1 AND kind = 'barcode' AND deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a7e98106d290eef812936be3f6eb54a9424d51cbaf8342dc628bdaae09d359ab"
+}

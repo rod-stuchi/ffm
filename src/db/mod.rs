@@ -1,6 +1,7 @@
 //! The store. One SQLite file, one process, one household.
 
 pub mod auth;
+pub mod bill_codes;
 pub mod changes;
 pub mod ledger;
 pub mod members;

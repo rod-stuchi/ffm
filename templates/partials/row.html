@@ -74,7 +74,7 @@
           exists. The href is built from the row's id and the file's KIND,
           never from the computed path — a URL made of user-typed taxonomy is
           a traversal waiting to be written. -#}
-      <a class="fbadge{% if f.warn %} is-warn{% endif %}" data-n="{{ f.number }}" href="{{ f.href }}"
+      <a class="fbadge" data-n="{{ f.number }}" href="{{ f.href }}"
          target="_blank" rel="noopener" title="{{ f.label }} — {{ f.path }}">
         <kbd>{{ f.number }}</kbd>
         <span class="ficon">{{ f.svg|safe }}</span>

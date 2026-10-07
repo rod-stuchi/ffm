@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE rule_bill_code SET retired_at = ?2 WHERE rule_id = ?1 AND retired_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "29314525fcd2b836ab63b5dade36f422061ddedb23d1b112bea25e4a1adb1432"
+}

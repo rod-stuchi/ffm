@@ -1032,6 +1032,45 @@ pub async fn reconcile_row(
     Ok(out)
 }
 
+/// The bill a month of a rule covering several months shows: the one shared
+/// file its code came from (`db::bill_codes`), when that file is live and on
+/// disk, and the page the month's code is printed on. `None` for any other
+/// row, or a month the file has no code for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SharedBill {
+    pub path: String,
+    pub ext: String,
+    pub page: u32,
+}
+
+pub async fn shared_bill(
+    pool: &SqlitePool,
+    root: &Path,
+    transaction_id: i64,
+) -> Option<SharedBill> {
+    let row = sqlx::query!(
+        r#"SELECT t.rule_id AS "rule_id!: i64", t.period AS "period!: String"
+           FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id
+           WHERE t.id = ?1 AND r.spans_period = 1"#,
+        transaction_id
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()??;
+    let period = Period::parse(&row.period)?;
+    let code = crate::db::bill_codes::for_period(pool, row.rule_id, period)
+        .await
+        .ok()??;
+    let (path, ext) = crate::db::bill_codes::shared_file(pool, &code)
+        .await
+        .ok()??;
+    root.join(&path).exists().then_some(SharedBill {
+        path,
+        ext,
+        page: code.page,
+    })
+}
+
 /// The note on a file the app moved because the path its row computes moved
 /// under it — a rule's bucket or bill name renamed, the row given to another
 /// member, an amount in the filename that changed. Logged as the system,

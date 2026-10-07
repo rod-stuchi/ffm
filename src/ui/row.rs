@@ -125,17 +125,16 @@ pub struct FileControl {
     /// pt-BR ledger. The word is chosen in `view`, where `t` is in scope; the
     /// number, which never changes, stays here.
     pub path: String,
-    /// `Bill · p.4` when the rule's barcode spans several periods.
+    /// `Bill · p.4` when the rule's bill covers several months: the page this
+    /// month's code is printed on.
     pub page: Option<BarcodePage>,
 }
 
-/// Which page of a multi-period barcode file this occurrence is.
+/// Where this month's code is printed in a bill that covers several months
+/// (`db::bill_codes`).
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct BarcodePage {
-    pub page: i32,
-    pub total: u16,
-    /// False once the window has been outgrown — flagged, never silently wrong.
-    pub in_window: bool,
+    pub page: u32,
 }
 
 /// The month-over-month delta. The arrow is direction; the color is whether
@@ -281,8 +280,11 @@ pub struct LedgerRow {
     pub instance: Option<String>,
     pub total_installments: Option<u16>,
     pub spans_period: bool,
-    pub window_size: Option<u16>,
-    pub window_start: Option<Period>,
+    /// For a rule whose bill covers several months: the page this month's code
+    /// is printed on, and — when the shared file is stored on another month's
+    /// row — that file's path. `db::bill_codes`; `None` otherwise.
+    pub bill_page: Option<u32>,
+    pub bill_path: Option<String>,
     pub amount_in_filename: bool,
     /// Income whose amount is projected rather than carried forward.
     pub varies: bool,
@@ -541,6 +543,13 @@ impl LedgerRow {
     /// relabel them.
     pub fn file_path(&self, kind: FileKind) -> Option<String> {
         let ext = self.files.get(kind)?;
+        // A bill covering several months is one file, stored on the row it
+        // was dropped on; every other month shows that one.
+        if kind == FileKind::Bill
+            && let Some(shared) = &self.bill_path
+        {
+            return Some(shared.clone());
+        }
         // `{slug}`: files live under their owner's folder, so two
         // members using the same bucket name never collide.
         let vault = crate::domain::receipt_path::vault(&self.member_slug);
@@ -565,22 +574,14 @@ impl LedgerRow {
         ))
     }
 
-    /// Which page of a multi-period barcode document this occurrence is.
-    ///
-    /// Derived from the window's start and this row's own period — never a
-    /// per-occurrence stored number.
+    /// Where this month's code is printed, in a bill that covers several
+    /// months — read off the file when it was attached, one code per month by
+    /// its due date (`services::installments`).
     pub fn barcode_page(&self) -> Option<BarcodePage> {
         if !self.spans_period {
             return None;
         }
-        let start = self.window_start?;
-        let total = self.window_size?;
-        let page = start.months_until(self.period) + 1;
-        Some(BarcodePage {
-            page,
-            total,
-            in_window: page >= 1 && page <= total as i32,
-        })
+        self.bill_page.map(|page| BarcodePage { page })
     }
 
     /// The full sentence behind the mark, for `gd`.
@@ -907,7 +908,6 @@ pub struct FileView {
     /// `barcode` | `scheduled` | `receipt`, for the delete and upload actions.
     pub kind: &'static str,
     pub page: Option<String>,
-    pub warn: bool,
 }
 
 /// An empty slot on an attachable row, drawn as its own `+` control under
@@ -1016,7 +1016,6 @@ impl LedgerRow {
                     // pt-BR ledger.
                     label: slot_label(c.kind, self.kind.is_income(), t),
                     page: c.page.map(|p| format!("p.{}", p.page)),
-                    warn: c.page.is_some_and(|p| !p.in_window),
                     href: format!("/tx/{}/file/{}", self.id, c.kind.storage().code()),
                     kind: c.kind.storage().code(),
                     path: c.path,
@@ -1134,8 +1133,8 @@ mod tests {
             rule_deleted_on: None,
             total_installments: None,
             spans_period: false,
-            window_size: None,
-            window_start: None,
+            bill_page: None,
+            bill_path: None,
             amount_in_filename: false,
             varies: false,
             member_slug: "rodrigo".into(),
@@ -1449,30 +1448,27 @@ mod tests {
         assert!(base().file_rail().is_empty());
     }
 
-    // -- barcode window --------------------------------------------------
+    // -- a bill covering several months -----------------------------------
 
     #[test]
-    fn barcode_page_derives_from_the_window_start() {
+    fn the_bills_page_is_where_this_months_code_is_printed() {
         let mut r = base();
         r.spans_period = true;
-        r.window_start = Some(Period::new(2026, 1).unwrap());
-        r.window_size = Some(12);
-
-        let p = r.barcode_page().unwrap();
-        assert_eq!(p.page, 9); // January is page 1, so September is page 9
-        assert!(p.in_window);
+        r.bill_page = Some(3);
+        assert_eq!(r.barcode_page(), Some(BarcodePage { page: 3 }));
+        r.spans_period = false;
+        assert_eq!(r.barcode_page(), None);
     }
 
     #[test]
-    fn an_occurrence_past_the_window_is_flagged_not_silently_wrong() {
+    fn another_months_row_shows_the_shared_files_path() {
         let mut r = base();
-        r.spans_period = true;
-        r.window_start = Some(Period::new(2026, 1).unwrap());
-        r.window_size = Some(6); // only January..June in the file
-
-        let p = r.barcode_page().unwrap();
-        assert_eq!(p.page, 9);
-        assert!(!p.in_window, "page 9 of a 6-page file must be flagged");
+        r.files.bill = Some("pdf".into());
+        r.bill_path = Some("rodrigo/moradia/iptu/2026/10_barcode.pdf".into());
+        assert_eq!(
+            r.file_path(FileKind::Bill).unwrap(),
+            "rodrigo/moradia/iptu/2026/10_barcode.pdf"
+        );
     }
 
     // -- chrome ----------------------------------------------------------

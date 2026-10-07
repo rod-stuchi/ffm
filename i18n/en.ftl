@@ -297,10 +297,8 @@ file-pdf-unreadable = could not open this PDF — it may be damaged — nothing 
 file-preview = Files
 file-no-files = no files on this row
 file-page-of = One file, { $total } pages — this month is page { $page }
-file-page-outside = page { $page } — outside this file's { $total } pages, a new upload is needed for this month
 rule-spans-period = Barcode covers multiple months
-rule-window-size = Pages in this file
-rule-window-start = First page covers
+rule-spans-hint = each month takes the code due in it — attach the file and it is read
 estimate-no-history = no confirmed months yet — the rule's own amount is used
 
 ## Settings panes — :profile, :household, :members
@@ -556,6 +554,16 @@ import-dropzone = Drop the bill here, or choose a file
 import-client-code = Client code
 import-unlink = Unlink
 import-read = read { $what } from the bill
+import-installments =
+    { $n ->
+        [one] 1 month · { $first }
+       *[other] { $n } months · { $first }–{ $last }
+    }
+import-installments-each =
+    { $n ->
+        [one] 1 month · { $first } · { $amount }
+       *[other] { $n } installments · { $first }–{ $last } · { $amount } each
+    }
 import-filled = read { $amount } due { $date } from the barcode
 import-read-amount = read { $amount } from the barcode
 import-amount-differs = the barcode says { $barcode }, this row says { $row } — left as it was

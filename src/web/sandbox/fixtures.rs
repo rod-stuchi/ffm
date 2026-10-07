@@ -60,8 +60,8 @@ pub fn base(ctx: RowCtx) -> LedgerRow {
         instance: None,
         total_installments: None,
         spans_period: false,
-        window_size: None,
-        window_start: None,
+        bill_page: None,
+        bill_path: None,
         amount_in_filename: false,
         varies: false,
         cadence_months: None,
@@ -255,32 +255,14 @@ pub fn specs() -> Vec<Spec> {
         },
         Spec {
             id: "barcode-window",
-            heading: "One barcode file, several months",
-            why: "Some bills arrive as a single document with twelve or thirty-six barcodes, \
-                  one page per month. The page is <em>derived</em> from the window's start and \
-                  this occurrence's period — never stored per row — and shows on the bill \
-                  control as <code>p.9</code>.",
+            heading: "One bill file, several months",
+            why: "A city's IPTU or a loan's carnê arrives as one PDF holding a code per month \
+                  (and, for the IPTU, a single payment too). Each month takes the code due in \
+                  it, read once when the file is attached, and shows the one shared file on the \
+                  page its code is printed on — <code>p.3</code> on the bill control.",
             build: |ctx| LedgerRow {
                 spans_period: true,
-                window_start: Some(Period::new(2026, 1).unwrap()),
-                window_size: Some(12),
-                files: FilePresence {
-                    bill: Some("pdf".into()),
-                    ..Default::default()
-                },
-                ..base(ctx)
-            },
-        },
-        Spec {
-            id: "barcode-outside",
-            heading: "Barcode page outside the window",
-            why: "The uploaded file ran out: page 9 of a six-page document. Flagged on the file \
-                  control rather than silently wrong, through the same warning channel as \
-                  scheduled-overdue — not a new color meaning. A fresh upload is needed.",
-            build: |ctx| LedgerRow {
-                spans_period: true,
-                window_start: Some(Period::new(2026, 1).unwrap()),
-                window_size: Some(6),
+                bill_page: Some(3),
                 files: FilePresence {
                     bill: Some("pdf".into()),
                     ..Default::default()

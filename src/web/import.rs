@@ -651,14 +651,14 @@ async fn attach_bill(
     };
     match read {
         Ok(parsed) => {
-            match attach_to(
+            match attach_covering(
                 st,
                 auth,
                 rule,
                 tx_id,
                 period,
                 &upload,
-                &parsed,
+                parsed,
                 answers.anyway,
                 fidget,
             )
@@ -691,6 +691,193 @@ async fn attach_bill(
             let noted = rule_binding(rule).is_bound();
             store_plain(st, auth, rule, tx_id, period, &upload, noted, fidget).await
         }
+    }
+}
+
+/// Attaches a bill to one occurrence — and, when the rule's bill covers
+/// several months (`spans_period`), gives that row the code due in ITS month
+/// rather than the file's first one (on an IPTU, the single payment), then
+/// keeps every month's code and stamps the months that exist. Every way a bill
+/// reaches a rule goes through here: `E`'s dropzone, a row's slot 1 and `A`'s
+/// Create. `A`'s used to call `attach_to` alone, so a covering bill dropped
+/// in `A` stamped only the current month, with the single payment.
+#[allow(clippy::too_many_arguments)]
+pub async fn attach_covering(
+    st: &AppState,
+    auth: &Auth,
+    rule: &rules::Rule,
+    tx_id: i64,
+    period: Period,
+    upload: &Upload,
+    parsed: Parsed,
+    anyway: bool,
+    fidget: &Fidget,
+) -> Result<(i64, String), Halt> {
+    let plan = if rule.spans_period {
+        installments_of(upload, rule, period).await
+    } else {
+        Vec::new()
+    };
+    let parsed = if plan.is_empty() {
+        parsed
+    } else {
+        own_installment(parsed, plan.iter().find(|(p, _)| *p == period))
+    };
+    let (member_id, message) = attach_to(
+        st, auth, rule, tx_id, period, upload, &parsed, anyway, fidget,
+    )
+    .await?;
+    if plan.is_empty() {
+        return Ok((member_id, message));
+    }
+    let spread = spread(st, auth, rule, tx_id, period, &plan).await;
+    Ok((member_id, format!("{message} · {spread}")))
+}
+
+/// Every code in a covering bill, one per month (`services::installments`).
+/// Empty when the file holds none — it is then attached like any bill.
+async fn installments_of(
+    upload: &Upload,
+    rule: &rules::Rule,
+    period: Period,
+) -> Vec<(Period, crate::services::installments::FoundCode)> {
+    let upload = Upload {
+        filename: upload.filename.clone(),
+        bytes: upload.bytes.clone(),
+        ..Default::default()
+    };
+    let active: Option<Vec<u32>> = rule
+        .months
+        .as_ref()
+        .map(|m| (1..=12).filter(|n| m.contains(*n)).collect());
+    let year = period.year();
+    tokio::task::spawn_blocking(move || {
+        let scratch = scratch_file(&upload).ok()?;
+        let text = import::text_of(&scratch.0).ok()?;
+        let codes = crate::services::installments::codes(&text, crate::clock::today());
+        Some(crate::services::installments::installments(
+            &codes,
+            active.as_deref(),
+            year,
+        ))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default()
+}
+
+/// The bill as read, with this month's code in place of whatever the reader
+/// found first. A month the file has no code for gets no code, amount or due
+/// date from it — only the file.
+fn own_installment(
+    mut parsed: Parsed,
+    mine: Option<&(Period, crate::services::installments::FoundCode)>,
+) -> Parsed {
+    match mine {
+        Some((_, code)) => {
+            let b = &code.barcode;
+            parsed.import.amount = never_coerce(b.amount);
+            parsed.import.amount_source = parsed.import.amount.map(|_| "barcode");
+            parsed.import.due = b.due.date();
+            parsed.import.due_source = parsed.import.due.map(|_| match b.kind {
+                crate::services::boleto::Kind::Cobranca => "fator",
+                crate::services::boleto::Kind::Arrecadacao => "free_field",
+            });
+            parsed.barcode = Some(b.clone());
+        }
+        None => {
+            parsed.barcode = None;
+            parsed.import.amount = None;
+            parsed.import.amount_source = None;
+            parsed.import.due = None;
+            parsed.import.due_source = None;
+        }
+    }
+    parsed
+}
+
+/// After a covering bill is filed on `tx_id`: every month's code is kept
+/// (retiring the last file's), and every other month of the rule that exists
+/// is stamped with its own. Says what it did, for the statusline.
+async fn spread(
+    st: &AppState,
+    auth: &Auth,
+    rule: &rules::Rule,
+    tx_id: i64,
+    period: Period,
+    plan: &[(Period, crate::services::installments::FoundCode)],
+) -> String {
+    let t = auth.catalog();
+    let receipt: Option<i64> = sqlx::query_scalar!(
+        r#"SELECT id AS "id!: i64" FROM receipts
+           WHERE transaction_id = ?1 AND kind = 'barcode' AND deleted_at IS NULL"#,
+        tx_id
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .ok()
+    .flatten();
+    let Some(receipt) = receipt else {
+        return t.error_not_written().to_string();
+    };
+    let Ok(mut tx) = st.pool.begin().await else {
+        return t.error_not_written().to_string();
+    };
+    let at = crate::clock::stamp();
+    if crate::db::bill_codes::replace(&mut tx, rule.id, receipt, plan, &at)
+        .await
+        .is_err()
+        || tx.commit().await.is_err()
+    {
+        return t.error_not_written().to_string();
+    }
+
+    let actor = Actor::Import(Some(auth.viewer.member_id));
+    for (p, _) in plan.iter().filter(|(p, _)| *p != period) {
+        let Some(row) = occurrence_of(st, rule.id, *p).await else {
+            continue;
+        };
+        match crate::db::bill_codes::for_period(&st.pool, rule.id, *p).await {
+            Ok(Some(code)) => {
+                if let Err(e) = crate::db::bill_codes::stamp(&st.pool, actor, row, &code).await {
+                    tracing::warn!("covering bill, rule {} {p}: {e}", rule.id);
+                }
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!("covering bill, rule {} {p}: {e}", rule.id),
+        }
+    }
+
+    let currency = crate::db::ledger::household(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|h| h.currency)
+        .unwrap_or_default();
+    let first = plan
+        .first()
+        .map(|(p, _)| fmt::period(*p))
+        .unwrap_or_default();
+    let last = plan
+        .last()
+        .map(|(p, _)| fmt::period(*p))
+        .unwrap_or_default();
+    match crate::db::bill_codes::summary(&st.pool, rule.id)
+        .await
+        .ok()
+        .flatten()
+    {
+        // The accessor takes its arguments in the order they first appear in
+        // the message, and the singular variant names `$amount` before
+        // `$last`: (count, first, amount, last).
+        Some(s) if s.amount.is_some() => t.import_installments_each(
+            s.count,
+            &first,
+            &fmt::money(s.amount.unwrap_or_default(), currency),
+            &last,
+        ),
+        _ => t.import_installments(plan.len() as i64, &first, &last),
     }
 }
 

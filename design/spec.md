@@ -445,21 +445,11 @@ standing out.)
   custom file renderer is built for it. `P` (below) is a second, additive
   way to look at a row's files without leaving the ledger; it doesn't
   replace opening a file in its own tab, which is still one keystroke away.
-- **The bill control shows a page indicator when its rule's barcode spans
-  several periods** (see Recurring rules' `spans_period` in `CLAUDE.md`) —
-  `Bill · p.4` in its label, rather than a bare "Bill" that would read as
-  this month's own file when it's actually page 4 of a shared one. An
-  occurrence outside the current window's page count gets the same
-  warning treatment as `scheduled overdue` (`fbadge-warn`) instead of the
-  neutral stroke styling every other file control uses — the badge itself
-  is the first place this gets flagged, before anyone opens `P` or the
-  file.
-
-### File preview carousel (`P`)
-
-`P` opens a carousel over the focused row's own files — bill, scheduled,
-receipt — without leaving the ledger behind it.
-
+- **The bill control shows a page indicator when its rule's bill covers
+  several months** (see Recurring rules' `spans_period` in `CLAUDE.md`) —
+  `Bill · p.2` in its label: the page this month's own code is printed on in
+  the one shared file, rather than a bare "Bill" that would read as this
+  month's own file.
 - **Same fixed numbering as `g1`/`g2`/`g3`, reused rather than
   reinvented.** `1`/`2`/`3` inside the carousel jump straight to that file
   kind; pressing a number for a kind that doesn't exist on this row is the
@@ -589,44 +579,9 @@ receipt — without leaving the ledger behind it.
     app's own reader finds it in the page, exactly as on a bill a company
     issued — Save files it through the same bill checks.
   - **`a` puts another PDF's pages last** (`qpdf --empty --pages`).
-- **A bill whose rule spans several periods (`spans_period`) shows its page
-  prominently in the stage**, not just in the file rail's small label —
-  "One file, 10 pages — this month is page **4**" sits right under the
-  icon, since the whole point of opening the carousel for this file kind
-  is confirming which page is actually owed this period. A page outside
-  the current window's count shows the same warning color and copy as
-  the file rail's `fbadge-warn` state: "page 11 — outside this file's 10
-  pages, a new upload is needed for this month" — the carousel and the
-  badge always agree, never one flagging a problem the other stays quiet
-  about.
-
----
-
-## Keymap
-
-Lowercase acts on the **occurrence**, uppercase on the **rule or the window**.
-Nothing destructive fires from a single keystroke.
-
-### Move
-| Key | Action |
-|---|---|
-| `j` / `k` | row down / up |
-| `5j` `7k` | counted motion |
-| `gg` / `G` | first / last row — first / last entry while the change log is open |
-| `H` / `L` | focus member pane, left / right — the URL follows, so a refresh stays put |
-| `gt` / `gT` | next / previous member tab (tabs mode) |
-| `2gt` | jump straight to tab 2 — `{count}gt` is tab {count}, so `1gt` is the first |
-| `2gT` | go **back** two tabs — `gT`'s count is a distance, not a destination |
-| `[` / `]` | previous / next month — counted, so `3]` is three months on |
-| `T` | the current month — today's, as the server's clock has it |
-
-Every **uppercase** binding here (`G`, `J`/`K`, `gT`, `zR`/`zM`, `A`/`I`/`E`,
-`H`/`L`, `N`, `P`, `T`, `U`) is reached by holding Shift, which fires a keydown of its
-own before the letter. A keymap that resets its pending prefix and count on
-every key it sees will therefore eat the keystroke *before* the one it meant
-to read. See `CLAUDE.md`'s gotchas — this is written down because a synthetic
-`KeyboardEvent` sends only the final key and will not catch it.
-
+- **A bill covering several months (`spans_period`) opens on this month's
+  page** — the page its own code is printed on, scrolled to as the carousel
+  opens, and passed to the browser's viewer as `#page=N`.
 - **One way to change month, whatever asked.** `[`, `]`, `T`, the `‹ ›`
   arrows and a picker cell all go through `gotoPeriod`, which builds the
   URL from `location`: `?pane=` and `?split=` survive the page load — the
@@ -1171,14 +1126,12 @@ editing. So:
   End date alone, with installments left blank, is the correct way to give
   an ordinary open-ended bill a stopping point without implying it was ever
   a fixed-length loan.
-- **A tracked rule's "Barcode covers multiple months" checkbox reveals two
-  more fields** the moment it's ticked, "Pages in this file" and "First page covers" —
-  `spans_period`'s `window_size`/`window_start`, per CLAUDE.md's Recurring
-  rules section. The same two fields serve both shapes the feature
-  supports: filled in once for a fixed-length loan's one-time file, or
-  re-entered whenever a cyclic bill's next cycle actually sends a new one
-  — there's no separate "renew" control, typing a fresh pair of values
-  *is* the renewal.
+- **A tracked rule's "Barcode covers multiple months" switch has no fields
+  of its own** — each month takes the code due in it, read off the file when
+  it is attached (see One bill file, several months, under Receipt tracking &
+  files). Under the switch, a read-back says what the attached file holds:
+  *10 installments · 01/2026–10/2026 · R$ 121,62 each*. It replaced *Pages in
+  this file* and *First page covers*, which could not describe a real IPTU.
 - **A tracked rule's "This bill has no barcode file" checkbox hides the
   upload control and the multi-page checkbox entirely** — set once, for
   bills paid by wire transfer / PIX / TED that will never have a barcode to
@@ -2202,53 +2155,46 @@ manual one — a `file_delete` entry in the change log (below) carrying
 rather than `manual`, so `u` on the receipt upload restores the scheduled
 file too and the audit trail is honest about why it moved.
 
-### Multi-page barcode — one file, several months (`spans_period`)
+### One bill file, several months (`spans_period`)
 
 Opt-in per rule, off by default. Some bills arrive as a single document
-covering several periods at once instead of a fresh file every month:
+covering several months instead of a fresh file every month:
 
-- A city property tax office sending one PDF with 10 barcodes for a
-  Jan–Oct cycle, reissued (new file, values readjusted) at the start of
-  the next cycle.
-- A bank issuing one document with a loan's entire run of installments up
-  front — that one file lasts for the rule's whole life; there's no
-  "next cycle" to reissue for.
+- A city's IPTU: one PDF holding the single payment (*ÚNICA*, in full with
+  a discount) and ten installments, reissued each year.
+- A bank's carnê with a loan's whole run, which lasts the rule's life.
 
-Both shapes share the same mechanism: `spans_period`, `window_size`
-(pages in the current file) and `window_start` (which period is page 1).
-`{month}_barcode.{ext}` stops being computed per period when this is on —
-every occurrence inside the window points at the identical uploaded file,
-and the app derives the page from `window_start` and the occurrence's own
-period, not from a separately-stored per-occurrence number. `scheduled`
-and the definitive receipt stay genuinely per-period regardless — sharing
-one bill document doesn't mean sharing one payment.
+**Each month takes the code due in it.** A utility code carries its due date
+in its free field and a bank slip in its date factor, so attaching the file
+reads every code in it (`services::installments`) and keeps one per month in
+`rule_bill_code`, with the page it is printed on. There is nothing to type:
+no page count, no first month. Only the **bill** is shared — the scheduled
+proof and the receipt stay per month, because each installment is still
+paid on its own.
 
-- **The window doesn't have to span the rule's entire life.** A
-  fixed-length rule (`total_installments` set) gets exactly one window,
-  sized to match, that outlives nothing — once it's done, it's done, so
-  there's never a second file to upload. A cyclic bill gets a **new**
-  window every cycle: re-entering `window_size`/`window_start` when that
-  cycle's document actually arrives is the whole "I got a new file"
-  action — there's no separate upload flow modeled for any of the three
-  file kinds yet (see Upload, below), and this doesn't need one either.
-- **Independent of the still-open cyclic/seasonal rule design** (a
-  `months`-of-year allow-list — see CLAUDE.md's Open items). This doesn't
-  wait on that: it only needs a start period and a page count to compute
-  from, regardless of what eventually decides which months are active.
-  IPTU already demonstrates the *filtering* half (a `months` allow-list in
-  the mock's seed data) independently of the *shared-file* half decided
-  here — the two compose without either depending on the other.
-- **An occurrence outside the current window's page count is flagged, not
-  silently wrong** — the same warning channel as scheduled-overdue, shown
-  both on the file badge (`fbadge-warn`) and in the `P` preview carousel:
-  *"page 11 — outside this file's 10 pages, a new upload is needed for
-  this month."* That message is the cue a fresh file needs uploading, not
-  a bug to chase down.
-- **The rule form's "Barcode covers multiple months" checkbox** sits right
-  under "Track receipt on disk" (only shown once that's on), revealing
-  "Pages in this file" and "First page covers" — the same two fields
-  whether you're setting up a loan's one-time window or a tax's next
-  yearly one.
+- **Every covered month is filled when the file arrives**, with its own
+  amount, due date and code — one `import` entry per row, so `u` reverses
+  each. A month the materializer creates later is filled from its code when
+  it appears.
+- **The installments, not the single payment.** Two codes due in one month —
+  the ÚNICA and installment 1 — resolve to the one whose value repeats in the
+  file. With the toggle **off**, the bill is read like any other bill: its
+  first code, which on an IPTU is the ÚNICA, paid at once.
+- **Every covered month shows the one file**, stored on the row it was
+  dropped on: slot 1 opens it on that month's page (*Bill · p.2*), in `P`
+  as in a new tab. A month the file has no code for shows nothing from it.
+- **Codes with no date** go to the rule's active months (`months`), in the
+  order the file prints them, with a value that appears only once left out —
+  so a single payment does not take January's place.
+- **A new file retires the last one's codes**; history keeps the codes it
+  was billed with.
+- **Reversed: the page window.** The first design asked for *Pages in this
+  file* and *First page covers* and derived "page N is month N". A real IPTU
+  holds eleven codes on three pages, so neither field could describe it, and
+  the file's path was never stored — no other month ever showed the bill.
+  Both fields are gone from the pane; the toggle alone says the file covers
+  several months, and a read-back under it says what the attached file holds
+  (*10 installments · 01/2026–10/2026 · R$ 121,62 each*).
 
 ### Paid is still "a matching file exists on disk" — checked directly, not by traversal
 
@@ -3227,7 +3173,7 @@ key-value file was rejected:
 |---|---|
 | cardinal plural | `2 rows moved down` versus a single named row |
 | a count of drafts | the statusline's parked-`unsaved` count |
-| two counts in one message | *"page 11 — outside this file's 10 pages"* |
+| two counts in one message | *"10 installments · 01/2026–10/2026"* (a count and a range) |
 | user content interpolated | `"{title}" moved down`, `not a command: {cmd}` |
 | identifiers interpolated | `ledger.sort = "date" — reorder needs sort = "manual"` |
 | pre-formatted money/date | `~R$ 4.133,33`, `expires 27/09/2026` |

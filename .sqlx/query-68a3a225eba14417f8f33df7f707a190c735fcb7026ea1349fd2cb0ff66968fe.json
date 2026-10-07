@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT count(*) AS \"n!: i64\", min(period) AS \"first: String\",\n                  max(period) AS \"last: String\",\n                  CASE WHEN count(DISTINCT amount_cents) = 1 THEN max(amount_cents) END\n                      AS \"amount: i64\"\n           FROM rule_bill_code WHERE rule_id = ?1 AND retired_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "n!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "first: String",
+        "ordinal": 1,
+        "type_info": "Null"
+      },
+      {
+        "name": "last: String",
+        "ordinal": 2,
+        "type_info": "Null"
+      },
+      {
+        "name": "amount: i64",
+        "ordinal": 3,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "68a3a225eba14417f8f33df7f707a190c735fcb7026ea1349fd2cb0ff66968fe"
+}

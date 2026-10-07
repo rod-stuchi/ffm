@@ -262,10 +262,8 @@ file-pdf-unreadable = não consegui abrir este PDF — talvez esteja corrompido 
 file-preview = Arquivos
 file-no-files = nenhum arquivo nesta linha
 file-page-of = Um arquivo, { $total } páginas — este mês é a página { $page }
-file-page-outside = página { $page } — fora das { $total } páginas deste arquivo, é preciso enviar um novo para este mês
 rule-spans-period = O código de barras cobre vários meses
-rule-window-size = Páginas neste arquivo
-rule-window-start = A primeira página é de
+rule-spans-hint = cada mês fica com o código que vence nele — anexe o arquivo e ele é lido
 estimate-no-history = nenhum mês confirmado ainda — usa o valor da própria regra
 
 ## Configurações
@@ -519,6 +517,16 @@ import-dropzone = Solte a conta aqui, ou escolha um arquivo
 import-client-code = Código do cliente
 import-unlink = Desvincular
 import-read = li { $what } da conta
+import-installments =
+    { $n ->
+        [one] 1 mês · { $first }
+       *[other] { $n } meses · { $first }–{ $last }
+    }
+import-installments-each =
+    { $n ->
+        [one] 1 mês · { $first } · { $amount }
+       *[other] { $n } parcelas · { $first }–{ $last } · { $amount } cada
+    }
 import-filled = li { $amount } com vencimento { $date } do código de barras
 import-read-amount = li { $amount } do código de barras
 import-amount-differs = o código de barras diz { $barcode }, esta linha diz { $row } — mantida como estava
