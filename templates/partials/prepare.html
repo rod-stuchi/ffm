@@ -13,6 +13,7 @@
   <div class="pz-head">
     <b>{% if stored %}{{ t.prepare_title_stored() }}{% else %}{{ t.prepare_title() }}{% endif %}</b>
     <span class="mono pz-name">{{ filename }}</span>
+    {%- if let Some(r) = row %}<span class="pz-for">{{ t.prepare_for(r) }}</span>{% endif %}
   </div>
 
   <div class="pz-body">

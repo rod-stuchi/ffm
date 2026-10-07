@@ -107,11 +107,20 @@ pub async fn upload(
     let mut bytes: Vec<u8> = Vec::new();
     // What the person answered a bill's questions — only a bill asks.
     let mut answers = crate::web::import::Answers::default();
+    // The trim view's Shrink — done as the file is stored, never before it
+    // is read (`import::filed_bytes`).
+    let mut shrink = crate::web::import::ShrinkAsk::default();
     while let Ok(Some(field)) = form.next_field().await {
         if let Some(name @ ("attach_anyway" | "recipe")) = field.name() {
             let name = name.to_string();
             let value = field.text().await.unwrap_or_default();
             crate::web::import::Answers::read(&name, &value, &mut answers);
+            continue;
+        }
+        if let Some(name @ ("shrink" | "stage" | "keep")) = field.name() {
+            let name = name.to_string();
+            let value = field.text().await.unwrap_or_default();
+            shrink.read(&name, &value);
             continue;
         }
         if field.name() != Some("file") {
@@ -131,8 +140,12 @@ pub async fn upload(
     // A locked PDF is opened with the rule's password BEFORE anything else
     // sees it — the bill's barcode is read from the unlocked copy, and the
     // unlocked copy is what the vault keeps, on every slot.
-    let upload = crate::web::import::Upload { filename, bytes };
-    let crate::web::import::Upload { filename, bytes } =
+    let upload = crate::web::import::Upload {
+        filename,
+        bytes,
+        shrink,
+    };
+    let upload =
         match crate::web::import::unlock_for(&t, upload, password.as_deref(), &fidget).await {
             Ok(u) => u,
             Err(crate::web::import::Refused(m)) => return crate::web::tx::say_only(&m, true),
@@ -142,11 +155,12 @@ pub async fn upload(
     // to, through the same attach the rule pane's dropzone uses — see
     // `import::attach_on_row`. Scheduled and receipt stay plain files.
     if kind == Kind::Barcode {
-        let upload = crate::web::import::Upload { filename, bytes };
         return crate::web::import::attach_on_row(&st, &auth, tx_id, upload, answers, &fidget)
             .await;
     }
 
+    let bytes = crate::web::import::filed_bytes(&upload, auth.viewer.member_id, &t, &fidget).await;
+    let filename = upload.filename;
     fidget.step(t.progress_file());
     match receipts::store(
         &st.pool,

@@ -26,6 +26,9 @@ pub struct Parked {
     pub member_id: i64,
     pub filename: String,
     pub bytes: Vec<u8>,
+    /// The trim view's Shrink was on. The parked bytes are the unshrunk
+    /// file — everything is read from them — and Create shrinks as it files.
+    pub shrink: bool,
 }
 
 fn root() -> PathBuf {
@@ -45,7 +48,7 @@ fn dir_of(token: &str) -> Option<PathBuf> {
 
 /// Parks a bill and returns its token. Sweeps anything older than a day on
 /// the way, so there is no separate job to forget to run.
-pub fn park(member_id: i64, filename: &str, bytes: &[u8]) -> std::io::Result<String> {
+pub fn park(member_id: i64, filename: &str, bytes: &[u8], shrink: bool) -> std::io::Result<String> {
     sweep();
     let mut raw = [0u8; 16];
     rand::rng().fill_bytes(&mut raw);
@@ -54,6 +57,9 @@ pub fn park(member_id: i64, filename: &str, bytes: &[u8]) -> std::io::Result<Str
     std::fs::create_dir_all(&dir)?;
     std::fs::write(dir.join("file"), bytes)?;
     std::fs::write(dir.join("meta"), format!("{member_id}\n{filename}"))?;
+    if shrink {
+        std::fs::write(dir.join("shrink"), b"1")?;
+    }
     Ok(token)
 }
 
@@ -67,11 +73,13 @@ pub fn claim(token: &str, member_id: i64) -> Option<Parked> {
         return None;
     }
     let bytes = std::fs::read(dir.join("file")).ok()?;
+    let shrink = dir.join("shrink").exists();
     let _ = std::fs::remove_dir_all(&dir);
     Some(Parked {
         member_id,
         filename: filename.to_string(),
         bytes,
+        shrink,
     })
 }
 
@@ -114,12 +122,17 @@ mod tests {
 
     #[test]
     fn a_parked_bill_is_claimed_once_and_only_by_its_owner() {
-        let token = park(7, "conta.pdf", b"%PDF").unwrap();
+        let token = park(7, "conta.pdf", b"%PDF", false).unwrap();
         assert!(claim(&token, 8).is_none());
         assert_eq!(filename_of(&token, 7).as_deref(), Some("conta.pdf"));
         let p = claim(&token, 7).unwrap();
         assert_eq!(p.bytes, b"%PDF");
+        assert!(!p.shrink);
         assert!(claim(&token, 7).is_none());
+
+        // The trim view's Shrink travels with the parked bill to Create.
+        let token = park(7, "conta.pdf", b"%PDF", true).unwrap();
+        assert!(claim(&token, 7).unwrap().shrink);
     }
 
     #[test]

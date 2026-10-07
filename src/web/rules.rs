@@ -798,9 +798,15 @@ async fn attach_parked(
     let Some(tx_id) = crate::web::import::occurrence_of(st, rule_id, period).await else {
         return (t.import_no_occurrence_new_rule().to_string(), true);
     };
+    // The parked bytes are the unshrunk file; the shrink the trim view asked
+    // for is done as it is filed (`import::filed_bytes`).
     let upload = crate::web::import::Upload {
         filename: parked.filename,
         bytes: parked.bytes,
+        shrink: crate::web::import::ShrinkAsk {
+            on: parked.shrink,
+            ..Default::default()
+        },
     };
     // The recipe the assistant wrote for this bill in `A`, seen in the box
     // before Create — creating the rule is keeping it.

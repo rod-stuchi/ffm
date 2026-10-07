@@ -14,6 +14,7 @@
 use crate::services::live::{Live, Progress};
 use axum::http::HeaderMap;
 
+#[derive(Clone)]
 pub struct Fidget {
     live: Option<Live>,
     member: i64,

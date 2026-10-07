@@ -587,20 +587,27 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     carousel: "page 11 — outside this file's 10 pages, a new upload is
     needed for this month." That's the signal a fresh file needs
     uploading (a new tax year, a refinanced loan), not a bug to chase.
-- **Dropping a barcode/boleto PDF onto a member's panel binds nothing — it's
-  a notifier, not an upload path.** An earlier design had the drop parse the
-  file and infer which rule it belonged to (by issuer + period + value
-  proximity, or by matching the dropped filename against a row's title);
-  both were rejected as too fragile — a real bill's filename, or its
-  content, shouldn't have to line up with what's already in the ledger. The
-  only place a barcode file is ever attached now is the rule's own editor:
-  `A`'s optional upload field at creation, or `E`'s upload field afterward —
-  both scoped to one specific, already-identified rule, so there's no
-  matching left to get wrong. A panel drop just checks that panel for
-  recurring, tracked rules still missing a barcode
-  (`tracked && recurring && !no_barcode && !client_code`) and says so in the
-  statusline if any exist; otherwise the dropped file is discarded with no
-  message at all. Full parsing design (FEBRABAN barcode decoding,
+- **A bill dropped anywhere on the page goes to the row of the rule that
+  already knows it — recognized, never bound.** This reverses "a panel drop
+  binds nothing — it's a notifier" (which was never built: a drop outside a
+  row's targets did nothing at all). An earlier design had a drop parse the
+  file and *infer* its rule — by issuer + period + value proximity, or by
+  matching the filename against a row's title — and that stays rejected: a
+  real bill's name, or a near match, shouldn't have to line up with the
+  ledger. What changed is that rules now carry a binding — client code,
+  issuer CNPJ, card, company code — that a first attach in `A`/`E` or on a
+  row's slot 1 set **explicitly**. `POST /bills/find` (`import::find`) only
+  *recognizes* a bill by that binding: candidates are the viewer's writable,
+  tracked spend rules a bill has bound, each reads the text with its own
+  recipe, and a rule matches only when `import::names_rule` says an account
+  or an issuer agreed — the barcode kind alone never does, an unconfirmed or
+  unbound rule never does. The row is the rule's in the bill's **due-date
+  month** (the month on screen when it shows none); several matches are a
+  picker in `ga`'s shape, never a guess; none is a statusline line. Nothing
+  is written there: the file then takes the upload a drop on target `1`
+  takes — trim view (titled with the row), binding check, questions, the
+  amount read off the bill, the log — and binding still happens only where
+  it did. Full parsing design (FEBRABAN barcode decoding,
   value/due-date extraction, issuer profiles) still lives in
   `design/spec-bill-import.md` — it runs on whatever file lands in `A`/`E`'s
   own upload control, the same as it would have on a panel-dropped file
@@ -839,6 +846,15 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
     dropped is refused with the usual message, and the view stays open to
     put it back. From `P` it is a replacement, so the old copy goes to the
     trash and `u` brings it back.
+  - **What Save sends is trimmed, never shrunk; the shrink is the last step
+    before the vault** (`import::filed_bytes`, from the copy the size line
+    already built, via `stage`). Every read — barcode, recipe, binding,
+    amount, fingerprint — is of the unshrunk file. It used to be the shrunk
+    one, and Ghostscript can re-encode a PDF's text (*é* came back *Ž*): the
+    recipe stopped reading the bill, and its fingerprint stopped matching the
+    same bill dropped again. `A` parks the unshrunk bytes with the shrink
+    still to do (`pending`), and Create does it. No unshrunk copy is kept —
+    the household's originals live in its email.
   - **Ghostscript is optional.** Without `gs` on the server the Shrink
     switch is absent and trimming still works; `qpdf` was already required.
   - **A shrink that does not come out smaller is thrown away** — an already

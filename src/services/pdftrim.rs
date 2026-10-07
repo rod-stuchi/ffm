@@ -79,6 +79,25 @@ pub fn shrink(input: &Path, out: &Path) -> Result<(), String> {
     run(cmd, "gs", &[0])
 }
 
+/// [`shrink`] on bytes rather than paths, for a file with no staged copy to
+/// work from — `A`'s bill, parked until Create. `None` when the shrunk copy
+/// is not smaller: the same rule `stage` applies. **Blocking.**
+pub fn shrink_bytes(bytes: &[u8]) -> Result<Option<Vec<u8>>, String> {
+    let mut raw = [0u8; 8];
+    rand::RngCore::fill_bytes(&mut rand::rng(), &mut raw);
+    let tag: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+    let dir = std::env::temp_dir().join(format!("ffm-shrink-{tag}"));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let (input, out) = (dir.join("in.pdf"), dir.join("out.pdf"));
+    let result = std::fs::write(&input, bytes)
+        .map_err(|e| e.to_string())
+        .and_then(|()| shrink(&input, &out))
+        .and_then(|()| std::fs::read(&out).map_err(|e| e.to_string()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let shrunk = result?;
+    Ok((shrunk.len() < bytes.len()).then_some(shrunk))
+}
+
 /// Runs a command to completion or `TIMEOUT`, whichever comes first — killed
 /// on the timeout, never left running behind a request that gave up on it.
 fn run(mut cmd: Command, name: &str, ok: &[i32]) -> Result<(), String> {
@@ -198,5 +217,16 @@ trailer<</Root 1 0 R>>\n%%EOF\n";
         let out = dir.join("small.pdf");
         shrink(&two, &out).unwrap();
         assert_eq!(count(&out), 2, "every page survives the shrink");
+    }
+
+    /// A PDF already as lean as `/ebook` makes it is not "shrunk" into a
+    /// bigger one: `None`, and the caller files the original.
+    #[test]
+    fn a_shrink_that_does_not_help_is_not_used() {
+        if !gs_available() {
+            return;
+        }
+        let tiny = b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 10 10]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n";
+        assert_eq!(shrink_bytes(tiny), Ok(None));
     }
 }

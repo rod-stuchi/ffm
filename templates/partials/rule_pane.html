@@ -406,7 +406,7 @@ function rulePane() {
         rule: {{ id.unwrap_or(0) }} || '',
         pdf_password: this.$root.querySelector('[name=pdf_password]')?.value || '',
         spans: this.spans ? 1 : 0,
-      }, f => this.sendNow(f));
+      }, (f, extra) => this.sendNow(f, extra));
     },
 
     /// The upload itself. Resolves to whether the bill was taken. A question

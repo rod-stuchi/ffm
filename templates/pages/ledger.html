@@ -91,7 +91,7 @@
          that would otherwise flicker the targets away under the pointer. -#}
      @dragover.prevent="if (hasFile($event)) dragging = true"
      @dragleave="if (!$event.relatedTarget) dragging = false"
-     @drop="dragging = false"
+     @drop="dropAnywhere($event)"
      @dragend.window="dragging = false">
   <header class="ledger-bar">
     <span class="bar-logo">{% include "partials/logo.html" %}</span>
@@ -707,6 +707,24 @@
     </div>
   </div>
 
+  {#- A bill dropped anywhere on the page that more than one rule recognizes
+      — two houses with the same water company, say, and nothing on the bill
+      to tell them apart. The server lists the rows (`import::find`,
+      `partials/bill_pick.html`); picking one is the whole question, and Esc
+      files nothing. One match never comes here: it goes straight on. -#}
+  <div class="modal" x-show="billPick" x-cloak @click.self="billPick = null">
+    <div class="card" style="max-width:min(460px,100%)">
+      <div class="ch"><h1>{{ t.drop_pick_title() }}</h1><p x-text="billPick?.file?.name"></p></div>
+      <div class="cb">
+        <p class="hint">{{ t.drop_pick_note() }}</p>
+        <div class="givelist" id="billpick" role="listbox"></div>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="billPick = null">{{ t.row_cancel() }} <kbd>esc</kbd></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   {#- The two bars sit at the FOOT of the shell, in flow — not pinned with
       `position: fixed`, which is what let them drift apart: the command bar
       was fixed 30px off the bottom while the statusline floated wherever the
@@ -1007,6 +1025,9 @@ function ledger() {
     /// private, and which member is highlighted. Visual state — nothing is
     /// sent until a name is picked.
     giving: null,
+    /// A bill dropped anywhere on the page that more than one rule
+    /// recognizes: `{ file, sel }` while the picker asks which row.
+    billPick: null,
     tip: null,
     /// Where the pointer last was, in screen coordinates — see `mouseMoved`.
     pointerAt: null,
@@ -1506,6 +1527,7 @@ function ledger() {
         return;
       }
       if (this.giving) { e.preventDefault(); this.giveKey(e.key); return; }
+      if (this.billPick) { e.preventDefault(); this.billPickKey(e.key); return; }
       // A form — the edit row, the rule pane, a settings pane — answers
       // Ctrl-h/j/k/l itself: they move between its fields, and past its edge
       // hand focus back to the ledger (`formEdge`). Decided by the CONTAINER,
@@ -3702,6 +3724,78 @@ function ledger() {
       return !!dt && Array.from(dt.types || []).includes('Files');
     },
 
+    /// A file dropped anywhere else on the page. The server finds the row of
+    /// the rule whose binding recognizes the bill (`/bills/find`) — never by
+    /// its name, and never a rule nothing has bound — and the file then goes
+    /// the way a drop on that row's target `1` goes. A drop a row target or
+    /// the rule pane's dropzone already took arrives here prevented, and is
+    /// left alone.
+    dropAnywhere(e) {
+      this.dragging = false;
+      if (e.defaultPrevented) return;
+      // Never the browser's own drop, which opens the file in place of the
+      // ledger — and with it every parked draft.
+      e.preventDefault();
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      if (this.carousel || this.prep || this.keymap || this.confirming || this.giving
+          || this.attachAsk || this.billPick || this.removingFile) return;
+      const body = new FormData();
+      body.append('file', file);
+      body.append('period', document.querySelector('.ledger-shell')?.dataset.period || '');
+      const job = this.fidgetStart();
+      this.busyFetch('status', fetch('/bills/find', { method: 'POST', body, headers: { 'HX-Request': 'true', 'X-FFM-Job': job } })
+        .then(r => r.text().then(html => ({ html, trigger: r.headers.get('HX-Trigger') })))
+        .then(({ html, trigger }) => {
+          const events = trigger ? JSON.parse(trigger) : {};
+          if (events['ffm:say']) this.say(events['ffm:say'].message, events['ffm:say'].bad);
+          if (!html.trim()) { this.fidgetEnd(false); return; }
+          const list = document.getElementById('billpick');
+          list.innerHTML = html;
+          const rows = list.querySelectorAll('.give');
+          if (rows.length === 1) { list.innerHTML = ''; this.fileFound(rows[0], file); return; }
+          // A question takes over from the box, as the attach's own do.
+          this.fidgetEnd(false);
+          this.billPick = { file, sel: 0 };
+        })
+        .catch(() => { this.fidgetEnd(false); this.say(this.errorNotWritten, true); }));
+    },
+
+    /// Inside the dropped bill's picker: the `ga` picker's keys.
+    billPickKey(k) {
+      const p = this.billPick;
+      const n = document.querySelectorAll('#billpick .give').length;
+      if (k === 'Escape') { this.billPick = null; return; }
+      if (k === 'Enter') { this.pickBill(p.sel); return; }
+      if (/^[1-9]$/.test(k)) { if (Number(k) <= n) this.pickBill(Number(k) - 1); return; }
+      const step = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[k];
+      if (step) p.sel = Math.max(0, Math.min(p.sel + step, n - 1));
+    },
+
+    pickBill(i) {
+      const p = this.billPick;
+      const btn = document.querySelectorAll('#billpick .give')[i];
+      this.billPick = null;
+      if (!p || !btn) return;
+      this.fileFound(btn, p.file);
+    },
+
+    /// Sends a dropped bill to the row it was recognized for — the upload a
+    /// drop on that row's target `1` makes, trim view and every check
+    /// included. A row in another month is not on screen to show it, so the
+    /// statusline says where it went.
+    fileFound(btn, file) {
+      const id = Number(btn.dataset.tx);
+      const filed = btn.dataset.filed;
+      // A PDF stops at the trim view, whose Save starts its own box; this
+      // one's steps are done. Anything else goes on under the same box.
+      if (this.isPdf(file)) this.fidgetEnd(true);
+      return this.prepare(file, { tx: id }, (f, extra) => this.sendUpload(id, 'barcode', f, extra).then(r => {
+        if (r === true && !document.getElementById('row-' + id)) this.say(filed, false);
+        return r;
+      }));
+    },
+
     /// A drop on one of a row's three targets. The row came from where you
     /// let go and the kind from which target you hit, so nothing here has to
     /// be guessed from the file itself — which is the whole reason a panel
@@ -3731,7 +3825,7 @@ function ledger() {
     /// Every PDF on its way to a row stops at the trim-and-shrink view first;
     /// a photo or a text file goes straight in.
     upload(id, kind, file) {
-      return this.prepare(file, { tx: id }, f => this.sendUpload(id, kind, f));
+      return this.prepare(file, { tx: id }, (f, extra) => this.sendUpload(id, kind, f, extra));
     },
 
     /// The server's "attach anyway?" — resolves to whether the person said
@@ -3876,7 +3970,7 @@ function ledger() {
       const id = c.id;
       this.prepOpen(fetch('/tx/' + id + '/file/' + kind + '/prepare',
                           { method: 'POST', headers: { 'HX-Request': 'true' } }),
-        f => this.sendUpload(id, kind, f).then(ok => {
+        (f, extra) => this.sendUpload(id, kind, f, extra).then(ok => {
           // The carousel shows the file again, as it now is.
           if (ok && this.carousel) {
             const el = document.querySelector('.cviewin');
@@ -3969,11 +4063,20 @@ function ledger() {
     /// Builds the file on the server, then sends it through the upload it was
     /// headed for. The view closes only once that upload took it: a refusal
     /// (a bill whose barcode page was removed, say) leaves it open to fix.
+    ///
+    /// The file sent is trimmed but **not shrunk**: everything that reads the
+    /// bill — barcode, recipe, binding, amount, fingerprint — reads it as it
+    /// was, and the upload shrinks it as the last step before the vault
+    /// (`import::filed_bytes`), from the copy the size line already built.
+    /// Ghostscript can re-encode a PDF's text, and a bill read from that is
+    /// not the same bill.
     prepSave() {
       const p = this.prep;
       if (!p || p.saving) return;
       p.saving = true;
-      const url = '/prepare/' + p.token + '/file?' + this.prepQuery();
+      const keep = p.keep.map((k, i) => k ? i + 1 : 0).filter(Boolean).join(',');
+      const url = '/prepare/' + p.token + '/file?keep=' + keep + '&shrink=0';
+      const extra = p.shrink ? { shrink: '1', stage: p.token, keep } : {};
       // In the Save button: the view covers the statusline, so the loader's
       // usual fallback would be out of sight.
       // One job for the whole Save — the file build, then the upload — so one
@@ -3981,7 +4084,7 @@ function ledger() {
       const job = this.fidgetStart();
       this.busyFetch(document.querySelector('.pz-actions .btn.pri') || 'status', fetch(url, { headers: { 'X-FFM-Job': job } })
         .then(r => r.ok ? r.blob() : Promise.reject(r.status))
-        .then(blob => p.onSave(new File([blob], p.name, { type: 'application/pdf' })))
+        .then(blob => p.onSave(new File([blob], p.name, { type: 'application/pdf' }), extra))
         .then(ok => {
           p.saving = false;
           this.fidgetEnd(ok);

@@ -2338,11 +2338,11 @@ stored file's extension mirrors whatever was actually uploaded.
   `reason`) so `u` restores it exactly — the same one audit mechanism every
   other change goes through, not a second one for files.
 
-### Attaching a file — three gestures, one upload path
+### Attaching a file — four gestures, one upload path
 
 Phase 7 built the server side — three endpoints, one per kind, with the
 supersede and the soft delete. What was left open was the gesture. There are
-three, and they all end in the same request:
+four, and they all end in the same request:
 
 - **The `+` control on the focused row's file rail.** The rail still shows
   only files that *exist* — no ghost placeholders — so attaching lives behind
@@ -2362,6 +2362,10 @@ three, and they all end in the same request:
   shell; built on demand they would flicker into place under a pointer
   already moving toward them.
 - **`gu1` / `gu2` / `gu3`** — straight to that slot, no menu.
+- **Dropping a bill anywhere else on the page** — slot 1 only, on the row
+  of the rule whose binding recognizes it (see Bill import, below). A
+  scheduled-payment proof or a receipt carries nothing that names its rule,
+  so those still go on their row.
 
 **Three distinct actions, never one upload plus a question**, in all three
 gestures: each kind has its own fixed name on disk and its own effect on
@@ -2397,8 +2401,14 @@ already stored.
   shrink that comes out no smaller is dropped and the line says so.
 - **A bill covering several months (`spans_period`) has no page toggles** —
   page N is month N — and a line in their place says why. Shrink still works.
-- **Save sends the finished file through the upload it was headed for**, so
-  every check runs on what is actually filed. A bill whose barcode page was
+- **Save sends the trimmed file through the upload it was headed for, and
+  the upload shrinks it last**, right before it is stored. Every check reads
+  the file as trimmed and **not** shrunk — the barcode, the rule's recipe, the
+  binding, the amount and the duplicate fingerprint — because Ghostscript can
+  re-encode a PDF's text, and a bill read after it was not always the same
+  bill. The shrunk copy the size line built is the one stored, so Save is no
+  slower; when there is none (`A`'s Create, after the view closed) the shrink
+  runs then, and the progress box says so. A bill whose barcode page was
   removed is refused with the usual message and the view **stays open** to
   put it back; anything else closes it. From `P`, saving replaces the stored
   file — the old copy goes to the trash as `superseded`, the carousel shows
@@ -2423,15 +2433,18 @@ UI-facing:
   scoped to one specific, already-identified rule, so there's no matching
   left to get wrong; see Edit fields, above, for the dropzone and its
   read-only Client code / Unlink controls.
-- **Dropping a file onto a member's panel binds nothing.** It's downgraded
-  to a passive nudge: if that panel has recurring, tracked rules still
-  missing a barcode (and not marked "no barcode file"), the statusline
-  names them and points at `E`; otherwise the dropped file is discarded
-  with no message at all. The panel still decides member attribution for
-  a *new* rule (`A`/`I`'s form is created against whichever panel is
-  focused, same as `a`/`i`/`:add`) — it just never decides which rule a
-  dropped file belongs to, because a drop no longer resolves to a rule at
-  all.
+- **A bill dropped anywhere on the page finds its own row — by the rule's
+  binding, never by guessing.** (It was "a panel drop binds nothing — a
+  notifier", which was never built.) Only rules a bill has already bound
+  are candidates, and a rule matches only when the bill names its account
+  or issuer — client code, CNPJ, card, company code (`import::names_rule`).
+  The row is that rule's in the bill's due-date month, or the month on
+  screen when the bill shows none. One match goes straight to the trim view,
+  which says *for Nubank · 01/2026*; several open a picker shaped like `ga`'s
+  — a number picks, `j`/`k` + Enter, Esc files nothing; none says *no rule
+  knows this bill yet*. A bill already filed says so before the trim view.
+  A row in another month is not on screen, so the statusline says where it
+  went. Binding itself still happens only in `A`/`E` or on a row's slot 1.
 - **A bill that cannot be confirmed, or that contradicts the rule, is a
   question — never a dead end.** *"Wrong row? this bill is from Cartão ·
   Inter, but Nubank is bound to Cartão · Nubank — attach it anyway?"*, or

@@ -389,6 +389,14 @@ section.
 
 ### Drop target: a notifier, not a binding path
 
+> **Amended 2026-10-06.** The notifier below was never built, and a drop
+> anywhere on the page now finds the row of the rule that **already** knows
+> the bill — by the binding an explicit attach set (client code, issuer CNPJ,
+> card, company code; `import::names_rule`), in the bill's due-date month,
+> with a picker when several rules match. It recognizes and never binds; the
+> inference rejected below — filename or value proximity — stays rejected.
+> See CLAUDE.md's Recurring rules.
+
 An earlier design made a household member's **panel** the primary drop
 target — parse whatever landed there, then infer which rule it belonged to
 by `issuer.recurring` + period + value proximity, or (failing that) by

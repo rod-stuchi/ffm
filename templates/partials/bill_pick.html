@@ -1,0 +1,14 @@
+{#- The rows a bill dropped anywhere on the page was recognized for
+    (`import::find`). One is sent there at once; several are this list, in
+    the `ga` picker's shape — a number picks, `j`/`k` walk, Enter takes the
+    highlighted one, Esc files nothing. Mounted into `#billpick`. -#}
+{%- for f in found %}
+<button class="btn give" type="button" role="option"
+        data-tx="{{ f.tx_id }}" data-filed="{{ t.drop_filed_elsewhere(f.label) }}"
+        :class="{ 'is-sel': billPick?.sel === {{ loop.index0 }} }"
+        :aria-selected="billPick?.sel === {{ loop.index0 }}"
+        @click="pickBill({{ loop.index0 }})">
+  <span><b>{{ f.title }}</b><span class="give-sub mono">{{ f.whose }}</span></span>
+  {%- if loop.index <= 9 %}<kbd>{{ loop.index }}</kbd>{% endif %}
+</button>
+{%- endfor %}

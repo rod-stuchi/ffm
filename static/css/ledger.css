@@ -915,6 +915,13 @@
   background: var(--accent-soft);
 }
 
+/* A dropped bill's picker: the rule, then whose and which month, quieter. */
+.give .give-sub {
+  margin-left: 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
 [x-cloak] {
   display: none !important;
 }
@@ -2860,6 +2867,13 @@
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The row the file is going to — said before anything is filed. */
+.pz-for {
+  color: var(--ink-2);
+  font-size: 13px;
   white-space: nowrap;
 }
 

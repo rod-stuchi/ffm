@@ -22,6 +22,7 @@ use crate::db::rules;
 use crate::domain::money::Cents;
 use crate::domain::period::Period;
 use crate::domain::receipt_path::Kind as FileKind;
+use crate::domain::viewer::Viewer;
 use crate::services::boleto::Amount;
 use crate::services::import::{
     self, Binding, Gate, Ident, ImportError, Override, Parsed, binding_check, gate,
@@ -52,9 +53,104 @@ pub struct Params {
 }
 
 /// A file as it arrived, before anything has been decided about it.
+#[derive(Default)]
 pub struct Upload {
     pub filename: String,
     pub bytes: Vec<u8>,
+    /// Whether it is shrunk as it is filed. Every read — the barcode, the
+    /// recipe, the binding, the amount, the fingerprint — is done on `bytes`
+    /// as they are; the shrink is the last step before the vault
+    /// ([`filed_bytes`]), because Ghostscript can re-encode a PDF's text
+    /// (*é* came back *Ž*), and a bill read from that is not the same bill.
+    pub shrink: ShrinkAsk,
+}
+
+/// The trim view's Shrink, as an upload carries it: on or off, and — when
+/// the view staged the file — the staged token and the pages kept, so the
+/// shrunk copy its size line already built is the one filed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ShrinkAsk {
+    pub on: bool,
+    pub stage: Option<String>,
+    pub keep: Option<String>,
+}
+
+impl ShrinkAsk {
+    /// Reads the `shrink`, `stage` and `keep` fields, from any upload handler.
+    pub fn read(&mut self, name: &str, value: &str) -> bool {
+        let value = value.trim();
+        match name {
+            "shrink" => self.on = value == "1",
+            "stage" => self.stage = Some(value.to_string()).filter(|v| !v.is_empty()),
+            "keep" => self.keep = Some(value.to_string()).filter(|v| !v.is_empty()),
+            _ => return false,
+        }
+        true
+    }
+
+    fn pages(&self) -> Option<Vec<u32>> {
+        self.keep.as_deref().map(|k| {
+            k.split(',')
+                .filter_map(|p| p.trim().parse::<u32>().ok())
+                .collect()
+        })
+    }
+}
+
+/// The bytes that go to the vault: the upload's own, shrunk now when that was
+/// asked — **after** everything that reads the bill has read it.
+///
+/// The trim view's size line has normally built the shrunk copy already, so
+/// it is taken from the stage — but only when the stage's unshrunk copy is
+/// byte for byte what was uploaded, so a stale token can never file another
+/// file. Otherwise (`A`'s Create comes after the stage was dropped) the bytes
+/// are shrunk here. A shrink that is not smaller is not used, as anywhere.
+pub async fn filed_bytes(upload: &Upload, member_id: i64, t: &Catalog, fidget: &Fidget) -> Vec<u8> {
+    use crate::services::{pdftrim, stage};
+    let ask = &upload.shrink;
+    let is_pdf =
+        upload.filename.to_ascii_lowercase().ends_with(".pdf") || upload.bytes.starts_with(b"%PDF");
+    if !ask.on || !is_pdf || !pdftrim::gs_available() {
+        return upload.bytes.clone();
+    }
+    let step = t.progress_shrink().to_string();
+    if let Some(token) = ask.stage.clone() {
+        let keep = ask.pages();
+        let same = {
+            let (token, keep) = (token.clone(), keep.clone());
+            tokio::task::spawn_blocking(move || {
+                stage::result(&token, member_id, keep.as_deref(), false)
+                    .ok()
+                    .and_then(|o| std::fs::read(o.path).ok())
+            })
+            .await
+            .ok()
+            .flatten()
+        };
+        if same.as_deref() == Some(upload.bytes.as_slice()) {
+            let live = fidget.clone();
+            let shrunk = tokio::task::spawn_blocking(move || {
+                stage::result_with(&token, member_id, keep.as_deref(), true, &|_| {
+                    live.step(step.clone())
+                })
+                .ok()
+                .filter(|o| o.shrink == stage::Shrink::Applied)
+                .and_then(|o| std::fs::read(o.path).ok())
+            })
+            .await
+            .ok()
+            .flatten();
+            return shrunk.unwrap_or_else(|| upload.bytes.clone());
+        }
+    }
+    fidget.step(t.progress_shrink());
+    let bytes = upload.bytes.clone();
+    tokio::task::spawn_blocking(move || pdftrim::shrink_bytes(&bytes))
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .flatten()
+        .unwrap_or_else(|| upload.bytes.clone())
 }
 
 /// Why an attach did not happen — always a statusline message, and always
@@ -155,12 +251,18 @@ async fn read_upload(t: &Catalog, form: &mut Multipart) -> Result<Incoming, Refu
     let mut bytes: Vec<u8> = Vec::new();
     let mut password = None;
     let mut answers = Answers::default();
+    let mut shrink = ShrinkAsk::default();
     while let Ok(Some(field)) = form.next_field().await {
         match field.name() {
             Some(name @ ("attach_anyway" | "recipe")) => {
                 let name = name.to_string();
                 let value = field.text().await.unwrap_or_default();
                 Answers::read(&name, &value, &mut answers);
+            }
+            Some(name @ ("shrink" | "stage" | "keep")) => {
+                let name = name.to_string();
+                let value = field.text().await.unwrap_or_default();
+                shrink.read(&name, &value);
             }
             Some("file") => {
                 filename = field.file_name().unwrap_or_default().to_string();
@@ -185,7 +287,11 @@ async fn read_upload(t: &Catalog, form: &mut Multipart) -> Result<Incoming, Refu
         return Err(Refused(t.error_not_written().to_string()));
     }
     Ok(Incoming {
-        upload: Upload { filename, bytes },
+        upload: Upload {
+            filename,
+            bytes,
+            shrink,
+        },
         password,
         answers,
     })
@@ -218,6 +324,7 @@ pub async fn unlock_for(
             Ok(std::borrow::Cow::Owned(bytes)) => Ok(Upload {
                 filename: upload.filename,
                 bytes,
+                shrink: upload.shrink,
             }),
             Err(e) => Err(e),
         }
@@ -291,6 +398,7 @@ async fn read_bill_off(
     let upload = Upload {
         filename: upload.filename.clone(),
         bytes: upload.bytes.clone(),
+        ..Default::default()
     };
     let (recipe, kind) = (recipe.cloned(), kind.map(str::to_string));
     tokio::task::spawn_blocking(move || read_bill(&upload, recipe.as_ref(), kind.as_deref()))
@@ -699,6 +807,7 @@ pub async fn teach(
     let up = Upload {
         filename: upload.filename.clone(),
         bytes: upload.bytes.clone(),
+        ..Default::default()
     };
     fidget.step(t.progress_ask(provider.code()));
     let (proposal, text) = tokio::task::spawn_blocking(move || {
@@ -826,11 +935,12 @@ async fn store_plain(
     fidget: &Fidget,
 ) -> Response {
     let t = auth.catalog();
-    fidget.step(t.progress_file());
     let say = |m: &str| crate::web::tx::say_only(m, true);
     let Some((slot, _, member_id)) = crate::web::files::slot_for(st, auth, tx_id).await else {
         return say(t.file_not_tracked());
     };
+    let filed = filed_bytes(upload, auth.viewer.member_id, &t, fidget).await;
+    fidget.step(t.progress_file());
     match receipts::store(
         &st.pool,
         &st.cfg.receipts_root,
@@ -838,7 +948,7 @@ async fn store_plain(
         &slot,
         FileKind::Barcode,
         &upload.filename,
-        &upload.bytes,
+        &filed,
     )
     .await
     {
@@ -950,89 +1060,13 @@ pub async fn attach_to(
     let barcode = parsed.barcode.as_ref();
     let raw = barcode.map(|b| b.raw.clone());
     let keyed_by_text = !barcode.is_some_and(|b| b.names_one_bill());
-    let already = match (&raw, keyed_by_text) {
-        (Some(raw), false) => sqlx::query!(
-            r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
-                      t.title AS "title!: String",
-                      t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
-                      t.visibility AS "visibility!: String",
-                      EXISTS (SELECT 1 FROM receipts r
-                              WHERE r.transaction_id = t.id AND r.kind = 'barcode'
-                                AND r.deleted_at IS NULL) AS "holds!: bool"
-               FROM transactions t
-               WHERE t.barcode_raw = ?1 AND t.id <> ?2 AND t.deleted_at IS NULL"#,
-            raw,
-            tx_id
-        )
-        .fetch_optional(&st.pool)
-        .await
-        .ok()
-        .flatten()
-        .map(|r| Holder {
-            id: r.id,
-            period: r.period,
-            title: r.title,
-            amount_cents: r.amount_cents,
-            member_id: r.member_id,
-            visibility: r.visibility,
-            holds: r.holds,
-        }),
-        _ => sqlx::query!(
-            r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
-                      t.title AS "title!: String",
-                      t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
-                      t.visibility AS "visibility!: String"
-               FROM receipts r JOIN transactions t ON t.id = r.transaction_id
-               WHERE r.text_hash = ?1 AND r.kind = 'barcode' AND r.deleted_at IS NULL
-                 AND t.deleted_at IS NULL AND t.id <> ?2
-               LIMIT 1"#,
-            parsed.fingerprint,
-            tx_id
-        )
-        .fetch_optional(&st.pool)
-        .await
-        .ok()
-        .flatten()
-        .map(|r| Holder {
-            id: r.id,
-            period: r.period,
-            title: r.title,
-            amount_cents: r.amount_cents,
-            member_id: r.member_id,
-            visibility: r.visibility,
-            // A fingerprint is only ever on a file that is there: the row
-            // holds it, and there is nothing to take over.
-            holds: true,
-        }),
-    };
+    let already = holder_of(st, parsed, tx_id).await;
     let (refuse, takeover) = match already {
         Some(r) if r.holds || !auth.viewer.may_write(r.member_id) => (Some(r), None),
         other => (None, other),
     };
     if let Some(row) = refuse {
-        let label = Period::parse(&row.period)
-            .map(fmt::period)
-            .unwrap_or(row.period);
-        // Naming the row that holds it is what makes the refusal useful —
-        // unless that row is private to somebody else, when its title and
-        // amount are exactly what `private` hides. The month alone says no
-        // more than the refusal itself already does.
-        if row.visibility == "private" && !auth.viewer.sees_private_of(row.member_id) {
-            return Err(Halt::Refused(t.import_already_attached_hidden(&label)));
-        }
-        let currency = crate::db::ledger::household(&st.pool)
-            .await
-            .ok()
-            .flatten()
-            .map(|h| h.currency)
-            .unwrap_or_default();
-        let amount = row
-            .amount_cents
-            .map(|c| fmt::money(Cents(c), currency))
-            .unwrap_or_else(|| fmt::money_placeholder(currency));
-        return Err(Halt::Refused(
-            t.import_already_attached(&label, &row.title, &amount),
-        ));
+        return Err(Halt::Refused(already_message(st, &t, auth, &row).await));
     }
 
     // The file itself is kept, under the deterministic name every other
@@ -1040,6 +1074,8 @@ pub async fn attach_to(
     let Some((slot, _, member_id)) = crate::web::files::slot_for(st, auth, tx_id).await else {
         return Err(Halt::Refused(t.file_not_tracked().to_string()));
     };
+    // Shrunk only now: everything above read the bill as it was uploaded.
+    let filed = filed_bytes(upload, auth.viewer.member_id, &t, fidget).await;
     fidget.step(t.progress_file());
     if receipts::store(
         &st.pool,
@@ -1048,7 +1084,7 @@ pub async fn attach_to(
         &slot,
         FileKind::Barcode,
         &upload.filename,
-        &upload.bytes,
+        &filed,
     )
     .await
     .is_err()
@@ -1400,6 +1436,98 @@ pub async fn attach_to(
     Ok((member_id, message))
 }
 
+/// The live row, other than `except_tx`, that already holds this bill — by
+/// its barcode, or by its text where the barcode cannot tell one bill from
+/// another (see `attach_to`). Asked again by [`find`] before the trim view
+/// opens, so a bill filed twice is said at once rather than after Save.
+async fn holder_of(st: &AppState, parsed: &Parsed, except_tx: i64) -> Option<Holder> {
+    let barcode = parsed.barcode.as_ref();
+    let raw = barcode.map(|b| b.raw.clone());
+    let keyed_by_text = !barcode.is_some_and(|b| b.names_one_bill());
+    let tx_id = except_tx;
+    match (&raw, keyed_by_text) {
+        (Some(raw), false) => sqlx::query!(
+            r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+                      t.title AS "title!: String",
+                      t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
+                      t.visibility AS "visibility!: String",
+                      EXISTS (SELECT 1 FROM receipts r
+                              WHERE r.transaction_id = t.id AND r.kind = 'barcode'
+                                AND r.deleted_at IS NULL) AS "holds!: bool"
+               FROM transactions t
+               WHERE t.barcode_raw = ?1 AND t.id <> ?2 AND t.deleted_at IS NULL"#,
+            raw,
+            tx_id
+        )
+        .fetch_optional(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|r| Holder {
+            id: r.id,
+            period: r.period,
+            title: r.title,
+            amount_cents: r.amount_cents,
+            member_id: r.member_id,
+            visibility: r.visibility,
+            holds: r.holds,
+        }),
+        _ => sqlx::query!(
+            r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+                      t.title AS "title!: String",
+                      t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
+                      t.visibility AS "visibility!: String"
+               FROM receipts r JOIN transactions t ON t.id = r.transaction_id
+               WHERE r.text_hash = ?1 AND r.kind = 'barcode' AND r.deleted_at IS NULL
+                 AND t.deleted_at IS NULL AND t.id <> ?2
+               LIMIT 1"#,
+            parsed.fingerprint,
+            tx_id
+        )
+        .fetch_optional(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|r| Holder {
+            id: r.id,
+            period: r.period,
+            title: r.title,
+            amount_cents: r.amount_cents,
+            member_id: r.member_id,
+            visibility: r.visibility,
+            // A fingerprint is only ever on a file that is there: the row
+            // holds it, and there is nothing to take over.
+            holds: true,
+        }),
+    }
+}
+
+/// Why a bill is refused as already filed — naming the row that holds it,
+/// unless that row is private to somebody else.
+async fn already_message(st: &AppState, t: &Catalog, auth: &Auth, row: &Holder) -> String {
+    let label = Period::parse(&row.period)
+        .map(fmt::period)
+        .unwrap_or_else(|| row.period.clone());
+    // Naming the row that holds it is what makes the refusal useful —
+    // unless that row is private to somebody else, when its title and
+    // amount are exactly what `private` hides. The month alone says no
+    // more than the refusal itself already does.
+    if row.visibility == "private" && !auth.viewer.sees_private_of(row.member_id) {
+        return t.import_already_attached_hidden(&label);
+    }
+    let currency = crate::db::ledger::household(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|h| h.currency)
+        .unwrap_or_default();
+    let amount = row
+        .amount_cents
+        .map(|c| fmt::money(Cents(c), currency))
+        .unwrap_or_else(|| fmt::money_placeholder(currency));
+    t.import_already_attached(&label, &row.title, &amount)
+}
+
 /// A live row already carrying the bill being attached.
 struct Holder {
     id: i64,
@@ -1562,6 +1690,282 @@ pub async fn meta(State(st): State<AppState>, auth: Auth, Path(rule_id): Path<i6
     }
 }
 
+/// One row a dropped bill was recognized for.
+pub struct Found {
+    pub tx_id: i64,
+    /// The rule's name, as the picker's bold line.
+    pub title: String,
+    /// Whose ledger and which month — the picker's quieter line.
+    pub whose: String,
+    /// *Nubank · 01/2026*, for the statusline when the row is off screen.
+    pub label: String,
+}
+
+/// The rows a dropped bill was recognized for — one is sent there at once,
+/// several are asked about (`#billpick`).
+#[derive(Template)]
+#[template(path = "partials/bill_pick.html")]
+pub struct BillPick {
+    pub t: Catalog,
+    pub found: Vec<Found>,
+}
+
+/// `POST /bills/find` — a bill dropped anywhere on the page, with no row
+/// named. Answers the rows it belongs to; files nothing.
+///
+/// **It recognizes, it never binds.** The only candidates are the viewer's
+/// writable, tracked spend rules that a bill has ALREADY bound — by `A`/`E`
+/// or by a row's own slot 1 — and a rule is a match only when its binding
+/// agrees on something that names an account or an issuer
+/// ([`import::names_rule`]): the client code, the issuer's CNPJ, the card,
+/// the company code. No filename, no title, no nearest guess, and an unbound
+/// rule is never offered. The row is the rule's in the bill's due-date month
+/// (the month on screen when the bill shows none).
+///
+/// The page then sends the file through the very upload a drop on target `1`
+/// makes, so the trim view, the binding check, every question, the amount
+/// read off the bill and the log all run unchanged.
+pub async fn find(
+    State(st): State<AppState>,
+    auth: Auth,
+    headers: axum::http::HeaderMap,
+    mut form: Multipart,
+) -> Response {
+    let t = auth.catalog();
+    let say = |m: &str| crate::web::tx::say_only(m, true);
+    let fidget = Fidget::from(&headers, &st.live, auth.viewer.member_id);
+
+    let mut filename = String::new();
+    let mut bytes = Vec::new();
+    let mut period = String::new();
+    while let Ok(Some(field)) = form.next_field().await {
+        match field.name() {
+            Some("file") => {
+                filename = field.file_name().unwrap_or_default().to_string();
+                match field.bytes().await {
+                    Ok(b) if b.len() <= MAX_BYTES => bytes = b.to_vec(),
+                    Ok(_) => return say(t.file_too_big()),
+                    Err(_) => return say(t.error_not_written()),
+                }
+            }
+            Some("period") => period = field.text().await.unwrap_or_default(),
+            _ => {}
+        }
+    }
+    if bytes.is_empty() || filename.is_empty() {
+        return say(t.error_not_written());
+    }
+    let today = crate::clock::today();
+    let on_screen = Period::parse(period.trim()).unwrap_or_else(|| Period::of(today));
+    fidget.step(t.progress_find());
+
+    let candidates = candidates(&st.pool, auth.viewer).await;
+    if candidates.is_empty() {
+        return say(t.drop_no_rule());
+    }
+
+    // The text, once — opened with whichever rule's password opens it.
+    let mut passwords: Vec<String> = candidates
+        .iter()
+        .filter_map(|r| r.pdf_password.clone())
+        .collect();
+    passwords.sort();
+    passwords.dedup();
+    if crate::services::pdflock::looks_locked(&filename, &bytes) {
+        fidget.step(t.progress_unlock());
+    }
+    let upload = Upload {
+        filename,
+        bytes,
+        ..Default::default()
+    };
+    let text = tokio::task::spawn_blocking(move || read_text(upload, &passwords))
+        .await
+        .unwrap_or_else(|e| Err(TextError::Read(ImportError::Tool(e.to_string()))));
+    let text = match text {
+        Ok(text) => text,
+        Err(TextError::Locked) => return say(t.drop_locked()),
+        Err(TextError::Read(e)) => return say(&unread_reason(&t, &e)),
+    };
+
+    fidget.step(t.progress_read());
+    let Recognized { matched, no_row } =
+        recognize(&st.pool, &candidates, &text, on_screen, today).await;
+    if matched.is_empty() {
+        return match no_row {
+            Some((title, period)) => say(&t.drop_no_row(&title, &fmt::period(period))),
+            None => say(t.drop_no_rule()),
+        };
+    }
+
+    // Filed already? Said now, rather than after the trim view's Save — on
+    // any row, its own included: a bill dropped anywhere is never a re-file
+    // (that is `t` from `P`, which replaces a row's file on purpose).
+    if let Some(row) = holder_of(&st, &matched[0].parsed, 0).await
+        && (row.holds || !auth.viewer.may_write(row.member_id))
+    {
+        return say(&already_message(&st, &t, &auth, &row).await);
+    }
+
+    let names: std::collections::HashMap<i64, String> = crate::db::members::list(&st.pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| (m.id, fmt::name(&m.name)))
+        .collect();
+    let found = matched
+        .into_iter()
+        .map(|m| {
+            let month = fmt::period(m.period);
+            Found {
+                tx_id: m.tx_id,
+                title: m.title.clone(),
+                whose: match names.get(&m.member_id) {
+                    Some(name) => format!("{name} · {month}"),
+                    None => month.clone(),
+                },
+                label: format!("{} · {month}", m.title),
+            }
+        })
+        .collect();
+    Html(BillPick { t, found }).into_response()
+}
+
+/// Every rule a bill has already bound, that `viewer` may write to — the
+/// only rules a dropped bill can be recognized for. A binding by the barcode
+/// kind alone is left out: it names no account and no issuer.
+pub async fn candidates(pool: &sqlx::SqlitePool, viewer: Viewer) -> Vec<rules::Rule> {
+    let ids: Vec<i64> = sqlx::query_scalar!(
+        r#"SELECT id AS "id!: i64" FROM recurring_rules
+           WHERE deleted_at IS NULL AND kind = 'out' AND tracked = 1 AND no_barcode = 0
+             AND (client_code IS NOT NULL OR issuer_id IS NOT NULL
+                  OR card_last4 IS NOT NULL OR barcode_company IS NOT NULL)
+           ORDER BY id"#
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    let mut out = Vec::new();
+    for id in ids {
+        if let Ok(Some(rule)) = rules::get(pool, id).await
+            && viewer.may_write(rule.member_id)
+        {
+            out.push(rule);
+        }
+    }
+    out
+}
+
+/// A rule a dropped bill was recognized for, and the row it goes on.
+pub struct Match {
+    pub rule_id: i64,
+    pub title: String,
+    pub member_id: i64,
+    pub tx_id: i64,
+    pub period: Period,
+    pub parsed: Parsed,
+}
+
+/// What a dropped bill's text was recognized as.
+pub struct Recognized {
+    pub matched: Vec<Match>,
+    /// A rule that knew the bill but has no row in its month — said when
+    /// nothing else matched, rather than "no rule knows it".
+    pub no_row: Option<(String, Period)>,
+}
+
+/// Reads `text` with each candidate's own recipe and keeps the rules whose
+/// binding it names ([`import::names_rule`]). The row is the rule's in the
+/// bill's due-date month, or `on_screen` when the bill shows no due date.
+pub async fn recognize(
+    pool: &sqlx::SqlitePool,
+    candidates: &[rules::Rule],
+    text: &str,
+    on_screen: Period,
+    today: NaiveDate,
+) -> Recognized {
+    let mut matched = Vec::new();
+    let mut no_row = None;
+    for rule in candidates {
+        let recipe = recipes::live(pool, rule.id).await;
+        let profiles = recipe
+            .as_ref()
+            .map(|r| r.profiles(rule.barcode_kind.as_deref()))
+            .unwrap_or_default();
+        let Ok(parsed) = import::parse_text(text, &profiles, today) else {
+            continue;
+        };
+        if !import::names_rule(rule_binding(rule), read_binding(&parsed)) {
+            continue;
+        }
+        let period = parsed.import.due.map(Period::of).unwrap_or(on_screen);
+        let key = period.to_string();
+        let tx = sqlx::query_scalar!(
+            r#"SELECT id AS "id!: i64" FROM transactions
+               WHERE rule_id = ?1 AND period = ?2 AND deleted_at IS NULL"#,
+            rule.id,
+            key
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        match tx {
+            Some(tx_id) => matched.push(Match {
+                rule_id: rule.id,
+                title: rule.title.clone(),
+                member_id: rule.member_id,
+                tx_id,
+                period,
+                parsed,
+            }),
+            None => no_row = no_row.or(Some((rule.title.clone(), period))),
+        }
+    }
+    Recognized { matched, no_row }
+}
+
+/// Why a dropped file's text could not be had.
+enum TextError {
+    /// Locked, and no candidate rule's password opens it.
+    Locked,
+    Read(ImportError),
+}
+
+/// A dropped file's text, unlocked with the first password that opens it.
+/// Blocking: `qpdf` and `pdftotext` are child processes.
+fn read_text(upload: Upload, passwords: &[String]) -> Result<String, TextError> {
+    use crate::services::pdflock::{self, LockError};
+    let mut open = None;
+    let tries = std::iter::once(None).chain(passwords.iter().map(|p| Some(p.as_str())));
+    for password in tries {
+        match pdflock::unlock(&upload.filename, &upload.bytes, password) {
+            Ok(bytes) => {
+                open = Some(bytes.into_owned());
+                break;
+            }
+            Err(LockError::NeedsPassword | LockError::WrongPassword) => continue,
+            Err(LockError::NoTool) => {
+                return Err(TextError::Read(ImportError::Tool(
+                    "qpdf is not installed".into(),
+                )));
+            }
+            Err(LockError::Tool(why)) => return Err(TextError::Read(ImportError::Tool(why))),
+        }
+    }
+    let Some(bytes) = open else {
+        return Err(TextError::Locked);
+    };
+    let unlocked = Upload {
+        filename: upload.filename,
+        bytes,
+        ..Default::default()
+    };
+    let scratch =
+        scratch_file(&unlocked).map_err(|e| TextError::Read(ImportError::Tool(e.to_string())))?;
+    import::text_of(&scratch.0).map_err(TextError::Read)
+}
+
 /// `POST /rules/barcode/preview` — the dropzone in `A`.
 ///
 /// The rule does not exist yet, so nothing is attached: the bill is read,
@@ -1606,7 +2010,12 @@ pub async fn preview(
         (Some(p), _) | (None, Ok(p)) => p,
         (None, Err(e)) => return crate::web::tx::say_only(&unread_reason(&t, &e), true),
     };
-    let Ok(token) = pending::park(auth.viewer.member_id, &upload.filename, &upload.bytes) else {
+    let Ok(token) = pending::park(
+        auth.viewer.member_id,
+        &upload.filename,
+        &upload.bytes,
+        upload.shrink.on,
+    ) else {
         return crate::web::tx::say_only(t.error_not_written(), true);
     };
     let mut meta = BarcodeMeta::of_parsed(t, &parsed, token, upload.filename);
@@ -1640,6 +2049,7 @@ pub fn meta_of_parked(
     let upload = Upload {
         filename: filename.clone(),
         bytes,
+        ..Default::default()
     };
     // The parked recipe is read, not claimed: Create still needs it.
     let proposal = recipe_token.and_then(|tok| peek_proposal(tok).map(|(s, r)| (tok, s, r)));
@@ -1740,5 +2150,46 @@ fn never_coerce(a: Amount) -> Option<Cents> {
     match a {
         Amount::Fixed(c) => Some(c),
         Amount::Open | Amount::Reference(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod shrink_tests {
+    use super::*;
+    use crate::ui::i18n::Lang;
+
+    #[test]
+    fn the_trim_views_fields_are_read_whatever_their_order() {
+        let mut ask = ShrinkAsk::default();
+        assert!(ask.read("keep", " 1,3 "));
+        assert!(ask.read("stage", "abc"));
+        assert!(ask.read("shrink", "1"));
+        assert!(!ask.read("file", "x"));
+        assert!(ask.on);
+        assert_eq!(ask.stage.as_deref(), Some("abc"));
+        assert_eq!(ask.pages(), Some(vec![1, 3]));
+        // An empty field is no value, not an empty one.
+        ask.read("stage", "");
+        assert!(ask.stage.is_none());
+    }
+
+    #[tokio::test]
+    async fn nothing_is_shrunk_unless_asked_and_only_a_pdf() {
+        let t = Catalog::new(Lang::En);
+        let off = Upload {
+            filename: "conta.pdf".into(),
+            bytes: b"%PDF-1.4 not really".to_vec(),
+            ..Default::default()
+        };
+        assert_eq!(filed_bytes(&off, 1, &t, &Fidget::off()).await, off.bytes);
+        let text = Upload {
+            filename: "conta.txt".into(),
+            bytes: b"Total a pagar R$ 1,00".to_vec(),
+            shrink: ShrinkAsk {
+                on: true,
+                ..Default::default()
+            },
+        };
+        assert_eq!(filed_bytes(&text, 1, &t, &Fidget::off()).await, text.bytes);
     }
 }

@@ -679,6 +679,28 @@ pub fn gate(verdict: Result<Verdict, Mismatch>, anyway: bool) -> Gate {
     }
 }
 
+/// Whether a bill is **this** rule's, firmly enough to send it there with no
+/// row named — a file dropped anywhere on the page (`web::import::find`).
+///
+/// [`binding_check`] must agree, and something that names an account or an
+/// issuer must actually have been compared: the client code, the issuer's
+/// CNPJ printed on the bill, the bound card listed on it, or the arrecadação
+/// company code. The barcode kind alone never does — every bank slip in the
+/// country shares it — and neither does an unconfirmed or unbound rule:
+/// recognizing a bill is not binding one.
+pub fn names_rule(bound: Binding<'_>, read: Binding<'_>) -> bool {
+    if binding_check(bound, read) != Ok(Verdict::Agrees) {
+        return false;
+    }
+    let same = |a: Option<&str>, b: Option<&str>| matches!((a, b), (Some(x), Some(y)) if x == y);
+    same(bound.client_code, read.client_code)
+        || bound
+            .issuer
+            .is_some_and(|k| read.cnpjs.iter().any(|c| c == k))
+        || bound.cards.first().is_some_and(|k| read.cards.contains(k))
+        || same(bound.company, read.company)
+}
+
 #[cfg(test)]
 mod binding_tests {
     use super::*;
@@ -864,5 +886,31 @@ mod binding_tests {
             gate(Err(m.clone()), true),
             Gate::Pass(Some(Override::Mismatch(m)))
         );
+    }
+
+    #[test]
+    fn a_drop_finds_a_rule_only_by_what_names_it() {
+        let cnpj = ["11222333000181".to_string()];
+        let card7766 = ["7766".to_string()];
+        let none: [String; 0] = [];
+        // The kind alone agrees with every bank slip — never enough.
+        let kind_only = Binding {
+            kind: Some("cobranca"),
+            ..Default::default()
+        };
+        assert!(!names_rule(kind_only, slip("077")));
+        // The client code decides, both ways.
+        assert!(names_rule(b(Some("1"), None), b(Some("1"), None)));
+        assert!(!names_rule(b(Some("1"), None), b(Some("2"), None)));
+        // The issuer's CNPJ printed on the bill.
+        assert!(names_rule(card(Some(&cnpj[0]), &none), bill(&cnpj, &none)));
+        // The bound card listed on the statement.
+        assert!(names_rule(card(None, &card7766), bill(&none, &card7766)));
+        // The company code.
+        assert!(names_rule(b(None, Some("0048")), b(None, Some("0048"))));
+        // Nothing to compare: unconfirmed, never sent anywhere.
+        assert!(!names_rule(card(Some(&cnpj[0]), &none), bill(&none, &none)));
+        // An unbound rule is never a candidate.
+        assert!(!names_rule(Binding::default(), b(Some("1"), Some("0048"))));
     }
 }

@@ -41,6 +41,10 @@ pub struct PrepareView {
     /// Reworking a file already in the vault, from `P`, rather than one on
     /// its way in. Only the heading says so.
     stored: bool,
+    /// The row it is for — *Nubank · 01/2026* — when there is one. A bill
+    /// dropped anywhere on the page found that row itself, so the view says
+    /// which before anything is filed.
+    row: Option<String>,
 }
 
 #[derive(Template)]
@@ -59,6 +63,8 @@ struct SizeLine {
 struct Context {
     password: Option<String>,
     spans: bool,
+    /// The row's name and month, for the view's heading.
+    row: Option<String>,
 }
 
 /// `POST /prepare` — a PDF on its way to a row (`tx`) or a rule (`rule`, or
@@ -111,12 +117,14 @@ pub async fn stage_upload(State(st): State<AppState>, auth: Auth, mut form: Mult
                 // The pane's field wins, as it does on the dropzone itself.
                 password: typed.or(r.pdf_password),
                 spans: r.spans_period,
+                row: None,
             }
         }
         // `A`: the rule does not exist yet; what the pane says is all there is.
         (None, None) => Context {
             password: typed,
             spans,
+            row: None,
         },
     };
     stage_bytes(&auth, &t, filename, bytes, &ctx, false).await
@@ -157,8 +165,9 @@ async fn row_context(st: &AppState, auth: &Auth, tx_id: i64) -> Result<Context, 
         return Err(crate::web::tx::refuse(t.file_not_tracked(), true));
     };
     crate::web::tx::may_write(st, auth, member_id).await?;
-    let spans: bool = sqlx::query_scalar!(
-        r#"SELECT r.spans_period AS "s!: bool"
+    let row = sqlx::query!(
+        r#"SELECT r.spans_period AS "s!: bool", t.title AS "title!: String",
+                  t.period AS "period!: String"
            FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id
            WHERE t.id = ?1"#,
         tx_id
@@ -166,11 +175,16 @@ async fn row_context(st: &AppState, auth: &Auth, tx_id: i64) -> Result<Context, 
     .fetch_optional(&st.pool)
     .await
     .ok()
-    .flatten()
-    .unwrap_or(false);
+    .flatten();
     Ok(Context {
         password: crate::web::files::rule_pdf_password(st, tx_id).await,
-        spans,
+        spans: row.as_ref().is_some_and(|r| r.s),
+        row: row.map(|r| {
+            let month = crate::domain::period::Period::parse(&r.period)
+                .map(crate::ui::fmt::period)
+                .unwrap_or(r.period);
+            format!("{} · {month}", r.title)
+        }),
     })
 }
 
@@ -184,7 +198,11 @@ async fn stage_bytes(
 ) -> Response {
     // Unlocked first, with the rule's password: the pages have to be drawn,
     // and the scratch copy should never need the password again.
-    let upload = crate::web::import::Upload { filename, bytes };
+    let upload = crate::web::import::Upload {
+        filename,
+        bytes,
+        ..Default::default()
+    };
     let upload = match crate::web::import::unlock_for(
         t,
         upload,
@@ -229,6 +247,7 @@ async fn stage_bytes(
         gs: pdftrim::gs_available(),
         spans: ctx.spans,
         stored,
+        row: ctx.row.clone(),
     })
     .into_response()
 }
