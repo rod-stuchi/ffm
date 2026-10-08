@@ -2705,17 +2705,19 @@
   overflow: hidden;
 }
 
-/* In the stage's corner, the placement any image viewer's zoom control uses —
- * chosen so it does not compete with the file-nav row for space. */
+/* At the caption's right end — the corner any image viewer puts its zoom
+ * control in, kept off the file-nav row. In the caption's own row, not over
+ * it: absolutely placed, it covered the label on a phone, and the caption
+ * kept clear of it with a padding guessed for each set of switches. Pushed
+ * right by its auto margin; when the row cannot hold it beside the label it
+ * takes a line of its own, and wraps inside it on the narrowest screens. */
 .czoom {
-  position: absolute;
-  top: 0;
-  height: var(--cbar-h);
-  right: 12px;
+  margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 4px;
-  z-index: 2;
 }
 
 .czoom .btn {
@@ -2732,8 +2734,7 @@
 /* PNG ⇄ PDF: how a PDF is shown — page images, or the browser's own viewer
  * (`files::FileView`). The `.tog` switch between its two names; the side on
  * show is in the ink, the other faint. Its own item, set apart from the zoom
- * buttons by a margin. The caption keeps clear of the wider corner while it
- * shows. */
+ * buttons by a margin. */
 .cviewsw {
   white-space: nowrap;
   gap: 7px;
@@ -2745,15 +2746,6 @@
 
 .cviewsw .is-on {
   color: var(--ink);
-}
-
-.cstage:has(.cviewsw:not([style*="none"])) .ccap {
-  padding-right: 320px;
-}
-
-/* Two switches — PNG ⇄ PDF and the fit — in the corner at once. */
-.cstage:has(.cviewsw:not(.cfitsw):not([style*="none"])):has(.cfitsw:not([style*="none"])) .ccap {
-  padding-right: 470px;
 }
 
 /* The browser's own PDF viewer, filling the stage. It scrolls and zooms
@@ -2773,15 +2765,17 @@
 }
 
 /* What the file is, above the file itself: the kind, the computed path, and
- * for a shared bill the page that is owed. Right padding keeps it clear of
- * the zoom controls. */
+ * for a shared bill the page that is owed — then the view's controls. One
+ * line of `--cbar-h` wherever they fit; a second when they do not. */
 .ccap {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 4px;
   min-width: 0;
-  height: var(--cbar-h);
-  padding: 0 210px 0 16px;
+  min-height: var(--cbar-h);
+  padding: 4px 12px 4px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-2);
 }
@@ -2805,7 +2799,13 @@
   stroke-linejoin: round;
 }
 
+/* The path gives way first. A zero basis, so a long path never pushes the
+ * controls onto a second line by itself; it grows back to its own width
+ * (never past it, so the page sits right after it) and is cut with an
+ * ellipsis when the line is short. */
 .cpath {
+  flex: 1 1 0;
+  max-width: max-content;
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink-3);
@@ -2838,6 +2838,26 @@
   /* A size container, so a page can be fitted to its height in CSS (`cqh`)
    * with nothing measured in script. */
   container-type: size;
+}
+
+/* One stage per file of the row, stacked in one cell, only the file on show
+ * visible: the others load behind it and keep their place. `visibility`, not
+ * `display: none` — a stage taken out of layout loses its scroll offset, and
+ * the next file's place could not be measured or kept. A hidden stage takes
+ * no clicks or wheel, and its loader is hidden with it. */
+.cviews {
+  min-height: 0;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+.cviews > .cview {
+  grid-area: 1 / 1;
+  visibility: hidden;
+}
+
+.cviews > .cview.is-current {
+  visibility: visible;
 }
 
 .cviewin {
@@ -2884,16 +2904,35 @@
   overflow-wrap: anywhere;
 }
 
+/* Three columns: the size, the buttons, and an empty one as wide as the
+ * size's, so the buttons sit in the middle of the bar. The size used to be
+ * out of the flow, absolutely placed at the left, and from about 800px down
+ * the centered buttons slid under it. In its own column it cannot be
+ * overlapped: a narrower bar first closes the gaps, then wraps the buttons
+ * inside theirs. `1fr` cannot shrink a column below what is in it, so the
+ * size keeps its width and the empty column gives way first. */
 .cnav {
-  position: relative;
-  display: flex;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: center;
+  column-gap: 12px;
   min-height: var(--cbar-h);
   padding: 4px 12px;
   border-top: 1px solid var(--line);
   background: var(--surface-2);
+}
+
+/* Placed by column, never by order: with no size yet (`x-show` hides it),
+ * the buttons would otherwise drop into the first column. */
+.cnavbtns {
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
 }
 
 .cnav .btn {
@@ -2902,14 +2941,13 @@
   border-radius: 6px;
 }
 
-/* The file's size, at the bar's left end. Out of the flow, so the centered
- * buttons stay exactly where they were; on a phone there is no room beside
- * them, so it rejoins the row as its first item. */
+/* The file's size, at the bar's left end — on a phone, the row's first item
+ * instead (below). */
 .csize {
-  position: absolute;
-  left: 16px;
-  top: 50%;
-  transform: translateY(-50%);
+  grid-row: 1;
+  grid-column: 1;
+  justify-self: start;
+  padding-left: 4px;
   font-family: var(--mono);
   /* The buttons' own size and ink. It was --ink-3 at 12px, which all but
    * vanished on --surface-2 (2.5:1 in the median palette, 2.0 at worst);
@@ -2927,12 +2965,20 @@
  * the bar wraps rather than cutting its last button off. */
 @media (max-width: 700px) {
   .cnav {
+    display: flex;
     flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* The group steps aside, so the size and the buttons wrap as one row. */
+  .cnavbtns {
+    display: contents;
   }
 
   .csize {
-    position: static;
-    transform: none;
+    padding-left: 0;
   }
 }
 

@@ -474,12 +474,24 @@ standing out.)
   boxes, and this is the one deliberate exception. The actual job is reading a boleto's barcode digits, or
   holding a phone up to its QR code to scan it — both need the file
   genuinely large on screen, which a 560px dialog can't give.
-- **Zoom (`+`/`-`, `0` to reset) scales the preview**, with floating
-  controls in the stage's corner — the same placement any image viewer's
-  zoom control uses, chosen so it doesn't compete with the row of file-nav
-  buttons for space. Each file starts back at 100% when you flip to a
-  different one; a carried-over zoom level would be a surprise applied to
-  an unrelated file, not a convenience.
+- **Zoom (`+`/`-`, `0` to reset) scales the preview**, with its controls
+  at the right end of the caption — the stage's corner, the same placement
+  any image viewer's zoom control uses, chosen so it doesn't compete with
+  the row of file-nav buttons for space. **Each file keeps its own zoom, and its own place**,
+  while the carousel is open: `h` back to the bill finds it on the page, at
+  the scroll and the zoom it was left at, and a file not yet shown opens at
+  its top, at 100%. Amended from "each file starts back at 100% when you flip
+  to a different one" — still nothing is carried over to an unrelated file;
+  each only remembers its own.
+- **The row's files load together, the one on show first.** One stage per
+  file, stacked, only the current one visible — `visibility: hidden` on the
+  others, so each keeps its layout and scroll. The file on show loads first;
+  once its pages are in, the row's other files load out of sight, so
+  switching to one fetches nothing and shows it at once. Not the HTTP cache:
+  the page images are `no-cache` with no validator (a replaced bill keeps its
+  path), so a warmed cache would draw every page again. `v` reloads every
+  PDF's stage, the one on show first; a replaced file (`t`, `b`, `a`)
+  reloads its own.
 - **The stage shows the file itself**, with its kind, icon and computed
   path in a caption above it. It used to show only the icon and the path —
   "not the file's actual bytes" — which could not do the one job this modal
@@ -502,8 +514,10 @@ standing out.)
   show at its top, middle or bottom, as Vim's do for the screen. `J`/`K`
   go a whole page down or up, landing on the next page's top — at fit height
   one page per press, which `j`'s small steps took seven of.
-  `+`/`-`/`0` zoom on top of either fit, which is kept from file to file
-  while the carousel is open and starts at height every time it opens. The
+  `+`/`-`/`0` zoom on top of either fit. The fit is one setting for the
+  whole carousel, kept from file to file while it is open and at height
+  every time it opens: `f` changes it on every file's stage, each staying on
+  the page it was on, each back at 100%. The
   fit is CSS: the stage is a size container and a page is
   `100cqh` tall, so nothing is measured in script. A photo fits the same
   way; a text file has no page, and only scrolls. The trim view's large
@@ -532,7 +546,12 @@ standing out.)
   files, and that flip is not remembered after it closes.
 - **The caption and the file-nav row are one low height** (`--cbar-h`,
   34px), with the nav's buttons a size down: the bars frame the file, and
-  every pixel they take is the file's. An
+  every pixel they take is the file's. **The corner's controls are in the
+  caption's row, not over it**: absolutely placed, they covered the label
+  on a phone, and the caption kept clear of them with a right padding
+  guessed for each set of switches. Now a long path is cut with an ellipsis
+  first, and when the controls still do not fit beside the label they take
+  a second line of their own. An
   SVG drawing of each page (`pdftocairo`) was tried as a third way and did
   not fit as well as either.
 - **The bottom bar's left end shows the file's size** — `412 KB`,
@@ -541,9 +560,14 @@ standing out.)
   (`data-size` on the fragment), so it is the stored file's size in every
   view, and it changes as `h`/`l` move to another file. It sits at the same
   end of the bar as *Trim* on purpose: the size is what decides whether a
-  PDF is worth shrinking. Out of the flow beside the centered buttons; on a
-  phone, the row's first item — and there the bar wraps onto a second line,
-  since the stage clips whatever overflows and would cut its last button off.
+  PDF is worth shrinking. **A column of its own**, left of the centered
+  buttons and mirrored by an empty one on the right, so the buttons stay in
+  the middle and the two can never overlap — a narrower window closes the
+  gaps, then wraps the buttons. It used to be out of the flow, absolutely
+  placed, and from about 800px down the centered buttons slid under it. On a
+  phone it is the row's first item — and there the bar wraps onto a second
+  line, since the stage clips whatever overflows and would cut its last
+  button off.
 - **A row with zero files refuses outright** — `P` says "no files on this
   row" rather than opening an empty carousel with nothing to look at.
 - **The file on show can be removed from here** — a Remove button beside
@@ -631,7 +655,7 @@ standing out.)
 | `gl` | change log for the focused row — who changed what, when — in a side pane *(proposal, not in the original spec)* |
 | `p` | toggle private *(proposal, not in the original spec)* |
 | `m` | mark paid by hand — an untracked recurring bill only; "received" on an income. Refused, with the reason, on a tracked row (its receipt proves it) and on a one-off |
-| `P` | preview the row's files in a carousel — see Files below *(proposal, not in the original spec)* |
+| `P` · `gp` | preview the row's files in a carousel — see Files below *(proposal, not in the original spec)* |
 
 ### Mouse
 | Action | Result |
@@ -761,7 +785,7 @@ whole keymap was out of reach: there was no field to focus.
 | `g2` | open the scheduled-payment file *(proposal, not in the original spec)* |
 | `g3` | open the receipt *(proposal, not in the original spec)* |
 | `gu1` / `gu2` / `gu3` | **attach** a bill / scheduled / receipt to the focused row |
-| `P` | preview the row's files in a carousel, without leaving the ledger *(proposal, not in the original spec)* |
+| `P` · `gp` | preview the row's files in a carousel, without leaving the ledger *(proposal, not in the original spec)* |
 | `1` / `2` / `3` | inside the carousel — jump straight to that file |
 | `h` / `l` | inside the carousel — previous / next file |
 | `+` / `-` | inside the carousel — zoom in / out |

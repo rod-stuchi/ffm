@@ -779,7 +779,7 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
             vec![
                 k("g1 / g2 / g3", "open the bill / scheduled / receipt"),
                 k("gu1 / gu2 / gu3", "attach a bill / scheduled / receipt"),
-                k("P", "preview this row's files"),
+                k("P · gp", "preview this row's files"),
                 k("1 2 3 · h l", "inside P: jump to a file · step"),
                 k("+ - 0", "inside P: zoom in, out, reset"),
                 k("j k · f", "inside P: scroll · fit height / width"),

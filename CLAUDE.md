@@ -917,7 +917,8 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   hands over the real file. A bill shared across months scrolls to this
   month's page. See `design/spec.md`'s row-component
   section for the on-row badges and their keybindings.
-- **`P` opens that carousel for the focused row's files.** `1`/`2`/`3`
+- **`P` opens that carousel for the focused row's files** — and so does
+  `gp`, the `g`-prefix spelling beside `gl` and `gd`. `1`/`2`/`3`
   jump straight to that fixed file kind (unchanged from `g1`/`g2`/`g3`'s
   numbering — never renumbered by what exists); `h`/`l` step to the
   previous/next file that actually exists on the row, clamping rather than
@@ -937,11 +938,23 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   rest. It is the same on every file type and in every browser, which is the
   reason the pages are images: three attempts at zooming the browser's PDF
   viewer from outside (CSS zoom on the frame, a fresh frame with `#zoom=`,
-  widening the frame) each worked in one browser at most, floating controls
-  in the stage's corner rather than in the button row, the same placement
-  any image viewer's zoom control uses. Each file starts back at 100% when
-  you flip to a different one with `h`/`l`/`1`/`2`/`3` — carrying a zoom
-  level over to an unrelated file would be a surprise, not a convenience.
+  widening the frame) each worked in one browser at most, its controls
+  at the caption's right end rather than in the button row, the same
+  placement any image viewer's zoom control uses. **Each file keeps its own place**
+  — page, scroll and zoom — while the carousel is open, so `h` back to the
+  bill finds it where it was left; a file not yet shown opens at its top, at
+  100%. Amended from "each file starts back at 100% when you flip to a
+  different one", which threw away where you were in the bill every time you
+  glanced at the receipt. Its reason still holds: nothing is *carried over*
+  to an unrelated file, each one only remembers its own.
+- **The row's other files load behind the one on show.** The carousel keeps
+  one stage per file, stacked, only the current one visible
+  (`visibility`, not `display: none`, which would drop its scroll): the file
+  on show loads first, and once its pages are in, the others load out of
+  sight, so `h`/`l`/`1`/`2`/`3` fetch nothing. Kept in the DOM rather than
+  warmed in the HTTP cache because the page images are `no-cache` with no
+  validator — a replaced bill keeps its path — so a cache would fetch, and
+  `pdftoppm` would draw, every page again.
 - **Carrying the amount forward is opt-in per rule, checked by default.**
   Materializing a new period seeds its amount from the *previous* period's
   actual value when this is on; off, the new occurrence starts with no amount
