@@ -57,6 +57,7 @@ row-unsaved-rule = não salvo · E para retomar
 row-try-again = Tentar de novo
 menu-mode = Claro ou escuro
 menu-preview = Ver o app como um membro sem poderes de admin
+menu-previewing = Vendo sem direitos de admin — :preview neste menu os devolve
 row-menu-edit = Editar
 row-menu-edit-rule = Editar regra
 row-menu-paid = Marcar como pago

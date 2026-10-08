@@ -87,8 +87,9 @@
   text-align: center;
 }
 
-/* Centered, not stretched: stretched, `.htot` took the badge's height and its
- * figures sat at the top of it, above the buttons' middle. */
+/* Centered, not stretched: stretched, `.htot` took the bar's tallest
+ * control's height and its figures sat at the top of it, above the buttons'
+ * middle. */
 .htotals {
   margin-left: auto;
   display: flex;
@@ -126,8 +127,7 @@
  * wrapper from layout so the button is a direct flex child of `.ledger-bar`.
  *
  * It was `.signout` when the sign-out form was the only one. It is now on the
- * preview badge and the light/dark control too, and neither of those signs
- * anybody out. */
+ * light/dark control, which signs nobody out. */
 .barform {
   display: contents;
 }
@@ -196,27 +196,19 @@
   background: var(--line);
 }
 
-/* The mode badge: accent for "you are here", the warning color while admin
- * powers are switched off — so the state is never ambiguous at a glance. */
-.badge {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  padding: 4px 8px;
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.badge.is-preview {
+/* While admin powers are switched off, the profile button wears the warning
+ * color the bar's PREVIEW badge did — the badge moved into this button's menu
+ * as `:preview`, and the state must still read at a glance. */
+.profbtn.is-preview {
   border-color: var(--neg);
   color: var(--neg);
 }
 
 /* --- the bar on a phone -------------------------------------------------- */
 
-/* The menu's copies of the admin badge and the light/dark button. Hidden
- * here and shown by the same media query that takes the originals out of
- * the bar, so no width has both, or neither. */
+/* The menu's copy of the light/dark button. Hidden here and shown by the
+ * same media query that takes the original out of the bar, so no width has
+ * both, or neither. */
 .ppop-narrow {
   display: none;
 }
@@ -287,14 +279,13 @@
  *              09/2026            IN     OUT     NET
  *
  * The first tier only breaks the line; nothing leaves. The second is the
- * phone: the arrows go, the badge and light/dark move into the profile menu,
+ * phone: the arrows go, light/dark moves into the profile menu,
  * and each total puts its label over its figure.
  *
  * A wrapping flex row, not a grid: the two rows share no columns, and a grid
  * would make the month button and the logo agree on a width. `order` places
  * each item, and a zero-height `::after` with a full basis is the line break.
- * `.htotals` is `display: contents` so the badge (row 1) and the figures
- * (row 2) can be ordered apart.
+ * `.htotals` is `display: contents` so its figures can be ordered onto row 2.
  *
  * Fixed widths, like the tab and command hints' breakpoints, not `layout_*`
  * values: those decide how panes share a screen, and this is only whether
@@ -321,7 +312,6 @@
    * end of the name's space, never onto row 2 or into the menu. */
   .ledger-bar .runbadge { order: 3; }
   .htotals { display: contents; }
-  .htotals .badge { order: 4; }
   .ledger-bar .modebtn { order: 5; }
   .profmenu { order: 6; }
   .mnav { order: 8; }
@@ -355,10 +345,9 @@
     display: none;
   }
 
-  /* Out of the bar and into the profile menu. Each sits in a `.barform`,
+  /* Out of the bar and into the profile menu. It sits in a `.barform`,
    * which is `display: contents`, so the button is hidden directly. */
-  .ledger-bar .modebtn,
-  .htotals .badge {
+  .ledger-bar .modebtn {
     display: none;
   }
 

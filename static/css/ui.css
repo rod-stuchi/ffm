@@ -705,6 +705,18 @@ input.i.mono {
   padding: 6px 11px;
 }
 
+/* The ledger bar's light/dark: the icon alone. A zero-width character
+ * gives it the same line of text the profile button beside it has, so the
+ * two are the same height in any font, rather than a pixel guess at it. */
+.modebtn.is-icon {
+  gap: 0;
+  padding: 6px 9px;
+}
+
+.modebtn.is-icon::after {
+  content: "\200b";
+}
+
 .modebtn svg,
 .profbtn svg {
   width: 15px;

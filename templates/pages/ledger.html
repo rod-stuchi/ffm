@@ -98,8 +98,8 @@
     <span class="bar-sep" aria-hidden="true"></span>
     <b>{{ household }}</b>
     {#- Which server this is, when it is not the household's: beside its name,
-        on row 1 at every width — nothing moves it into the profile menu the
-        way the admin badge goes on a phone. PROD wears nothing (`crate::run`). -#}
+        on row 1 at every width — never into the profile menu, where the
+        admin/preview toggle lives. PROD wears nothing (`crate::run`). -#}
     {%- if let Some(r) = run %}
     <span class="runbadge" title="{{ r.title }}">{{ r.kind }}{% if let Some(d) = r.day %} · {{ d }}<span class="rb-year">{{ r.year }}</span>{% endif %}</span>
     {%- endif %}
@@ -130,13 +130,9 @@
     <div class="htotals">
       {#- The member's name is not here any more: it labels the profile button
           at the end of the bar, and printing it twice within 200px was the
-          only thing keeping it in two places. The badge stays — it is a status
-          and a toggle, not a way into your settings. -#}
-      {%- if admin || previewing %}
-      <form method="post" action="/preview" class="barform">
-        <button class="btn badge{% if previewing %} is-preview{% endif %}" type="submit">{% if previewing %}PREVIEW{% else %}ADMIN{% endif %}</button>
-      </form>
-      {%- endif %}
+          only thing keeping it in two places. The ADMIN / PREVIEW badge went
+          the same way, into the profile menu as `:preview`: the bar is for the
+          month and its money. -#}
       <span class="htot" id="htot">
         <span><i>{{ t.totals_in() }}</i> <b class="pos">{{ house.ins }}</b></span>
         <span><i>{{ t.totals_out() }}</i> <b class="neg">{{ house.outs }}</b></span>
@@ -149,7 +145,11 @@
 
         The button shows the state you are IN and submits the next one, which
         is the pre-auth control's shape unchanged; the cycle itself lives on
-        `ModePref::next` so the two cannot drift apart. -#}
+        `ModePref::next` so the two cannot drift apart.
+
+        Its icon alone: sun, moon or screen already says which state you are
+        in, and the word was the widest thing on row 1. The word stays as the
+        title and the accessible name. -#}
     <form method="post" action="/theme" class="barform"
           @submit="$el.next.value = location.pathname + location.search">
       {#- Restamped from `location` on submit, because `?pane=` is rewritten
@@ -158,9 +158,8 @@
           `safe_next` refuses anything that is not a local path either way. -#}
       <input type="hidden" name="next" value="{{ back_to }}">
       <input type="hidden" name="mode" value="{{ mode_next }}">
-      <button class="btn modebtn" type="submit" title="{{ mode_label }}">
-        {{ mode_svg|safe }}<span>{{ mode_label }}</span>
-      </button>
+      <button class="btn modebtn is-icon" type="submit" title="{{ mode_label }}"
+              aria-label="{{ mode_label }}">{{ mode_svg|safe }}</button>
     </form>
 
     {#- Everything about you, in one place. Built like `.mnav` above — trigger
@@ -170,8 +169,11 @@
         scrolls sideways. A bar control has no such problem. -#}
     <nav class="profmenu" x-data="{ open: false }"
          @click.outside="open = false" @keydown.escape.window="open = false">
-      <button class="btn profbtn" type="button" @click="open = !open"
-              :aria-expanded="open" title="{{ t.settings_profile() }}">
+      {#- While admin powers are switched off it wears the warning color the
+          bar's PREVIEW badge did, so the state still shows at a glance with
+          the badge gone into this menu. -#}
+      <button class="btn profbtn{% if previewing %} is-preview{% endif %}" type="button" @click="open = !open"
+              :aria-expanded="open" title="{% if previewing %}{{ t.menu_previewing() }}{% else %}{{ t.settings_profile() }}{% endif %}">
         {{ person_svg|safe }}<span>{{ me }}</span>
       </button>
       {#- The items are named after the commands they run, in mono, because
@@ -191,6 +193,16 @@
         <button class="btn" type="button" title="{{ t.settings_household() }}"
                 @click="open = false; showSplit('/household')">:household</button>
         {%- endif %}
+        {#- Admin powers on or off, at every width: it was the bar's ADMIN /
+            PREVIEW badge. `:preview` is a real command whose bare form
+            toggles, so it earns a command name like the items around it, and
+            it follows the ROLE — it stays while previewing, the only way back. -#}
+        {%- if admin || previewing %}
+        <form method="post" action="/preview">
+          <button class="btn{% if previewing %} is-on{% endif %}" type="submit"
+                  title="{{ t.menu_preview() }}">:preview</button>
+        </form>
+        {%- endif %}
         {#- The same pane the first item opens, with the keyboard left on the
             swatches — which are its first control. That is the whole
             difference, and it is why this is not a second palette picker. -#}
@@ -198,24 +210,17 @@
                 @click="open = false; openColors()">:theme</button>
         <button class="btn" type="button" title="{{ t.trash_menu() }}"
                 @click="open = false; openTrash()">:trash</button>
-        {#- On a phone the bar has no room for the admin badge or the
-            light/dark button, so they move in here. `.ppop-narrow` is shown
-            by the SAME media query that hides them from the bar, so there is
-            never a width with both copies, or neither.
+        {#- On a phone the bar has no room for the light/dark button, so it
+            moves in here. `.ppop-narrow` is shown by the SAME media query that
+            hides it from the bar, so there is never a width with both copies,
+            or neither.
 
-            `:preview` is a real command whose bare form toggles, so it earns
-            a command name like the items above. Light/dark has no command: it
-            is a setting's three values under a heading, not an item named
-            after something to type — so its words come from the catalog. And
-            three direct choices rather than the bar's cycle, because through
-            a menu a cycle is up to three rounds of open-and-tap. -#}
+            Light/dark has no command: it is a setting's three values under a
+            heading, not an item named after something to type — so its words
+            come from the catalog. And three direct choices rather than the
+            bar's cycle, because through a menu a cycle is up to three rounds
+            of open-and-tap. -#}
         <div class="ppop-narrow">
-          {%- if admin || previewing %}
-          <form method="post" action="/preview">
-            <button class="btn{% if previewing %} is-on{% endif %}" type="submit"
-                    title="{{ t.menu_preview() }}">:preview</button>
-          </form>
-          {%- endif %}
           <form method="post" action="/theme" class="pmode"
                 @submit="$el.next.value = location.pathname + location.search">
             <input type="hidden" name="next" value="{{ back_to }}">

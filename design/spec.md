@@ -200,8 +200,8 @@ then refuses.
 previewing as one — the same rule that removes the Household button rather
 than disabling it. `preview` is the exception and follows the *role* rather
 than whether its powers are in effect: it is the toggle itself, the same
-category as the badge, and dropping it while previewing would say there is no
-way back.
+category as the profile menu's `:preview`, and dropping it while previewing
+would say there is no way back.
 
 ### The loader
 
@@ -1894,9 +1894,12 @@ The card's heading is the household name and its subtitle says what this is.
 ### Preview as non-admin (admin only)
 
 An admin can toggle their own session's admin rights off, to see the app the
-way any other member actually experiences it — badge click (`ADMIN` ↔
-`PREVIEW`) or `:preview`, reversible any time, no confirmation needed since
-nothing about it is destructive or hard to undo.
+way any other member actually experiences it — `:preview`, typed or picked
+from the profile menu, reversible any time, no confirmation needed since
+nothing about it is destructive or hard to undo. (It was an `ADMIN` ↔
+`PREVIEW` badge in the bar; the bar is for the month and its money now, and
+while previewing the profile button wears the badge's warning color, so the
+state still shows at a glance.)
 
 - **Deliberately not called "impersonate", and not built as one.** The admin
   considered and rejected impersonating a specific other member (viewing as

@@ -65,6 +65,7 @@ row-try-again = Try Again
 # The profile menu on a phone, where the bar has no room for these.
 menu-mode = Light or dark
 menu-preview = See the app as a member without admin rights
+menu-previewing = Previewing without admin rights — :preview in this menu turns them back on
 # The row menu: a long press on a phone, a right-click with a mouse. The key
 # each item runs is shown beside it, outside the message.
 row-menu-edit = Edit

@@ -1405,18 +1405,28 @@ that will otherwise be re-proposed.
   about 1070px, and squeezed below it the household name wrapped to three
   lines, IN/OUT/NET stacked into six, and on a phone the light/dark and
   profile buttons ran off the edge and scrolled the page sideways.
-  **≤ 1100px** only breaks the line: row 1 is logo · household · badge ·
+  **≤ 1100px** only breaks the line: row 1 is logo · household ·
   light/dark · profile, row 2 the month and the totals; nothing leaves.
   **≤ 720px** is the phone: the month arrows go (the picker and
-  `[`/`]` remain), the badge and light/dark move into the profile
-  menu, and each total puts its label over its figure. The menu's copies are
-  shown by the **same** media query that hides the originals, so no width
+  `[`/`]` remain), light/dark moves into the profile
+  menu, and each total puts its label over its figure. The menu's copy is
+  shown by the **same** media query that hides the original, so no width
   has both or neither; there light/dark is three direct choices rather than
   the bar's cycle, because through a menu a cycle is up to three rounds of
   open-and-tap. Both breakpoints are fixed CSS, not `layout_*` values: those
   decide how panes share a screen, and this is only whether the bar fits.
   A wrapping flex row with `order` and a zero-height `::after` as the line
   break, not a grid — the two rows share no columns.
+- **The ADMIN / PREVIEW badge is the profile menu's `:preview`, at every
+  width** — it used to sit in the bar beside the totals, and moved into the
+  menu only on a phone. The bar is for the month and its money. While
+  previewing, the profile button wears the badge's warning color (and says
+  so in its title), so the state still reads at a glance.
+- **Light/dark in the bar is its icon alone** — sun, moon or screen says the
+  state, the word is its title and accessible name. A zero-width character
+  gives it the profile button's line height, so the two match in any font.
+  The pre-auth chrome keeps its words: there the buttons sit beside their
+  `Alt-L` / `Alt-T` key-caps.
 - **The member's name is on the profile button and nowhere else in the bar.**
   It used to sit in `.htotals` as well, which printed it twice within 200px.
 - **`:theme` and `:profile` both open `:profile`** — the difference is that
@@ -1609,7 +1619,7 @@ that will otherwise be re-proposed.
     (`just dev 2026-10-15`) adds its date.
   - A non-PROD build wears a hazard-striped `DEV` / `DEV-LAN` /
     `DEV · 15/10/2026` badge beside the household's name — row 1 at every
-    width, never moved into the profile menu the way the admin badge is —
+    width, never moved into the profile menu the way the admin toggle was —
     on `/login` too, and prefixes the tab title (`[dev 15/10] …`). A phone
     drops the badge's year.
   - **PROD wears nothing**, and says so only in `:profile`'s first line and
