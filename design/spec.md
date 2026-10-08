@@ -527,9 +527,26 @@ standing out.)
   statement drawn small in PDF points (Inter's is 446 pt wide) came out
   929 px at 150 dpi and was stretched 2–4× to fill the stage — blurry beside
   the same file in a tab. At 300 an A4 page is ~2480 px and that statement
-  ~1860 px. A page costs ~2.5× the bytes and the time (~1 MB, ~0.8 s for an
-  A4 bill), which the household's LAN does not notice.
-- **`v` shows a PDF in the browser's own viewer instead** — a *PNG ⇄ PDF*
+  ~1860 px.
+- **JPEG, kept by the browser, loaded as it comes into view** — the three
+  things that made `P` feel slow beside the browser's own viewer
+  (`services::pdfpage`).
+  - **JPEG, not PNG.** Drawing a page is cheap; PNG's encoder is not. On the
+    household's bills a 300 dpi page took 0.3–2.5 s as PNG (a 2-page DAAE bill
+    4.9 s) and 45–190 ms as JPEG, quality 90 — about twice the bytes on a text
+    page, which is milliseconds on the LAN. The trim view's pages are JPEG too.
+  - **Kept for good.** Each page's URL carries the file's size and modified
+    time (`?v=`), and is cached `private, immutable`: reopening `P` asks the
+    server for nothing. A replaced bill keeps its path but gets a new `v`, so
+    an old image can never show. It was `no-cache` with no validator, which
+    redrew every page on every open.
+  - **Lazy.** Only the page `P` opens on — the owed one, else the first —
+    loads at once; the others load as they come into view. Each `<img>`
+    carries its page's size from `pdfinfo` as `width`/`height`, so a page not
+    yet drawn already takes its real box: `J`/`K`, `gg`/`G` and the scroll to
+    the owed page land where they should. The row's other files wait only for
+    that first page before they load behind it.
+- **`v` shows a PDF in the browser's own viewer instead** — an *Image ⇄ PDF*
   switch in the corner, beside the zoom buttons, only on a PDF: one `.tog`
   between the two names, the side on show in the ink. The viewer
   is the file itself in an `<embed>`: sharp at any size, text selectable, a
@@ -540,10 +557,13 @@ standing out.)
   this section rejected above failed as the *only* view, because the
   carousel's zoom had to drive it; as an opt-in it is free to zoom itself.
   **`P` opens on the member's side** — `member_settings.pdf_view`, a
-  `:profile` radio, `png` by default (amended from "every `P` opens on the
+  `:profile` radio, `png` (the images) by default (amended from "every `P` opens on the
   pages", which made a member who reads every bill in the viewer press `v`
   each time). `v` flips it while the carousel is open, across the row's
   files, and that flip is not remembered after it closes.
+  **The switch says *Image*, not *PNG*:** the pages are JPEGs now (see
+  below), and the control should name what is seen, not a file format that
+  can change under it. The stored value stays `png`.
 - **The caption and the file-nav row are one low height** (`--cbar-h`,
   34px), with the nav's buttons a size down: the bars frame the file, and
   every pixel they take is the file's. **The corner's controls are in the

@@ -13,9 +13,17 @@
   {%- if embed %}
   <embed class="cembed" src="{{ base }}{% if owed > 0 %}#page={{ owed }}{% endif %}" type="application/pdf">
   {%- endif %}
-  {%- for n in pages %}
-  <img class="cpg" id="cpg-{{ n }}" src="{{ base }}/page/{{ n }}"
-       alt="{{ t.carousel_page_alt(n.clone()) }}"{% if n.clone() == owed %} data-owed{% endif %}>
+  {#- One JPEG per page, under the file's version (`?v=`), so the browser
+      keeps it for good and a replaced file is a new URL. Only the page the
+      carousel opens on loads at once; the rest load as they come into view.
+      Each page's box (`width`/`height`, in points) is its aspect ratio before
+      it has loaded, so a page not yet drawn already takes its real place and
+      J/K, gg/G and the scroll to the owed page land where they should. -#}
+  {%- for p in pages %}
+  <img class="cpg" id="cpg-{{ p.n }}" src="{{ base }}/page/{{ p.n }}?v={{ version }}"
+       width="{{ p.w }}" height="{{ p.h }}" decoding="async"
+       {%- if p.n == first %} loading="eager" fetchpriority="high"{% else %} loading="lazy"{% endif %}
+       alt="{{ t.carousel_page_alt(p.n.clone()) }}"{% if p.n == owed %} data-owed{% endif %}>
   {%- endfor %}
   {%- if image %}
   <img class="cpg" src="{{ base }}" alt="">

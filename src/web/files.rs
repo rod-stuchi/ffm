@@ -364,8 +364,17 @@ pub struct FileView {
     t: crate::ui::i18n::Catalog,
     /// `/tx/{id}/file/{kind}` — the file, and the root its pages hang off.
     base: String,
-    /// A PDF's page numbers, `1..=n`. Empty for anything else.
-    pages: Vec<i64>,
+    /// A PDF's pages, each with the box it is shown in. Empty for anything
+    /// else.
+    pages: Vec<PageBox>,
+    /// The file's size and modified time, `{size}-{mtime}`, on every page's
+    /// URL. The pages are cached by the browser for good (`page`), and a
+    /// replaced bill keeps its path — so a new file is a new URL, and an old
+    /// image can never show for it.
+    version: String,
+    /// The page that loads at once: the owed one, else the first. Every
+    /// other page is lazy, fetched as it comes into view.
+    first: i64,
     /// The page a shared bill owes this month (`spans_period`), scrolled to
     /// on open. 0 = none.
     owed: i64,
@@ -379,6 +388,15 @@ pub struct FileView {
     /// The file's size, `412 KB` / `1,2 MB` — shown at the left of the
     /// carousel's bottom bar. Empty when the file could not be read.
     size: String,
+}
+
+/// One page of a PDF on the stage: its number, and its box in points
+/// (`pdfpage::boxes`), which becomes the `<img>`'s `width`/`height` — the
+/// aspect ratio a lazy page holds before it is drawn.
+pub struct PageBox {
+    n: i64,
+    w: u32,
+    h: u32,
 }
 
 #[derive(serde::Deserialize)]
@@ -409,14 +427,29 @@ pub async fn view(
         .flatten()
         .map(|h| h.currency)
         .unwrap_or_default();
-    let size = tokio::fs::metadata(&path)
-        .await
+    let meta = tokio::fs::metadata(&path).await.ok();
+    let size = meta
+        .as_ref()
         .map(|m| crate::ui::fmt::bytes(m.len(), currency))
+        .unwrap_or_default();
+    let version = meta
+        .as_ref()
+        .map(|m| {
+            let mtime = m
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            format!("{}-{mtime}", m.len())
+        })
         .unwrap_or_default();
     let mut view = FileView {
         t,
         base,
         pages: Vec::new(),
+        version,
+        first: 1,
         owed: 0,
         image: false,
         text: None,
@@ -431,11 +464,24 @@ pub async fn view(
             view.owed = p.page.filter(|p| *p > 0).unwrap_or(0);
         }
         "pdf" => {
-            // A PDF poppler cannot count is still a file: one page is tried,
+            // A PDF poppler cannot read is still a file: one A4 page is tried,
             // and a page that will not draw says so in its own place.
-            let n = page_count(&path).await.unwrap_or(1).max(1);
-            view.pages = (1..=n).collect();
+            let probe = path.clone();
+            let mut boxes =
+                tokio::task::spawn_blocking(move || crate::services::pdfpage::boxes(&probe))
+                    .await
+                    .unwrap_or_default();
+            if boxes.is_empty() {
+                boxes.push((595, 842));
+            }
+            let n = boxes.len() as i64;
+            view.pages = boxes
+                .into_iter()
+                .zip(1..)
+                .map(|((w, h), n)| PageBox { n, w, h })
+                .collect();
             view.owed = p.page.filter(|p| (1..=n).contains(p)).unwrap_or(0);
+            view.first = if view.owed > 0 { view.owed } else { 1 };
         }
         "txt" => view.text = tokio::fs::read_to_string(&path).await.ok(),
         _ => view.image = true,
@@ -448,13 +494,20 @@ pub async fn view(
 /// 300 dpi: an A4 page comes out ~2480 px wide, and a statement drawn small in
 /// PDF points (the Inter one is 446 pt wide, ~1860 px here) still fills the
 /// stage without being stretched. It was 150, which left that statement at
-/// 929 px and stretched it 2–4× — blurry beside the same file in a tab. A page
-/// is ~2.5× the bytes and the time (~1 MB, ~0.8 s for an A4 bill), which a
-/// household's LAN does not notice.
+/// 929 px and stretched it 2–4× — blurry beside the same file in a tab. As a
+/// JPEG (`services::pdfpage`) a 300 dpi page takes 45–190 ms; as the PNG it
+/// was, 0.3–2.5 s.
 const PAGE_DPI: &str = "300";
 
-/// `GET /tx/{id}/file/{kind}/page/{n}` — one page of a PDF, as a PNG, at
-/// [`PAGE_DPI`].
+/// `GET /tx/{id}/file/{kind}/page/{n}?v=…` — one page of a PDF, as a JPEG,
+/// at [`PAGE_DPI`].
+///
+/// **Kept by the browser for good.** The stage names each page with the
+/// file's size and modified time (`FileView::version`), so a URL means one
+/// drawing of one file: a replaced bill keeps its path, but gets a new `v`,
+/// and with it a new URL. Reopening `P` then asks the server for nothing. It
+/// was `no-cache` with no validator, which redrew every page on every open.
+/// `private`, so a proxy in front never keeps a household's bill.
 pub async fn page(
     State(st): State<AppState>,
     auth: Auth,
@@ -467,24 +520,20 @@ pub async fn page(
         return StatusCode::NOT_FOUND.into_response();
     }
     // A subprocess, like the importer's `pdftotext`; off the async runtime,
-    // since it blocks for the few hundred milliseconds a page takes.
-    let out = tokio::task::spawn_blocking(move || {
-        let n = n.to_string();
-        std::process::Command::new("pdftoppm")
-            .args(["-f", &n, "-l", &n, "-r", PAGE_DPI, "-png", "-singlefile"])
-            .arg(&path)
-            .output()
-    })
-    .await;
+    // since it blocks for the time a page takes.
+    let out =
+        tokio::task::spawn_blocking(move || crate::services::pdfpage::render(&path, n, PAGE_DPI))
+            .await;
     match out {
-        Ok(Ok(o)) if o.status.success() && !o.stdout.is_empty() => (
+        Ok(Some(jpeg)) => (
             [
-                (header::CONTENT_TYPE, "image/png"),
-                // A replaced bill keeps its path, so the page must not be
-                // served from cache after the file under it changed.
-                (header::CACHE_CONTROL, "no-cache"),
+                (header::CONTENT_TYPE, "image/jpeg"),
+                (
+                    header::CACHE_CONTROL,
+                    "private, max-age=31536000, immutable",
+                ),
             ],
-            o.stdout,
+            jpeg,
         )
             .into_response(),
         _ => StatusCode::NOT_FOUND.into_response(),

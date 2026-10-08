@@ -12,6 +12,7 @@ pub mod live;
 pub mod live_feed;
 pub mod materializer;
 pub mod pdflock;
+pub mod pdfpage;
 pub mod pdftrim;
 pub mod pending;
 pub mod prune;

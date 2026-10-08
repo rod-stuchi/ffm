@@ -600,7 +600,7 @@
                 browser's own viewer, which is sharp at any size and zooms
                 itself (`files::FileView`). Absent on a photo or a text file,
                 which have nothing to switch. -#}
-            {#- One switch between two named sides, PNG on the left, PDF on the
+            {#- One switch between two named sides, Image on the left, PDF on the
                 right — the side on show is in the ink, the other faint. Which
                 side `P` opens on is the member's (`:profile`). -#}
             <label class="tog cviewsw" x-show="pdfOnShow()" title="{{ t.carousel_view_title() }}">
@@ -613,7 +613,7 @@
             <template x-if="!(pdfView && pdfOnShow())">
               <span class="czoombtns">
                 {#- Fit height (how every page opens) ⇄ fit width — `f`. The
-                    same two-sided switch as PNG ⇄ PDF. Not on a text file,
+                    same two-sided switch as Image ⇄ PDF. Not on a text file,
                     which has no page to fit. -#}
                 <label class="tog cviewsw cfitsw" x-show="imageOnShow()" title="{{ t.page_fit_title() }}">
                   <span :class="{ 'is-on': pageFit === 'height' }">{{ t.page_fit_height() }}</span>
@@ -2423,15 +2423,17 @@ function ledger() {
     /// file keeps its own scroll. Zooming never reloads it; `v` does, since
     /// how it is shown is part of the key.
     ///
-    /// The file on show loads first. The row's others wait for its pages to
-    /// arrive (`ready`), then load out of sight: a PDF page is a `pdftoppm`
-    /// run on the server, and the pages being looked at should not queue
+    /// The file on show loads first. The row's others wait for its first page
+    /// to arrive (`ready`), then load out of sight: a PDF page is a `pdftoppm`
+    /// run on the server, and the page being looked at should not queue
     /// behind the ones that are not. A stage switched to before then is the
-    /// one on show, and loads at once.
+    /// one on show, and loads at once. Inside a stage only the page it opens
+    /// on loads at once; the rest are `loading="lazy"`, fetched as they come
+    /// into view (`file_view.html`).
     ///
-    /// Why stages and not the HTTP cache: the page images are `no-cache` with
-    /// no validator (a replaced bill keeps its path), so a warmed cache would
-    /// fetch every page again anyway.
+    /// The stages keep each file's scroll and zoom. Opening `P` again is the
+    /// HTTP cache's: a page's URL carries the file's version (`?v=`) and is
+    /// kept by the browser for good, so it is not drawn twice.
     ///
     /// A bill shared across months (`spans_period`) scrolls to THIS month's
     /// page: the badge already says `Bill · p.4`, and confirming which page is
@@ -2467,7 +2469,10 @@ function ledger() {
             img.addEventListener('load', done, { once: true });
             img.addEventListener('error', done, { once: true });
           });
-          Promise.all([...el.querySelectorAll('img')].map(settled)).then(() => {
+          // Only the page that loads at once: a lazy page off screen never
+          // loads, and waiting on it would hold the row's other files back
+          // for good.
+          Promise.all([...el.querySelectorAll('img:not([loading="lazy"])')].map(settled)).then(() => {
             if (this.carousel === c && el.dataset.src === key) c.ready = true;
           });
         });
@@ -2600,7 +2605,7 @@ function ledger() {
     },
 
     /// Whether the carousel's file is drawn as page images — a PDF on the
-    /// PNG side, or a photo. A text file has no page to fit or jump in.
+    /// image side, or a photo. A text file has no page to fit or jump in.
     imageOnShow() {
       const f = this.carousel && this.carousel.current;
       return !!f && !/\.txt$/i.test(f.path || '') && !(this.pdfView && this.pdfOnShow());
@@ -2671,7 +2676,7 @@ function ledger() {
       view.scrollTo({ top: Math.max(0, Math.round(to)) });
     },
 
-    // --- page images: the carousel's PNG side and the trim view's page ---
+    // --- page images: the carousel's image side and the trim view's page ---
     //
     // One set of keys wherever a page is shown as an image: `j`/`k` scroll,
     // `H`/`M`/`L` put the page on show at its top / middle / bottom, as Vim's

@@ -935,13 +935,17 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   digits, or holding a phone up to its QR code. **A PDF's pages are drawn
   server-side by `pdftoppm`** (poppler, already required for `pdftotext`),
   at 300 dpi, and shown as images; a photo is itself, a text file is text.
+  **As JPEG, kept by the browser, and loaded as they come into view**
+  (`services::pdfpage`): PNG's encoder was the cost — 0.3–2.5 s a page, against
+  45–190 ms — the page URL carries the file's version (`?v=`) so a reopen asks
+  for nothing, and only the page `P` opens on loads at once.
   The browser's own PDF viewer was tried first, in a frame, and could not be
   zoomed from the carousel reliably in either Chrome or Safari — a frame is
   somebody else's program and answers to its own controls. **It is offered
-  now as the second way:** `v` (a *PNG ⇄ PDF* switch) swaps the images for
+  now as the second way:** `v` (an *Image ⇄ PDF* switch) swaps the images for
   an `<embed>` of the file, sharp at any size and zooming itself. Which side
   `P` opens on is the member's (`member_settings.pdf_view`, in `:profile`) —
-  amended from "every `P` opens on the images" — and PNG stays the default,
+  amended from "every `P` opens on the images" — and the images stay the default,
   because the images' zoom and keys work alike in both browsers. "Open in new tab" still
   hands over the real file. A bill shared across months scrolls to this
   month's page. See `design/spec.md`'s row-component

@@ -272,18 +272,20 @@ pub async fn page(
         return StatusCode::NOT_FOUND.into_response();
     }
     let dpi = if p.big == Some(1) { "150" } else { "36" };
-    let out = tokio::task::spawn_blocking(move || {
-        let n = n.to_string();
-        std::process::Command::new("pdftoppm")
-            .args(["-f", &n, "-l", &n, "-r", dpi, "-png", "-singlefile"])
-            .arg(&path)
-            .output()
-    })
-    .await;
+    let out =
+        tokio::task::spawn_blocking(move || crate::services::pdfpage::render(&path, n, dpi)).await;
     match out {
-        Ok(Ok(o)) if o.status.success() && !o.stdout.is_empty() => {
-            ([(header::CONTENT_TYPE, "image/png")], o.stdout).into_response()
-        }
+        // A JPEG, as the carousel's pages are (`services::pdfpage`). The
+        // staged file never changes under its single-use token, so a page
+        // flipped back to comes from the browser's cache.
+        Ok(Some(jpeg)) => (
+            [
+                (header::CONTENT_TYPE, "image/jpeg"),
+                (header::CACHE_CONTROL, "private, max-age=86400"),
+            ],
+            jpeg,
+        )
+            .into_response(),
         _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
