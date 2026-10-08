@@ -922,7 +922,7 @@ checkbox each, restored in any combination.
 | `:invite` | admin only — open `:members` with the create form |
 | `:logout` | end this session |
 | `:preview` | admin only — toggle previewing the app as a non-admin member |
-| `:help` · `:h` | the keymap — the same modal `?` opens |
+| `:help` · `:h` | the keymap — the same modal `?` opens · `:help ga` opens it searched for `ga` |
 | `?` | keymap |
 
 **`:add`, `:in` and `:move` are not here, and will not be.** They were
@@ -1335,6 +1335,38 @@ editing. So:
   keys to ask, a third to choose, at any household size. `Esc` backs out with
   nothing written. `Ctrl-H`/`Ctrl-L` now only say *rows move to another
   member with ga now*. The row menu offers it as *Move to…*.
+
+### Searching the keymap
+
+The `?` keymap runs to about a hundred lines across Move, Act, Find, Fold,
+Files, Type and the marks. Before this, finding one binding meant reading
+down the list, and only a mouse could scroll the modal: `Esc` and `?` were
+its only keys.
+
+- **`/` searches it**, the ledger's search key and the one Vim's `:help`
+  uses. The field sits in the modal's header, outside the part that scrolls,
+  so it stays put over the results, and it is always shown, so a mouse finds
+  it too. `matching/total` sits beside it.
+- **It filters what is already there**, like `/` on the ledger: no request,
+  instant. A key row matches on its key or on what it does, a marks line on
+  its words, and the match is marked in place. A section whose heading
+  matches keeps every row (`/files` is the Files section); a section with
+  nothing left goes with its heading.
+- **The term is the ledger's**: a regex, falling back to a literal when it
+  does not compile, which matters more here, where `?`, `+` and `[` are keys
+  as well as metacharacters.
+  - **Smartcase**, as in Vim: a capital makes the search case-sensitive, so
+    `J` finds the `J` row and not every `j`.
+  - **Accents are set aside** on both sides: `periodo` finds *período*.
+- **Enter keeps the filter and hands the keys back. Esc clears it, and a
+  second Esc closes.** That is `/` on the ledger again: Enter keeps the
+  highlights, Esc drops them.
+- **The modal scrolls from the keyboard**: `j`/`k` (and the arrows), `Ctrl-d`
+  / `Ctrl-u` by half a screen, `gg` / `G` to the top and the end.
+- **`:help <term>` opens it already searched**, as Vim's `:help gt` lands on
+  `gt`. The keys are the modal's at once, so `j` scrolls the result. A bare
+  `:help` opens the whole keymap.
+- **Closing forgets the search**: the next `?` opens on everything.
 
 ### A rejected form says which box
 

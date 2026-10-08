@@ -673,43 +673,70 @@
   {#- `?` opens the keymap, not reverse search. `N` already walks a `/` search
       backwards, and `?`-as-help is the one key a non-Vim user will try — half
       this app's household does not use Vim. -#}
-  <div class="modal" x-show="keymap" x-cloak @click.self="keymap = false">
+  <div class="modal" x-show="keymap" x-cloak @click.self="closeKeymap()">
     <div class="card keymapcard">
-      <div class="ch"><h1>{{ t.keymap_title() }}</h1></div>
-      <div class="cb keymapbody">
+      {#- `/` searches it — the ledger's search key, and Vim's in `:help`. The
+          field sits in the header, outside the scrolling body, so it stays
+          put while the results scroll; it is always shown, so a mouse finds
+          it too. Enter keeps the filter and hands the keys back (j/k scroll
+          the results), Esc clears it, and a second Esc closes. -#}
+      <div class="ch kmhead">
+        <h1>{{ t.keymap_title() }}</h1>
+        <label class="kmfind">
+          <span class="caret" aria-hidden="true">/</span>
+          <input x-ref="kmfind" x-model="kmQuery" @input="filterKeymap()"
+                 @keydown.enter.prevent="backToKeys($el)"
+                 @keydown.escape.prevent="kmQuery = ''; filterKeymap(); backToKeys($el)"
+                 placeholder="{{ t.keymap_search() }}" aria-label="{{ t.keymap_search() }}"
+                 autocomplete="off" spellcheck="false">
+        </label>
+        <span class="kmcount" x-text="kmCount"></span>
+      </div>
+      <div class="cb keymapbody" x-ref="kmbody">
+        {#- Each row is a `display: contents` wrapper, so the search can hide a
+            key and what it does as one thing while the grid stays the grid;
+            each section wraps its heading, so a section with nothing left in
+            it goes with its heading. -#}
         {%- for section in keymap %}
-        <div class="sect">{{ section.0 }}</div>
-        <div class="kmap">
-          {%- for row in section.1 %}
-          <kbd>{{ row.0 }}</kbd><span>{{ row.1 }}</span>
-          {%- endfor %}
-        </div>
+        <section class="kmsect">
+          <div class="sect">{{ section.0 }}</div>
+          <div class="kmap">
+            {%- for row in section.1 %}
+            <div class="krow"><kbd>{{ row.0 }}</kbd><span>{{ row.1 }}</span></div>
+            {%- endfor %}
+          </div>
+        </section>
         {%- endfor %}
         {#- The marks, drawn by the row's own partial — a legend that
             re-drew them by hand would be free to disagree with the ledger. -#}
-        <div class="sect">{{ t.legend_title() }}</div>
-        <div class="legend">
-          {%- for item in legend %}
-          <div class="lsamples">
-            {%- for sample in item.samples %}
-            {%- match sample %}
-            {%- when LegendSample::Mark(m) %}{% include "partials/mark.html" %}
-            {%- when LegendSample::Flag(f) %}
-            <span class="mflag flag-{{ f.icon }}{% if f.on %} is-on{% endif %}">{{ f.svg|safe }}</span>
-            {%- when LegendSample::File { number, svg } %}
-            <span class="fbadge"><kbd>{{ number }}</kbd><span class="ficon">{{ svg|safe }}</span></span>
-            {%- when LegendSample::Amount(a) %}
-            <span class="amt"><span class="v is-estimated">{{ a }}</span></span>
-            {%- when LegendSample::Ring(s) %}{% include "partials/fold_ring.html" %}
-            {%- endmatch %}
+        <section class="kmsect">
+          <div class="sect">{{ t.legend_title() }}</div>
+          <div class="legend">
+            {%- for item in legend %}
+            <div class="lrow">
+              <div class="lsamples">
+                {%- for sample in item.samples %}
+                {%- match sample %}
+                {%- when LegendSample::Mark(m) %}{% include "partials/mark.html" %}
+                {%- when LegendSample::Flag(f) %}
+                <span class="mflag flag-{{ f.icon }}{% if f.on %} is-on{% endif %}">{{ f.svg|safe }}</span>
+                {%- when LegendSample::File { number, svg } %}
+                <span class="fbadge"><kbd>{{ number }}</kbd><span class="ficon">{{ svg|safe }}</span></span>
+                {%- when LegendSample::Amount(a) %}
+                <span class="amt"><span class="v is-estimated">{{ a }}</span></span>
+                {%- when LegendSample::Ring(s) %}{% include "partials/fold_ring.html" %}
+                {%- endmatch %}
+                {%- endfor %}
+              </div>
+              <span class="ltext">{{ item.text }}</span>
+            </div>
             {%- endfor %}
           </div>
-          <span>{{ item.text }}</span>
-          {%- endfor %}
-        </div>
+        </section>
+        <p class="kmnone" x-show="kmQuery && kmCount.startsWith('0/')" x-cloak>{{ t.keymap_none() }}</p>
       </div>
       <div class="cf">
-        <button class="btn" type="button" @click="keymap = false">{{ t.keymap_close() }} <kbd>esc</kbd></button>
+        <button class="btn" type="button" @click="closeKeymap()">{{ t.keymap_close() }} <kbd>esc</kbd></button>
       </div>
     </div>
   </div>
@@ -1125,6 +1152,11 @@ function ledger() {
     /// `data-size`, so it is the server's reading of the file on disk.
     fileSize: '',
     keymap: false,
+    /// The keymap's search — what is typed, and "matching/total" beside it.
+    kmQuery: '',
+    kmCount: '',
+    /// The `g` of a `gg` typed inside the keymap.
+    kmBuf: '',
     monthsWord: {{ months_word|json|safe }},
     attaching: null,
     /// The row the file picker is for. NOT `attaching`, which is whether the
@@ -1650,10 +1682,7 @@ function ledger() {
       // pending `d` of a `dd` (see the Shift gotcha in CLAUDE.md).
       if (this.carousel && ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
       if (this.carousel) { e.preventDefault(); this.carouselKey(e.key); return; }
-      if (this.keymap) {
-        if (e.key === 'Escape' || e.key === '?') { e.preventDefault(); this.keymap = false; }
-        return;
-      }
+      if (this.keymap) { this.keymapKey(e, el); return; }
       if (this.confirming) {
         // The only "yes" is an explicit `y`. Enter is deliberately unbound in
         // here so it can never become an accidental way to confirm.
@@ -1828,7 +1857,7 @@ function ledger() {
         if (today === this.shell().dataset.period) this.say(this.monthAlreadyCurrent, false);
         else this.gotoPeriod(today, 'T');
       }
-      else if (k === '?') { this.keymap = true; }
+      else if (k === '?') { this.openKeymap(''); }
       else if (k === 'G') {
         // The log owns the vertical motions while it is open, and `G` is one
         // of them — `j`/`k` already are. Ending up at the bottom of a long
@@ -3009,6 +3038,147 @@ function ledger() {
       this.paint();
     },
 
+    // --- the keymap (`?`) ------------------------------------------------
+
+    /// `?`, and `:help` — with a term, already searched, the way Vim's
+    /// `:help gt` lands on `gt`. The keys stay the modal's: j/k scroll the
+    /// results at once, and `/` refines them.
+    openKeymap(term) {
+      this.kmQuery = term || '';
+      this.kmBuf = '';
+      this.keymap = true;
+      this.filterKeymap();
+      this.$nextTick(() => { if (this.$refs.kmbody) this.$refs.kmbody.scrollTop = 0; });
+    },
+
+    /// Closing forgets the search, so the next `?` opens on the whole keymap.
+    closeKeymap() {
+      this.keymap = false;
+      this.kmQuery = '';
+      this.filterKeymap();
+    },
+
+    /// A key with the keymap open. Its own search field takes what is typed
+    /// there (Enter and Esc are the field's); everything else is the modal's.
+    keymapKey(e, el) {
+      if (el && el.closest('.kmfind')) return;
+      // A modifier alone is not a keystroke — it must not drop the `g` of a
+      // `gg` (the Shift gotcha in CLAUDE.md).
+      if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
+      const body = this.$refs.kmbody;
+      const armed = this.kmBuf;
+      this.kmBuf = '';
+      const k = e.key;
+      let done = true;
+      if (k === 'Escape' || k === '?') this.closeKeymap();
+      // Synchronously, inside the key's own event: with a phone's keyboard
+      // up, iOS keeps it only when focus moves to a field in the same
+      // gesture (see `focusBar`).
+      else if (k === '/') { this.$refs.kmfind.focus({ preventScroll: true }); this.$refs.kmfind.select(); }
+      else if (e.ctrlKey && (k === 'd' || k === 'u')) {
+        body?.scrollBy({ top: (k === 'd' ? 1 : -1) * Math.round(body.clientHeight / 2) });
+      }
+      else if (e.ctrlKey || e.metaKey || e.altKey) done = false;
+      else if (k === 'j' || k === 'ArrowDown') this.pageScroll(body, 1);
+      else if (k === 'k' || k === 'ArrowUp') this.pageScroll(body, -1);
+      else if (k === 'g') {
+        if (armed === 'g') body?.scrollTo({ top: 0 });
+        else this.kmBuf = 'g';
+      }
+      else if (k === 'G') body?.scrollTo({ top: body.scrollHeight });
+      else done = false;
+      if (done) e.preventDefault();
+    },
+
+    /// Filters the keymap to what the search matches — markup the server
+    /// already rendered, so it is instant and asks nothing, like `/` on the
+    /// ledger. A key row matches on its key or on what it does, a legend
+    /// line on its words; a section whose heading matches keeps every row
+    /// (`/files` is the Files section). The match is marked in place.
+    ///
+    /// A regex falling back to a literal, as `/` does — which matters more
+    /// here, where `?`, `+` and `[` are keys as well as metacharacters.
+    /// Smartcase, as Vim's: a capital in the term makes it case-sensitive,
+    /// so `J` finds the `J` row and not every `j`. Accents are set aside on
+    /// both sides, so `periodo` finds "período".
+    filterKeymap() {
+      const body = this.$refs.kmbody;
+      if (!body) return;
+      const term = this.unaccent(this.kmQuery.trim()).text;
+      const flags = /[A-Z]/.test(term) ? '' : 'i';
+      let re = null;
+      if (term) {
+        try { re = new RegExp(term, flags); }
+        catch { re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags); }
+      }
+      let shown = 0;
+      let total = 0;
+      body.querySelectorAll('.kmsect').forEach(sect => {
+        // Always through `markText`, with no term too: that is what takes a
+        // heading's mark back off when the search is cleared.
+        const whole = this.markText(sect.querySelector('.sect'), re);
+        let any = false;
+        sect.querySelectorAll('.krow, .lrow').forEach(row => {
+          total++;
+          const cells = row.matches('.krow') ? row.querySelectorAll('kbd, span') : row.querySelectorAll('.ltext');
+          // Every cell is marked (or unmarked), so the eye finds the match in
+          // whichever column it is.
+          let hit = !re;
+          cells.forEach(c => { if (this.markText(c, re)) hit = true; });
+          row.hidden = !(hit || whole);
+          if (!row.hidden) { shown++; any = true; }
+        });
+        sect.hidden = !any;
+      });
+      this.kmCount = re ? shown + '/' + total : '';
+    },
+
+    /// Marks `re`'s first match in `el`'s text, in place, and says whether
+    /// there was one; no regex puts the text back as the server rendered it.
+    /// Built from text nodes, never markup. The match is made on the text
+    /// with its accents set aside, and mapped back onto the original
+    /// letters, so "período" is marked whole.
+    markText(el, re) {
+      if (!el) return false;
+      if (el.dataset.text === undefined) el.dataset.text = el.textContent;
+      const text = el.dataset.text;
+      if (!re) {
+        if (el.querySelector('mark')) el.textContent = text;
+        return false;
+      }
+      const { text: folded, at } = this.unaccent(text);
+      const m = re.exec(folded);
+      if (!m) {
+        if (el.querySelector('mark')) el.textContent = text;
+        return false;
+      }
+      const from = at[m.index];
+      const to = at[m.index + m[0].length];
+      const mark = document.createElement('mark');
+      mark.className = 'kmhit';
+      mark.textContent = text.slice(from, to);
+      el.replaceChildren(document.createTextNode(text.slice(0, from)), mark,
+                         document.createTextNode(text.slice(to)));
+      return true;
+    },
+
+    /// `s` with its accents taken off, and where each folded character came
+    /// from: `at[i]` is the index in `s` of folded character `i`, with one
+    /// extra entry for the end.
+    unaccent(s) {
+      let text = '';
+      const at = [];
+      for (let i = 0; i < s.length; ) {
+        const ch = String.fromCodePoint(s.codePointAt(i));
+        const bare = ch.normalize('NFD').replace(/\p{M}/gu, '');
+        for (let j = 0; j < bare.length; j++) at.push(i);
+        text += bare;
+        i += ch.length;
+      }
+      at.push(s.length);
+      return { text, at };
+    },
+
     // --- search ----------------------------------------------------------
 
     openSearch() {
@@ -3825,16 +3995,13 @@ function ledger() {
         case 'trash':                     return this.openTrash();
         // Duplicate files, admin only — the server refuses anybody else.
         case 'prune':                     return this.openPrune();
-        // Every month, as opposed to `/`, which filters what is on screen.
         // `:help` opens the keymap — the same modal `?` does. It is not a
         // nicety: `not-a-command` literally tells people to "try help", so
         // without this the app answers "not a command: help (try help)".
-        // `:help` opens the keymap — the same modal `?` does. It is not a
-        // nicety: `not-a-command` literally tells people to "try help", so
-        // without this the app answers "not a command: help (try help)".
+        // With a term it opens searched, as Vim's `:help gt` does.
         case 'help': case 'h':
-          this.keymap = true;
-          return;
+          return this.openKeymap(arg);
+        // Every month, as opposed to `/`, which filters what is on screen.
         case 'grep':
           // A bare `:grep` is a command MISSING ITS ARGUMENT, not an unknown
           // one. Saying "not a command: grep" was the one thing that is not

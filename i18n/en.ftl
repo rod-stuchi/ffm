@@ -428,7 +428,7 @@ login-error-inactive = This account is turned off. Ask an admin to turn it back 
 ## The command bar
 
 command-placeholder = command · Tab completes · Ctrl-p recalls
-command-about-help = the keymap — the same as ?
+command-about-help = the keymap — the same as ? · :help ga opens it searched
 command-about-profile = your own settings
 command-about-sort = the order of the rows
 command-about-group = group the rows by bucket, or flatten them
@@ -759,6 +759,8 @@ page-fit-title = Fit the page to the view's height or width · j k scroll · J K
 carousel-page-alt = page { $n }
 keymap-title = Keymap
 keymap-close = Close
+keymap-search = search keys and what they do
+keymap-none = Nothing in the keymap matches that — Esc clears the search.
 details-months = month(s)
 keymap-move = Move
 keymap-act = Act

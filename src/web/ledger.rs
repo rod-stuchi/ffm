@@ -825,7 +825,7 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                     }
                     (key, (c.about)(t))
                 })
-                .chain([k("?", "this")])
+                .chain([k("?", "this — / searches it, j k scroll it")])
                 .collect(),
         ),
     ]

@@ -391,7 +391,7 @@ members-has-rows = Há linhas no livro, então não pode ir para a lixeira. Desa
 login-error-inactive = Esta conta está desativada. Peça a um admin para reativá-la.
 
 command-placeholder = comando · Tab completa · Ctrl-p recupera
-command-about-help = os atalhos — o mesmo que ?
+command-about-help = os atalhos — o mesmo que ? · :help ga abre já buscando
 command-about-profile = suas configurações
 command-about-sort = a ordem das linhas
 command-about-group = agrupar as linhas por categoria, ou desagrupar
@@ -728,6 +728,8 @@ page-fit-title = Ajustar a página à altura ou à largura da tela · j k rolar 
 carousel-page-alt = página { $n }
 keymap-title = Atalhos
 keymap-close = Fechar
+keymap-search = buscar atalhos e o que fazem
+keymap-none = Nada nos atalhos corresponde a isso — Esc limpa a busca.
 details-months = mês(es)
 keymap-move = Mover
 keymap-act = Agir
