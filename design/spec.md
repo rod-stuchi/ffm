@@ -958,7 +958,7 @@ named in the description — `:config` is one, and it is a real command.
 ### Edit fields
 | Key | Action |
 |---|---|
-| `Ctrl-H` / `Ctrl-J` / `Ctrl-K` / `Ctrl-L` | move focus between a form's fields, left / down / up / right — past the form's edge, back to the ledger, keeping the draft |
+| `Ctrl-H` / `Ctrl-J` / `Ctrl-K` / `Ctrl-L` | move focus between a form's fields, left / down / up / right — past the `e` row's edge, or the rule pane's left edge, back to the ledger, keeping the draft |
 | `Ctrl-j` / `Ctrl-k` | from the ledger, into the bottom split; inside it, `Ctrl-k` off the top field comes back out |
 | `zz` | zoom the bottom split, half ↔ nearly full |
 | `Enter` | save — the form's primary action |
@@ -1031,14 +1031,16 @@ editing. So:
   marked row picks its draft back up exactly as it was left.
 - **`Ctrl-H/J/K/L` past the form's edge is the keyboard way out — and the
   way to close a form keeping what was typed.** Esc discards; there is no
-  separate "park" key. Off the top or bottom of an inline row, or of an `E`
-  pane, the cursor moves to the row above or below, which parks the draft:
-  the row is marked `unsaved · e to resume` (or `· E to resume` for a rule)
-  and `e`/`E` picks it back up. Off the left edge of the rule pane, focus
-  returns to the ledger with the pane still open until the cursor actually
-  moves — and moving it parks the pane the same way. `A`/`I` have no rule
-  yet to park, so their top and bottom edges do nothing. Sideways never
-  jumps rows — with no field left or right on this row, that's the edge.
+  separate "park" key. Off the top or bottom of an inline row, the cursor
+  moves to the row above or below, which parks the draft: the row is marked
+  `unsaved · e to resume` and `e` picks it back up. **The rule pane's top
+  and bottom edges do nothing** — `A`, `I` and `E` alike. It is a column
+  beside the ledger, so up and down stay inside it; `E`'s edges used to move
+  the cursor as the inline row's do, and `Ctrl-k` on Amount closed the pane
+  under the key. Its way out is the left edge: focus returns to the ledger
+  with the pane still open until the cursor actually moves — and moving it
+  parks the pane (`· E to resume`). Sideways never jumps rows — with no
+  field left or right on this row, that's the edge.
   A park key was considered and dropped: `Ctrl-C` is copy and `Ctrl-Z` is
   undo on Linux, inside the very fields it would fire from.
 - **Which form a key belongs to is decided by its container, not by whether
@@ -1046,6 +1048,11 @@ editing. So:
   check says no, and `Ctrl-j` fell through to the ledger's own `Ctrl-j`
   and opened the settings split. These keys had been in this table since
   the mock, which implemented them; the app never did until the port.
+  **The same holds for every other key**: with focus on a button inside the
+  rule pane or the `e` row — a section's fold header, Save, Unlink — a
+  letter is the form's and does nothing, where it used to reach the ledger,
+  move the cursor off the row and close the pane under it. Enter and Space
+  still press the button; Esc keeps its meaning.
 - **A rule draft is measured against the pane as it loaded**, not against
   each field's default: a `<select>` has no `defaultValue`, and a field
   `x-model` rewrites on load would read as edited by nobody. Restoring one
@@ -1073,12 +1080,34 @@ editing. So:
   delete.
 - **Field order puts what names the bill first:** Amount and Bill name, then
   Bucket and Cadence, then the dates (Start / Due, End / Installments).
+- **The rule pane is a top block and two sections that fold.** It had grown
+  to one ~1500px column of eight fields, nine switches each on its own row,
+  and three accent-tinted boxes. Now:
+  - **Always open:** Amount and Description, Bucket and Cadence, and the
+    switches about the amount and the row — *Carry the amount forward*,
+    *Hidden from other members*, and for income *Amount varies* with its
+    estimate — two to a line.
+  - **Schedule:** the dates and *Only some months*.
+  - **Files:** tracking, the names, the PDF password, the path, and the
+    Bill card.
+  - **A closed section says what it holds in one line** —
+    `01/01/2026 → ongoing · due 10 · 1-10`, `receipts on disk · bill on
+    file · …/d_19/2026/10.pdf` — built from the fields as they stand, so it
+    follows an edit.
+  - **Where they start:** `A` / `I` open both. `E` opens Schedule, and opens
+    Files only while the rule still needs something there — a tracked bill
+    with no bill yet. A field the server rejected opens its section, and so
+    does a parked draft that changed one when `E` picks it back up.
+  - **The bodies are `x-show`**, so a closed section's fields are still sent,
+    parked and restored, and which section is open is visual state — never
+    part of a draft. A header is a stop for `Ctrl-h/j/k/l`, so `Ctrl-j`
+    reaches a closed section; Enter or Space opens it.
 - **On/off settings are toggle switches, not tick boxes** — "track receipt on
   disk", "no barcode file", "covers multiple months", "hidden from other
   members" all read as states rather than actions, and a pill toggle says
   that in less space than a checkbox plus its label.
-- **A create form is the same field grid as an edit form, minus the two per-occurrence
-  noteboxes** (the path box and "past occurrences are left as recorded") —
+- **A create form is the same field grid as an edit form, minus the
+  per-occurrence note** ("earlier months keep what they recorded") —
   there's no real row behind it yet. `Esc`/Cancel removes the placeholder
   row too: nothing has been created to cancel out of.
 - **Cadence offers monthly, bimonthly, every 3 / 4 / 6 months and yearly.**
@@ -1132,15 +1161,16 @@ editing. So:
   files). Under the switch, a read-back says what the attached file holds:
   *10 installments · 01/2026–10/2026 · R$ 121,62 each*. It replaced *Pages in
   this file* and *First page covers*, which could not describe a real IPTU.
-- **A tracked rule's "This bill has no barcode file" checkbox hides the
-  upload control and the multi-page checkbox entirely** — set once, for
+- **A tracked rule's "This bill has no barcode file" switch empties the
+  Bill card down to itself** — no codes, no Choose file, no multi-month
+  switch, and a drop on it does nothing — set once, for
   bills paid by wire transfer / PIX / TED that will never have a barcode to
   attach. Decided in `A`'s form at creation, correctable later in `E`'s,
   never inferred from anything else about the rule.
-- **The computed receipt path is shown live, in two lines** — the real path
-  as it stands (`consumption/condominio/house_33a/2026/09.pdf`) above a dim
-  reminder of what makes it up (`bucket / bill name / instance / year /
-  month.ext`). It recomputes on every keystroke in Bucket, Bill name or
+- **The computed receipt path is shown live** — the real path as it stands
+  (`consumption/condominio/house_33a/2026/09.pdf`), with what makes it up
+  (`bucket / bill name / instance / year / month.ext`) in its tooltip; it
+  was a dim second line, until the pane needed the room. It recomputes on every keystroke in Bucket, Bill name or
   Instance, so renaming taxonomy shows where the files will move before the
   rule is saved. It includes the **bucket** segment, matching the storage
   layout above, under the member's `{slug}` folder. A tracked rule with no
@@ -1174,12 +1204,24 @@ editing. So:
   - **The app's own suffixes are untouched** — `{month}_scheduled.{ext}`
     and `{month}_barcode.{ext}` keep their plain `_` form, so the three file
     kinds stay recognizable at a glance.
-- **The barcode upload field is a dropzone, not a file `<input>` styled to
-  look like one** — attaching a file there is what derives `client_code`
-  on save (see Bill import, below), and it's optional in both `A` and `E`:
-  a rule can be created and saved with tracking on and no file yet, the
-  same way an amount or due date can be filled in later.
-- **A bound rule shows a "Bill on file" box**, above the upload field —
+- **The bill is one card, and the card is the drop target** — the Bill
+  card, in Files, for a spend rule that tracks its receipt. It replaced a
+  dashed dropzone between two accent-tinted boxes (*Bill on file* above, the
+  past note below), which read as a gap rather than a place to drop. A drop
+  anywhere on the card, or **Choose file** in its head, attaches the bill —
+  what derives `client_code` (see Bill import, below). Optional in both
+  `A` and `E`: a rule can be created and saved with tracking on and no file
+  yet, the same way an amount or due date can be filled in later.
+  - **Neutral**, not the accent: the accent shows only while a file is
+    dragged over it. Empty, the card is dashed and says *Drop the bill here,
+    or choose a file*; bound, it is solid and ends in a quiet *drop a new
+    bill here to replace this one*. The two are told apart by CSS
+    (`.billcard:has(.barcodemeta)`), so a server swap restyles it.
+  - **Its two switches sit under the codes**: *Covers multiple months* (with
+    what the file holds) and *This bill has no barcode file*. They are the
+    pane's own markup, outside the swapped `#barcodemeta`, so a drop never
+    takes unsaved switch state with it.
+- **A bound rule's card lists what it is bound to** —
   issuer, barcode kind, company code, client code and card (*ending 7766*),
   each only when the bill carried it, with its own **Unlink** button and no
   input box. Never the amount or the due date: they change every period,
@@ -1195,7 +1237,7 @@ editing. So:
   what `E` will show afterwards. **Unlink** clears the binding only — it
   doesn't close the pane, doesn't touch `tracked`/`bucket`/`billName`, and
   exists specifically for "the wrong file got attached the first time":
-  drop a corrected one right after, in the same still-open dropzone.
+  drop a corrected one right after, on the same card.
 - **The `e` form lists the row's files**, each with Open and **Remove** — the
   one place besides the `P` carousel a file is removed. Remove is its own
   request targeting only the form's file strip, never part of the form's
@@ -1208,7 +1250,9 @@ editing. So:
   length) unless it is confirmed — a receipt or payslip for a tracked rule, the
   manual tick for an untracked one — logs it as an edit of the row's due date
   that `u` reverses, and the statusline says *this month's row now due
-  05/10/2026*. Earlier months stay as recorded, and the notebox says so.
+  05/10/2026*. Earlier months stay as recorded, and a line under the due
+  day says so — only in `E`, and only once the due day or the amount was
+  changed: said when it is true, rather than a box that was always there.
 - **Due date moved from the occurrence form to the rule form.** The
   edit-occurrence form's Day field only renders at all for a non-recurring
   row; a recurring row's due day is edited on the rule (`E`) instead, so

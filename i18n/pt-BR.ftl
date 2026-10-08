@@ -224,7 +224,18 @@ rule-create = Criar
 rule-save = Salvar
 rule-delete = Excluir regra
 rule-path-legend = categoria / conta / identificação / ano / mês.ext
-rule-past-note = Os meses anteriores, e este depois de pago, ficam como foram registrados. A linha deste mês segue o novo vencimento enquanto não estiver paga.
+rule-past-note = Os meses anteriores ficam como foram registrados; a linha deste mês segue o novo vencimento enquanto não estiver paga.
+# As duas seções do painel da regra que se dobram, e o que uma fechada diz conter.
+rule-sect-schedule = Datas
+rule-sect-files = Arquivos
+rule-sum-ongoing = em aberto
+rule-sum-due = vence
+rule-sum-expected = previsto
+rule-sum-tracked = comprovantes no disco
+rule-sum-untracked = sem arquivos
+rule-sum-bill = conta vinculada
+rule-bill-card = Conta
+rule-pdf-password-placeholder = só para extratos com senha
 rule-created = regra criada · { $n } mês(es) gerado(s)
 rule-saved = regra salva
 rule-moved-due = a linha deste mês agora vence em { $date }
@@ -514,6 +525,8 @@ trash-bill-elsewhere = "{ $title }" já está com a mesma conta, e uma conta só
 ## Importação de contas
 
 import-dropzone = Solte a conta aqui, ou escolha um arquivo
+import-choose-file = Escolher arquivo
+import-drop-replace = solte uma conta nova aqui para trocar esta
 import-client-code = Código do cliente
 import-unlink = Desvincular
 import-read = li { $what } da conta
@@ -586,7 +599,6 @@ import-meta-taught = lida por { $assistant } — mantida quando você criar a re
 import-meta-card = Cartão
 import-meta-card-value = final { $digits }
 import-meta-text-only = conta sem código de barras — lida do texto
-import-meta-title = Conta vinculada
 import-meta-hint = a que esta regra está vinculada — uma conta de qualquer outra coisa é perguntada antes
 import-meta-issuer = Emissor
 import-meta-kind = Código de barras

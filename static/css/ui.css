@@ -645,16 +645,27 @@ legend {
 /* --- the seasonal months read-back --------------------------------------
  *
  * Server-rendered on every keystroke, so it cannot disagree with the parser
- * that stores the value. Shares the notebox's frame: it is a computed
- * restatement of a field, exactly like the receipt path and the income
- * estimate above it.
+ * that stores the value. One line under the field and no frame: it restates
+ * the field, and a tinted box here was the third of three in the rule pane.
  */
-.monthsbox .mrow {
+.monthsbox {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 7px;
+}
+
+.monthsbox .mmarks {
+  display: flex;
+  gap: 3px;
   font-family: var(--mono);
   font-size: 11px;
-  margin-bottom: 3px;
+}
+
+.monthsbox .p2 {
+  font-size: 11.5px;
+  color: var(--ink-3);
 }
 
 .monthsbox .mmark {

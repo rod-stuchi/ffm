@@ -4,9 +4,12 @@
     preview built in the browser would be a second implementation of the
     parser, free to disagree with the one that actually stores the value —
     and this one decides which months a bill exists in at all. Same argument
-    the theme picker's server-rendered <style> block already makes. -#}
-<div class="notebox monthsbox{% if bad %} is-bad{% endif %}" id="monthsback">
-  <div class="mrow">
+    the theme picker's server-rendered <style> block already makes.
+
+    One line under the field — the twelve marks, then what they mean — and no
+    box: it restates the field, so it reads as part of it. -#}
+<div class="monthsbox{% if bad %} is-bad{% endif %}" id="monthsback">
+  <div class="mmarks">
     {%- for m in marks %}
     <span class="mmark{% if m.1 %} is-on{% endif %}">{{ m.0 }}</span>
     {%- endfor %}

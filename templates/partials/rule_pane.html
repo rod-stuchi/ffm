@@ -52,7 +52,7 @@
             format instead. -#}
         <input class="i amt-in" name="amount" value="{{ amount }}" inputmode="numeric"
                autocomplete="off" data-cents="{{ amount_cents }}"
-               x-init="ffmMoney($el)"
+               x-init="ffmMoney($el)" @input="amountTouched = true"
                {% if errors.none() %}autofocus{% endif %}>
       </label>
       <label class="f{% if errors.has("title") %} is-bad{% endif %}">
@@ -90,211 +90,243 @@
       </label>
     </div>
 
-    <div class="fgrid">
-      <label class="f{% if errors.has("start") %} is-bad{% endif %}">
-        <span class="k">{{ t.rule_start() }}</span>
-        <input class="i" type="date" name="start" value="{{ start }}" x-model="start"
-               {% if errors.focus("start") %}autofocus{% endif %}>
-        {%- if let Some(m) = errors.get("start") %}<span class="ferr">{{ m }}</span>{% endif %}
-      </label>
-      <label class="f">
-        <span class="k">{% if income %}{{ t.rule_expected_day() }}{% else %}{{ t.rule_due_day() }}{% endif %}</span>
-        <input class="i" name="due_day" value="{{ due_day }}" inputmode="numeric" maxlength="2"
-               @beforeinput="digitsOnly($event)">
-      </label>
-    </div>
-
-    {#- End date and installments stay in sync: typing one recomputes the
-        other. End date alone is the correct way to give an ordinary
-        open-ended bill a stopping point without implying it was ever a
-        fixed-length loan. -#}
-    <div class="fgrid">
-      <label class="f">
-        <span class="k">{{ t.rule_end() }}</span>
-        <input class="i" type="date" name="end" value="{{ end }}" x-model="end" @input="syncFromEnd()">
-      </label>
-      <label class="f">
-        <span class="k">{% if income %}{{ t.rule_payments() }}{% else %}{{ t.rule_installments() }}{% endif %}</span>
-        <input class="i" name="installments" value="{{ installments }}" inputmode="numeric"
-               x-model="installments" @input="syncFromCount()" @beforeinput="digitsOnly($event)">
-      </label>
-    </div>
-
-    <div class="rp-toggles">
-      {#- On/off settings are switches, not tick boxes: they read as states
-          rather than actions, and say so in less space. -#}
+    {#- The switches about the amount and the row itself, two to a line: their
+        labels are short, and a column of nine switches is what made this pane
+        a scroll. On/off settings are switches, not tick boxes: they read as
+        states rather than actions. -#}
+    <div class="tog-grid">
       <label class="tog">
         <input type="checkbox" name="carry_forward"{% if carry_forward %} checked{% endif %}>
         <span>{{ t.rule_carry_forward() }}</span>
       </label>
-
-      {#- Seasonal months. An expression, not twelve toggles: toggles are a
-          mouse gesture in a keyboard-first app, and `1-10` is one thing to
-          type. The read-back underneath is rendered BY THE SERVER on every
-          keystroke — see partials/months_readback.html for why it is not
-          computed here. -#}
       <label class="tog">
-        <input type="checkbox" name="seasonal"{% if seasonal %} checked{% endif %} x-model="seasonal">
-        <span>{{ t.months_seasonal() }}<span class="d">{{ t.months_seasonal_hint() }}</span></span>
+        <input type="checkbox" name="private"{% if private %} checked{% endif %}>
+        <span>{{ t.rule_private() }}</span>
       </label>
-      <div class="f{% if errors.has("months") %} is-bad{% endif %}" x-show="seasonal" x-cloak>
-        <span class="k">{{ t.months_label() }}</span>
-        <input class="i mono" name="months" value="{{ months }}"
-               placeholder="{{ t.months_placeholder() }}" autocomplete="off"
-               {% if errors.focus("months") %}autofocus{% endif %}
-               hx-get="/rules/months" hx-target="#monthsback" hx-swap="outerHTML"
-               hx-trigger="input changed delay:150ms" data-busy="none">
-        <span class="hint mono">{{ t.months_help() }}</span>
-        {%- if let Some(m) = errors.get("months") %}
-        <span class="ferr">{{ m }}</span>
-        {%- endif %}
-        {{ months_readback|safe }}
-      </div>
-
       {%- if income %}
       <label class="tog">
         <input type="checkbox" name="varies"{% if varies %} checked{% endif %} x-model="varies">
         <span>{{ t.rule_varies() }}</span>
       </label>
-      <div class="f" x-show="varies" x-cloak>
-        <span class="k">{{ t.rule_estimate_basis() }}</span>
-        <div class="radios">
-          <label><input type="radio" name="estimate_basis" value="lowest"{% if estimate_basis == "lowest" %} checked{% endif %} x-model="basis"> {{ t.rule_estimate_lowest() }}</label>
-          <label><input type="radio" name="estimate_basis" value="average"{% if estimate_basis == "average" %} checked{% endif %} x-model="basis"> {{ t.rule_estimate_average() }}</label>
-          <label><input type="radio" name="estimate_basis" value="last"{% if estimate_basis == "last" %} checked{% endif %} x-model="basis"> {{ t.rule_estimate_last() }}</label>
-        </div>
-        <span class="hint">{{ t.rule_estimate_window(*estimate_window) }}</span>
-        <input type="hidden" name="estimate_window" value="{{ estimate_window }}">
-
-        {#- Mirrors the computed-path box: the projected figure bright on the
-            first line, the months it came from dim on the second, both
-            recomputing live as the basis changes — before anything is saved. -#}
-        <div class="pathbox">
-          <span class="p1" x-text="estimate()"></span>
-          <span class="p2" x-text="estimateFrom()"></span>
-        </div>
-      </div>
       {%- endif %}
-
-      <label class="tog">
-        <input type="checkbox" name="tracked"{% if tracked %} checked{% endif %} x-model="tracked">
-        <span>{{ t.rule_tracked() }}</span>
-      </label>
-
-      {%- if !income %}
-      <label class="tog" x-show="tracked" x-cloak>
-        <input type="checkbox" name="no_barcode"{% if no_barcode %} checked{% endif %} x-model="noBarcode">
-        <span>{{ t.rule_no_barcode() }}</span>
-      </label>
-      {%- endif %}
-
-      {%- if !income %}
-      {#- One uploaded document covering several months: a city's IPTU (a
-          single payment and ten installments in one PDF), or a loan's carnê.
-          Each month takes the code due in it — read off the file when it is
-          attached, so there is nothing to type here: no page count, no first
-          month. Only the BILL is shared; scheduled and the receipt stay per
-          month, because each installment is still paid on its own. -#}
-      <label class="tog" x-show="tracked && !noBarcode" x-cloak>
-        <input type="checkbox" name="spans_period"{% if spans_period %} checked{% endif %} x-model="spans">
-        <span>{{ t.rule_spans_period() }}</span>
-      </label>
-      <p class="hint" x-show="tracked && !noBarcode && spans" x-cloak>
-        {%- if let Some(r) = spans_readback %}{{ r }}{% else %}{{ t.rule_spans_hint() }}{% endif -%}
-      </p>
-      {%- endif %}
-
-      <label class="tog" x-show="tracked" x-cloak>
-        <input type="checkbox" name="amount_in_filename"{% if amount_in_filename %} checked{% endif %}>
-        <span>{{ t.rule_amount_in_filename() }}</span>
-      </label>
-
-      <label class="tog">
-        <input type="checkbox" name="private"{% if private %} checked{% endif %}>
-        <span>{{ t.rule_private() }}</span>
-      </label>
     </div>
 
-    <div x-show="tracked" x-cloak>
-      <div class="fgrid">
-        <label class="f">
-          {#- The taxonomy field, and only a tracked rule has any use for it:
-              it names the folder, not the row. Left empty it falls back to the
-              title, because for most bills they are the same word. -#}
-          <span class="k">{% if income %}{{ t.rule_source() }}{% else %}{{ t.rule_bill_name() }}{% endif %}</span>
-          <input class="i" name="bill_name" value="{{ bill_name }}" autocomplete="off"
-                 :placeholder="title" x-model="billName">
-        </label>
-      <label class="f">
-        {#- Only a tracked rule has an instance: it exists to disambiguate two
-            properties in a receipt PATH, and that meaning does not generalize. -#}
-        <span class="k">{{ t.rule_instance() }}</span>
-        <input class="i" name="instance" value="{{ instance }}" autocomplete="off" x-model="instance">
-      </label>
+    {%- if income %}
+    <div class="f" x-show="varies" x-cloak>
+      <span class="k">{{ t.rule_estimate_basis() }}</span>
+      <div class="radios">
+        <label><input type="radio" name="estimate_basis" value="lowest"{% if estimate_basis == "lowest" %} checked{% endif %} x-model="basis"> {{ t.rule_estimate_lowest() }}</label>
+        <label><input type="radio" name="estimate_basis" value="average"{% if estimate_basis == "average" %} checked{% endif %} x-model="basis"> {{ t.rule_estimate_average() }}</label>
+        <label><input type="radio" name="estimate_basis" value="last"{% if estimate_basis == "last" %} checked{% endif %} x-model="basis"> {{ t.rule_estimate_last() }}</label>
       </div>
+      <span class="hint">{{ t.rule_estimate_window(*estimate_window) }}</span>
+      <input type="hidden" name="estimate_window" value="{{ estimate_window }}">
 
-      {#- What a locked PDF of this rule opens with — a bank statement, a
-          payslip. Every upload to the rule's rows is unlocked with it and the
-          vault keeps the unlocked copy; a file it does not open is refused.
-          Spend and income alike, so it sits outside the barcode block.
-
-          A text field masked by CSS, NOT type="password": a real password
-          field makes Safari and Chrome offer to save a login on every rule
-          save, and autofill the member's own ffm password into it. Both are
-          wrong for a bank file's password. The eye is visual state only. -#}
-      <label class="f">
-        <span class="k">{{ t.rule_pdf_password() }}</span>
-        <span class="pwfield">
-          <input class="i" name="pdf_password" value="{{ pdf_password }}" type="text"
-                 autocomplete="off" autocapitalize="off" spellcheck="false"
-                 data-1p-ignore data-lpignore="true" data-form-type="other"
-                 :class="{ 'is-masked': !showPw }">
-          <button type="button" class="pw-eye" @click.prevent="showPw = !showPw"
-                  :aria-pressed="showPw.toString()"
-                  :title='showPw ? {{ t.rule_pdf_password_hide()|json|safe }} : {{ t.rule_pdf_password_show()|json|safe }}'
-                  :aria-label='showPw ? {{ t.rule_pdf_password_hide()|json|safe }} : {{ t.rule_pdf_password_show()|json|safe }}'>
-            <span x-show="!showPw">{{ crate::ui::icons::svg("eye")|safe }}</span>
-            <span x-show="showPw" x-cloak>{{ crate::ui::icons::svg("eye_off")|safe }}</span>
-          </button>
-        </span>
-        <span class="hint">{{ t.rule_pdf_password_hint() }}</span>
-      </label>
-
-      {#- The real path as it stands, above a dim reminder of what makes it up.
-          It recomputes on every keystroke in Bucket, Bill name or Instance, so
-          renaming taxonomy shows where the files will move BEFORE saving. -#}
+      {#- Mirrors the computed-path box: the projected figure bright on the
+          first line, the months it came from dim on the second, both
+          recomputing live as the basis changes — before anything is saved. -#}
       <div class="pathbox">
-        <span class="p1" x-text="path()"></span>
-        <span class="p2">{{ t.rule_path_legend() }}</span>
+        <span class="p1" x-text="estimate()"></span>
+        <span class="p2" x-text="estimateFrom()"></span>
       </div>
     </div>
-
-    {%- if !income %}
-    {#- The ONE place a barcode file is ever attached. The rule is already
-        identified here — or, in `A`, is about to be — so there is no matching
-        left to get wrong, which is why a panel drop was downgraded to a
-        notifier rather than kept as an upload path.
-
-        In `A` it is also where the rule gets BOUND: the account and company
-        the bill names are stored on the rule, and a later bill for anything
-        else is refused as the wrong row. The box above the dropzone shows
-        exactly what that binding is, before Create. -#}
-    <div x-show="tracked && !noBarcode" x-cloak class="dropwrap">
-      {{ meta|safe }}
-
-      {#- A dropzone, not a file input styled to look like one. -#}
-      <label class="dropzone" :class="{ 'is-over': over }"
-             @dragover.prevent="over = true" @dragleave="over = false"
-             @drop.prevent="over = false; send($event.dataTransfer.files[0])">
-        <span>{{ t.import_dropzone() }}</span>
-        <input type="file" class="hidden-input" accept=".pdf,.txt,.jpg,.png"
-               @change="send($el.files[0]); $el.value = ''">
-      </label>
-    </div>
     {%- endif %}
-    {%- if id.is_some() %}
-    <div class="notebox">{{ t.rule_past_note() }}</div>
-    {%- endif %}
+
+    {#- Two sections that fold, the way a ledger group does: what is not being
+        changed collapses to one line that still says what it holds. The body
+        is `x-show`, never `x-if` — a closed section's fields stay in the form,
+        so they are still sent, still parked in a draft and still restored.
+        Which section starts open is decided here; a field the server rejected
+        opens its section (`init`), and so does a restored draft that changed
+        one (`restoreRuleDraft`). -#}
+    <section class="rp-sect" data-sect="schedule">
+      <button type="button" class="rp-sect-head" @click="open.schedule = !open.schedule"
+              :aria-expanded="open.schedule.toString()">
+        <span class="chev">{{ crate::ui::icons::svg("chevron")|safe }}</span>
+        <span class="rp-sect-title">{{ t.rule_sect_schedule() }}</span>
+        <span class="rp-sect-sum" x-show="!open.schedule" x-text="scheduleSum()"></span>
+      </button>
+      <div class="rp-sect-body" x-show="open.schedule">
+        <div class="fgrid">
+          <label class="f{% if errors.has("start") %} is-bad{% endif %}">
+            <span class="k">{{ t.rule_start() }}</span>
+            <input class="i" type="date" name="start" value="{{ start }}" x-model="start"
+                   {% if errors.focus("start") %}autofocus{% endif %}>
+            {%- if let Some(m) = errors.get("start") %}<span class="ferr">{{ m }}</span>{% endif %}
+          </label>
+          <label class="f">
+            <span class="k">{% if income %}{{ t.rule_expected_day() }}{% else %}{{ t.rule_due_day() }}{% endif %}</span>
+            <input class="i" name="due_day" value="{{ due_day }}" inputmode="numeric" maxlength="2"
+                   x-model="dueDay" @beforeinput="digitsOnly($event)">
+          </label>
+        </div>
+        {%- if id.is_some() %}
+        {#- What a change here does to the rows already recorded — said when it
+            is true, not always: only once the due day or the amount moved. -#}
+        <p class="hint rp-past" x-show="dueDay !== dueDay0 || amountTouched" x-cloak>{{ t.rule_past_note() }}</p>
+        {%- endif %}
+
+        {#- End date and installments stay in sync: typing one recomputes the
+            other. End date alone is the correct way to give an ordinary
+            open-ended bill a stopping point without implying it was ever a
+            fixed-length loan. -#}
+        <div class="fgrid">
+          <label class="f">
+            <span class="k">{{ t.rule_end() }}</span>
+            <input class="i" type="date" name="end" value="{{ end }}" x-model="end" @input="syncFromEnd()">
+          </label>
+          <label class="f">
+            <span class="k">{% if income %}{{ t.rule_payments() }}{% else %}{{ t.rule_installments() }}{% endif %}</span>
+            <input class="i" name="installments" value="{{ installments }}" inputmode="numeric"
+                   x-model="installments" @input="syncFromCount()" @beforeinput="digitsOnly($event)">
+          </label>
+        </div>
+
+        {#- Seasonal months. An expression, not twelve toggles: toggles are a
+            mouse gesture in a keyboard-first app, and `1-10` is one thing to
+            type. The read-back underneath is rendered BY THE SERVER on every
+            keystroke — see partials/months_readback.html for why it is not
+            computed here. -#}
+        <label class="tog" title="{{ t.months_seasonal_hint() }}">
+          <input type="checkbox" name="seasonal"{% if seasonal %} checked{% endif %} x-model="seasonal">
+          <span>{{ t.months_seasonal() }}</span>
+        </label>
+        <div class="f{% if errors.has("months") %} is-bad{% endif %}" x-show="seasonal" x-cloak>
+          <span class="k">{{ t.months_label() }}</span>
+          <input class="i mono" name="months" value="{{ months }}"
+                 placeholder="{{ t.months_placeholder() }}" autocomplete="off"
+                 x-model="monthsExpr" @focus="monthsFocus = true" @blur="monthsFocus = false"
+                 {% if errors.focus("months") %}autofocus{% endif %}
+                 hx-get="/rules/months" hx-target="#monthsback" hx-swap="outerHTML"
+                 hx-trigger="input changed delay:150ms" data-busy="none">
+          <span class="hint mono" x-show="monthsFocus || !monthsExpr">{{ t.months_help() }}</span>
+          {%- if let Some(m) = errors.get("months") %}
+          <span class="ferr">{{ m }}</span>
+          {%- endif %}
+          {{ months_readback|safe }}
+        </div>
+      </div>
+    </section>
+
+    <section class="rp-sect" data-sect="files">
+      <button type="button" class="rp-sect-head" @click="open.files = !open.files"
+              :aria-expanded="open.files.toString()">
+        <span class="chev">{{ crate::ui::icons::svg("chevron")|safe }}</span>
+        <span class="rp-sect-title">{{ t.rule_sect_files() }}</span>
+        <span class="rp-sect-sum" x-show="!open.files" x-text="filesSum()"></span>
+      </button>
+      <div class="rp-sect-body" x-show="open.files">
+        <div class="tog-grid">
+          <label class="tog">
+            <input type="checkbox" name="tracked"{% if tracked %} checked{% endif %} x-model="tracked">
+            <span>{{ t.rule_tracked() }}</span>
+          </label>
+          <label class="tog" x-show="tracked" x-cloak>
+            <input type="checkbox" name="amount_in_filename"{% if amount_in_filename %} checked{% endif %}>
+            <span>{{ t.rule_amount_in_filename() }}</span>
+          </label>
+        </div>
+
+        <div class="rp-sect-body" x-show="tracked" x-cloak>
+          <div class="fgrid">
+            <label class="f">
+              {#- The taxonomy field, and only a tracked rule has any use for it:
+                  it names the folder, not the row. Left empty it falls back to the
+                  title, because for most bills they are the same word. -#}
+              <span class="k">{% if income %}{{ t.rule_source() }}{% else %}{{ t.rule_bill_name() }}{% endif %}</span>
+              <input class="i" name="bill_name" value="{{ bill_name }}" autocomplete="off"
+                     :placeholder="title" x-model="billName">
+            </label>
+            <label class="f">
+              {#- Only a tracked rule has an instance: it exists to disambiguate two
+                  properties in a receipt PATH, and that meaning does not generalize. -#}
+              <span class="k">{{ t.rule_instance() }}</span>
+              <input class="i" name="instance" value="{{ instance }}" autocomplete="off" x-model="instance">
+            </label>
+          </div>
+
+          {#- What a locked PDF of this rule opens with — a bank statement, a
+              payslip. Every upload to the rule's rows is unlocked with it and the
+              vault keeps the unlocked copy; a file it does not open is refused.
+              Spend and income alike, so it sits outside the Bill card.
+
+              A text field masked by CSS, NOT type="password": a real password
+              field makes Safari and Chrome offer to save a login on every rule
+              save, and autofill the member's own ffm password into it. Both are
+              wrong for a bank file's password. The eye is visual state only. -#}
+          <label class="f" title="{{ t.rule_pdf_password_hint() }}">
+            <span class="k">{{ t.rule_pdf_password() }}</span>
+            <span class="pwfield">
+              <input class="i" name="pdf_password" value="{{ pdf_password }}" type="text"
+                     placeholder="{{ t.rule_pdf_password_placeholder() }}"
+                     autocomplete="off" autocapitalize="off" spellcheck="false"
+                     data-1p-ignore data-lpignore="true" data-form-type="other"
+                     :class="{ 'is-masked': !showPw }">
+              <button type="button" class="pw-eye" @click.prevent="showPw = !showPw"
+                      :aria-pressed="showPw.toString()"
+                      :title='showPw ? {{ t.rule_pdf_password_hide()|json|safe }} : {{ t.rule_pdf_password_show()|json|safe }}'
+                      :aria-label='showPw ? {{ t.rule_pdf_password_hide()|json|safe }} : {{ t.rule_pdf_password_show()|json|safe }}'>
+                <span x-show="!showPw">{{ crate::ui::icons::svg("eye")|safe }}</span>
+                <span x-show="showPw" x-cloak>{{ crate::ui::icons::svg("eye_off")|safe }}</span>
+              </button>
+            </span>
+          </label>
+
+          {#- The real path as it stands; what makes it up is in its title. It
+              recomputes on every keystroke in Bucket, Bill name or Instance, so
+              renaming taxonomy shows where the files will move BEFORE saving. -#}
+          <div class="pathbox" title="{{ t.rule_path_legend() }}">
+            <span class="p1" x-text="path()"></span>
+          </div>
+
+          {%- if !income %}
+          {#- The Bill card: the ONE place a barcode file is attached from this
+              pane, and the drop target itself — the whole card, not a strip
+              between two boxes. The rule is already identified here — or, in
+              `A`, is about to be — so there is no matching left to get wrong.
+
+              What the rule is bound to (`#barcodemeta`) is swapped in by the
+              server after a drop or an Unlink; the switches around it are this
+              pane's own markup, so a swap never takes unsaved switch state
+              with it. Empty and bound are told apart by CSS (`:has`). -#}
+          <div class="billcard" :class="{ 'is-over': over }" title="{{ t.import_meta_hint() }}"
+               @dragover.prevent="over = !noBarcode" @dragleave="over = false"
+               @drop.prevent="over = false; if (!noBarcode) send($event.dataTransfer.files[0])">
+            <div class="bc-head">
+              <b>{{ t.rule_bill_card() }}</b>
+              <label class="btn bc-choose" for="rp-billfile" x-show="!noBarcode">{{ t.import_choose_file() }}</label>
+              <input type="file" id="rp-billfile" class="hidden-input" accept=".pdf,.txt,.jpg,.png"
+                     @change="send($el.files[0]); $el.value = ''">
+            </div>
+            <div class="bc-body" x-show="!noBarcode">
+              {{ meta|safe }}
+              <label class="bc-empty" for="rp-billfile">{{ t.import_dropzone() }}</label>
+            </div>
+            {#- The two switches about the bill file itself, side by side under
+                what it is bound to. "Covers multiple months" is a city's IPTU
+                (a single payment and ten installments in one PDF) or a loan's
+                carnê: each month takes the code due in it, read off the file
+                when it is attached, so there is nothing to type. "No barcode
+                file" (a bill paid by PIX or transfer) leaves only itself. -#}
+            <div class="tog-grid">
+              <label class="tog" x-show="!noBarcode">
+                <input type="checkbox" name="spans_period"{% if spans_period %} checked{% endif %} x-model="spans">
+                <span>{{ t.rule_spans_period() }}</span>
+              </label>
+              <label class="tog">
+                <input type="checkbox" name="no_barcode"{% if no_barcode %} checked{% endif %} x-model="noBarcode">
+                <span>{{ t.rule_no_barcode() }}</span>
+              </label>
+            </div>
+            <p class="hint bc-spans" x-show="spans && !noBarcode" x-cloak>
+              {%- if let Some(r) = spans_readback %}{{ r }}{% else %}{{ t.rule_spans_hint() }}{% endif -%}
+            </p>
+            <label class="bc-drop" for="rp-billfile" x-show="!noBarcode">{{ t.import_drop_replace() }}</label>
+          </div>
+          {%- endif %}
+        </div>
+      </div>
+    </section>
 
     {#- Primary last, at the right; Delete apart at the far left, never beside
         the button Enter would press (see CLAUDE.md, Editing). -#}
@@ -343,6 +375,64 @@ function rulePane() {
     // beside the rows it belongs to.
     period: document.querySelector('.ledger-shell')?.dataset.period
             || {{ start|json|safe }}.slice(0, 7),
+
+    // Which sections are open — visual state, never part of a draft (a draft
+    // reads only `[name]`). A new rule opens both; `E` keeps Files closed
+    // unless the rule still needs something there: a tracked bill with no
+    // bill attached yet.
+    open: {
+      schedule: true,
+      files: {% if id.is_none() %}true{% else %}{{ tracked && !income && !no_barcode && meta.is_empty() }}{% endif %},
+    },
+    dueDay: {{ due_day|json|safe }},
+    dueDay0: {{ due_day|json|safe }},
+    amountTouched: false,
+    monthsExpr: {{ months|json|safe }},
+    monthsFocus: false,
+    // The words a closed section's summary is made of, from the catalog.
+    sumWords: {
+      ongoing: {{ t.rule_sum_ongoing()|json|safe }},
+      due: {% if income %}{{ t.rule_sum_expected()|json|safe }}{% else %}{{ t.rule_sum_due()|json|safe }}{% endif %},
+      tracked: {{ t.rule_sum_tracked()|json|safe }},
+      untracked: {{ t.rule_sum_untracked()|json|safe }},
+      bill: {{ t.rule_sum_bill()|json|safe }},
+    },
+
+    init() {
+      // A field the server rejected, or the one it wants focused, is never
+      // left inside a closed section. Set here, before the children's
+      // `x-show` first runs, so the section is open on the first frame.
+      this.$root.querySelectorAll('.is-bad, [autofocus]').forEach(el => {
+        const sect = el.closest('[data-sect]');
+        if (sect) this.open[sect.dataset.sect] = true;
+      });
+    },
+
+    /// A closed Schedule in one line: `01/01/2026 → ongoing · due 10 · 1-10`.
+    /// Dates are always dd/mm/yyyy, so this is slicing, not formatting; the
+    /// months are the expression as typed, because the month NAMES are the
+    /// server's read-back's to say.
+    scheduleSum() {
+      const dmy = (iso) => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
+      const parts = [];
+      if (this.start) parts.push(dmy(this.start) + ' → ' + (this.end ? dmy(this.end) : this.sumWords.ongoing));
+      if (this.dueDay) parts.push(this.sumWords.due + ' ' + this.dueDay);
+      if (this.seasonal && this.monthsExpr.trim()) parts.push(this.monthsExpr.trim());
+      return parts.join(' · ');
+    },
+
+    /// A closed Files in one line: tracked or not, whether a bill is on file,
+    /// and where this month's receipt goes. It reads `open.files`, so it is
+    /// recomputed as the section closes — which is when it shows, and when
+    /// the Bill card it looks into is current.
+    filesSum() {
+      if (this.open.files) return '';
+      if (!this.tracked) return this.sumWords.untracked;
+      const parts = [this.sumWords.tracked];
+      if (!this.noBarcode && this.$root.querySelector('.billcard .barcodemeta')) parts.push(this.sumWords.bill);
+      parts.push('…/' + this.path().split('/').slice(-3).join('/'));
+      return parts.join(' · ');
+    },
 
     slug(s) {
       // The same rule domain::slug applies: lowercase, runs of anything else

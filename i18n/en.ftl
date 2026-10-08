@@ -259,7 +259,18 @@ rule-create = Create
 rule-save = Save
 rule-delete = Delete rule
 rule-path-legend = bucket / bill name / instance / year / month.ext
-rule-past-note = Earlier months, and this month once it is paid, keep what they recorded. This month's row follows a new due day while it is unpaid.
+rule-past-note = Earlier months keep what they recorded; this month's row follows a new due day while it is unpaid.
+# The rule pane's two sections that fold, and what a closed one says it holds.
+rule-sect-schedule = Schedule
+rule-sect-files = Files
+rule-sum-ongoing = ongoing
+rule-sum-due = due
+rule-sum-expected = expected
+rule-sum-tracked = receipts on disk
+rule-sum-untracked = no files
+rule-sum-bill = bill on file
+rule-bill-card = Bill
+rule-pdf-password-placeholder = only for locked statements
 rule-created = rule created · { $n } period(s) materialized
 rule-saved = rule saved
 rule-moved-due = this month's row now due { $date }
@@ -551,6 +562,8 @@ trash-bill-elsewhere = "{ $title }" already holds the same bill, and a bill can 
 ## Bill import
 
 import-dropzone = Drop the bill here, or choose a file
+import-choose-file = Choose file
+import-drop-replace = drop a new bill here to replace this one
 import-client-code = Client code
 import-unlink = Unlink
 import-read = read { $what } from the bill
@@ -623,7 +636,6 @@ import-meta-taught = read by { $assistant } — kept when you create the rule
 import-meta-card = Card
 import-meta-card-value = ending { $digits }
 import-meta-text-only = no barcode on this bill — read from its text
-import-meta-title = Bill on file
 import-meta-hint = what this rule is bound to — a bill for anything else is asked about first
 import-meta-issuer = Issuer
 import-meta-kind = Barcode

@@ -64,6 +64,11 @@ pub fn svg(name: &str) -> &'static str {
         "eye_off" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.6 3.6M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>"#
         }
+        // A rule pane section's fold: pointing right while closed, turned
+        // down by CSS while open — the one icon, so the turn is animated.
+        "chevron" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>"#
+        }
         _ => r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>"#,
     }
 }
@@ -77,7 +82,7 @@ mod tests {
     /// A name added to `svg()` and not to here is untested; a name used in a
     /// template and not here is worse, because the fallback circle renders
     /// and nothing complains.
-    const NAMES: [&str; 12] = [
+    const NAMES: [&str; 13] = [
         "bill",
         "scheduled",
         "receipt",
@@ -90,6 +95,7 @@ mod tests {
         "globe",
         "eye",
         "eye_off",
+        "chevron",
     ];
 
     #[test]

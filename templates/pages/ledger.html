@@ -985,11 +985,16 @@ function ffmResetAmounts(form) {
    caller turns into "back to the ledger". */
 const FFM_DIRS = { h: 'left', j: 'down', k: 'up', l: 'right' };
 
-/* Not a file input: the dropzone's is visually hidden behind its label, so
+/* Not a file input: the Bill card's is visually hidden behind its label, so
    landing on it shows no focus at all, and its box is a 1px stand-in that
-   would skew every distance. Tab still reaches it. */
+   would skew every distance. Tab still reaches it.
+
+   A rule pane section's header IS a stop, though it is a button: with a
+   section closed it is the only thing of it on screen, and without it
+   Ctrl-j walked straight past Files to the next row. Enter or Space on it
+   opens the section. */
 function ffmFields(box) {
-  return [...box.querySelectorAll('input:not([type=hidden]):not([type=file]), select, textarea')]
+  return [...box.querySelectorAll('input:not([type=hidden]):not([type=file]), select, textarea, .rp-sect-head')]
     .filter(el => !el.disabled && el.offsetParent !== null);
 }
 
@@ -1680,6 +1685,16 @@ function ledger() {
         this.closeRule();
         return;
       }
+      // Every other key with focus on a BUTTON in the rule pane or the `e`
+      // row — a section's fold header, Save, Unlink, the password's eye — is
+      // the form's as well, by the same container rule. `typing` says no
+      // there, so `j` reached the ledger, moved the cursor off the row and
+      // closed the pane under the key. Not prevented: Enter and Space still
+      // press the button, and Tab still walks.
+      if (box && !box.closest('#hsplitmount') && !typing && e.key !== 'Escape'
+          && !e.ctrlKey && !e.metaKey) {
+        return;
+      }
       // `:` still opens the command bar, so a second search is one key away.
       if (listing && !e.ctrlKey && !e.metaKey && e.key !== ':') {
         if (e.key === 'Escape') {
@@ -2021,16 +2036,18 @@ function ledger() {
            });
     },
 
-    /// Ctrl-h/j/k/l past a form's edge. Up or down out of the `e` row, or out
-    /// of an `E` pane, moves the cursor to the row above or below — and a
-    /// cursor leaving the row is what parks the draft (`paint`), so the edit
-    /// is kept, marked on its row, and `e`/`E` picks it back up. Left out of
-    /// the rule pane is back to the ledger with the pane still open, until
-    /// the cursor moves. Up out of a settings pane leaves the split.
+    /// Ctrl-h/j/k/l past a form's edge. Up or down out of the `e` row moves
+    /// the cursor to the row above or below — and a cursor leaving the row is
+    /// what parks the draft (`paint`), so the edit is kept, marked on its row,
+    /// and `e` picks it back up. The rule pane's top and bottom edges do
+    /// nothing: it is a column beside the ledger, so up and down stay inside
+    /// it — they used to move the cursor too, and Ctrl-k on Amount closed the
+    /// pane. Left out of it is back to the ledger with the pane still open,
+    /// until the cursor moves. Up out of a settings pane leaves the split.
     formEdge(box, dir) {
       const vertical = dir === 'up' || dir === 'down';
       const leave = () => document.activeElement?.blur();
-      if (vertical && (box.matches('form.editrow') || (box.matches('.rulepane') && this.ruleFor))) {
+      if (vertical && box.matches('form.editrow')) {
         const to = this.row + (dir === 'down' ? 1 : -1);
         // At the first or last row there is nowhere to go, and leaving the
         // form without moving would leave it open with focus nowhere.
@@ -2110,6 +2127,17 @@ function ledger() {
         el.value = v;
         el.dispatchEvent(new Event('input', { bubbles: true }));
       }));
+      // A field the draft changed is never left inside a closed section: the
+      // pane opens Files closed when the rule has its bill, and a parked
+      // rename there would otherwise come back out of sight.
+      const pane = Alpine.$data(form.closest('.rulepane'));
+      const start = form._ffmStart || {};
+      fields.forEach(el => {
+        const k = keyOf(el);
+        if (values[k] === undefined || values[k] === start[k]) return;
+        const sect = el.closest('[data-sect]');
+        if (sect && pane?.open) pane.open[sect.dataset.sect] = true;
+      });
       this.markDrafts();
     },
 

@@ -8,15 +8,25 @@
     anything is written. -#}
 <div id="barcodemeta">
   {%- if !is_empty() %}
-  <div class="notebox barcodemeta">
-    <b class="bm-title">{{ t.import_meta_title() }}</b>
-    <dl class="bm-list">
-      {%- if let Some(v) = issuer %}<dt>{{ t.import_meta_issuer() }}</dt><dd>{{ v }}</dd>{% endif %}
-      {%- if let Some(v) = kind %}<dt>{{ t.import_meta_kind() }}</dt><dd>{{ v }}</dd>{% endif %}
-      {%- if let Some(v) = company %}<dt>{{ t.import_meta_company() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
-      {%- if let Some(v) = client_code %}<dt>{{ t.import_client_code() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
-      {%- if let Some(v) = card %}<dt>{{ t.import_meta_card() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
-    </dl>
+  {#- Inside the rule pane's Bill card, which carries the title and the
+      sentence on what a binding does (its `title`). Neutral, not the accent
+      tint: the card is where a file is dropped, and the tint read as a
+      second box beside it. -#}
+  <div class="barcodemeta">
+    <div class="bm-top">
+      <dl class="bm-list">
+        {%- if let Some(v) = issuer %}<dt>{{ t.import_meta_issuer() }}</dt><dd>{{ v }}</dd>{% endif %}
+        {%- if let Some(v) = kind %}<dt>{{ t.import_meta_kind() }}</dt><dd>{{ v }}</dd>{% endif %}
+        {%- if let Some(v) = company %}<dt>{{ t.import_meta_company() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
+        {%- if let Some(v) = client_code %}<dt>{{ t.import_client_code() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
+        {%- if let Some(v) = card %}<dt>{{ t.import_meta_card() }}</dt><dd class="mono">{{ v }}</dd>{% endif %}
+      </dl>
+      {%- if let Some(rid) = rule_id %}
+      <button class="btn bm-unlink" type="button"
+              hx-post="/rules/{{ rid }}/unlink"
+              hx-target="#barcodemeta" hx-swap="outerHTML">{{ t.import_unlink() }}</button>
+      {%- endif %}
+    </div>
     {%- if text_only %}
     <span class="p2">{{ t.import_meta_text_only() }}</span>
     {%- endif %}
@@ -37,13 +47,6 @@
     {#- Create carries this like any other field; the parked file is attached
         to the rule it creates. -#}
     <input type="hidden" name="barcode_token" value="{{ tok }}">
-    {%- else %}
-    <span class="p2">{{ t.import_meta_hint() }}</span>
-    {%- endif %}
-    {%- if let Some(rid) = rule_id %}
-    <button class="btn bm-unlink" type="button"
-            hx-post="/rules/{{ rid }}/unlink"
-            hx-target="#barcodemeta" hx-swap="outerHTML">{{ t.import_unlink() }}</button>
     {%- endif %}
   </div>
   {%- endif %}

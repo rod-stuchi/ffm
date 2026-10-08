@@ -268,6 +268,11 @@ card in plain CSS.
 - **Why:** the rule form outgrew a dialog, and a dialog hides the ledger
   you're editing — the same argument that made `:household` a vsplit instead
   of a modal (see `design/spec.md`'s Configuration section).
+- **The rule pane folds** — an always-open top block, then **Schedule** and
+  **Files**, each one line of summary while closed — and the bill is **one
+  card that is itself the drop target**, neutral rather than accent-tinted.
+  It had grown to a ~1500px column with a dropzone wedged between two tinted
+  boxes. See `design/spec.md`'s Edit fields.
 - **Drafts outlive focus.** Leaving a row mid-edit collapses it back to
   read-only; unchanged drafts vanish, changed ones stay marked on the row
   (dashed border, `unsaved` tag, a statusline count) until saved or
