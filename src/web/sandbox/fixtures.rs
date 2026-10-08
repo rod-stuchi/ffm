@@ -67,6 +67,7 @@ pub fn base(ctx: RowCtx) -> LedgerRow {
         cadence_months: None,
         rule_deleted_on: None,
         member_slug: "rodrigo".into(),
+        manual: 0,
         prev_amount_cents: None,
         estimate_cents: None,
         installments_paid: None,

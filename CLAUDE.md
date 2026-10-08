@@ -1252,8 +1252,11 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   A–Z ignoring accents, and by cost, biggest spend first. A per-member
   setting (`member_settings.group_order`), like sort, and written by `S`, a
   statusline cell and a `:profile` radio alike. `s` beside it orders the
-  rows, inside the groups as much as in a flat pane. See `design/spec.md`'s
-  Categorization & grouping.
+  rows, inside the groups as much as in a flat pane — **and never the groups
+  themselves**: first seen is where a bucket's earliest row sits in the
+  *manual* order (`LedgerRow::manual`), not in whatever `s` sorts by. It was
+  the current sort's order, so `name` moved Moradia above Cartão. See
+  `design/spec.md`'s Categorization & grouping.
 - **A group header always shows its subtotal, open or closed.** This is why
   there is no separate `:budget`/report screen: `zM` (fold everything) on the
   real ledger already reads as a per-category summary. Browsing and

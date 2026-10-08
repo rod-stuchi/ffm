@@ -251,6 +251,7 @@ pub async fn pane_with_vault(
             t.bucket             AS "bucket: String",
             t.bill_name          AS "bill_name: String",
             t.manual_paid        AS "manual_paid!: i64",
+            t.sort_key           AS "sort_key!: String",
 
             r.tracked            AS "tracked?: i64",
             r.bucket             AS "rule_bucket?: String",
@@ -330,6 +331,22 @@ pub async fn pane_with_vault(
     // titles are equal once case and accents are set aside keep the manual
     // order the query read them in. Before the rows are numbered, so the
     // gutter counts what is on screen.
+    // Where each row sits in the MANUAL order, read before anything re-sorts
+    // them. Under "first seen" a fold is placed by its earliest row here, so
+    // `s` re-sorts the rows inside the folds and never moves a fold — which
+    // first seen in the CURRENT sort did, every time a sort put another
+    // bucket's row first.
+    let manual_of: std::collections::HashMap<i64, usize> = {
+        let mut keyed: Vec<(&str, i64)> =
+            rows.iter().map(|r| (r.sort_key.as_str(), r.id)).collect();
+        keyed.sort_unstable();
+        keyed
+            .into_iter()
+            .enumerate()
+            .map(|(at, (_, id))| (id, at))
+            .collect()
+    };
+
     let mut rows = rows;
     if ctx.sort == Sort::Name {
         rows.sort_by_cached_key(|r| crate::domain::collate::name_key(&r.title));
@@ -391,6 +408,7 @@ pub async fn pane_with_vault(
 
             member_slug: member.slug.clone(),
 
+            manual: manual_of.get(&r.id).copied().unwrap_or(0),
             prev_amount_cents: r.prev_amount_cents.map(Cents),
             // Computed below, once the row exists to be asked about. Derived
             // on read and never stored, so it follows new history instead of

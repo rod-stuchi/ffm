@@ -395,6 +395,82 @@ async fn grouping_subtotals_are_the_report() {
 }
 
 #[tokio::test]
+async fn s_orders_the_rows_inside_the_folds_and_never_moves_a_fold() {
+    // First seen is the MANUAL order: Casa, Comida, Contas. A–Z puts Água
+    // (Contas) first, the amount puts Mercado (Comida) first and the date
+    // Aluguel (Casa) — each sort a different bucket first, and none of them
+    // may move a fold.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    add(
+        &pool,
+        me,
+        "Zelador",
+        100,
+        Some("Casa"),
+        Some(d(2026, 9, 20)),
+    )
+    .await;
+    add(
+        &pool,
+        me,
+        "Mercado",
+        50000,
+        Some("Comida"),
+        Some(d(2026, 9, 25)),
+    )
+    .await;
+    add(&pool, me, "Água", 1000, Some("Contas"), Some(d(2026, 9, 2))).await;
+    add(
+        &pool,
+        me,
+        "Aluguel",
+        200000,
+        Some("Casa"),
+        Some(d(2026, 9, 1)),
+    )
+    .await;
+
+    let member = ledger::members(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|m| m.id == me)
+        .unwrap();
+    let t = Catalog::new(Lang::En);
+    for sort in Sort::ALL {
+        let pane = ledger::pane(
+            &pool,
+            &member,
+            Period::parse("2026-09").unwrap(),
+            ctx(sort),
+            Viewer::new(me, true),
+        )
+        .await
+        .unwrap();
+        let groups = ffm::web::ledger::group_rows(
+            me,
+            &pane.rows,
+            &t,
+            Currency::Brl,
+            ffm::web::ledger::GroupOrder::Appearance,
+        );
+        assert_eq!(
+            groups.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(),
+            ["Casa", "Comida", "Contas"],
+            "{sort:?}"
+        );
+        // …while the rows inside a fold follow the sort.
+        let casa: Vec<&str> = groups[0].rows.iter().map(|r| r.title.as_str()).collect();
+        let want = match sort {
+            Sort::Manual => ["Zelador", "Aluguel"],
+            _ => ["Aluguel", "Zelador"],
+        };
+        assert_eq!(casa, want, "{sort:?}");
+    }
+}
+
+#[tokio::test]
 async fn grep_reaches_every_month_and_respects_privacy() {
     let pool = pool().await;
     let me = household(&pool).await;

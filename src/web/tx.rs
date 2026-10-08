@@ -482,6 +482,7 @@ async fn deleted_row(
             .as_deref()
             .and_then(crate::db::ledger::local_day),
         member_slug: row.slug,
+        manual: 0,
         prev_amount_cents: None,
         estimate_cents: None,
         installments_paid: None,

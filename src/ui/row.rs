@@ -314,6 +314,11 @@ pub struct LedgerRow {
     pub member_slug: String,
 
     // --- computed by the QUERY, not by this struct ------------------------
+    /// Where the row sits in its pane's MANUAL order (`sort_key`), whatever
+    /// order the pane is read in. A fold's place under "first seen" comes
+    /// from this, so `s` re-sorts the rows inside the folds and never moves
+    /// a fold.
+    pub manual: usize,
     /// The same line in the previous period. The delta's only input.
     pub prev_amount_cents: Option<Cents>,
     /// A projection from the last N confirmed periods. Computed on read so it
@@ -1263,6 +1268,7 @@ mod tests {
             amount_in_filename: false,
             varies: false,
             member_slug: "rodrigo".into(),
+            manual: 0,
             prev_amount_cents: None,
             estimate_cents: None,
             installments_paid: None,

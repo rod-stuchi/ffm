@@ -1232,8 +1232,11 @@ pub(crate) fn year_summary(
 /// everything.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GroupOrder {
-    /// First seen in the pane's own sort — the default, and what grouping
-    /// always did, so nothing moves for a member who never asks.
+    /// First seen in the MANUAL order — where each bucket's earliest row
+    /// sits in the order the household put the rows in, whatever `s` sorts
+    /// the rows inside the folds by. The default: grouping always read like
+    /// the manual order. It was first seen in the pane's *current* sort until
+    /// that turned out to let `s` reshuffle the folds.
     Appearance,
     /// A–Z by bucket, ignoring case and accents: "Água" files among the A's.
     Name,
@@ -1304,11 +1307,20 @@ struct Cluster {
     key: String,
     counts: TallyCounts,
     rows: Vec<usize>,
+    /// The earliest of its rows in the pane's manual order
+    /// (`LedgerRow::manual`) — where "first seen" puts the fold.
+    first: usize,
 }
 
 /// Clusters a pane's rows by `bucket`, then orders the groups by the member's
 /// `group_order` — first seen by default, so a grouped pane still reads in
 /// something like the order the household put it in.
+///
+/// **`s` orders the rows, `S` the folds.** The rows inside a fold keep the
+/// pane's sort; the folds are first put where their earliest row sits in the
+/// MANUAL order, whatever the sort, and `S`'s A–Z and by-cost orders then
+/// sort stably over that. Walking the rows in the pane's sort to decide the
+/// folds' order let `name` (or `amount`, or `date`) move a whole fold.
 ///
 /// Nesting stops at `bucket`: one level is enough for a household-sized
 /// ledger, and a `bill_name` sub-fold would be a second gesture to learn for
@@ -1337,6 +1349,7 @@ fn clusters(
                     key: fold_key(bucket),
                     counts: TallyCounts::default(),
                     rows: Vec::new(),
+                    first: row.manual,
                 },
             ));
             seen.len() - 1
@@ -1355,8 +1368,13 @@ fn clusters(
             cluster.counts.add(tally);
         }
         cluster.rows.push(i);
+        cluster.first = cluster.first.min(row.manual);
     }
 
+    // First seen in the manual order, not in whatever order the rows were
+    // just read in. Stable: rows that all report 0 (a fixture, a single row)
+    // keep the order they were given.
+    seen.sort_by_key(|g| g.2.first);
     order_groups(seen, group_order, t.group_uncategorized())
 }
 
@@ -1510,6 +1528,52 @@ mod tests {
 
     fn names(groups: Vec<(String, Cents, ())>) -> Vec<String> {
         groups.into_iter().map(|g| g.0).collect()
+    }
+
+    /// Rows read in name order, whose MANUAL order puts Cartão first — the
+    /// October that showed the bug: `s` = name moved Moradia above Cartão.
+    fn read_by_name() -> Vec<crate::ui::row::LedgerRow> {
+        let base = crate::web::sandbox::fixtures::base(RowCtx {
+            sort: crate::db::ledger::Sort::Name,
+            today: crate::web::sandbox::fixtures::default_today(),
+            currency: Currency::Brl,
+            show_recurring: true,
+            show_delta: true,
+            narrow: false,
+            line_numbers: LineNumbers::Relative,
+        });
+        [
+            ("Buona Vita", "Moradia", 3),
+            ("Damha III", "Moradia", 2),
+            ("Inter", "Cartão", 1),
+            ("Nubank", "Cartão", 0),
+            ("Vivo", "Consumo", 4),
+        ]
+        .into_iter()
+        .map(|(title, bucket, manual)| crate::ui::row::LedgerRow {
+            title: title.into(),
+            bucket: Some(bucket.into()),
+            manual,
+            ..base.clone()
+        })
+        .collect()
+    }
+
+    #[test]
+    fn first_seen_is_the_manual_order_whatever_the_rows_are_sorted_by() {
+        let t = Catalog::new(Lang::En);
+        let groups = clusters(&read_by_name(), &t, GroupOrder::Appearance);
+        let names: Vec<&str> = groups.iter().map(|g| g.0.as_str()).collect();
+        assert_eq!(names, ["Cartão", "Moradia", "Consumo"]);
+        // Inside each fold the rows keep the sort they were read in — `s`
+        // still orders them.
+        let cartao: Vec<usize> = groups[0].2.rows.clone();
+        assert_eq!(cartao, [2, 3], "Inter before Nubank, as read by name");
+
+        // `S`'s own orders are untouched by it.
+        let by_name = clusters(&read_by_name(), &t, GroupOrder::Name);
+        let names: Vec<&str> = by_name.iter().map(|g| g.0.as_str()).collect();
+        assert_eq!(names, ["Cartão", "Consumo", "Moradia"]);
     }
 
     #[test]

@@ -2869,7 +2869,7 @@ Three orders, cycled with `S`, per member (`member_settings.group_order`):
 
 | order | groups by |
 |---|---|
-| **First seen** (default) | where each bucket's first row sits in the pane's own sort — what grouping always did |
+| **First seen** (default) | where each bucket's earliest row sits in the **manual** order — the order the household put the rows in, whatever `s` sorts the rows inside by |
 | **A–Z** | bucket name, ignoring case and accents, so *Água* and *Dívidas* file where a Brazilian household expects |
 | **By cost** | the subtotal, biggest spend first; a group that nets to income comes after every cost |
 
@@ -2878,6 +2878,13 @@ Three orders, cycled with `S`, per member (`member_settings.group_order`):
   First seen alone used to put it first whenever an unfiled row led the
   pane — one income at the top pulled it above everything.
 - **A tie keeps first-seen order** — every sort is stable.
+- **`s` never moves a fold.** It orders the rows inside the folds; the folds
+  are `S`'s. First seen used to be read in the pane's *current* sort, so
+  switching to `name` put Moradia (Buona Vita) above Cartão (Inter) — and
+  `amount` or `date` could do the same whenever they put another bucket's
+  row first. Each row now carries its place in the manual order
+  (`LedgerRow::manual`, from `sort_key`), and a fold is placed by its
+  earliest.
 - **Three gestures, one row:** `S`, the statusline cell beside sort, and the
   *Groups ordered* radio in `:profile`. The order is decided when the server
   renders the pane, so writing it refreshes the page, like sort.
