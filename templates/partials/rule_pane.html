@@ -222,7 +222,7 @@
             <span>{{ t.rule_tracked() }}</span>
           </label>
           <label class="tog" x-show="tracked" x-cloak>
-            <input type="checkbox" name="amount_in_filename"{% if amount_in_filename %} checked{% endif %}>
+            <input type="checkbox" name="amount_in_filename"{% if amount_in_filename %} checked{% endif %} x-model="amountInName">
             <span>{{ t.rule_amount_in_filename() }}</span>
           </label>
         </div>
@@ -362,6 +362,11 @@ function rulePane() {
     end: {{ end|json|safe }},
     installments: {{ installments|json|safe }},
     vault: {{ vault|json|safe }},
+    amountInName: {{ amount_in_filename }},
+    // This month's row's amount as a filename shows it (`brl121.62`), from the
+    // server's own `fmt::money_filename` — never formatted here. null when the
+    // row has no amount yet, which is when the name on disk has none either.
+    fileAmount: {{ file_amount|json|safe }},
     missingBucket: {{ missing_bucket|json|safe }},
     // [basis, formatted money, the months it came from] — one ready-made
     // projection per basis, computed and formatted by the SERVER. The pane
@@ -454,7 +459,10 @@ function rulePane() {
       if (this.instance.trim()) parts.push(this.slug(this.instance));
       const [y, m] = this.period.split('-');
       parts.push(y);
-      return parts.join('/') + '/' + m + '.pdf';
+      // *Amount in filename*: `10.pdf` becomes `10_brl121.62.pdf` — the
+      // receipt's name, which is the file this preview shows.
+      const amount = this.amountInName && this.fileAmount ? '_' + this.fileAmount : '';
+      return parts.join('/') + '/' + m + amount + '.pdf';
     },
 
     estimate() {

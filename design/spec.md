@@ -1201,7 +1201,13 @@ editing. So:
   Instance, so renaming taxonomy shows where the files will move before the
   rule is saved. It includes the **bucket** segment, matching the storage
   layout above, under the member's `{slug}` folder. A tracked rule with no
-  bucket shows the missing segment by name rather than as `//`.
+  bucket shows the missing segment by name rather than as `//`. **With
+  *Amount in filename* on it shows the suffix too** — `10_brl550.00.pdf` —
+  for the row of the month on screen, formatted by the server with the
+  `fmt::money_filename` the upload uses (`E` sends that month), and following
+  the switch as it flips. No row that month, or no amount on it yet, and the
+  preview has no suffix, exactly as the name on disk has none. `A` has no row
+  yet, so it shows none.
 - **"Amount in filename" appends it to the month** —
   `{month}_{currency}{amount}.{ext}`, so `09.pdf` becomes
   `09_brl122.94.pdf`. Off by default, per tracked rule.

@@ -88,6 +88,12 @@ pub struct RulePane {
     estimate_basis: String,
     estimate_window: i64,
     amount_in_filename: bool,
+    /// What *Amount in filename* adds to this month's receipt name — `brl121.62`
+    /// — for the path preview, from the row of the month on screen and by the
+    /// same `fmt::money_filename` the upload names the file with. `None` when
+    /// there is no such row, or it has no amount yet: then the name has no
+    /// suffix on disk either.
+    file_amount: Option<String>,
     /// `true` when the rule skips some months. Separate from the expression
     /// so the field can be revealed without inventing a value for it: a
     /// seasonal switch that is off means `months = NULL`, which is a
@@ -289,6 +295,8 @@ pub async fn new_rule(
         estimate_basis: "lowest".into(),
         estimate_window: 3,
         amount_in_filename: false,
+        // A new rule has no row yet, so no amount of its own in a name.
+        file_amount: None,
         // A new rule runs every month until somebody says otherwise: seasonal
         // is the unusual shape, and `months = NULL` is how "no opinion" is
         // stored rather than a list of all twelve.
@@ -311,7 +319,20 @@ pub async fn new_rule(
 
 /// `E`. A no-op with a statusline message on a plain row — the same treatment
 /// `gd` gets there, rather than a different error path to learn.
-pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) -> Response {
+/// `E`'s query: the month the ledger is showing, so the path preview names
+/// the file of that month's row.
+#[derive(Deserialize)]
+pub struct EditParams {
+    #[serde(default)]
+    period: String,
+}
+
+pub async fn edit_rule(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path(id): Path<i64>,
+    Query(p): Query<EditParams>,
+) -> Response {
     let t = auth.catalog();
     let Ok(Some(r)) = rules::get(&st.pool, id).await else {
         // A stale page can still carry the id of a rule deleted since: say
@@ -382,6 +403,7 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         estimate_basis: r.estimate_basis.clone(),
         estimate_window: r.estimate_window,
         amount_in_filename: r.amount_in_filename,
+        file_amount: file_amount(&st, r.id, &p.period).await,
         seasonal: r.months.is_some(),
         months: r
             .months
@@ -402,6 +424,33 @@ pub async fn edit_rule(State(st): State<AppState>, auth: Auth, Path(id): Path<i6
         t,
     })
     .into_response()
+}
+
+/// The amount suffix this month's receipt name carries with *Amount in
+/// filename* on — `brl121.62` — from the rule's row in `period` (the month the
+/// ledger shows), formatted by the same `fmt::money_filename` the upload uses,
+/// so the preview cannot disagree with the disk. `None` with no such row or no
+/// amount on it, which is when the name has no suffix either.
+async fn file_amount(st: &AppState, rule_id: i64, period: &str) -> Option<String> {
+    let period = Period::parse(period)?.to_string();
+    let cents: i64 = sqlx::query_scalar!(
+        r#"SELECT amount_cents AS "amount_cents!: i64" FROM transactions
+           WHERE rule_id = ?1 AND period = ?2 AND deleted_at IS NULL
+             AND amount_cents IS NOT NULL"#,
+        rule_id,
+        period
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .ok()
+    .flatten()?;
+    let currency = crate::db::ledger::household(&st.pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|h| h.currency)
+        .unwrap_or_default();
+    Some(crate::ui::fmt::money_filename(Cents(cents), currency))
 }
 
 /// What a covering bill's file holds, in the words the attach used:
@@ -984,6 +1033,10 @@ async fn rejected(
         },
         estimate_window: input.estimate_window.unwrap_or(3),
         amount_in_filename: on(&input.amount_in_filename),
+        file_amount: match id {
+            Some(id) => file_amount(st, id, &input.period).await,
+            None => None,
+        },
         seasonal: on(&input.seasonal),
         months: input.months.clone(),
         months_readback,

@@ -2073,7 +2073,7 @@ function ledger() {
       this.closeLog();
       this.closeRule();
       this.ruleFor = { row: this.focusedId(), rule: ruleId };
-      this.ajax('GET', '/rules/' + ruleId + '/edit',
+      this.ajax('GET', '/rules/' + ruleId + '/edit?period=' + (this.shell().dataset.period || ''),
                 { target: this.mount(), swap: 'innerHTML' }, this.focusedRow())
            .then(() => {
              // The cursor left before the pane arrived: it opened for a row
