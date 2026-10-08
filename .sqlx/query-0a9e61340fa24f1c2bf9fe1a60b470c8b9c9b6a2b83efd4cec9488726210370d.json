@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT period AS \"period!: String\" FROM transactions\n           WHERE rule_id = ?1 AND member_id = ?2 AND period < ?3 AND deleted_at IS NULL\n           ORDER BY period DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "period!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0a9e61340fa24f1c2bf9fe1a60b470c8b9c9b6a2b83efd4cec9488726210370d"
+}

@@ -235,7 +235,14 @@ async fn every_action_the_api_can_spell_is_one_the_schema_accepts() {
             .await
             .unwrap_or_else(|e| panic!("{a:?}: {e}"));
     }
-    for a in [MemberAction::PasswordReset, MemberAction::SessionsRevoked] {
+    for a in [
+        MemberAction::PasswordReset,
+        MemberAction::SessionsRevoked,
+        MemberAction::Status,
+        MemberAction::Remove,
+        MemberAction::Restore,
+        MemberAction::OrderCopy,
+    ] {
         Change::member(Actor::User(1), a, 2)
             .write(&mut tx)
             .await
@@ -254,6 +261,36 @@ async fn every_action_the_api_can_spell_is_one_the_schema_accepts() {
         bad.is_err(),
         "password_reset on a transaction must be refused"
     );
+}
+
+#[tokio::test]
+async fn a_part_belongs_to_another_entry_and_is_always_a_row() {
+    // `:order`'s copy: one anchor on the pane, and the rows it moved as parts
+    // of it — which only a transaction entry can be.
+    let pool = seeded().await;
+    let mut tx = pool.begin().await.unwrap();
+    let anchor = Change::member(Actor::User(1), MemberAction::OrderCopy, 1)
+        .note(ffm::db::order::COPIED)
+        .write(&mut tx)
+        .await
+        .unwrap();
+    let action: String = sqlx::query_scalar("SELECT action FROM change WHERE id = ?")
+        .bind(anchor)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(action, "edit", "the schema has no verb of its own for it");
+
+    Change::transaction(Actor::User(1), TxAction::Reorder, 8)
+        .part_of(anchor)
+        .write(&mut tx)
+        .await
+        .unwrap();
+    let file = Change::file(Actor::User(1), FileAction::Upload, 1)
+        .part_of(anchor)
+        .write(&mut tx)
+        .await;
+    assert!(file.is_err(), "only a row can be part of a copy");
 }
 
 #[tokio::test]

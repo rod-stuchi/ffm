@@ -4,9 +4,11 @@
 //! can only be rendered — and it takes a `Currency` but never a `Lang`, which
 //! is the three-axis rule expressed as a function signature.
 
+pub mod collate;
 pub mod estimate;
 pub mod money;
 pub mod months;
+pub mod order;
 pub mod period;
 pub mod receipt_path;
 pub mod slug;

@@ -267,10 +267,20 @@ async fn insert_occurrence(pool: &SqlitePool, o: Occurrence<'_>) -> sqlx::Result
     let period_s = o.period.to_string();
     let mut tx = pool.begin().await?;
 
-    // Income lands at the top of its pane, a spend at the bottom — the same
-    // rule a hand-entered row follows, because a materialized row is an
+    // A month arrives in the order the last one was left in: the occurrence
+    // lands where its rule sat in its latest earlier month, among the rows
+    // already here. That is what lets `:order`, or a month arranged by hand,
+    // carry forward without anybody arranging it again.
+    let inherited =
+        crate::db::order::inherited_key(&mut tx, o.member_id, o.rule_id, o.period).await?;
+
+    // With nothing to go by — a rule's first month, or no neighbor of it here
+    // yet — income lands at the top of its pane and a spend at the bottom:
+    // the rule a hand-entered row follows, because a materialized row is an
     // ordinary transaction that happens to have a rule behind it.
-    let neighbor: Option<String> = if o.kind == "in" {
+    let neighbor: Option<String> = if inherited.is_some() {
+        None
+    } else if o.kind == "in" {
         sqlx::query_scalar!(
             r#"SELECT min(sort_key) AS "k: String" FROM transactions
                WHERE member_id = ?1 AND period = ?2 AND deleted_at IS NULL"#,
@@ -289,10 +299,11 @@ async fn insert_occurrence(pool: &SqlitePool, o: Occurrence<'_>) -> sqlx::Result
         .fetch_one(&mut *tx)
         .await?
     };
-    let sort_key = match (o.kind == "in", neighbor.as_deref()) {
-        (true, Some(first)) => sortkey::before(first),
-        (false, Some(last)) => sortkey::after(last),
-        (_, None) => sortkey::between(None, None),
+    let sort_key = match (inherited, o.kind == "in", neighbor.as_deref()) {
+        (Some(key), _, _) => key,
+        (None, true, Some(first)) => sortkey::before(first),
+        (None, false, Some(last)) => sortkey::after(last),
+        (None, _, None) => sortkey::between(None, None),
     };
 
     // The rule owns `due_day`; materializing stamps a real date from it,

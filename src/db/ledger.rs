@@ -165,32 +165,50 @@ pub async fn pane(
 /// How the rows are ordered.
 ///
 /// `Manual` is the default because this app replaces a spreadsheet where rows
-/// *were* arranged by hand. The other two are **derived views**: the moment
+/// *were* arranged by hand. The other three are **derived views**: the moment
 /// rows are read in an order the household did not put them in, `J`/`K` stop
 /// making sense and say so rather than pretending.
+///
+/// Declared in the order `s` cycles them — [`Sort::ALL`] is that order, and
+/// `settings::LEDGER_SORTS` spells it.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub enum Sort {
     #[default]
     Manual,
-    Date,
+    /// A–Z by title, ignoring case and accents; a tie keeps manual order.
+    Name,
+    /// Biggest first.
     Amount,
+    /// Paid on, or due on while unpaid.
+    Date,
 }
 
 impl Sort {
+    /// Every order, in the order `s` steps through them.
+    pub const ALL: [Sort; 4] = [Sort::Manual, Sort::Name, Sort::Amount, Sort::Date];
+
     pub fn code(self) -> &'static str {
         match self {
             Sort::Manual => "manual",
-            Sort::Date => "date",
+            Sort::Name => "name",
             Sort::Amount => "amount",
+            Sort::Date => "date",
         }
     }
 
     pub fn parse(s: &str) -> Sort {
         match s {
-            "date" => Sort::Date,
+            "name" => Sort::Name,
             "amount" => Sort::Amount,
+            "date" => Sort::Date,
             _ => Sort::Manual,
         }
+    }
+
+    /// The order `s` goes to from this one, round again after the last.
+    pub fn next(self) -> Sort {
+        let at = Sort::ALL.iter().position(|s| *s == self).unwrap_or(0);
+        Sort::ALL[(at + 1) % Sort::ALL.len()]
     }
 
     /// A derived view cannot be reordered by hand.
@@ -279,9 +297,11 @@ pub async fn pane_with_vault(
           AND t.period     = ?3
           AND t.deleted_at IS NULL
           AND (t.visibility = 'household' OR ?4)
-        -- Ordered three ways from one query rather than three, because the
+        -- Ordered from one query rather than one per order, because the
         -- SELECT above is the expensive part and duplicating it is how two of
-        -- them quietly stop agreeing about what a row is.
+        -- them quietly stop agreeing about what a row is. `name` reads
+        -- `sort_key` here and is sorted below, in Rust: SQLite's `lower()`
+        -- folds only ASCII, and "Água" belongs among the A's.
         ORDER BY
           CASE ?5
             -- An unpaid row has no paid-on date yet, so it sorts by the day
@@ -305,6 +325,15 @@ pub async fn pane_with_vault(
     )
     .fetch_all(pool)
     .await?;
+
+    // By title, A–Z the way the household reads it. Stable, so rows whose
+    // titles are equal once case and accents are set aside keep the manual
+    // order the query read them in. Before the rows are numbered, so the
+    // gutter counts what is on screen.
+    let mut rows = rows;
+    if ctx.sort == Sort::Name {
+        rows.sort_by_cached_key(|r| crate::domain::collate::name_key(&r.title));
+    }
 
     let mut out = Vec::with_capacity(rows.len());
     let mut ins = Cents::ZERO;

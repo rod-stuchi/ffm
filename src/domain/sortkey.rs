@@ -71,6 +71,26 @@ pub fn before(b: &str) -> String {
     midpoint("", Some(b))
 }
 
+/// `n` ascending keys strictly between `lo` and `hi` — for a run of rows that
+/// all land in one gap at once, as `:order` does.
+///
+/// By bisection, not by calling [`between`] `n` times against the last key
+/// made: that walks one end of the gap and grows the key about a character
+/// every five rows, where splitting the gap in halves grows it by the log of
+/// the run instead.
+pub fn spread(lo: Option<&str>, hi: Option<&str>, n: usize) -> Vec<String> {
+    if n == 0 {
+        return Vec::new();
+    }
+    let mid = between(lo, hi);
+    let left = (n - 1) / 2;
+    let mut keys = spread(lo, Some(&mid), left);
+    let right = spread(Some(&mid), hi, n - 1 - left);
+    keys.push(mid);
+    keys.extend(right);
+    keys
+}
+
 /// A key nothing here would ever produce: empty, or ending in the lowest
 /// character, which leaves no room above it inside its own prefix.
 pub fn valid(key: &str) -> bool {
@@ -221,6 +241,34 @@ mod tests {
             assert!(valid(&key), "{key}");
             key = before(&key);
         }
+    }
+
+    #[test]
+    fn a_spread_run_is_ascending_inside_its_gap_and_stays_short() {
+        for (lo, hi) in [
+            (None, None),
+            (Some("a"), Some("b")),
+            (Some("V"), None),
+            (None, Some("1")),
+        ] {
+            let keys = spread(lo, hi, 100);
+            assert_eq!(keys.len(), 100);
+            assert!(keys.windows(2).all(|w| w[0] < w[1]), "{keys:?}");
+            assert!(keys.iter().all(|k| valid(k)), "{keys:?}");
+            if let Some(lo) = lo {
+                assert!(keys[0].as_str() > lo, "{lo} < {}", keys[0]);
+            }
+            if let Some(hi) = hi {
+                assert!(keys[99].as_str() < hi, "{} < {hi}", keys[99]);
+            }
+            // Bisection grows a key by the log of the run, not by the run.
+            assert!(
+                keys.iter().all(|k| k.len() <= 6),
+                "{:?}",
+                keys.iter().map(String::len).max()
+            );
+        }
+        assert!(spread(Some("a"), Some("b"), 0).is_empty());
     }
 
     #[test]

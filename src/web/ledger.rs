@@ -401,6 +401,9 @@ struct LedgerPage {
     nu_label: &'static str,
     sort: &'static str,
     sort_label: String,
+    /// Where `s` and the sort cell go from here — `Sort::next`, so the cycle
+    /// is written down once, in Rust, rather than again in the page.
+    next_sort: &'static str,
     /// `S`'s group order, `None` while the pane is flat — the statusline cell
     /// is shown only when there are groups to order, and `S` refuses without.
     group_order: Option<&'static str>,
@@ -638,6 +641,9 @@ pub async fn ledger(
         sort_label: ledger::Sort::parse(&auth.settings.ledger_sort)
             .code()
             .to_string(),
+        next_sort: ledger::Sort::parse(&auth.settings.ledger_sort)
+            .next()
+            .code(),
         group_order: GroupOrder::of(&auth.settings).map(GroupOrder::code),
         group_order_label: GroupOrder::of(&auth.settings)
             .map(|g| g.label(&t))
@@ -747,7 +753,8 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("A / I", "create a recurring bill / income"),
                 k("e / E", "edit this row / its rule"),
                 k("J / K", "move the row down / up"),
-                k("s", "row order: manual · date · amount"),
+                k("s", "row order: manual · name · amount · date"),
+                k("gs", "copy this month's order to other months — :order"),
                 k(
                     "ga",
                     "give the row to another member — picked by name, admin only",
@@ -811,7 +818,10 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
             vec![
                 k("dd", "delete — opens a confirmation"),
                 k("y", "confirm in a modal"),
-                k("u / U", "undo · redo — your changes, this pane, this month"),
+                k(
+                    "u / U",
+                    "undo · redo — your changes, this pane, this month; asks first",
+                ),
                 k(
                     "Ctrl-u · :trash",
                     "the trash — bring back any deleted row or file",
@@ -1275,7 +1285,7 @@ fn order_groups<T>(
 ) -> Vec<(String, crate::domain::money::Cents, T)> {
     match order {
         GroupOrder::Appearance => {}
-        GroupOrder::Name => groups.sort_by_cached_key(|g| name_key(&g.0)),
+        GroupOrder::Name => groups.sort_by_cached_key(|g| crate::domain::collate::name_key(&g.0)),
         // Signed and ascending: a subtotal is spend minus income, negative
         // when the group costs money, so the most negative is the biggest
         // cost. A group that nets to income ranks after every cost.
@@ -1284,16 +1294,6 @@ fn order_groups<T>(
     // Stable, so moving the catch-all leaves the others exactly as ordered.
     groups.sort_by_key(|g| g.0 == uncategorized);
     groups
-}
-
-/// A–Z the way a Brazilian household reads it: "Água" among the A's rather
-/// than after "Z", which is where a byte comparison puts an accented letter.
-fn name_key(name: &str) -> String {
-    use unicode_normalization::UnicodeNormalization;
-    name.nfd()
-        .filter(|c| !unicode_normalization::char::is_combining_mark(*c))
-        .collect::<String>()
-        .to_lowercase()
 }
 
 /// One `bucket`'s rows before they are rendered: its key, its rows' states

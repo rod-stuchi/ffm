@@ -15,7 +15,7 @@ use crate::db::changes::Actor;
 use crate::db::ledger;
 use crate::db::rules::{self, RuleForm};
 use crate::domain::money::Cents;
-use crate::domain::months::{Months, MonthsError};
+use crate::domain::months::Months;
 use crate::domain::period::Period;
 use crate::domain::status::{TxKind, Visibility};
 use crate::services::materializer;
@@ -24,6 +24,7 @@ use crate::ui::i18n::Catalog;
 use crate::web::form::FieldErrors;
 use crate::web::import::BarcodeMeta;
 use crate::web::ledger::{HouseTotals, PaneTotals};
+use crate::web::months::{INITIALS, month_names, months_error};
 use crate::web::session::Auth;
 use crate::web::template::Html;
 use askama::Template;
@@ -155,8 +156,6 @@ pub struct MonthsReadback {
     bad: bool,
 }
 
-const INITIALS: [&str; 12] = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
-
 impl MonthsReadback {
     /// What an unparsed or empty expression reads as: every month, nothing
     /// skipped. Not an error — a rule that runs every month is the ordinary
@@ -200,26 +199,6 @@ impl MonthsReadback {
                 bad: true,
             },
         }
-    }
-}
-
-/// The month names, from the catalog — the one place in this feature where
-/// language reaches the output at all. The expression itself is digits, and
-/// stays digits in every locale.
-fn month_names(t: &Catalog, months: &[u32]) -> Vec<String> {
-    months
-        .iter()
-        .map(|m| t.month_short(*m as i64).to_string())
-        .collect()
-}
-
-fn months_error(t: &Catalog, e: &MonthsError) -> String {
-    match e {
-        MonthsError::Empty => t.months_err_empty().to_string(),
-        MonthsError::NotANumber(tok) => t.months_err_not_a_number(tok),
-        MonthsError::OutOfRange(n) => t.months_err_out_of_range(*n as i64),
-        MonthsError::BackwardsRange(a, b) => t.months_err_backwards(&format!("{a}-{b}")),
-        MonthsError::NothingLeft => t.months_err_nothing_left().to_string(),
     }
 }
 

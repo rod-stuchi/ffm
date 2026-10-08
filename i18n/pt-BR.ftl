@@ -186,9 +186,32 @@ undo-more = { $n ->
         [one] + 1 campo
        *[other] + { $n } campos
     }
-undo-confirm = u de novo para desfazer: { $verb } "{ $title }", de { $date }
-redo-confirm = U de novo para refazer: { $verb } "{ $title }", de { $date }
 undo-skipped = { $who } mudou "{ $title }" depois — ficou como deixou
+undo-skipped-copy = uma ordem copiada moveu "{ $title }" depois — ficou onde está
+undo-ask-title = Desfazer isto?
+redo-ask-title = Refazer isto?
+undo-ask-row = { $verb } "{ $title }" · { $when }
+undo-ask-order = ordem copiada para { $months } · { $when }
+undo-ask-yes = Desfazer
+redo-ask-yes = Refazer
+undo-ask-hint = u de novo ou y desfaz — qualquer outra tecla deixa como está.
+redo-ask-hint = U de novo ou y refaz — qualquer outra tecla deixa como está.
+order-ask-month = { $month } · { $n ->
+        [one] 1 linha
+       *[other] { $n } linhas
+    }
+order-left = { $n ->
+        [one] 1 linha movida depois — ficou onde está
+       *[other] { $n } linhas movidas depois — ficaram onde estão
+    }
+order-undo-did = desfeito: ordem copiada para { $months } · { $n ->
+        [one] 1 linha de volta
+       *[other] { $n } linhas de volta
+    }
+order-redo-did = refeito: ordem copiada para { $months } · { $n ->
+        [one] 1 linha movida
+       *[other] { $n } linhas movidas
+    }
 error-not-written = Não deu certo — nada foi salvo.
 
 ## Regras recorrentes
@@ -305,6 +328,7 @@ profile-max-width = Largura máxima do painel
 profile-gap = Espaço entre painéis
 profile-sort = Ordem das linhas
 profile-sort-manual = Manual
+profile-sort-name = Nome
 profile-sort-date = Data
 profile-sort-amount = Valor
 profile-search-scope = Onde buscar
@@ -401,6 +425,7 @@ command-about-theme = sua paleta de cores — sozinho, abre o seletor
 command-about-lang = seu idioma — só as palavras, nunca datas ou dinheiro
 command-about-grep = buscar em todos os meses — sozinho, repete a última busca
 command-about-trash = linhas apagadas e arquivos removidos, para trazer de volta
+command-about-order = copiar a ordem deste mês para outros meses
 command-about-prune = arquivos duplicados — remover as cópias na lixeira
 command-about-household = as configurações da casa
 command-about-members = membros e links de convite
@@ -534,6 +559,38 @@ trash-failed = { $n ->
        *[other] { $n } não puderam ser restaurados
     }
 trash-bill-elsewhere = "{ $title }" já está com a mesma conta, e uma conta só pode estar em uma linha
+
+## :order / gs — a ordem manual deste painel, copiada para outros meses.
+order-title = Copiar esta ordem
+order-hint = Põe as linhas de { $who }, nos meses que você escolher, na ordem que elas têm em { $month } — cada uma casada com a daqui pela regra, depois pelo nome. As que não casam ficam depois delas.
+order-months = Meses de { $year }
+order-apply = Copiar ordem
+order-note = Um mês que ainda vai chegar vem na ordem do mês anterior, então os meses seguintes acompanham sem precisar escolher. u neste mês desfaz a cópia inteira, todos os meses de uma vez.
+order-pick = digite os meses para onde copiar esta ordem — 1-9, ou ^10 para todos os outros
+order-empty-source = este mês não tem linhas — não há ordem aqui para copiar
+order-mark-source = esta ordem
+order-mark-moves = { $n ->
+        [one] 1 linha muda
+       *[other] { $n } linhas mudam
+    }
+order-mark-same = já nesta ordem
+order-mark-follows = acompanha quando chegar
+order-mark-not = chega na ordem de { $from }
+order-mark-empty = sem linhas
+order-nothing-to-move = nada para mover
+order-line-moves = { $n ->
+        [one] 1 linha muda
+       *[other] { $n } linhas mudam
+    } em { $months }
+order-line-same = { $months } já nesta ordem
+order-line-follows = { $months } acompanham quando chegarem
+order-line-not = { $months } vão chegar na ordem de { $from }, não nesta
+order-line-empty = sem linhas em { $months }
+order-copied = ordem copiada para { $months } · { $n ->
+        [one] 1 linha movida
+       *[other] { $n } linhas movidas
+    }
+order-nothing-moved = nada mudou — os meses escolhidos já estavam assim
 
 ## Importação de contas
 

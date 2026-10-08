@@ -221,13 +221,33 @@ pub struct Undoable {
     pub entity: String,
     pub entity_id: i64,
     pub action: String,
-    /// When the change was made, ISO UTC — a change from before today asks
-    /// for a second `u` first.
+    /// When the change was made, ISO UTC — what the question before every
+    /// `u` says, and a date when it was not today.
     pub at: String,
-    /// The row the change is about (for a file, the row it belongs to), and
-    /// its title — what the statusline names.
-    pub tx_id: i64,
-    pub title: String,
+    /// What the step reaches.
+    pub step: Step,
+}
+
+/// What one `u` or `U` reaches.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Step {
+    /// One row — the change is to it, or to a file on it — and its title,
+    /// which is what the statusline names.
+    Row { tx_id: i64, title: String },
+    /// `:order`'s copy: the anchor of a pane's manual order copied to other
+    /// months, from `owner`'s pane in `period`. Its rows are parts of it and
+    /// are reversed with it (`db::order::reverse`).
+    OrderCopy { owner: i64, period: Period },
+}
+
+impl Undoable {
+    /// The row this step is about, when it is about one.
+    pub fn tx_id(&self) -> Option<i64> {
+        match self.step {
+            Step::Row { tx_id, .. } => Some(tx_id),
+            Step::OrderCopy { .. } => None,
+        }
+    }
 }
 
 /// Which way through the stack.
@@ -264,8 +284,19 @@ impl Scope {
 /// than reversed over their work.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Skipped {
-    pub who: String,
+    pub who: Overtaker,
     pub title: String,
+}
+
+/// Who changed a row since.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Overtaker {
+    /// Another member, by name.
+    Member(String),
+    /// `:order`, copying another month's order onto this one — whoever ran it.
+    /// A move by hand reversed after that would be a move from the copied
+    /// position, not the one it was made from.
+    OrderCopy,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -310,39 +341,51 @@ pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Resu
            SELECT c.id AS "id!: i64", c.entity AS "entity!: String",
                   c.entity_id AS "entity_id!: i64", c.action AS "action!: String",
                   c.at AS "at!: String", depth.d AS "depth!: i64",
-                  t.id AS "tx_id!: i64", t.title AS "title!: String",
+                  c.period AS "period: String",
+                  c.part_of IS NOT NULL AS "part!: bool",
+                  t.id AS "tx_id?: i64", t.title AS "title?: String",
                   EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id) AS "reversed!: bool"
            FROM change c
            JOIN depth ON depth.id = c.id
            LEFT JOIN receipts r ON c.entity = 'file' AND r.id = c.entity_id
-           JOIN transactions t
-             ON t.id = CASE WHEN c.entity = 'file' THEN r.transaction_id ELSE c.entity_id END
+           -- Only a row's or a file's change is about a transaction: a
+           -- member entry's id is a member's, and must not join a row that
+           -- happens to share the number.
+           LEFT JOIN transactions t
+             ON c.entity IN ('transaction', 'file')
+            AND t.id = CASE WHEN c.entity = 'file' THEN r.transaction_id ELSE c.entity_id END
            WHERE c.member_id = ?1
-             AND ((c.entity = 'transaction'
-                   AND c.action IN ('create', 'delete', 'restore', 'edit', 'import',
-                                    'privacy', 'reorder', 'reattribute'))
-                  OR (c.entity = 'file' AND c.action IN ('file_upload', 'file_delete')))
-             -- Part of another entry, and never a step of its own.
-             AND NOT (c.entity = 'file' AND c.note IS NOT NULL AND c.note IN (?4, ?5))
-             AND NOT EXISTS (SELECT 1 FROM change p
-                             WHERE p.id = c.undo_of AND p.note IS NOT NULL AND p.note IN (?4, ?5))
-             -- A copy retired from the trash (`receipts::RETIRED`) — its bill
-             -- is on another row now, or `:prune` removed it as a duplicate:
-             -- neither its delete nor its upload can be reversed any more, so
-             -- they are not steps at all rather than ones `u` would refuse
-             -- forever.
-             AND NOT (c.entity = 'file'
-                      AND EXISTS (SELECT 1 FROM change x
-                                  WHERE x.entity = 'file' AND x.entity_id = c.entity_id
-                                    AND x.action = 'file_unlink' AND x.note IN (?6, ?7)))
-             -- The pane: rows in this member's ledger, or a row this pane
-             -- handed to somebody else, which is still this pane's change.
-             AND (?2 IS NULL OR t.member_id = ?2
-                  OR (c.action = 'reattribute'
-                      AND EXISTS (SELECT 1 FROM change_field f JOIN members m ON m.name = f.old_value
-                                  WHERE f.change_id = c.id AND f.field = 'member' AND m.id = ?2)))
-             -- The month on screen.
-             AND (?3 IS NULL OR t.period = ?3)
+             AND ((t.id IS NOT NULL
+                   AND ((c.entity = 'transaction'
+                         AND c.action IN ('create', 'delete', 'restore', 'edit', 'import',
+                                          'privacy', 'reorder', 'reattribute'))
+                        OR (c.entity = 'file' AND c.action IN ('file_upload', 'file_delete')))
+                   -- Part of another entry, and never a step of its own.
+                   AND NOT (c.entity = 'file' AND c.note IS NOT NULL AND c.note IN (?4, ?5))
+                   AND NOT EXISTS (SELECT 1 FROM change p
+                                   WHERE p.id = c.undo_of AND p.note IS NOT NULL AND p.note IN (?4, ?5))
+                   -- A copy retired from the trash (`receipts::RETIRED`) — its bill
+                   -- is on another row now, or `:prune` removed it as a duplicate:
+                   -- neither its delete nor its upload can be reversed any more, so
+                   -- they are not steps at all rather than ones `u` would refuse
+                   -- forever.
+                   AND NOT (c.entity = 'file'
+                            AND EXISTS (SELECT 1 FROM change x
+                                        WHERE x.entity = 'file' AND x.entity_id = c.entity_id
+                                          AND x.action = 'file_unlink' AND x.note IN (?6, ?7)))
+                   -- The pane: rows in this member's ledger, or a row this pane
+                   -- handed to somebody else, which is still this pane's change.
+                   AND (?2 IS NULL OR t.member_id = ?2
+                        OR (c.action = 'reattribute'
+                            AND EXISTS (SELECT 1 FROM change_field f JOIN members m ON m.name = f.old_value
+                                        WHERE f.change_id = c.id AND f.field = 'member' AND m.id = ?2)))
+                   -- The month on screen.
+                   AND (?3 IS NULL OR t.period = ?3))
+                  -- `:order`'s anchor: a copy made FROM this pane and month,
+                  -- whose rows (its parts) are in other months.
+                  OR (c.entity = 'member' AND c.action = 'edit' AND c.note = ?8
+                      AND (?2 IS NULL OR c.entity_id = ?2)
+                      AND (?3 IS NULL OR c.period = ?3)))
            ORDER BY c.id DESC"#,
         scope.me,
         scope.owner,
@@ -351,10 +394,14 @@ pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Resu
         SATELLITES[1],
         crate::services::receipts::RETIRED[0],
         crate::services::receipts::RETIRED[1],
+        crate::db::order::COPIED,
     )
     .fetch_all(pool)
     .await?;
 
+    // A copy's rows still count as a fresh change in their own months — so a
+    // copy onto September clears September's redo stack, as any change there
+    // would — but are never a step of their own, and never what was skipped.
     let newest_fresh = rows
         .iter()
         .filter(|r| r.depth == 0)
@@ -363,7 +410,7 @@ pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Resu
         .unwrap_or(0);
     let last_reversal = rows
         .iter()
-        .filter(|r| r.depth > 0)
+        .filter(|r| r.depth > 0 && !r.part)
         .map(|r| r.id)
         .max()
         .unwrap_or(0);
@@ -374,14 +421,35 @@ pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Resu
             Direction::Undo => r.depth % 2 == 0,
             Direction::Redo => r.depth % 2 == 1 && r.id > newest_fresh,
         };
-        if r.reversed || !wanted {
+        if r.part || r.reversed || !wanted {
             continue;
         }
-        if let Some(who) = overtaken(pool, scope.me, r.id, &r.entity, r.entity_id, r.tx_id).await? {
+        let step = match (r.tx_id, r.title) {
+            (Some(tx_id), Some(title)) => Step::Row { tx_id, title },
+            _ => match r.period.as_deref().and_then(Period::parse) {
+                Some(period) => Step::OrderCopy {
+                    owner: r.entity_id,
+                    period,
+                },
+                None => continue,
+            },
+        };
+        if let Step::Row { tx_id, title } = &step
+            && let Some(who) = overtaken(
+                pool,
+                scope.me,
+                r.id,
+                &r.entity,
+                &r.action,
+                r.entity_id,
+                *tx_id,
+            )
+            .await?
+        {
             if r.id > last_reversal {
                 out.skipped.push(Skipped {
                     who,
-                    title: r.title.clone(),
+                    title: title.clone(),
                 });
             }
             continue;
@@ -392,8 +460,7 @@ pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Resu
             entity_id: r.entity_id,
             action: r.action,
             at: r.at,
-            tx_id: r.tx_id,
-            title: r.title,
+            step,
         });
         break;
     }
@@ -404,15 +471,19 @@ pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Resu
 /// change still in effect, by another member, to the same row (or, for a
 /// file, the same slot, or the row it lives on). The materializer and the
 /// system have no member and never count: they are not somebody's work.
+///
+/// And, for a move by hand, `:order` copying another month's order onto this
+/// one since — by anybody, me included.
 async fn overtaken(
     pool: &SqlitePool,
     me: i64,
     change_id: i64,
     entity: &str,
+    action: &str,
     entity_id: i64,
     tx_id: i64,
-) -> sqlx::Result<Option<String>> {
-    if entity == "file" {
+) -> sqlx::Result<Option<Overtaker>> {
+    let member = if entity == "file" {
         sqlx::query_scalar!(
             r#"SELECT m.name AS "name!: String"
                FROM change o JOIN members m ON m.id = o.member_id
@@ -431,8 +502,7 @@ async fn overtaken(
             tx_id,
         )
         .fetch_optional(pool)
-        .await
-        .map(|who| who.map(|n| crate::ui::fmt::name(&n)))
+        .await?
     } else {
         sqlx::query_scalar!(
             r#"SELECT m.name AS "name!: String"
@@ -448,9 +518,50 @@ async fn overtaken(
             entity_id,
         )
         .fetch_optional(pool)
-        .await
-        .map(|who| who.map(|n| crate::ui::fmt::name(&n)))
+        .await?
+    };
+    if let Some(n) = member {
+        return Ok(Some(Overtaker::Member(crate::ui::fmt::name(&n))));
     }
+
+    // A move by hand, and then `:order` copied another month's order onto
+    // this one — whoever ran it. Reversing the move now would be a relative
+    // move from the copied position, landing somewhere nobody chose. Only a
+    // copy still in effect counts: a part not reversed, at an even depth (the
+    // copy itself, or a redo of it — an odd one is the copy undone, which put
+    // the row back where the move had left it).
+    if action == "reorder" {
+        let parts = sqlx::query!(
+            r#"SELECT o.id AS "id!: i64", o.undo_of AS "undo_of: i64"
+               FROM change o
+               WHERE o.id > ?1 AND o.entity = 'transaction' AND o.entity_id = ?2
+                 AND o.action = 'reorder' AND o.part_of IS NOT NULL
+                 AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = o.id)
+               ORDER BY o.id DESC"#,
+            change_id,
+            entity_id,
+        )
+        .fetch_all(pool)
+        .await?;
+        for p in parts {
+            let mut depth = 0;
+            let mut up = p.undo_of;
+            while let Some(id) = up {
+                depth += 1;
+                up = sqlx::query_scalar!(
+                    r#"SELECT undo_of AS "undo_of: i64" FROM change WHERE id = ?1"#,
+                    id
+                )
+                .fetch_optional(pool)
+                .await?
+                .flatten();
+            }
+            if depth % 2 == 0 {
+                return Ok(Some(Overtaker::OrderCopy));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// What `u` would undo for this member, anywhere — the unscoped form, kept
@@ -466,6 +577,12 @@ pub async fn last_undoable(pool: &SqlitePool, member_id: i64) -> sqlx::Result<Op
 /// `services::receipts`, which is the only thing that may touch the vault —
 /// this module never moves a file.
 pub async fn undo(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Result<bool> {
+    // A copy of a pane's order is reversed whole, every month at once.
+    if let Step::OrderCopy { .. } = u.step {
+        return Ok(crate::db::order::reverse(pool, actor, u.change_id)
+            .await?
+            .is_some());
+    }
     if u.entity != "transaction" {
         return Ok(false);
     }

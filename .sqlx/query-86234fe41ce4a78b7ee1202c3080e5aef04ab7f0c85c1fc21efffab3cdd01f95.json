@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT old_value AS \"old: String\", new_value AS \"new: String\"\n           FROM change_field WHERE change_id = ?1 AND field = 'months'",
+  "describe": {
+    "columns": [
+      {
+        "name": "old: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "new: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "86234fe41ce4a78b7ee1202c3080e5aef04ab7f0c85c1fc21efffab3cdd01f95"
+}

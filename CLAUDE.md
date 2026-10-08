@@ -289,8 +289,9 @@ card in plain CSS.
   exception: a single full-width submit on a card, with nothing to put
   beside it.
 - **Still modal:** the `dd` delete confirmation (and its twin for removing a
-  file from the `P` carousel), the `ga` member picker, the `?` keymap and
-  the `P` file carousel — confirmations and viewers, not forms.
+  file from the `P` carousel), the question every `u`/`U` asks first, the
+  `ga` member picker, the `?` keymap and the `P` file carousel —
+  confirmations and viewers, not forms.
 
 ---
 
@@ -451,10 +452,38 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   chain says what an entry is (0 original, odd undo, even redo), so there is
   no schema change and no second implementation of any verb, and a fresh
   change clears the redo stack. A change somebody else has changed since is
-  **skipped and named**, never reversed over their work; one from before
-  today needs a second `u`; every step says what it did and blinks the row.
-  Not Ctrl-R: it reloads on Linux, and a reload drops parked drafts. `r`/`R`
-  stay unbound.
+  **skipped and named**, never reversed over their work; every step says
+  what it did and blinks the row. Not Ctrl-R: it reloads on Linux, and a
+  reload drops parked drafts. `r`/`R` stay unbound.
+- **Every `u` and `U` asks first** — reversing "a change from before today
+  asks first", which left a stray `u` on today's edit acting at once. The
+  first request answers `ffm:undo-ask`: a popup saying what the step would put
+  back — the verb, the row, when, each field old → new the other way round,
+  and anything skipped — every string the server's. The same key again, or
+  `y`, sends the request again naming that change; Enter, Esc and any other
+  key leave it, nothing written. A stale confirmation (the stack moved in
+  between) is asked about again, never acted on.
+- **`part_of`: an entry that is part of another, never a step of its own**
+  (migration 0019). `:order` moves rows in several months at once, and `u`
+  must take it back in one press from the month it was made in — where those
+  rows are not. So the copy writes one **anchor** — `entity = 'member'` (the
+  pane's owner), `action = 'edit'`, `period` the month copied from, note
+  `order::COPIED`, a `months` field — and each row moved is a `reorder` in its
+  own month, `part_of` the anchor, with `position` for `gl` and the exact
+  `sort_key` for the undo. `tx::next` picks the anchor in that pane and month
+  and never a part; `db::order::reverse` writes a new anchor and puts back
+  every row still on the key the copy gave it, leaving one moved since. Redo
+  is `reverse` on the undo's anchor. Two amendments to 0001 follow: a member
+  entry with a `period` is that member's pane, not an account action; and
+  this *is* the "ad-hoc reuse of `edit`" 0001 warned against — `change`
+  cannot be rebuilt for a new verb, because `change_field` and `undo_of`
+  reference it and the drop fails under foreign keys inside a migration's
+  transaction.
+  - **A copy's rows still count as fresh changes in their own months**, so a
+    copy onto September clears September's redo stack, as any change there
+    would. And a move by hand that a later copy moved again is skipped by
+    `u` there and named (*a copied order moved "X" since*): reversing it
+    would be a relative move from the copied position.
 - **One entry per save, expandable to its fields.** The pane groups by day,
   newest first, and filters to `this row` / `rule` / `all`. It is read-only:
   `Esc` closes, `Ctrl-h` hands focus back to the ledger, `j`/`k` walk the
@@ -1088,7 +1117,9 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   one-off and an unconfirmed projection don't — the latter would be
   comparing a guess against a fact.
 - **Income lands at the top of its pane at creation**, which is where a
-  household reads what came in. That's a starting sort key, not a pin:
+  household reads what came in — a hand-entered one, and a rule's first
+  month; later months arrive where the rule sat the month before (see
+  Materialization). That's a starting sort key, not a pin:
   `J`/`K` move it anywhere afterwards and `:sort date` treats it like any
   other row. A hard "income always floats" tier was rejected — it would
   contradict being able to move it, and it would override an explicit sort.
@@ -1135,6 +1166,17 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
 - **Never materialize past the current month.** Future months stay projections
   rendered on the fly and are never persisted — which is what the mock's
   "projected" label already implies.
+- **A new month arrives in the order the last one was left in.** An
+  occurrence lands where its rule sat in the latest earlier month it has a
+  live row in (the same member's pane): right after the counterpart of the
+  nearest row above it, else right before the nearest row below
+  (`db::order::inherited_key`, `domain::order::placement`, matched like
+  `:order`). Only with nothing to go by — a rule's first month — does the old
+  rule hold: income on top, a spend last. This is what makes a month arranged
+  by hand, or by `:order`, carry forward without anybody arranging it again,
+  and why `:order` never needs to write a month that does not exist yet. The
+  rule-by-rule loop needs no change: whatever order the rules arrive in, the
+  placement rebuilds the previous month's order.
 - **The materializer stamps `transactions.due_date`; the rule owns `due_day`.**
   Both columns exist, which looks like one fact in two places — it is not, and
   the split has a rule. The rule carries the day-of-month; materializing an
@@ -1166,8 +1208,8 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
     by `just dev 2026-10-15`, moves the clock by whole days in a **debug build
     only** (a release binary logs that it is ignoring it). It is an offset, not
     a frozen date, and it moves the UTC stamps too: faked alone, the date would
-    disagree with the change log's `at`, and every `u` would ask "from before
-    today?" about a change made a minute ago.
+    disagree with the change log's `at`, and every `u` would ask about a
+    change made a minute ago as one "from 12/09/2026".
 
 ### Categorization & grouping
 
@@ -1287,15 +1329,45 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   first row did nothing at all, with an empty statusline, which reads as a
   broken key rather than as a row already where it was asked to go. Being
   genuinely at the end stays the quiet no-op it always was.
-- **`ledger.sort` gates reordering.** `J`/`K` work only in `manual`. Under `date`
-  or `amount` they refuse with
+- **`ledger.sort` gates reordering.** `J`/`K` work only in `manual`. Under `name`,
+  `amount` or `date` they refuse with
   `ledger.sort = "date" — reorder needs sort = "manual"`. You cannot reorder a
   derived view; the app says so instead of pretending. Default is `manual`
   because this replaces a spreadsheet where rows *were* arranged by hand.
-- **`s` cycles the row sort** (`manual` → `date` → `amount`) — the fourth
-  gesture writing `ledger_sort`, beside `:sort`, the statusline cell and
-  `:profile`. It pairs with `S`: `s` orders the rows, `S` the groups.
+- **Four orders, and `s` cycles them `manual` → `name` → `amount` → `date`** —
+  the fourth gesture writing `ledger_sort`, beside `:sort`, the statusline
+  cell and `:profile`, and all four read one order: `Sort::ALL`, spelled by
+  `settings::LEDGER_SORTS`, stepped by `Sort::next` (the page is handed the
+  next value rather than keeping a second copy of the cycle). It pairs with
+  `S`: `s` orders the rows, `S` the groups.
+  - **`name` is A–Z by title, ignoring case and accents** — *Água* among the
+    A's — with ties in manual order. It is a stable sort in Rust after the
+    pane query (`domain::collate::name_key`, which `S`'s A–Z uses too):
+    SQLite's `lower()` folds only ASCII, and a custom collation would be
+    missing from the connection SQLx checks queries against. Adding the value
+    rebuilt `member_settings` (migration 0018), since a CHECK cannot be
+    altered in place.
 - **An unpaid row sorts by its due day**, since it has no paid-on date yet.
+- **`:order` / `gs` copies the pane's manual order to other months of the
+  year** — a bottom drawer taking a months expression in *Only some months*'s
+  grammar (`1-9`, `^10`), with a read-back the server renders per keystroke
+  saying what each month would end in. See `design/spec.md`'s Copying the
+  order to other months.
+  - **Rows match by rule, then by exact title** (the k-th "Mercado" ↔ the
+    k-th) — the "same line" the cursor follows across months. Matched rows
+    take the source's order; **rows with no match go after them**, in their
+    own order (`domain::order`).
+  - **Only the rows out of place are written**: the longest run already in
+    order (by strictly increasing key — two live rows can share one) keeps
+    its keys, and the rest get keys spread between them.
+  - **Refused under a sort that is not manual, on a read-only pane** — in the
+    words `J`/`K` use — and on a month with no rows. **Not when grouped**, where
+    `J`/`K` do refuse: a move by one place is ambiguous among folds, a copy of
+    the whole manual order is not, and the folds are derived from it. An empty
+    expression is refused, unlike a rule's, where empty means every month:
+    here it would be a bulk write nobody typed.
+  - **One copy is one `u`**, from the pane and month it was made in — see the
+    change log's `part_of`, below.
 - **`/` is client-side and scoped to the visible month.** It filters rows already
   rendered — an Alpine highlight over the DOM, no round-trip, which is what makes
   incremental search feel instant. The term is a regex, falling back to a literal

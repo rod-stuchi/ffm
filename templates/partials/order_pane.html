@@ -1,0 +1,39 @@
+{#- `:order` / `gs` — this pane's manual order, copied to other months of the
+    year on screen.
+
+    One field, in the grammar a rule's *Only some months* takes, and under it
+    a read-back the server renders on every keystroke: each month's mark says
+    what it would end in — reordered, already in this order, following when
+    it arrives, or nothing there. A preview computed in the browser would be
+    a second matcher, free to disagree with the one that writes.
+
+    A real form. Enter copies; the answer closes the drawer and the
+    statusline says what moved, and one `u` in this pane and month puts it
+    all back. Esc in the field closes the drawer, as in every split. -#}
+<aside class="rulepane logpane orderpane" id="settingspane">
+  <header class="rp-head">
+    <b>{{ t.order_title() }} · {{ who }} · {{ month }}</b>
+    {%- include "partials/split_actions.html" %}
+  </header>
+
+  <form class="orderform" hx-post="/order/copy" hx-target="#settingspane" hx-swap="outerHTML">
+    <input type="hidden" name="member" value="{{ member }}">
+    <input type="hidden" name="period" value="{{ period }}">
+    <div class="rp-body">
+      <p class="hint">{{ t.order_hint(who, month) }}</p>
+      <div class="f">
+        <span class="k">{{ t.order_months(year) }}</span>
+        <input class="i mono" name="months" placeholder="{{ t.months_placeholder() }}"
+               autocomplete="off" spellcheck="false"
+               hx-get="/order/months" hx-include="closest form" hx-target="#orderback" hx-swap="outerHTML"
+               hx-trigger="input changed delay:150ms" data-busy="none">
+        <span class="hint mono">{{ t.months_help() }}</span>
+        {{ readback|safe }}
+      </div>
+      <p class="notebox">{{ t.order_note() }}</p>
+    </div>
+    <div class="rp-actions">
+      <button class="btn pri" type="submit">{{ t.order_apply() }} <kbd>&#9166;</kbd></button>
+    </div>
+  </form>
+</aside>

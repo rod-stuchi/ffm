@@ -324,7 +324,8 @@ async fn a_change_somebody_else_changed_since_is_skipped_and_named() {
         "her edit and her add, both overtaken"
     );
     assert_eq!(
-        next.skipped[0].who, "Rodrigo",
+        next.skipped[0].who,
+        tx::Overtaker::Member("Rodrigo".into()),
         "named the way people read it"
     );
     assert_eq!(next.skipped[0].title, "Padaria");

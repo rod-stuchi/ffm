@@ -5,6 +5,7 @@ pub mod bill_codes;
 pub mod changes;
 pub mod ledger;
 pub mod members;
+pub mod order;
 pub mod recipes;
 pub mod rules;
 pub mod settings;

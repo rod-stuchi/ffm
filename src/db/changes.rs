@@ -120,6 +120,12 @@ pub enum MemberAction {
     /// Into the trash, and back. Only a member with no rows can go there.
     Remove,
     Restore,
+    /// `:order`'s anchor: this member's manual order, in the month the entry
+    /// is stamped with, copied to other months. An `edit` (the schema has no
+    /// verb for it, and `change` cannot be rebuilt to add one — see 0019),
+    /// told apart from [`MemberAction::Status`] by its note, `order::COPIED`.
+    /// The rows it moved are entries of their own, `part_of` this one.
+    OrderCopy,
 }
 
 impl TxAction {
@@ -168,6 +174,7 @@ impl MemberAction {
             MemberAction::Status => "edit",
             MemberAction::Remove => "delete",
             MemberAction::Restore => "restore",
+            MemberAction::OrderCopy => "edit",
         }
     }
 }
@@ -249,6 +256,7 @@ pub struct Change {
     period: Option<Period>,
     undo_of: Option<i64>,
     note: Option<String>,
+    part_of: Option<i64>,
     fields: Vec<Field>,
 }
 
@@ -285,6 +293,7 @@ impl Change {
             period: None,
             undo_of: None,
             note: None,
+            part_of: None,
             fields: Vec::new(),
         }
     }
@@ -307,6 +316,14 @@ impl Change {
     /// "restored · undo of 18:39".
     pub fn undoing(mut self, change_id: i64) -> Change {
         self.undo_of = Some(change_id);
+        self
+    }
+
+    /// A part of another entry, never a step of its own — a row `:order`
+    /// moved, pointing at the copy's anchor. `u` reverses the anchor and every
+    /// part with it, and never picks a part alone.
+    pub fn part_of(mut self, anchor: i64) -> Change {
+        self.part_of = Some(anchor);
         self
     }
 
@@ -393,8 +410,8 @@ impl Change {
         let id = sqlx::query_scalar!(
             r#"INSERT INTO change
                    (at, member_id, source, action, entity, entity_id,
-                    rule_id, period, undo_of, note)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                    rule_id, period, undo_of, note, part_of)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                RETURNING id AS "id!: i64""#,
             at,
             member_id,
@@ -406,6 +423,7 @@ impl Change {
             period,
             self.undo_of,
             self.note,
+            self.part_of,
         )
         .fetch_one(&mut **tx)
         .await?;

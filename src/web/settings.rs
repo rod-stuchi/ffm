@@ -177,12 +177,17 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
             &s.line_numbers,
         ),
         panes: pane_choices(&s.layout_panes),
+        // In the order `s` cycles them, so the radios read like the key.
         sorts: choices(
-            &[
-                ("manual", t.profile_sort_manual().to_string()),
-                ("date", t.profile_sort_date().to_string()),
-                ("amount", t.profile_sort_amount().to_string()),
-            ],
+            &crate::db::ledger::Sort::ALL.map(|o| {
+                let label = match o {
+                    crate::db::ledger::Sort::Manual => t.profile_sort_manual(),
+                    crate::db::ledger::Sort::Name => t.profile_sort_name(),
+                    crate::db::ledger::Sort::Amount => t.profile_sort_amount(),
+                    crate::db::ledger::Sort::Date => t.profile_sort_date(),
+                };
+                (o.code(), label.to_string())
+            }),
             &s.ledger_sort,
         ),
         scopes: choices(

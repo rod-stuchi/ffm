@@ -204,7 +204,7 @@ impl std::fmt::Display for Invalid {
 /// against the same lists (`web::commands`) — a completion offering a value
 /// the write then refuses would be the hint lying all over again.
 pub const LANGUAGES: [&str; 2] = ["en", "pt-BR"];
-pub const LEDGER_SORTS: [&str; 3] = ["manual", "date", "amount"];
+pub const LEDGER_SORTS: [&str; 4] = ["manual", "name", "amount", "date"];
 pub const LEDGER_GROUPS: [&str; 2] = ["none", "bucket"];
 /// Roomiest first, the order `:profile` shows them in.
 pub const DENSITIES: [&str; 3] = ["default", "comfortable", "compact"];

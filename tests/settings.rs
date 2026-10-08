@@ -64,6 +64,21 @@ async fn a_refused_setting_leaves_the_previous_value_alone() {
 }
 
 #[tokio::test]
+async fn every_row_order_the_app_offers_is_one_the_schema_accepts() {
+    // The CHECK on `ledger_sort` is in a migration, the list `s`, `:sort` and
+    // `:profile` offer is in Rust: a value added to one and not the other is
+    // a setting that refuses itself. Writing each one proves they agree.
+    let pool = pool().await;
+    let me = household(&pool).await;
+    for sort in settings::LEDGER_SORTS {
+        settings::set_member(&pool, me, MemberKey::LedgerSort, sort)
+            .await
+            .unwrap_or_else(|e| panic!("{sort}: {e}"));
+        assert_eq!(settings_of(&pool, me).await.ledger_sort, sort);
+    }
+}
+
+#[tokio::test]
 async fn the_privacy_default_has_three_states_and_the_third_is_null() {
     let pool = pool().await;
     let me = household(&pool).await;

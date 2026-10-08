@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\", rule_id AS \"rule_id: i64\",\n                  title AS \"title!: String\", sort_key AS \"key!: String\"\n           FROM transactions\n           WHERE member_id = ?1 AND period = ?2 AND deleted_at IS NULL\n           ORDER BY sort_key, id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "key!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "fe7054bc719362fb87289187d8eff067b432a54d55ab2f92512e59dafa9a3e3f"
+}

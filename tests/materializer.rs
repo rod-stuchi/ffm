@@ -510,3 +510,128 @@ async fn a_rule_with_no_months_runs_every_month() {
         .unwrap();
     assert_eq!(periods(&pool).await.len(), 12);
 }
+
+// ---------------------------------------------------------------------------
+// a new month arrives in the order the last one was left in
+// ---------------------------------------------------------------------------
+
+/// A pane's titles, in its manual order.
+async fn order_of(pool: &SqlitePool, period: &str) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT title FROM transactions WHERE period = ? AND deleted_at IS NULL
+         ORDER BY sort_key, id",
+    )
+    .bind(period)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+async fn row_in(pool: &SqlitePool, period: &str, title: &str) -> i64 {
+    sqlx::query_scalar("SELECT id FROM transactions WHERE period = ? AND title = ?")
+        .bind(period)
+        .bind(title)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_new_month_arrives_in_the_order_the_last_one_was_left_in() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    for title in ["Aluguel", "Luz", "Internet"] {
+        rules::create(&pool, Actor::User(me), &form(me, title, d(2026, 8, 1)))
+            .await
+            .unwrap();
+    }
+    materializer::reconcile(&pool, d(2026, 9, 21))
+        .await
+        .unwrap();
+    assert_eq!(
+        order_of(&pool, "2026-09").await,
+        ["Aluguel", "Luz", "Internet"]
+    );
+
+    // September arranged by hand: Internet first.
+    let internet = row_in(&pool, "2026-09", "Internet").await;
+    tx::reorder(&pool, Actor::User(me), internet, -2, None)
+        .await
+        .unwrap();
+
+    materializer::reconcile(&pool, d(2026, 10, 5))
+        .await
+        .unwrap();
+    assert_eq!(
+        order_of(&pool, "2026-10").await,
+        ["Internet", "Aluguel", "Luz"],
+        "October takes September's order, not the rules' order"
+    );
+}
+
+#[tokio::test]
+async fn catching_up_several_months_keeps_the_order_in_each() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    for title in ["Aluguel", "Luz", "Internet"] {
+        rules::create(&pool, Actor::User(me), &form(me, title, d(2026, 8, 1)))
+            .await
+            .unwrap();
+    }
+    materializer::reconcile(&pool, d(2026, 8, 21))
+        .await
+        .unwrap();
+    let internet = row_in(&pool, "2026-08", "Internet").await;
+    tx::reorder(&pool, Actor::User(me), internet, -2, None)
+        .await
+        .unwrap();
+
+    // Down across two month boundaries: both arrive in August's order.
+    materializer::reconcile(&pool, d(2026, 10, 5))
+        .await
+        .unwrap();
+    for month in ["2026-09", "2026-10"] {
+        assert_eq!(
+            order_of(&pool, month).await,
+            ["Internet", "Aluguel", "Luz"],
+            "{month}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_rule_that_skipped_a_month_takes_its_place_from_the_last_it_ran() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    rules::create(&pool, Actor::User(me), &form(me, "Aluguel", d(2026, 8, 1)))
+        .await
+        .unwrap();
+    rules::create(&pool, Actor::User(me), &form(me, "Luz", d(2026, 8, 1)))
+        .await
+        .unwrap();
+    // Not in September.
+    let mut school = form(me, "Escola", d(2026, 8, 1));
+    school.months = Some(Months::parse("^9").unwrap());
+    rules::create(&pool, Actor::User(me), &school)
+        .await
+        .unwrap();
+    materializer::reconcile(&pool, d(2026, 9, 21))
+        .await
+        .unwrap();
+    assert_eq!(order_of(&pool, "2026-09").await, ["Aluguel", "Luz"]);
+
+    // August arranged by hand: Escola first.
+    let escola = row_in(&pool, "2026-08", "Escola").await;
+    tx::reorder(&pool, Actor::User(me), escola, -2, None)
+        .await
+        .unwrap();
+
+    materializer::reconcile(&pool, d(2026, 10, 5))
+        .await
+        .unwrap();
+    // Escola's last month was August, where it sat above Aluguel.
+    assert_eq!(
+        order_of(&pool, "2026-10").await,
+        ["Escola", "Aluguel", "Luz"]
+    );
+}

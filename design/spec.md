@@ -140,7 +140,7 @@ The statusline carries, left to right:
 | selection | `x`: `3 of 5 selected · Σ R$ 588,20` — how many of the **focused pane's** rows are selected, and their sum written like the pane header (`Σ + …` for incomes only; `in · out · net` for a mix, `~` on a projection). Rendered by the server from the same pane query as the header; hidden while nothing in the pane is selected |
 | buffer | the pending count and key prefix, so a half-typed `3d` or `g` is visible rather than silently remembered |
 | position | `4/7` in the focused pane |
-| sort | `manual` · `date` · `amount` — **clickable, cycles**, the same as `s` |
+| sort | `manual` · `name` · `amount` · `date` — **clickable, cycles**, the same as `s` |
 | group order | `First seen` · `A–Z` · `By cost` — only while the pane is grouped; **clickable, cycles**, the same as `S` |
 | line numbers | `rnu` · `nu` · `nonu` — **clickable, cycles** |
 | version | the running build — `v0.0.3`, or `v0.0.4-dev` on a dev build. Last, quiet, and **kept at every width**, where the cells before it step aside below 700px: a phone is where "which version is this?" gets asked |
@@ -639,7 +639,8 @@ standing out.)
 | Key | Action |
 |---|---|
 | `J` / `K` | move the row — or every selected row — down / up |
-| `s` | row order: `manual` → `date` → `amount`, and round again — `S` does the same for groups |
+| `s` | row order: `manual` → `name` → `amount` → `date`, and round again — `S` does the same for groups |
+| `gs` | copy this month's manual order to other months — the `:order` drawer, see Copying the order to other months |
 | `3J` | move it three places — a count past the end lands on the end |
 | `ga` | **re-attribute** — give the row to another member, picked from a list: their pane's number (`ga2`), or `j`/`k` + `Enter`. Admin only |
 | `a` | add a one-off spend |
@@ -861,18 +862,26 @@ one. And there was no redo.
   made it* — and reverses your change before it. Skipping rather than
   refusing is also what keeps `u` from getting stuck on one change forever.
   The materializer and the system are nobody's work and never overtake.
-- **A change from before today asks first.** The first `u` says what it would
-  undo and from when — *u again to undo: edited "Mercado", from 12/09/2026* —
-  and only the very next key, `u` again, about the same change, does it. The
-  server re-checks the id, so a stale confirmation cannot reverse something
-  else.
+- **Every step asks first** — reversing "a change from before today asks
+  first", which let a stray `u` on today's edit act at once. The first `u`
+  (or `U`) raises a question in the `dd` shape: *Undo this?*, the verb, the
+  row and when — *edited "Mercado" · today 14:32* — then each field it would
+  put back, old → new the other way round (*amount R$ 12,00 → R$ 10,00*),
+  and anything skipped on the way. **The same key again, or `y`, does it**;
+  Enter, Esc and any other key leave it, nothing written. Every string is
+  the server's, in the `ffm:undo-ask` event, and the second request names the
+  change it agrees to — the server acts only if that is still the one, and
+  asks again if the stack moved in between, so a stale confirmation cannot
+  reverse something else.
 - **It says what it did, where you are looking.** *undone: edited "Mercado" ·
   amount R$ 12,00 → R$ 10,00 · U redoes* — read off the entry the step just
   wrote, formatted as the log pane formats it, two fields at most. The cursor
   goes to the row and it blinks once.
 - **Parts of another step never stand alone.** A row's files moved with it,
   and a live file a swap moved aside (`swapped aside`), follow the entry they
-  belong to in both directions and are never picked on their own.
+  belong to in both directions and are never picked on their own. So does
+  every row `:order` moved: they are `part_of` the copy, which `u` reaches
+  from the month it was copied from, and reverses whole.
 - **Not Ctrl-R.** Vim's redo reloads the page on Linux, and a reload drops
   every parked draft. `U` is free on every platform and pairs with `u` the
   way the rest of this keymap pairs lowercase with uppercase.
@@ -927,6 +936,62 @@ checkbox each, restored in any combination.
   a statusline naming how many rows and files came back — and how many landed
   in other months, where there is nothing on screen to show it.
 
+### Copying the order to other months (`:order` / `gs`)
+
+A household arranges a month by hand — rent first, then the utilities, the
+cards last — and every other month was still in the order its rows happened
+to arrive in. `:order` (or `gs`, beside `s`) copies the focused pane's manual
+order, in the month on screen, to other months of the same year.
+
+- **The bottom split, one field.** The months are an expression in *Only
+  some months*'s grammar — `1-9`, `^10` for every other month, `1-3,7` —
+  and under it a read-back the server renders on every keystroke, the rule
+  pane's twelve marks each in the state that month would end in:
+
+  | mark | means |
+  |---|---|
+  | accent ring | this month — the order being copied |
+  | lit | its rows move; the title says how many |
+  | quiet fill | already in this order — nothing to write |
+  | dashed | still to come: it will arrive in this order |
+  | dashed, `--neg` | still to come, but it will arrive in another month's order — the one before it, which was not picked |
+  | struck through | picked, and has no rows |
+
+  and a line summing it up: *23 rows move in Jan, Feb, Sep · Nov, Dec follow
+  when they arrive*. Not computed in the browser: a preview there would be a
+  second matcher, free to disagree with the one that writes.
+- **Rows match by rule, then by exact title** — the k-th "Mercado" is the
+  k-th "Mercado" — the same "same line" the cursor follows to another month.
+  The matched rows take this month's order; **rows with no match follow
+  them**, in the order they were already in.
+- **Only rows out of place are written.** The longest run already in order
+  keeps its keys; the rest get keys spread between them, so a month almost
+  in order costs a write or two, and the log of a row that did not move says
+  nothing happened to it.
+- **A month still to come needs no write.** The materializer places a new
+  occurrence where its rule sat the month before (see CLAUDE.md's
+  Materialization), so a future month arrives in this order as long as the
+  month it inherits from is this one or one the copy reorders — which is
+  what the dashed marks say.
+- **Enter copies, the drawer closes**, and the statusline says *order copied
+  to Jan, Feb, Sep · 23 rows moved · u undoes*. Nothing on screen moves —
+  the copy was made from this month — and the months it reached hear it over
+  the live feed.
+- **One `u`, from here, puts every month back** — the pane and month the copy
+  was made from, where `u` always looks. Each moved row is its own `reorder`
+  in its own month's log (*order copied from 10/2026*), `part_of` one anchor
+  entry this month's `u` picks; a row moved by hand since the copy keeps
+  where it was put, and the statusline counts it. `U` redoes it.
+- **Refused where `J`/`K` refuse**, in the same words — a pane sorted by
+  name, amount or date, somebody else's ledger — and on a month with no rows.
+  **A grouped pane is the exception**: `J`/`K` refuse there because a move by
+  one place is ambiguous among folds, but a copy takes the whole manual order,
+  and the folds come from it (first seen, manual inside each) — so the months
+  it reaches read the same grouped as this one. An empty field is refused
+  too, rather than meaning every month as it does on a rule: here that would
+  be a bulk write nobody typed.
+- **Not remembered in `?split=`**: it is a gesture, not a setting.
+
 ### Type
 | Key | Action |
 |---|---|
@@ -934,7 +999,8 @@ checkbox each, restored in any combination.
 | `:grep vinho` | search every month — a result list, not a filter over this one · bare `:grep` reopens the last search |
 | `:trash` | deleted rows and removed files, to bring back — the same pane `Ctrl-u` opens |
 | `:prune` | admin only — byte-identical files in the vault; remove the copies in the trash, for good |
-| `:sort date` | row order: manual · date · amount |
+| `:sort date` | row order: manual · name · amount · date |
+| `:order` | copy this month's manual order to other months — the same drawer `gs` opens |
 | `:group bucket` | group by category · `:group none` to flatten |
 | `:set rnu` | gutter: relative · absolute · off |
 | `:theme gruvbox` | colorscheme (writes your own settings row) · bare `:theme` opens the picker |
@@ -1086,8 +1152,8 @@ editing. So:
   fires the events `x-model` listens for, toggles first, so the fields they
   reveal exist and the path preview follows.
 - **Still modal, on purpose:** the `dd` delete confirmation, the
-  `ga` member picker, the `?` keymap and the `P` file
-  carousel. Those are confirmations and full-screen viewers, not forms —
+  question every `u`/`U` asks first, the `ga` member picker, the `?` keymap
+  and the `P` file carousel. Those are confirmations and full-screen viewers, not forms —
   there's nothing to type, and a confirmation *should* stop you.
 
 - **Directional, not tab order.** These move by where a field actually sits
@@ -2034,7 +2100,9 @@ period is confirmed, the row shows an **estimate** derived from history.
 ### Where it sits, and what it's called
 
 - **A new income lands at the top of its pane** — where a household reads
-  what came in. That's a starting sort key, not a pin: `J`/`K` move it
+  what came in: a hand-entered one, and a rule's first month; every later
+  month arrives where the rule sat the month before. That's a starting sort
+  key, not a pin: `J`/`K` move it
   anywhere afterwards, and `:sort date`/`amount` treat it like any other
   row. A hard "income always floats" tier was rejected: it would contradict
   being able to move it, and it would quietly override an explicit sort.
@@ -2083,6 +2151,8 @@ change              -- one row per user action ("a save")
   period            TEXT     -- 'mm/yyyy'; null for rule-level changes
   undo_of           INTEGER  -- nullable FK -> change.id, for an undone action
   note              TEXT     -- nullable, one line ('superseded by receipt upload')
+  part_of           INTEGER  -- nullable FK -> change.id: a part of that entry,
+                             -- never a step of its own (0019) — a row `:order` moved
 
 change_field        -- one row per field actually touched; none for delete/restore
   change_id         INTEGER FK
@@ -2111,6 +2181,12 @@ change_field        -- one row per field actually touched; none for delete/resto
   same append-only record as everything else rather than in a side channel.
   They carry no `change_field` rows: a password has no old value worth
   recording, and writing one down would be worse than useless.
+- **…and, with a `period`, a member's pane.** `:order`'s anchor is an `edit`
+  on the pane's owner, stamped with the month copied from and noted *order
+  copied to other months*, with one `months` field. The rows it moved are
+  `reorder` entries in their own months, `part_of` it. An amendment, made
+  because `change` cannot be rebuilt for a verb of its own (see migration
+  0019): the note is what tells it apart from turning a member off.
 
 ### The pane
 
@@ -2832,7 +2908,7 @@ that re-rendered a grouped pane (a rule save included) flattened it.
 
 ### Interaction with sort and reorder
 
-Grouping is a derived view exactly like `ledger.sort = "date"`/`"amount"` — the
+Grouping is a derived view exactly like `ledger.sort = "name"`/`"amount"`/`"date"` — the
 moment rows are re-clustered by category, `J`/`K` refuse with the same message
 pattern: `ledger.group = "bucket" — reorder needs group = "none"`.
 
@@ -3191,7 +3267,7 @@ layout_min_split_width  int   -- px; below this, auto → tabs
 layout_min_width        int   -- px floor per pane; 0 = no floor
 layout_max_width        int   -- px cap per pane; 0 = unlimited
 layout_gap              int   -- px between panes
-ledger_sort             text  -- "manual" | "date" | "amount"
+ledger_sort             text  -- "manual" | "name" | "amount" | "date" (0018)
 ledger_search_scope     text  -- "pane" | "household"
 ledger_show_delta       bool
 ledger_group            text  -- "none" | "bucket"

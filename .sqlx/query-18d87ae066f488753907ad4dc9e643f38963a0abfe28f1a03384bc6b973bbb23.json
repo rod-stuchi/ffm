@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT o.id AS \"id!: i64\", o.undo_of AS \"undo_of: i64\"\n               FROM change o\n               WHERE o.id > ?1 AND o.entity = 'transaction' AND o.entity_id = ?2\n                 AND o.action = 'reorder' AND o.part_of IS NOT NULL\n                 AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = o.id)\n               ORDER BY o.id DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "undo_of: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "18d87ae066f488753907ad4dc9e643f38963a0abfe28f1a03384bc6b973bbb23"
+}

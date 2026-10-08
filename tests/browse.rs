@@ -137,7 +137,7 @@ async fn three_rows(pool: &SqlitePool) -> i64 {
 }
 
 #[tokio::test]
-async fn the_three_orders_read_the_same_rows_three_ways() {
+async fn the_four_orders_read_the_same_rows_four_ways() {
     let pool = pool().await;
     let me = three_rows(&pool).await;
 
@@ -146,6 +146,12 @@ async fn the_three_orders_read_the_same_rows_three_ways() {
     assert_eq!(
         titles(&pool, me, Sort::Manual).await,
         ["Energia", "Água", "Mercado"]
+    );
+    // A–Z the way the household reads it: "Água" among the A's, not after
+    // "Z" where a byte comparison would put the accented letter.
+    assert_eq!(
+        titles(&pool, me, Sort::Name).await,
+        ["Água", "Energia", "Mercado"]
     );
     assert_eq!(
         titles(&pool, me, Sort::Date).await,
@@ -156,6 +162,36 @@ async fn the_three_orders_read_the_same_rows_three_ways() {
         titles(&pool, me, Sort::Amount).await,
         ["Mercado", "Energia", "Água"]
     );
+}
+
+#[tokio::test]
+async fn by_name_ignores_case_and_ties_keep_the_manual_order() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    add(&pool, me, "mercado", 300, None, None).await;
+    add(&pool, me, "Zelador", 100, None, None).await;
+    add(&pool, me, "Mercado", 200, None, None).await;
+    add(&pool, me, "MERCADO", 100, None, None).await;
+    // Three titles equal once case is set aside: they keep the order they
+    // were put in by hand, rather than one a byte comparison would pick.
+    let rows = titles(&pool, me, Sort::Name).await;
+    assert_eq!(rows, ["mercado", "Mercado", "MERCADO", "Zelador"]);
+}
+
+#[test]
+fn s_steps_through_the_orders_in_the_order_the_settings_list_them() {
+    // manual → name → amount → date → manual. `LEDGER_SORTS` is the order
+    // `:profile` and Tab show them in, so the key reads the same.
+    let mut seen = vec![Sort::Manual.code()];
+    let mut at = Sort::Manual.next();
+    while at != Sort::Manual {
+        seen.push(at.code());
+        at = at.next();
+    }
+    assert_eq!(seen, ffm::db::settings::LEDGER_SORTS);
+    for code in ffm::db::settings::LEDGER_SORTS {
+        assert_eq!(Sort::parse(code).code(), code);
+    }
 }
 
 #[tokio::test]
@@ -302,6 +338,7 @@ async fn a_derived_view_cannot_be_reordered() {
     // Not a capability check — a statement about what the gesture could even
     // mean. Under `sort = date` the rows are in an order nobody put them in.
     assert!(!Sort::Manual.is_derived());
+    assert!(Sort::Name.is_derived());
     assert!(Sort::Date.is_derived());
     assert!(Sort::Amount.is_derived());
     assert_eq!(

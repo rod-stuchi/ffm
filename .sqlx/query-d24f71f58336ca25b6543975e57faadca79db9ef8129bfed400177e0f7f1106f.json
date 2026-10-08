@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT period AS \"period!: String\" FROM transactions\n           WHERE member_id = ?1 AND period BETWEEN ?2 AND ?3 AND deleted_at IS NULL\n           ORDER BY period",
+  "describe": {
+    "columns": [
+      {
+        "name": "period!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d24f71f58336ca25b6543975e57faadca79db9ef8129bfed400177e0f7f1106f"
+}

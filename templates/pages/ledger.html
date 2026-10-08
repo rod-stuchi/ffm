@@ -469,6 +469,32 @@
     </div>
   </div>
 
+  {#- "Undo this?" — every `u` and `U` asks first, saying what it would put
+      back: the entry as the log pane reads it, its fields the other way
+      round, and anything skipped on the way. The same key again or `y` does
+      it; anything else leaves it, with nothing written. -#}
+  <div class="modal" x-show="undoAsk" x-cloak @click.self="answerUndo(false)">
+    <div class="card" style="max-width:min(520px,100%)">
+      <div class="ch"><h1 x-text="undoAsk && undoAsk.title"></h1></div>
+      <div class="cb">
+        <p style="margin-top:0" x-text="undoAsk && undoAsk.message"></p>
+        <template x-if="undoAsk && undoAsk.lines && undoAsk.lines.length">
+          <ul class="ask-lines">
+            <template x-for="l in undoAsk.lines"><li x-text="l"></li></template>
+          </ul>
+        </template>
+        <p class="hint" x-text="undoAsk && undoAsk.hint"></p>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="answerUndo(false)">{{ t.row_cancel() }} <kbd>esc</kbd></button>
+          <button class="btn" type="button" @click="answerUndo(true)">
+            <span x-text="undoAsk && undoAsk.yes"></span>
+            <kbd x-text="undoAsk && (undoAsk.dir === 'undo' ? 'u' : 'U')"></kbd>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" x-show="confirming" x-cloak @click.self="confirming = null">
     <div class="card" style="max-width:min(460px,100%)">
       <div class="ch"><h1>{{ t.row_delete_confirm() }}</h1></div>
@@ -1186,12 +1212,13 @@ function ledger() {
     pickFor: null,
     dragging: false,
     splitZoom: false,
-    // `{ id, dir }` while a `u`/`U` on a change from before today waits for
-    // its second press. A confirmation, like `confirming` — never data.
-    undoConfirm: null,
+    // The question every `u`/`U` asks first — `{ id, dir, member, period,
+    // title, message, lines, yes, hint }`, every string the server's. A
+    // confirmation, like `confirming` — never data.
+    undoAsk: null,
     // The month a `[`/`]`/`T` (or a click) asked about, when drafts are
     // parked — answered only by the same request again. Visual, like
-    // `undoConfirm`: nothing is written either way.
+    // `undoAsk`: nothing is written either way.
     monthConfirm: null,
     nu: {{ nu|json|safe }},
     cursorOnFold: {{ cursor_on_fold|json|safe }},
@@ -1211,6 +1238,7 @@ function ledger() {
     // money display in the app reads the same setting, so the mask cannot
     // disagree with the rows above it.
     sort: {{ sort|json|safe }},
+    nextSort: {{ next_sort|json|safe }},
     // The two clickable cells show a SHORT label — `rnu` / `nu` / `nonu` are
     // the words a member types back at `:set`, which is the same reason the
     // sort-refusal message names `manual` and `date` rather than translating
@@ -1629,12 +1657,9 @@ function ledger() {
       if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) {
         return;
       }
-      // A `u` that asked "u again to undo …" is answered only by the very
-      // next key. Anything else in between and the question lapses — the
-      // server re-checks the change it names either way.
-      if (e.key !== 'u' && e.key !== 'U') this.undoConfirm = null;
-      // The month question lapses the same way — but not on a modifier (the
-      // Shift before `T`) or a digit (the 3 of a repeated `3]`).
+      // The month question is answered only by the very next key — but not
+      // a modifier (the Shift before `T`) or a digit (the 3 of a repeated
+      // `3]`); anything else in between and it lapses.
       if (!['[', ']', 'T', 'Shift', 'CapsLock'].includes(e.key) && !/^[0-9]$/.test(e.key)) this.monthConfirm = null;
 
       // A form takes literal text, so motions stop being motions inside one.
@@ -1676,6 +1701,15 @@ function ledger() {
         if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
         e.preventDefault();
         this.answerAttach(e.key === 'y');
+        return;
+      }
+      // "Undo this?" — every `u` and `U` asks first. The same key again, or
+      // `y`, does it; every other key, Enter and Esc included, leaves it. A
+      // bare Shift never gets here (returned above), so the Shift of `U`
+      // does not answer it.
+      if (this.undoAsk) {
+        e.preventDefault();
+        this.answerUndo(e.key === (this.undoAsk.dir === 'undo' ? 'u' : 'U') || e.key === 'y');
         return;
       }
       // The trim-and-shrink view sits above everything, the carousel included.
@@ -2213,8 +2247,10 @@ function ledger() {
     /// settings row — the same row `:set`, `:sort` and the `:profile` radios
     /// write, which is what keeps one setting to one source.
     cycleSort() {
-      const next = { manual: 'date', date: 'amount', amount: 'manual' }[this.sort] || 'manual';
-      this.setting('/settings/member', 'ledger_sort', next);
+      // manual → name → amount → date, decided by `Sort::next` on the
+      // server: the write refreshes the page, so the next step is always
+      // the one rendered with it.
+      this.setting('/settings/member', 'ledger_sort', this.nextSort);
     },
 
     /// `S`, and the statusline cell beside sort: first seen → A–Z → by cost.
@@ -3731,6 +3767,20 @@ function ledger() {
         .then(() => this.focusSplit());
     },
 
+    /// `:order` / `gs` — the focused pane's manual order, in the month on
+    /// screen, copied to other months. Opened with the keyboard in the months
+    /// field, its only control. The server refuses it under a sort that is
+    /// not manual and on somebody else's ledger, and the drawer then does not
+    /// open; a grouped pane is fine — the folds come from the manual order.
+    /// Not remembered in `?split=`: it is a gesture, not a setting.
+    openOrder() {
+      const member = this.paneMemberId();
+      if (!member || this.readOnly()) return;
+      const period = document.querySelector('.ledger-shell')?.dataset.period || '';
+      this.showSplit('/order?member=' + member + '&period=' + encodeURIComponent(period))
+        .then(() => this.focusSplit());
+    },
+
     /// `:prune` — opened with the keyboard on the first copy that can go.
     /// Not remembered in `?split=`: like the trash, it is a list for a
     /// moment, and reopening it on a reload would re-hash the vault for
@@ -3980,6 +4030,9 @@ function ledger() {
         if (k === 'd') { this.showDetails(); return true; }
         // `gp` — "go preview": the g-prefix spelling of `P`, beside gl / gd.
         if (k === 'p') { this.openCarousel(); return true; }
+        // `gs` — this month's manual order, copied to other months: the
+        // `:order` drawer. Beside `s`, which picks the order to read by.
+        if (k === 's') { this.openOrder(); return true; }
         // `ga` — "give to": move the row to another member, picked by name.
         if (k === 'a') { this.askGive(); return true; }
         // `gt` / `gT` cycle the member tabs, wrapping — and a count jumps
@@ -4092,6 +4145,8 @@ function ledger() {
         case 'household': case 'config':  return this.showSplit('/household');
         case 'members':                   return this.showSplit('/members');
         case 'trash':                     return this.openTrash();
+        // This month's manual order, to other months — `gs` too.
+        case 'order':                     return this.openOrder();
         // Duplicate files, admin only — the server refuses anybody else.
         case 'prune':                     return this.openPrune();
         // `:help` opens the keymap — the same modal `?` does. It is not a
@@ -4366,7 +4421,7 @@ function ledger() {
       const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
       if (!file) return;
       if (this.carousel || this.prep || this.keymap || this.confirming || this.giving
-          || this.attachAsk || this.billPick || this.removingFile) return;
+          || this.attachAsk || this.billPick || this.removingFile || this.undoAsk) return;
       const body = new FormData();
       body.append('file', file);
       body.append('period', document.querySelector('.ledger-shell')?.dataset.period || '');
@@ -4897,16 +4952,26 @@ function ledger() {
 
     /// `u` / `U`. Scoped to the pane and the month on screen, which the
     /// server needs told: the focused pane is the page's, not the session's.
+    /// The first request only asks — the answer is `ffm:undo-ask`, which
+    /// raises the popup.
     undoStep(dir) {
       const member = this.paneMemberId();
       if (!member || this.readOnly()) return;
       const period = document.querySelector('.ledger-shell')?.dataset.period || '';
-      const values = { member, period };
-      // The second press of a "u again to undo …" names the change it is
-      // agreeing to; the server acts only if that is still the one.
-      if (this.undoConfirm && this.undoConfirm.dir === dir) values.confirm = this.undoConfirm.id;
-      this.undoConfirm = null;
-      htmx.ajax('POST', '/' + dir, { target: 'body', swap: 'none', values });
+      htmx.ajax('POST', '/' + dir, { target: 'body', swap: 'none', values: { member, period } });
+    },
+
+    /// The popup's answer. Yes sends the same request again, naming the
+    /// change it was about; the server acts only if that is still the one,
+    /// and asks again if the stack moved in between.
+    answerUndo(yes) {
+      const ask = this.undoAsk;
+      this.undoAsk = null;
+      if (!yes || !ask) return;
+      htmx.ajax('POST', '/' + ask.dir, {
+        target: 'body', swap: 'none',
+        values: { member: ask.member, period: ask.period, confirm: ask.id },
+      });
     },
 
     init() {
@@ -4958,7 +5023,10 @@ function ledger() {
         this.cursorTo(String(e.detail.id));
         if (e.detail.flash) this.flashRow(String(e.detail.id));
       });
-      document.body.addEventListener('ffm:undo-confirm', e => { this.undoConfirm = e.detail; });
+      document.body.addEventListener('ffm:undo-ask', e => { this.undoAsk = e.detail; });
+      // A drawer whose job is done — `:order` after it copied — closes the
+      // way Esc closes it, zoom and `?split=` included.
+      document.body.addEventListener('ffm:split-close', () => this.closeSplit());
       this.listenLive();
       // A mutation that can move a month in or out of "overdue" says so in
       // its `HX-Trigger` (`live::mark_dot` on the server); and a tab coming

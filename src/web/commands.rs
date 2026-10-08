@@ -58,7 +58,7 @@ fn owned(values: &[&str]) -> Vec<String> {
 }
 
 /// In the order a household reaches for them, which is the hint's order.
-pub static ALL: [Command; 16] = [
+pub static ALL: [Command; 17] = [
     Command {
         name: "help",
         aliases: &["h"],
@@ -79,6 +79,13 @@ pub static ALL: [Command; 16] = [
         args: || owned(&settings::LEDGER_SORTS),
         who: Who::Anyone,
         about: |t| t.command_about_sort().to_string(),
+    },
+    Command {
+        name: "order",
+        aliases: &[],
+        args: none,
+        who: Who::Anyone,
+        about: |t| t.command_about_order().to_string(),
     },
     Command {
         name: "group",

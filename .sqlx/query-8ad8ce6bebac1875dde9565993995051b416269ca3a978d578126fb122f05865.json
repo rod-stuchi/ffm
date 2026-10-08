@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "WITH RECURSIVE depth(id, d) AS (\n               SELECT id, 0 FROM change WHERE member_id = ?1 AND undo_of IS NULL\n               UNION ALL\n               SELECT c.id, depth.d + 1 FROM change c JOIN depth ON c.undo_of = depth.id\n           )\n           SELECT c.id AS \"id!: i64\", c.entity AS \"entity!: String\",\n                  c.entity_id AS \"entity_id!: i64\", c.action AS \"action!: String\",\n                  c.at AS \"at!: String\", depth.d AS \"depth!: i64\",\n                  c.period AS \"period: String\",\n                  c.part_of IS NOT NULL AS \"part!: bool\",\n                  t.id AS \"tx_id?: i64\", t.title AS \"title?: String\",\n                  EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id) AS \"reversed!: bool\"\n           FROM change c\n           JOIN depth ON depth.id = c.id\n           LEFT JOIN receipts r ON c.entity = 'file' AND r.id = c.entity_id\n           -- Only a row's or a file's change is about a transaction: a\n           -- member entry's id is a member's, and must not join a row that\n           -- happens to share the number.\n           LEFT JOIN transactions t\n             ON c.entity IN ('transaction', 'file')\n            AND t.id = CASE WHEN c.entity = 'file' THEN r.transaction_id ELSE c.entity_id END\n           WHERE c.member_id = ?1\n             AND ((t.id IS NOT NULL\n                   AND ((c.entity = 'transaction'\n                         AND c.action IN ('create', 'delete', 'restore', 'edit', 'import',\n                                          'privacy', 'reorder', 'reattribute'))\n                        OR (c.entity = 'file' AND c.action IN ('file_upload', 'file_delete')))\n                   -- Part of another entry, and never a step of its own.\n                   AND NOT (c.entity = 'file' AND c.note IS NOT NULL AND c.note IN (?4, ?5))\n                   AND NOT EXISTS (SELECT 1 FROM change p\n                                   WHERE p.id = c.undo_of AND p.note IS NOT NULL AND p.note IN (?4, ?5))\n                   -- A copy retired from the trash (`receipts::RETIRED`) — its bill\n                   -- is on another row now, or `:prune` removed it as a duplicate:\n                   -- neither its delete nor its upload can be reversed any more, so\n                   -- they are not steps at all rather than ones `u` would refuse\n                   -- forever.\n                   AND NOT (c.entity = 'file'\n                            AND EXISTS (SELECT 1 FROM change x\n                                        WHERE x.entity = 'file' AND x.entity_id = c.entity_id\n                                          AND x.action = 'file_unlink' AND x.note IN (?6, ?7)))\n                   -- The pane: rows in this member's ledger, or a row this pane\n                   -- handed to somebody else, which is still this pane's change.\n                   AND (?2 IS NULL OR t.member_id = ?2\n                        OR (c.action = 'reattribute'\n                            AND EXISTS (SELECT 1 FROM change_field f JOIN members m ON m.name = f.old_value\n                                        WHERE f.change_id = c.id AND f.field = 'member' AND m.id = ?2)))\n                   -- The month on screen.\n                   AND (?3 IS NULL OR t.period = ?3))\n                  -- `:order`'s anchor: a copy made FROM this pane and month,\n                  -- whose rows (its parts) are in other months.\n                  OR (c.entity = 'member' AND c.action = 'edit' AND c.note = ?8\n                      AND (?2 IS NULL OR c.entity_id = ?2)\n                      AND (?3 IS NULL OR c.period = ?3)))\n           ORDER BY c.id DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "entity!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "entity_id!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "action!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "at!: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "depth!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "part!: bool",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tx_id?: i64",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "title?: String",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "reversed!: bool",
+        "ordinal": 10,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "8ad8ce6bebac1875dde9565993995051b416269ca3a978d578126fb122f05865"
+}

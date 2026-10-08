@@ -687,6 +687,43 @@ legend {
   color: var(--neg);
 }
 
+/* `:order`'s read-back: the same marks, each in the state it would end in.
+ * The month copied FROM wears the accent ring — "you are here"; a month that
+ * reorders is lit as a rule's active month is; one already in this order is
+ * picked but quiet; a month still to come is dashed (it follows when it
+ * arrives), in `--neg` when it would take another month's order instead; a
+ * picked month with no rows is struck through. Each says so in its title. */
+.orderback .mmark.is-src {
+  opacity: 1;
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.orderback .mmark.is-same {
+  opacity: 1;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.orderback .mmark.is-follow,
+.orderback .mmark.is-nofollow {
+  opacity: 1;
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  color: var(--accent);
+}
+
+.orderback .mmark.is-nofollow {
+  outline-color: var(--neg);
+  color: var(--neg);
+}
+
+.orderback .mmark.is-empty {
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+
 /* The months expression is read character by character, like every other
  * mono thing in this app: a regex, a path, an invite URL. */
 input.i.mono {

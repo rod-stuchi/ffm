@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT undo_of AS \"undo_of: i64\" FROM change WHERE id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "undo_of: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "bca12c3a6fddcd831c2a9429e2854b123d54fb1c8c3ae30f3e62713d27d04fe6"
+}

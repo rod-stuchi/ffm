@@ -723,8 +723,8 @@ pub struct MoveForm {
 }
 
 /// What `u` and `U` send: the pane and the month on screen — which is the
-/// whole of what they may reach — and, for a change from before today, the
-/// id the first press asked about.
+/// whole of what they may reach — and, on the second press, the id the
+/// question was about.
 #[derive(Deserialize)]
 pub struct UndoForm {
     member: i64,
@@ -749,6 +749,11 @@ pub async fn redo(State(st): State<AppState>, auth: Auth, Form(f): Form<UndoForm
 /// **Scoped to the pane and the month on screen**, and to the viewer's own
 /// changes: what `u` touches is always in front of you, so a stray press is
 /// seen, and `U` puts it back.
+///
+/// **Every step asks first.** The first press answers with what it would put
+/// back (`ffm:undo-ask`); only a second request naming that same change does
+/// it. A stale second press — the stack moved in between — is asked about
+/// again, never acted on, so a confirmation cannot reverse something else.
 async fn apply(st: &AppState, auth: &Auth, f: UndoForm, dir: tx::Direction) -> Response {
     let t = auth.catalog();
     let Some(period) = Period::parse(&f.period) else {
@@ -767,11 +772,7 @@ async fn apply(st: &AppState, auth: &Auth, f: UndoForm, dir: tx::Direction) -> R
     let Ok(next) = tx::next(&st.pool, scope, dir).await else {
         return say_only(t.error_not_written(), true);
     };
-    let skipped: Vec<String> = next
-        .skipped
-        .iter()
-        .map(|s| t.undo_skipped(&s.who, &s.title))
-        .collect();
+    let skipped: Vec<String> = next.skipped.iter().map(|s| skipped_line(&t, s)).collect();
 
     let Some(u) = next.pick else {
         let none = match dir {
@@ -792,34 +793,23 @@ async fn apply(st: &AppState, auth: &Auth, f: UndoForm, dir: tx::Direction) -> R
     };
     let verb = crate::ui::log::verb(&action, &t);
 
-    // A change from before today is not reversed on the first press. `u` is
-    // one key, next to `i`, and last week's edit is not what anybody expects
-    // it to reach — so the first press says what it would do and when, and
-    // only the same key again, about the same change, does it.
-    let today = crate::clock::today();
-    let day = crate::ui::log::local_date(&u.at).unwrap_or(today);
-    if day < today && f.confirm != Some(u.change_id) {
-        let date = crate::ui::fmt::date(day);
-        let ask = match dir {
-            tx::Direction::Undo => t.undo_confirm(&verb, &u.title, &date),
-            tx::Direction::Redo => t.redo_confirm(&verb, &u.title, &date),
-        };
+    if f.confirm != Some(u.change_id) {
         let res = (StatusCode::OK, HeaderMap::new(), String::new()).into_response();
-        return trigger(
-            res,
-            serde_json::json!({
-                "ffm:say": { "message": join(&ask, &skipped), "bad": false },
-                "ffm:undo-confirm": {
-                    "id": u.change_id,
-                    "dir": if dir == tx::Direction::Undo { "undo" } else { "redo" },
-                },
-            }),
-        );
+        let mut ask = undo_question(st, &t, &u, dir, &verb, &skipped).await;
+        // The second press goes back to the same pane and month.
+        ask["member"] = f.member.into();
+        ask["period"] = f.period.clone().into();
+        return trigger(res, serde_json::json!({ "ffm:undo-ask": ask }));
     }
+
+    let (tx_id, title) = match &u.step {
+        tx::Step::Row { tx_id, title } => (*tx_id, title.clone()),
+        tx::Step::OrderCopy { .. } => return order_step(st, &t, me, &u, dir, &skipped).await,
+    };
 
     // A write like any other: to a row this viewer may still change, and a
     // re-attribution only by an admin, exactly as the gesture itself.
-    if let Err(refused) = may_touch(st, auth, u.tx_id).await {
+    if let Err(refused) = may_touch(st, auth, tx_id).await {
         return refused;
     }
     if u.action == "reattribute" && !auth.viewer.is_admin() {
@@ -857,7 +847,7 @@ async fn apply(st: &AppState, auth: &Auth, f: UndoForm, dir: tx::Direction) -> R
         );
     }
 
-    let message = join(&describe(st, &t, &u, dir, &verb).await, &skipped);
+    let message = join(&describe(st, &t, &u, &title, dir, &verb).await, &skipped);
 
     // Undoing a re-attribution moves the row between two panes, and a single
     // row fragment could only ever tell half of that — the same reason the
@@ -881,21 +871,145 @@ async fn apply(st: &AppState, auth: &Auth, f: UndoForm, dir: tx::Direction) -> R
         || (u.entity == "transaction"
             && (u.action == "edit" || u.action == "import")
             && derived_view(auth));
-    let res =
-        if moves_row && let Ok(Some((member_id, period, _))) = tx::one(&st.pool, u.tx_id).await {
-            let mut res = pane_fragment(st, auth, member_id, period, &message).await;
-            res.headers_mut()
-                .insert("HX-Reswap", HeaderValue::from_static("none"));
-            res
-        } else {
-            match render_row(st, auth, u.tx_id, true).await {
-                Ok(f) => say(Html(f).into_response(), &message, false),
-                Err(e) => return say(error_row(&t, e), e, true),
-            }
-        };
+    let res = if moves_row && let Ok(Some((member_id, period, _))) = tx::one(&st.pool, tx_id).await
+    {
+        let mut res = pane_fragment(st, auth, member_id, period, &message).await;
+        res.headers_mut()
+            .insert("HX-Reswap", HeaderValue::from_static("none"));
+        res
+    } else {
+        match render_row(st, auth, tx_id, true).await {
+            Ok(f) => say(Html(f).into_response(), &message, false),
+            Err(e) => return say(error_row(&t, e), e, true),
+        }
+    };
     // The cursor goes to what changed, and the row blinks once — the eye
     // lands where the statusline is talking about.
-    point_at(res, u.tx_id)
+    point_at(res, tx_id)
+}
+
+/// `Ana changed "Padaria" since — left as they made it`.
+fn skipped_line(t: &Catalog, s: &tx::Skipped) -> String {
+    match &s.who {
+        tx::Overtaker::Member(who) => t.undo_skipped(who, &s.title),
+        tx::Overtaker::OrderCopy => t.undo_skipped_copy(&s.title),
+    }
+}
+
+/// The question before a step: what it would put back, for the popup. Every
+/// string is the server's, formatted the way the log pane formats it, so the
+/// page only shows them.
+async fn undo_question(
+    st: &AppState,
+    t: &Catalog,
+    u: &tx::Undoable,
+    dir: tx::Direction,
+    verb: &str,
+    skipped: &[String],
+) -> serde_json::Value {
+    let today = crate::clock::today();
+    let day = crate::ui::log::local_date(&u.at).unwrap_or(today);
+    let when = format!(
+        "{} {}",
+        crate::ui::log::day_label(day, today, t),
+        crate::ui::log::local_time(&u.at)
+    );
+    let (message, mut lines) = match &u.step {
+        tx::Step::Row { title, .. } => {
+            let currency = ledger::household(&st.pool)
+                .await
+                .ok()
+                .flatten()
+                .map(|h| h.currency)
+                .unwrap_or_default();
+            // What the step does to each field is the reverse of what the
+            // change did — for an undo and a redo alike, since a redo is the
+            // reverse of an undo.
+            let mirrored: Vec<crate::db::changes::FieldEntry> =
+                crate::db::changes::fields(&st.pool, u.change_id)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|f| crate::db::changes::FieldEntry {
+                        old: f.new,
+                        new: f.old,
+                        ..f
+                    })
+                    .collect();
+            (
+                t.undo_ask_row(verb, title, &when),
+                crate::ui::log::field_changes(&mirrored, currency, t),
+            )
+        }
+        tx::Step::OrderCopy { .. } => {
+            let rev = crate::db::order::preview_reverse(&st.pool, u.change_id)
+                .await
+                .unwrap_or_default();
+            let mut lines: Vec<String> = rev
+                .months
+                .iter()
+                .map(|(p, n)| t.order_ask_month(&crate::ui::fmt::period(*p), *n as i64))
+                .collect();
+            if rev.left > 0 {
+                lines.push(t.order_left(rev.left as i64));
+            }
+            (t.undo_ask_order(&month_list(t, &rev.months), &when), lines)
+        }
+    };
+    lines.extend(skipped.iter().cloned());
+    let undo = dir == tx::Direction::Undo;
+    serde_json::json!({
+        "id": u.change_id,
+        "dir": if undo { "undo" } else { "redo" },
+        "title": if undo { t.undo_ask_title() } else { t.redo_ask_title() },
+        "message": message,
+        "lines": lines,
+        "yes": if undo { t.undo_ask_yes() } else { t.redo_ask_yes() },
+        "hint": if undo { t.undo_ask_hint() } else { t.redo_ask_hint() },
+    })
+}
+
+/// `Jan, Feb, Sep` — the months a copy reached, by name, in the member's
+/// language.
+fn month_list(t: &Catalog, months: &[(Period, usize)]) -> String {
+    months
+        .iter()
+        .map(|(p, _)| t.month_short(p.month() as i64).to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// A copy of a pane's order, reversed or re-applied whole. Nothing on screen
+/// moves — the copy was made FROM this month — so the answer is the
+/// statusline alone; the months it reached hear it over the live feed.
+async fn order_step(
+    st: &AppState,
+    t: &Catalog,
+    me: i64,
+    u: &tx::Undoable,
+    dir: tx::Direction,
+    skipped: &[String],
+) -> Response {
+    let Ok(Some(rev)) = crate::db::order::reverse(&st.pool, Actor::User(me), u.change_id).await
+    else {
+        return say_only(&join(t.error_not_written(), skipped), true);
+    };
+    let months = month_list(t, &rev.months);
+    let mut parts = vec![match dir {
+        tx::Direction::Undo => t.order_undo_did(&months, rev.rows() as i64),
+        tx::Direction::Redo => t.order_redo_did(&months, rev.rows() as i64),
+    }];
+    if rev.left > 0 {
+        parts.push(t.order_left(rev.left as i64));
+    }
+    parts.push(
+        match dir {
+            tx::Direction::Undo => t.undo_redo_hint(),
+            tx::Direction::Redo => t.redo_undo_hint(),
+        }
+        .to_string(),
+    );
+    say_only(&join(&parts.join(" · "), skipped), false)
 }
 
 /// `a · b · c` — the step's own message, then anything skipped on the way.
@@ -912,6 +1026,7 @@ async fn describe(
     st: &AppState,
     t: &Catalog,
     u: &tx::Undoable,
+    title: &str,
     dir: tx::Direction,
     verb: &str,
 ) -> String {
@@ -928,8 +1043,8 @@ async fn describe(
         _ => Vec::new(),
     };
     let mut parts = vec![match dir {
-        tx::Direction::Undo => t.undo_did(verb, &u.title),
-        tx::Direction::Redo => t.redo_did(verb, &u.title),
+        tx::Direction::Undo => t.undo_did(verb, title),
+        tx::Direction::Redo => t.redo_did(verb, title),
     }];
     let changes = crate::ui::log::field_changes(&fields, currency, t);
     let shown = changes.len().min(2);
@@ -957,7 +1072,7 @@ fn point_at(mut res: Response, id: i64) -> Response {
 }
 
 /// `HX-Trigger` with more than the statusline in it.
-fn trigger(mut res: Response, payload: serde_json::Value) -> Response {
+pub(crate) fn trigger(mut res: Response, payload: serde_json::Value) -> Response {
     if let Ok(v) = HeaderValue::from_str(&ascii_json(&payload.to_string())) {
         res.headers_mut().insert("HX-Trigger", v);
     }

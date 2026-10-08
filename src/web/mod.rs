@@ -12,6 +12,8 @@ pub mod import;
 pub mod ledger;
 pub mod live;
 pub mod log;
+pub mod months;
+pub mod order;
 pub mod prepare;
 pub mod prune;
 pub mod rules;
@@ -97,6 +99,11 @@ pub fn router(state: AppState) -> Router {
         // trashed copy never decides whether a month is overdue.
         .route("/prune", get(prune::view).post(prune::run))
         .route("/tx/{id}/move", post(tx::move_row))
+        // `:order` / `gs` — this pane's manual order, copied to other months.
+        // Not in `overdue`: an order decides nothing about what is late.
+        .route("/order", get(order::view))
+        .route("/order/months", get(order::preview))
+        .route("/order/copy", post(order::copy))
         // `e` — the row opens into its own form, in place.
         .route("/tx/{id}/edit", get(tx::edit_form))
         .route("/tx/{id}/paid", post(tx::paid))

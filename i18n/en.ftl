@@ -221,9 +221,36 @@ undo-more = { $n ->
         [one] + 1 more field
        *[other] + { $n } more fields
     }
-undo-confirm = u again to undo: { $verb } "{ $title }", from { $date }
-redo-confirm = U again to redo: { $verb } "{ $title }", from { $date }
 undo-skipped = { $who } changed "{ $title }" since — left as they made it
+undo-skipped-copy = a copied order moved "{ $title }" since — left where it is
+# The question before every u / U. `when` arrives formatted: "today 14:32",
+# "12/09/2026 09:05".
+undo-ask-title = Undo this?
+redo-ask-title = Redo this?
+undo-ask-row = { $verb } "{ $title }" · { $when }
+undo-ask-order = order copied to { $months } · { $when }
+undo-ask-yes = Undo
+redo-ask-yes = Redo
+undo-ask-hint = u again or y undoes it — any other key leaves it as it is.
+redo-ask-hint = U again or y redoes it — any other key leaves it as it is.
+# :order's copy, undone or redone whole. `month` arrives formatted (10/2026),
+# `months` as short names (Jan, Feb).
+order-ask-month = { $month } · { $n ->
+        [one] 1 row
+       *[other] { $n } rows
+    }
+order-left = { $n ->
+        [one] 1 row moved since — left where it is
+       *[other] { $n } rows moved since — left where they are
+    }
+order-undo-did = undone: order copied to { $months } · { $n ->
+        [one] 1 row put back
+       *[other] { $n } rows put back
+    }
+order-redo-did = redone: order copied to { $months } · { $n ->
+        [one] 1 row moved
+       *[other] { $n } rows moved
+    }
 error-not-written = That didn't go through — nothing was written.
 
 ## The rule pane — A / I create, E edits
@@ -340,6 +367,7 @@ profile-max-width = Maximum pane width
 profile-gap = Gap between panes
 profile-sort = Row order
 profile-sort-manual = Manual
+profile-sort-name = Name
 profile-sort-date = Date
 profile-sort-amount = Amount
 profile-search-scope = Search scope
@@ -438,6 +466,7 @@ command-about-theme = your color palette — bare, it opens the picker
 command-about-lang = your language — words only, never dates or money
 command-about-grep = search every month — bare, the last search again
 command-about-trash = deleted rows and removed files, to bring back
+command-about-order = copy this month's order to other months
 command-about-prune = duplicate files — remove the copies in the trash
 command-about-household = the household's settings
 command-about-members = members and invite links
@@ -565,6 +594,40 @@ trash-failed = { $n ->
        *[other] { $n } could not be restored
     }
 trash-bill-elsewhere = "{ $title }" already holds the same bill, and a bill can be on one row only
+
+## :order / gs — this pane's manual order, copied to other months.
+## `who` is a member's name, `month` / `from` a formatted month (10/2026),
+## `months` short month names (Jan, Feb), `year` a year.
+order-title = Copy this order
+order-hint = Puts { $who }'s rows, in the months you pick, in the order they have in { $month } — each matched to its row here by its rule, then by its name. Rows with no match here go after them.
+order-months = Months of { $year }
+order-apply = Copy order
+order-note = A month still to come arrives in the order of the month before it, so later months follow without being picked. u in this month puts the whole copy back, every month at once.
+order-pick = type the months to copy this order to — 1-9, or ^10 for all the others
+order-empty-source = this month has no rows — there is no order here to copy
+order-mark-source = this order
+order-mark-moves = { $n ->
+        [one] 1 row moves
+       *[other] { $n } rows move
+    }
+order-mark-same = already in this order
+order-mark-follows = follows when it arrives
+order-mark-not = arrives in { $from }'s order instead
+order-mark-empty = no rows
+order-nothing-to-move = nothing to move
+order-line-moves = { $n ->
+        [one] 1 row moves
+       *[other] { $n } rows move
+    } in { $months }
+order-line-same = { $months } already in this order
+order-line-follows = { $months } follow when they arrive
+order-line-not = { $months } will arrive in { $from }'s order, not this one
+order-line-empty = no rows in { $months }
+order-copied = order copied to { $months } · { $n ->
+        [one] 1 row moved
+       *[other] { $n } rows moved
+    }
+order-nothing-moved = nothing moved — the months picked already read this way
 
 ## Bill import
 

@@ -1,0 +1,15 @@
+{#- `:order`'s read-back: what each month of the year would end in.
+
+    The twelve marks of the rule pane's months read-back, each with a state —
+    this month (the order copied), reordered, already in this order, following
+    when it arrives, taking another month's order instead, or nothing there —
+    said in words in its title, and a line summing it up. Rendered by the
+    server from the same plan the copy writes. -#}
+<div class="monthsbox orderback{% if bad %} is-bad{% endif %}" id="orderback">
+  <div class="mmarks">
+    {%- for m in marks %}
+    <span class="mmark {{ m.class }}" title="{{ m.title }}">{{ m.initial }}</span>
+    {%- endfor %}
+  </div>
+  <div class="p2">{{ line }}</div>
+</div>

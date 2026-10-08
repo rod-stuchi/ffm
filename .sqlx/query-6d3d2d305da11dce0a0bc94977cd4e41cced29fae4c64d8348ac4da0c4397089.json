@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT c.id AS \"part!: i64\", c.entity_id AS \"id!: i64\",\n                  c.period AS \"period: String\",\n                  f.old_value AS \"was: String\", f.new_value AS \"set: String\",\n                  t.sort_key AS \"now?: String\", t.member_id AS \"member?: i64\",\n                  t.period AS \"row_period?: String\", t.rule_id AS \"rule_id?: i64\",\n                  t.deleted_at AS \"deleted_at?: String\"\n           FROM change c\n           JOIN change_field f ON f.change_id = c.id AND f.field = 'sort_key'\n           LEFT JOIN transactions t ON t.id = c.entity_id\n           WHERE c.part_of = ?1\n             AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id)\n           ORDER BY c.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "part!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "was: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "set: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "now?: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "member?: i64",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "row_period?: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_id?: i64",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "deleted_at?: String",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "6d3d2d305da11dce0a0bc94977cd4e41cced29fae4c64d8348ac4da0c4397089"
+}
