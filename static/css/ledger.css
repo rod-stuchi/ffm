@@ -1972,7 +1972,10 @@
 /* The form is only there to carry the picks; `contents` lets the pane's
  * flex column see the scrolling body and the actions row directly, so the
  * actions stay at the foot while the list scrolls. */
-.trashform {
+/* The trash's and `:order`'s forms: their body and their footer are the
+ * drawer's own rows, so the body scrolls and the button keeps its footer. */
+.trashform,
+.orderform {
   display: contents;
 }
 
@@ -2053,7 +2056,8 @@
   font-size: 11px;
 }
 
-.trashpane .rp-actions {
+.trashpane .rp-actions,
+.orderpane .rp-actions {
   padding: 10px 14px;
   border-top: 1px solid var(--line);
 }
