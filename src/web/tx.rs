@@ -49,6 +49,9 @@ pub struct Fragment {
     /// somewhere that does not know where it sits — `u`, most obviously, which
     /// can undo a row in any pane.
     oob: Option<String>,
+    /// Every fold header of the row's pane, when the pane is grouped: a header
+    /// is a total, so it moves with the row like the pane's totals do.
+    folds: Vec<crate::web::ledger::FoldSummary>,
 }
 
 /// The statusline channel, carried on the response rather than in the body:
@@ -316,6 +319,23 @@ pub(crate) async fn live_row(
     ),
     &'static str,
 > {
+    let (rows, member_id, period, currency) = live_pane(st, auth, id).await?;
+    Ok((
+        rows.into_iter().find(|r| r.id == id),
+        member_id,
+        period,
+        currency,
+    ))
+}
+
+/// The whole pane `id` lives in, read through the same query — for an answer
+/// that needs the row's neighbors as well as the row: its fold header counts
+/// them.
+async fn live_pane(
+    st: &AppState,
+    auth: &Auth,
+    id: i64,
+) -> Result<(Vec<LedgerRow>, i64, Period, crate::domain::money::Currency), &'static str> {
     let Ok(Some((member_id, period, _deleted))) = tx::one(&st.pool, id).await else {
         return Err("that row is gone");
     };
@@ -341,12 +361,7 @@ pub(crate) async fn live_row(
     else {
         return Err("cannot read that month");
     };
-    Ok((
-        pane.rows.into_iter().find(|r| r.id == id),
-        member_id,
-        period,
-        currency,
-    ))
+    Ok((pane.rows, member_id, period, currency))
 }
 
 async fn render_row(
@@ -358,27 +373,49 @@ async fn render_row(
     // Deleted rows are not in the pane query — the row stays in the database,
     // but the ledger reads live rows. Re-render it from what we know instead of
     // widening the query that every page load runs.
-    let (row, member_id, period, currency) = live_row(st, auth, id).await?;
-    match row {
-        Some(r) => {
-            let (panes, house) = crate::web::ledger::totals(st, auth, period).await;
-            Ok(Fragment {
-                oob: oob.then(|| format!("outerHTML:#row-{id}")),
-                v: r.view(&auth.catalog()),
-                t: auth.catalog(),
-                pane_totals: panes.into_iter().find(|p| p.id == member_id),
-                house_totals: Some(house),
-            })
-        }
+    let (rows, member_id, period, currency) = live_pane(st, auth, id).await?;
+    let t = auth.catalog();
+    // A grouped pane's headers are totals too — every fold's, since a row's
+    // answer does not know which ones it moved (an import can change an
+    // amount, a delete the count). A flat pane has none to send.
+    let mut folds = match crate::web::ledger::GroupOrder::of(&auth.settings) {
+        Some(order) => crate::web::ledger::fold_summaries(member_id, &rows, &t, currency, order),
+        None => Vec::new(),
+    };
+    let mut fragment = match rows.iter().find(|r| r.id == id) {
+        Some(r) => Fragment {
+            oob: None,
+            v: r.view(&t),
+            t,
+            pane_totals: None,
+            house_totals: None,
+            folds: Vec::new(),
+        },
         None => {
-            let mut deleted = deleted_row(st, auth, id, member_id, period, currency).await?;
-            deleted.oob = oob.then(|| format!("outerHTML:#row-{id}"));
-            let (panes, house) = crate::web::ledger::totals(st, auth, period).await;
-            deleted.pane_totals = panes.into_iter().find(|p| p.id == member_id);
-            deleted.house_totals = Some(house);
-            Ok(deleted)
+            let (deleted, bucket) = deleted_row(st, auth, id, member_id, period, currency).await?;
+            // The deleted row's fold is missing from the live pane when it was
+            // the last row there, yet its header is still on screen beside the
+            // struck-through row: say it holds nothing now.
+            if !folds.is_empty() {
+                let gone = crate::web::ledger::FoldSummary::emptied(
+                    member_id,
+                    bucket.as_deref(),
+                    &deleted.t,
+                    currency,
+                );
+                if !folds.iter().any(|f| f.id == gone.id) {
+                    folds.push(gone);
+                }
+            }
+            deleted
         }
-    }
+    };
+    let (panes, house) = crate::web::ledger::totals(st, auth, period).await;
+    fragment.oob = oob.then(|| format!("outerHTML:#row-{id}"));
+    fragment.pane_totals = panes.into_iter().find(|p| p.id == member_id);
+    fragment.house_totals = Some(house);
+    fragment.folds = folds;
+    Ok(fragment)
 }
 
 /// A soft-deleted row, dimmed and struck through with its deletion date. It
@@ -391,10 +428,11 @@ async fn deleted_row(
     member_id: i64,
     period: Period,
     currency: crate::domain::money::Currency,
-) -> Result<Fragment, &'static str> {
+) -> Result<(Fragment, Option<String>), &'static str> {
     let row = sqlx::query!(
         r#"SELECT t.kind AS "kind!: String", t.title AS "title!: String",
                   t.amount_cents AS "amount_cents: i64",
+                  t.bucket AS "bucket: String",
                   t.visibility AS "visibility!: String",
                   t.rule_id AS "rule_id: i64",
                   r.deleted_at AS "rule_deleted_at?: String",
@@ -459,13 +497,17 @@ async fn deleted_row(
         ctx: ctx(auth, currency, true),
     };
 
-    Ok(Fragment {
-        oob: None,
-        v: ledger_row.view(&auth.catalog()),
-        t: auth.catalog(),
-        pane_totals: None,
-        house_totals: None,
-    })
+    Ok((
+        Fragment {
+            oob: None,
+            v: ledger_row.view(&auth.catalog()),
+            t: auth.catalog(),
+            pane_totals: None,
+            house_totals: None,
+            folds: Vec::new(),
+        },
+        row.bucket,
+    ))
 }
 
 /// The error row: red ground, what happened, and that nothing was written.
@@ -1585,5 +1627,81 @@ pub async fn reattribute(
             _ => say_only(t.error_not_written(), true),
         },
         _ => say_only(t.error_not_written(), true),
+    }
+}
+
+#[cfg(all(test, debug_assertions))]
+mod tests {
+    use super::*;
+    use crate::domain::money::Currency;
+    use crate::ui::i18n::Lang;
+    use crate::web::ledger::{FoldSummary, GroupOrder, fold_summaries};
+    use crate::web::sandbox::fixtures;
+
+    fn fragment(folds: Vec<FoldSummary>) -> String {
+        let t = Catalog::new(Lang::En);
+        let ctx = fixtures::base(RowCtx {
+            sort: Default::default(),
+            today: fixtures::default_today(),
+            currency: Currency::Brl,
+            show_recurring: true,
+            show_delta: true,
+            narrow: false,
+            line_numbers: LineNumbers::Relative,
+        });
+        Fragment {
+            v: ctx.view(&t),
+            t,
+            pane_totals: None,
+            house_totals: None,
+            oob: None,
+            folds,
+        }
+        .render()
+        .unwrap()
+    }
+
+    /// A fold header is a total: a row's answer in a grouped pane carries
+    /// every header's count and ring + subtotal, out of band, into the spans
+    /// the page gave ids to — and a flat pane's carries none, so there is
+    /// never an out-of-band swap with nowhere to land.
+    #[test]
+    fn a_rows_answer_carries_its_panes_fold_headers() {
+        let t = Catalog::new(Lang::En);
+        let rows = fixtures::folds(
+            fixtures::base(RowCtx {
+                sort: Default::default(),
+                today: fixtures::default_today(),
+                currency: Currency::Brl,
+                show_recurring: true,
+                show_delta: true,
+                narrow: false,
+                line_numbers: LineNumbers::Relative,
+            })
+            .ctx,
+        );
+        let folds = fold_summaries(3, &rows, &t, Currency::Brl, GroupOrder::Appearance);
+        let n = folds.len();
+        let html = fragment(folds);
+        assert_eq!(html.matches("hx-swap-oob=\"innerHTML:#fcnt-3-").count(), n);
+        assert_eq!(html.matches("hx-swap-oob=\"innerHTML:#fsum-3-").count(), n);
+        assert!(html.contains("class=\"fring\""));
+
+        assert!(!fragment(Vec::new()).contains("#fsum-"));
+    }
+
+    /// The fold a deleted row emptied still has a header on screen beside the
+    /// struck-through row: it is told it holds nothing now.
+    #[test]
+    fn an_emptied_fold_says_it_holds_nothing() {
+        let t = Catalog::new(Lang::En);
+        let s = FoldSummary::emptied(3, Some("Mercado"), &t, Currency::Brl);
+        assert_eq!(
+            s.id,
+            format!("3-{}", crate::web::ledger::fold_key(Some("Mercado")))
+        );
+        assert_eq!(s.count, "0 rows");
+        assert!(s.ring.is_empty());
+        assert!(!s.negative);
     }
 }

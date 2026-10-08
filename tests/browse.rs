@@ -337,6 +337,7 @@ async fn grouping_subtotals_are_the_report() {
     let t = Catalog::new(Lang::En);
     let views = pane.rows.iter().map(|r| r.view(&t)).collect();
     let groups = ffm::web::ledger::group_rows(
+        me,
         &pane.rows,
         views,
         &t,
@@ -352,10 +353,10 @@ async fn grouping_subtotals_are_the_report() {
     // Consumo: 343,62 + 108,40. The subtotal is what the bucket COSTS, which
     // is why `zM` turns the ledger into a per-category summary with no
     // separate screen built for it.
-    assert_eq!(groups[0].subtotal, "R$ 452,02");
-    assert!(groups[0].negative);
-    assert_eq!(groups[0].count, "2 rows");
-    assert_eq!(groups[2].count, "1 row");
+    assert_eq!(groups[0].summary.subtotal, "R$ 452,02");
+    assert!(groups[0].summary.negative);
+    assert_eq!(groups[0].summary.count, "2 rows");
+    assert_eq!(groups[2].summary.count, "1 row");
 }
 
 #[tokio::test]

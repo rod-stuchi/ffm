@@ -8,3 +8,11 @@
   {% include "partials/row.html" %}
 </div>
 {% if let Some(pt) = pane_totals %}{% let house = house_totals.as_ref().unwrap() %}{% include "partials/totals.html" %}{% endif %}
+{#- Its fold header too, in a grouped pane: the count and the ring + subtotal
+    of every fold, swapped inside the spans the page gave ids to. A header is
+    a total; one still counting a deleted row, or showing a bill unpaid after
+    its receipt landed, is the same disagreement. Empty in a flat pane. -#}
+{%- for s in folds %}
+<span hx-swap-oob="innerHTML:#fcnt-{{ s.id }}">{{ s.count }}</span>
+<span hx-swap-oob="innerHTML:#fsum-{{ s.id }}">{% include "partials/fold_summary.html" %}</span>
+{%- endfor %}

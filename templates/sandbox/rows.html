@@ -44,6 +44,36 @@
     </div>
   </div>
 
+  {#- The fold headers of a grouped pane, rendered by the header's own
+      partial. Not the page's `pane_body.html`: that one binds Alpine's fold
+      state, and the sandbox must not depend on the machinery it tests. -#}
+  <div class="spec" id="folds">
+    <div class="spec-head"><span class="spec-n">··</span><h2>Fold headers</h2></div>
+    <div class="spec-stage">
+      {%- for g in folds %}
+      <section class="fold">
+        <header class="foldhead">
+          <span class="fmark">▾</span>
+          <b>{{ g.name }}</b>
+          {%- let s = g.summary %}
+          <span class="fcount">{{ s.count }}</span>
+          <span class="fsum">{% include "partials/fold_summary.html" %}</span>
+        </header>
+        <div class="foldrows">
+          {%- for v in g.rows %}{% include "partials/row.html" %}{% endfor %}
+        </div>
+      </section>
+      {%- endfor %}
+    </div>
+    <p>The ring is the fold's marks, counted — each arc the color its rows' own marks wear,
+      sized by how many rows, so a bill with no amount yet still counts. <code>--pos</code> done,
+      <code>--info</code> scheduled, <code>--neg</code> late (the row's ring has run out, or a
+      scheduled payment went past its date), and what is still open in the track's color: it
+      fills as the fold is settled.
+      Plain rows and one-offs are left out — nothing could ever settle them — so
+      <em>Mercado</em> has no ring, and <em>Assinaturas</em> is all done.</p>
+  </div>
+
   {% for spec in specs %}
   <div class="spec" id="{{ spec.id }}">
     <div class="spec-head">

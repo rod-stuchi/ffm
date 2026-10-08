@@ -94,6 +94,7 @@ file-none-income-scheduled = no scheduled payment on an income row
 sort-refuses-reorder = ledger.sort = "{ $sort }" — reorder needs sort = "manual"
 group-refuses-reorder = ledger.group = "{ $group }" — reorder needs group = "none"
 group-order-needs-group = ledger.group = "none" — S orders groups; :group bucket first
+group-select-needs-group = ledger.group = "none" — X selects a group; :group bucket first
 not-a-command = not a command: { $name } (try help)
 no-rule-behind-row = not generated from a recurring rule
 # A non-admin reads the other ledgers and writes only their own.
@@ -511,6 +512,11 @@ group-rows = { $n ->
         [one] 1 row
        *[other] { $n } rows
     }
+# A fold header's ring, in words: its rows counted by the color of their marks
+fold-done = { $n } done
+fold-scheduled = { $n } scheduled
+fold-late = { $n } late
+fold-open = { $n } open
 grep-title = Found: { $term }
 grep-none = nothing matches that, in any month
 grep-count = { $n ->
@@ -816,6 +822,7 @@ legend-scheduled = Scheduled — proof of a scheduled payment is on file, not du
 legend-scheduled-overdue = Scheduled but overdue — the due date passed and no receipt came in
 legend-plain = Not tracked — no file is expected, so there is nothing to prove
 legend-estimated = Estimated — an income that varies, projected from recent months until it arrives
+legend-fold-ring = A group's rows, counted by their marks: an arc each for done, scheduled and late, in those marks' colors, and the empty track for what is still open. One-offs and untracked bills are left out.
 legend-recurring = Recurring — made by a rule each month. Dim: a one-off, or its rule was deleted.
 legend-private = Private — hidden from the other members, never from the admin. Dim: the household sees it.
 legend-files = Files on the row — 1 bill, 2 scheduled payment, 3 receipt. g1 g2 g3 open one, P previews them.

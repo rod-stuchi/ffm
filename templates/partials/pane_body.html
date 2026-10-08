@@ -21,8 +21,12 @@
   <header class="foldhead">
     <span class="fmark" x-text="closed('{{ p.id }}-{{ loop.index0 }}') ? '▸' : '▾'">▾</span>
     <b>{{ g.name }}</b>
-    <span class="fcount">{{ g.count }}</span>
-    <span class="fsub {% if g.negative %}neg{% else %}pos{% endif %}">{% if g.negative %}−{% endif %}{{ g.subtotal }}</span>
+    {#- The count and the ring + subtotal carry ids so a row's answer can
+        swap them out of band; the header itself is never swapped, so its
+        fold state and its cursor mark stay put. -#}
+    {%- let s = g.summary %}
+    <span class="fcount" id="fcnt-{{ s.id }}">{{ s.count }}</span>
+    <span class="fsum" id="fsum-{{ s.id }}">{% include "partials/fold_summary.html" %}</span>
   </header>
   <div class="foldrows" x-show="!closed('{{ p.id }}-{{ loop.index0 }}')">
     {%- for v in g.rows %}

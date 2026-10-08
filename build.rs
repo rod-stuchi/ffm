@@ -11,6 +11,9 @@
 //!     zero allocation — the ledger renders hundreds of these per request)
 //!   * placeables, no selector    -> `fn x(&self, a: &str) -> String` via format!
 //!   * a plural selector          -> the ONLY path that touches FluentBundle
+//!     — in ANY locale, not only the reference: Portuguese needs `agendado` /
+//!     `agendados` where English has one word, and a selector seen only in
+//!     `en` used to drop pt-BR's message to an empty string
 //!
 //! The build fails — loudly, with every problem listed at once — on a duplicate
 //! id, an id present in one locale but not the other, a differing placeable set
@@ -477,7 +480,12 @@ fn generate(catalogs: &BTreeMap<&str, BTreeMap<String, Msg>>, root: &std::path::
             .map(|(n, count)| format!(", {n}: {}", if *count { "i64" } else { "&str" }))
             .collect::<String>();
 
-        if r.selector {
+        // A plural in any locale sends the message through the bundle: the
+        // `format!` paths below render a selector's variants as nothing.
+        let selector = LOCALES
+            .iter()
+            .any(|(code, _)| catalogs[code].get(key).is_some_and(|m| m.selector));
+        if selector {
             // The only path that touches FluentBundle.
             let _ = writeln!(
                 s,

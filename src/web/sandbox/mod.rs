@@ -213,6 +213,7 @@ struct RowsPage {
     t: Catalog,
     specs: Vec<SpecBlock>,
     ledger: Vec<Specimen>,
+    folds: Vec<crate::web::ledger::Group>,
     themes: Vec<(&'static str, &'static str, bool)>,
     langs: Vec<(&'static str, &'static str, bool)>,
     modes: Vec<(&'static str, &'static str, bool)>,
@@ -254,7 +255,25 @@ async fn rows(Query(ctx): Query<Ctx>) -> impl IntoResponse {
         })
         .collect();
 
+    let folds = {
+        let t = Catalog::new(langs[0]);
+        let rows: Vec<LedgerRow> = fixtures::folds(rctx)
+            .into_iter()
+            .map(|r| apply_gutter(&ctx, r))
+            .collect();
+        let views = rows.iter().map(|r| r.view(&t)).collect();
+        crate::web::ledger::group_rows(
+            0,
+            &rows,
+            views,
+            &t,
+            ctx.currency(),
+            crate::web::ledger::GroupOrder::Appearance,
+        )
+    };
+
     Html(RowsPage {
+        folds,
         theme_css: ctx.theme_css(),
         attr: ctx.attr(),
         t: Catalog::new(langs[0]),
@@ -570,6 +589,53 @@ mod tests {
         for spec in fixtures::specs() {
             let v = (spec.build)(c).view(&Catalog::new(Lang::En));
             assert!(!v.classes.is_empty() || !v.title.is_empty(), "{}", spec.id);
+        }
+    }
+
+    /// The folds the sandbox shows, counted the way a header counts them —
+    /// and the page and a row's answer agree, because both go through
+    /// `clusters`.
+    #[test]
+    fn fold_headers_count_their_rows_marks() {
+        use crate::web::ledger::{GroupOrder, fold_summaries, group_rows};
+        let c = ctx();
+        let t = Catalog::new(Lang::En);
+        let rows = fixtures::folds(c);
+        let views = rows.iter().map(|r| r.view(&t)).collect();
+        let groups = group_rows(7, &rows, views, &t, Currency::Brl, GroupOrder::Appearance);
+        let names: Vec<&str> = groups.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Cartão", "Moradia", "Assinaturas", "Renda", "Mercado"]
+        );
+
+        let title = |name: &str| {
+            let g = groups.iter().find(|g| g.name == name).unwrap();
+            g.summary.ring_title.clone()
+        };
+        assert_eq!(title("Cartão"), "1 late · 1 open");
+        assert_eq!(title("Moradia"), "1 done · 1 scheduled · 1 late · 1 open");
+        // The plain row is left out, so the ticked one is the whole ring.
+        assert_eq!(title("Assinaturas"), "1 done");
+        assert_eq!(title("Renda"), "1 done · 1 open");
+        let mercado = groups.iter().find(|g| g.name == "Mercado").unwrap();
+        assert!(mercado.summary.ring.is_empty(), "one-offs: no ring at all");
+        assert_eq!(mercado.summary.count, "1 row");
+
+        // Every row lands in exactly one fold.
+        assert_eq!(
+            groups.iter().map(|g| g.rows.len()).sum::<usize>(),
+            rows.len()
+        );
+
+        // The headers alone, as a row's answer builds them, are the same.
+        let alone = fold_summaries(7, &rows, &t, Currency::Brl, GroupOrder::Appearance);
+        for (g, s) in groups.iter().zip(&alone) {
+            assert_eq!(g.summary.id, s.id);
+            assert!(g.summary.id.starts_with("7-"));
+            assert_eq!(g.summary.ring_title, s.ring_title);
+            assert_eq!(g.summary.subtotal, s.subtotal);
+            assert_eq!(g.summary.count, s.count);
         }
     }
 

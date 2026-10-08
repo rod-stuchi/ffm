@@ -1203,6 +1203,24 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   there is no separate `:budget`/report screen: `zM` (fold everything) on the
   real ledger already reads as a per-category summary. Browsing and
   summarizing are one mechanism at two zoom levels, not two features.
+- **Beside the subtotal, a ring: the fold's marks, counted.** Each arc is the
+  color a row's own mark wears — done, scheduled, late, and what is still
+  open in the track's color — **sized by row count, not amount**, so a bill
+  waiting for its amount still counts. Late is a red mark, which on the due
+  day is one day before the month-picker's dot; plain rows and one-offs,
+  which nothing could settle, are left out, and a fold of only those has no
+  ring. `LedgerRow::tally` decides, beside `mark()`. Slices with paper
+  between them, not a filled pie, which at 16px reads as a status mark. See
+  `design/spec.md`'s The ring beside the subtotal.
+- **A fold header is a total, so a row's answer carries it.** Every row
+  fragment in a grouped pane swaps each fold's count and ring + subtotal out
+  of band, into spans keyed by a hash of the bucket (never the fold's place,
+  which a bill can reorder). A `dd`'d row used to go on counting in its
+  header until a reload.
+- **`x` on a fold's header selects the fold; `X` from inside it, `gx` the
+  pane** — all selected → none, otherwise → all, the trash's rule. The
+  statusline's Σ then reads that fold's subtotal; a fully selected header
+  wears the `--info` bar. `x` is the one row key a header takes.
 - **Grouping is a derived view, exactly like `sort = date`/`amount`.** The
   moment rows are re-clustered by category instead of read in stored manual
   order, `J`/`K` refuses with the same message pattern already established for
@@ -1935,6 +1953,12 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   (U+2068/U+2069) by default.** In a mono statusline those render as phantom
   width, breaking the `.st.grow` ellipsis measurement and any string comparison
   in a test. Call `set_use_isolating(false)` on the bundle.
+- **A plural only Portuguese needs must still go through Fluent.** `build.rs`
+  chose the plural path by looking at the English message alone, and rendered
+  a pt-BR selector's variants as nothing: the selection cell read *"3 de 5 "*
+  for as long as it existed, and only the English tests ran. It now takes the
+  plural path when any locale has a selector; a test in `ui::i18n` renders the
+  Portuguese.
 - **A pre-auth template has no member row.** Every layout context must carry
   `me: Option<&Member>`, and the `.auth` layout must not read `layout_*` or
   `theme_name` — otherwise the login page either won't compile, or worse,

@@ -700,6 +700,7 @@
             <span class="fbadge"><kbd>{{ number }}</kbd><span class="ficon">{{ svg|safe }}</span></span>
             {%- when LegendSample::Amount(a) %}
             <span class="amt"><span class="v is-estimated">{{ a }}</span></span>
+            {%- when LegendSample::Ring(s) %}{% include "partials/fold_ring.html" %}
             {%- endmatch %}
             {%- endfor %}
           </div>
@@ -1233,6 +1234,7 @@ function ledger() {
     notACommand: {{ not_a_command|json|safe }},
     groupOrder: {{ group_order|json|safe }},
     groupOrderNeedsGroup: {{ group_order_needs_group|json|safe }},
+    groupSelectNeedsGroup: {{ group_select_needs_group|json|safe }},
     unsavedTag: {{ unsaved_tag|json|safe }},
     unsavedRuleTag: {{ unsaved_rule_tag|json|safe }},
     draftsParked: {{ drafts_parked|json|safe }},
@@ -1847,6 +1849,7 @@ function ledger() {
       else if (k === 'p') { this.togglePrivate(); }
       else if (k === 'm') { this.togglePaid(); }
       else if (k === 'x') { this.toggleSelected(); }
+      else if (k === 'X') { this.toggleFold(); }
       else if (k === 'd') { this.pending = 'd'; }
       // `u` undoes your last change in this pane and this month; `U` redoes
       // it. Not Ctrl-R, Vim's redo: on Linux that reloads the page, and a
@@ -2794,11 +2797,52 @@ function ledger() {
       });
     },
 
-    /// `x` — a marker for a batch operation, never a delete.
+    /// `x` — a marker for a batch operation, never a delete. On a fold's
+    /// header it marks the whole fold — the one thing a header can be the
+    /// target of, where every other row key says it is a group.
     toggleSelected() {
+      if (this.onFoldHead()) {
+        this.toggleIds(this.selectableIds(this.rows()[this.row].closest('.fold')));
+        return;
+      }
       const id = this.rowUnderCursor();
       if (!id) return;
       if (this.selected[id]) delete this.selected[id]; else this.selected[id] = true;
+      this.paintSelection();
+    },
+
+    /// `X` — every row of the fold the cursor is in, from a row or from its
+    /// header: the trash's `X` on its day, pointed at a bucket.
+    toggleFold() {
+      const el = this.rows()[this.row];
+      const section = el && el.closest('.fold');
+      if (!section) { this.say(this.groupSelectNeedsGroup, true); return; }
+      this.toggleIds(this.selectableIds(section));
+    },
+
+    /// `gx` — every row in the focused pane, grouped or flat.
+    toggleAllRows() {
+      const pane = document.querySelectorAll('.pane')[this.pane];
+      if (pane) this.toggleIds(this.selectableIds(pane));
+    },
+
+    /// The rows a group toggle covers inside `scope`: real ones, by id. A row
+    /// `dd` struck through is not in the pane any more — the server leaves it
+    /// out of the sum — and a placeholder or an in-flight add is not a row
+    /// yet, which its id says.
+    selectableIds(scope) {
+      return Array.from(scope.querySelectorAll('div[id^="row-"]'))
+        .filter(w => /^row-\d+$/.test(w.id) && !w.querySelector('.row.is-deleted'))
+        .map(w => w.id.slice(4));
+    },
+
+    /// All selected → none, otherwise → all: the trash's and `:prune`'s rule,
+    /// so a second press undoes the first and a half-selected group fills
+    /// rather than empties.
+    toggleIds(ids) {
+      if (!ids.length) return;
+      const on = !ids.every(id => this.selected[id]);
+      ids.forEach(id => { if (on) this.selected[id] = true; else delete this.selected[id]; });
       this.paintSelection();
     },
 
@@ -2806,6 +2850,12 @@ function ledger() {
       document.querySelectorAll('.row.is-selected').forEach(r => r.classList.remove('is-selected'));
       Object.keys(this.selected).forEach(id => {
         document.querySelector('#row-' + id + ' .row')?.classList.add('is-selected');
+      });
+      // A fold whose every row is selected says so on its header — with the
+      // fold closed, the header is the only thing on screen to show it.
+      document.querySelectorAll('.foldhead').forEach(head => {
+        const ids = this.selectableIds(head.closest('.fold'));
+        head.classList.toggle('is-selected', ids.length > 0 && ids.every(id => this.selected[id]));
       });
       this.refreshSelection();
     },
@@ -3656,6 +3706,8 @@ function ledger() {
         // new pattern, reusing g1/g2/g3's numbering so one set of numbers
         // means one thing whether you are opening a file or adding one.
         if (k === 'u') { this.pending = 'gu'; return true; }
+        // `gx` — select the whole pane, or clear it: the trash's `gx`.
+        if (k === 'x') { this.toggleAllRows(); return true; }
         // `gl` — "go to log", the same extension of the g vocabulary.
         if (k === 'l') { this.openLog(); return true; }
         if (k === 'd') { this.showDetails(); return true; }

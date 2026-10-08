@@ -505,6 +505,59 @@ pub fn ledger(ctx: RowCtx) -> Vec<LedgerRow> {
     .collect()
 }
 
+/// A grouped pane, for the fold headers' rings: one fold per kind of ring —
+/// mixed, all done, money arriving, and one of one-offs, which has none.
+/// Built from the specimens above with a bucket each, so a fold's rows look
+/// exactly like the rows they are counted from.
+pub fn folds(ctx: RowCtx) -> Vec<LedgerRow> {
+    let all = specs();
+    let spec = |id: &str| (all.iter().find(|s| s.id == id).expect("a specimen").build)(ctx);
+    let in_bucket = |bucket: &str, row: LedgerRow| LedgerRow {
+        bucket: Some(bucket.into()),
+        ..row
+    };
+    let rows = vec![
+        in_bucket("Cartão", spec("scheduled-overdue")),
+        in_bucket("Cartão", spec("no-amount")),
+        in_bucket("Moradia", spec("paid")),
+        in_bucket("Moradia", spec("scheduled")),
+        in_bucket(
+            "Moradia",
+            LedgerRow {
+                title: "Condomínio".into(),
+                // Due the 5th of a month on its 7th: the ring has run out.
+                due_date: Some(d(2026, 9, 5)),
+                ..base(ctx)
+            },
+        ),
+        in_bucket("Moradia", spec("pending")),
+        in_bucket("Assinaturas", spec("manual-paid")),
+        in_bucket("Assinaturas", spec("plain")),
+        in_bucket("Renda", spec("received")),
+        in_bucket("Renda", spec("expected")),
+        in_bucket(
+            "Mercado",
+            LedgerRow {
+                title: "Mercado · Pão de Açúcar".into(),
+                rule_id: None,
+                tracked: false,
+                due_date: None,
+                date: Some(d(2026, 9, 3)),
+                amount_cents: Some(Cents(65_890)),
+                ..base(ctx)
+            },
+        ),
+    ];
+    rows.into_iter()
+        .enumerate()
+        .map(|(i, mut row)| {
+            row.id = 100 + i as i64;
+            row.gutter = Gutter::Relative(i as i32);
+            row
+        })
+        .collect()
+}
+
 /// What the trash holds, for its sandbox page: one of each kind of entry,
 /// across two days and two members.
 pub fn trash_items(today: NaiveDate) -> Vec<crate::db::trash::Item> {

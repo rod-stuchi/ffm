@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.kind AS \"kind!: String\", t.title AS \"title!: String\",\n                  t.amount_cents AS \"amount_cents: i64\",\n                  t.bucket AS \"bucket: String\",\n                  t.visibility AS \"visibility!: String\",\n                  t.rule_id AS \"rule_id: i64\",\n                  r.deleted_at AS \"rule_deleted_at?: String\",\n                  m.slug AS \"slug!: String\"\n           FROM transactions t JOIN members m ON m.id = t.member_id\n           LEFT JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "kind!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "bucket: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_deleted_at?: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "slug!: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "318ab1f9041a9488d231b00f3e8631d5f865941556014a2cd4143b11b348f0a8"
+}

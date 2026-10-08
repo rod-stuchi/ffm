@@ -1,0 +1,8 @@
+{#- The inside of a fold header's `.fsum`, from a `FoldSummary` bound as `s`:
+    the ring, then the subtotal. The page renders it in the header, and a
+    row's answer swaps it in out of band from this same partial — a fold
+    header is a total, and the two copies cannot drift.
+
+    The ring has a partial of its own because the `?` legend draws it too. -#}
+{% include "partials/fold_ring.html" %}
+<span class="fsub {% if s.negative %}neg{% else %}pos{% endif %}">{% if s.negative %}−{% endif %}{{ s.subtotal }}</span>

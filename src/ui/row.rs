@@ -46,6 +46,21 @@ pub enum Mark {
     Error,
 }
 
+/// Where a row stands, for its fold header's ring: the marks a group's rows
+/// wear, counted. Each value is the color the row's own mark already shows, so
+/// the ring is read with nothing new to learn.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Tally {
+    /// Paid, received, or ticked by hand — the green marks.
+    Done,
+    /// A payment set up, its due date not passed — the blue clock ring.
+    Scheduled,
+    /// The red marks: a promise not kept, or a ring that has run out.
+    Late,
+    /// Still to come, with time left on its ring.
+    Open,
+}
+
 /// Which semantic color a mark uses. Deliberately not the accent: the accent
 /// means "you are here", and a money fact must never borrow it.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -456,6 +471,35 @@ impl LedgerRow {
 
     fn ring_tone(&self) -> Tone {
         ring_tone_at(self.ring_progress().unwrap_or(0.0))
+    }
+
+    /// Which slice of its fold's ring this row is — `None` for a row the ring
+    /// leaves out.
+    ///
+    /// **Late is a red mark, not `is_unresolved`.** On the due day the row's
+    /// ring is already full and red while the month-picker dot waits for the
+    /// day after; the header sits right above the row, so it follows the row.
+    ///
+    /// Left out: a plain row (untracked, no tick), which the dot does not nag
+    /// about either — and a one-off, which has no rule, so no file and no tick
+    /// can ever settle it and its slice would stay open forever.
+    pub fn tally(&self) -> Option<Tally> {
+        if self.state != RowState::Ok || self.flags.deleted || self.rule_id.is_none() {
+            return None;
+        }
+        Some(match self.status() {
+            RowStatus::Paid | RowStatus::Received | RowStatus::ManualPaid => Tally::Done,
+            RowStatus::Scheduled => Tally::Scheduled,
+            RowStatus::ScheduledOverdue => Tally::Late,
+            RowStatus::Pending | RowStatus::Expected => {
+                if self.ring_progress().is_some_and(|p| p >= 1.0) {
+                    Tally::Late
+                } else {
+                    Tally::Open
+                }
+            }
+            RowStatus::Plain => return None,
+        })
     }
 
     // -- amount ----------------------------------------------------------
@@ -951,6 +995,87 @@ pub struct DeltaView {
 
 /// Circumference of the ring: 2 * PI * 10.5.
 const RING_CIRCUMFERENCE: f32 = 65.973;
+
+/// A group's rows, counted by [`Tally`] — what the fold header's ring draws.
+#[derive(Copy, Clone, Default, PartialEq, Eq, Debug)]
+pub struct TallyCounts {
+    pub done: u32,
+    pub scheduled: u32,
+    pub late: u32,
+    pub open: u32,
+}
+
+/// One arc of the fold ring, for `partials/fold_ring.html`: its color token
+/// and where it sits on the 10.5px-radius circle the row's mark uses.
+#[derive(Clone, PartialEq, Debug)]
+pub struct RingSegment {
+    /// `pos` | `info` | `neg` | `line-2` — a token name, read as `var(--…)`.
+    pub tone: &'static str,
+    /// `stroke-dasharray`: the arc, then a gap longer than the circle, so the
+    /// pattern draws it exactly once.
+    pub dash: String,
+    /// `stroke-dashoffset`: negative, to start the arc where the last ended.
+    pub offset: String,
+}
+
+/// The paper showing between two arcs. It is what makes the fold ring read as
+/// slices rather than as a row's elapsed-time ring, which is one continuous
+/// arc over a track.
+const RING_GAP: f32 = 2.4;
+
+impl TallyCounts {
+    pub fn add(&mut self, tally: Tally) {
+        match tally {
+            Tally::Done => self.done += 1,
+            Tally::Scheduled => self.scheduled += 1,
+            Tally::Late => self.late += 1,
+            Tally::Open => self.open += 1,
+        }
+    }
+
+    pub fn total(&self) -> u32 {
+        self.done + self.scheduled + self.late + self.open
+    }
+
+    /// The arcs, clockwise from twelve o'clock: done, scheduled, late, then
+    /// what is still open in the track's color — so the ring fills as the
+    /// group gets settled. Sized by row count, not amount: a bill still
+    /// waiting for its amount is one thing left to do, and by amount it would
+    /// weigh nothing. Empty when no row is counted — no ring at all.
+    pub fn segments(&self) -> Vec<RingSegment> {
+        let total = self.total();
+        if total == 0 {
+            return Vec::new();
+        }
+        let parts = [
+            ("pos", self.done),
+            ("info", self.scheduled),
+            ("neg", self.late),
+            ("line-2", self.open),
+        ];
+        let slices = parts.iter().filter(|(_, n)| *n > 0).count();
+        // One slice is the whole circle, with nothing to separate.
+        let gap = if slices > 1 { RING_GAP } else { 0.0 };
+        let mut start = 0.0_f32;
+        let mut out = Vec::with_capacity(slices);
+        for (tone, n) in parts {
+            if n == 0 {
+                continue;
+            }
+            let len = RING_CIRCUMFERENCE * n as f32 / total as f32;
+            // A sliver never vanishes into its gap: one late bill among forty
+            // is exactly the slice worth seeing.
+            let arc = (len - gap).max(0.8);
+            out.push(RingSegment {
+                tone,
+                dash: format!("{arc:.2} {RING_CIRCUMFERENCE}"),
+                offset: format!("{:.2}", -(start + gap / 2.0)),
+            });
+            start += len;
+        }
+        out
+    }
+}
 
 impl LedgerRow {
     /// Takes the catalog because the meta line has WORDS in it ("due",
@@ -1542,6 +1667,147 @@ mod tests {
         // Blank keeps the track: a deleted row must not jump sideways.
         r.gutter = Gutter::Blank;
         assert!(!r.classes().contains(&"is-nogut"));
+    }
+
+    // -- fold ring -------------------------------------------------------
+
+    #[test]
+    fn a_row_tallies_as_the_mark_it_wears() {
+        let mut r = base(); // due the 15th, today the 7th
+        assert_eq!(r.tally(), Some(Tally::Open));
+
+        r.files.scheduled = Some("pdf".into());
+        assert_eq!(r.tally(), Some(Tally::Scheduled));
+
+        r.files.receipt = Some("pdf".into());
+        assert_eq!(r.tally(), Some(Tally::Done));
+
+        r.files.receipt = None;
+        r.ctx.today = d(2026, 9, 20);
+        assert_eq!(r.status(), RowStatus::ScheduledOverdue);
+        assert_eq!(r.tally(), Some(Tally::Late));
+
+        // Untracked: the tick is the only evidence there can be.
+        let mut u = base();
+        u.tracked = false;
+        u.manual_paid = true;
+        assert_eq!(u.tally(), Some(Tally::Done));
+
+        let mut i = base();
+        i.kind = TxKind::In;
+        assert_eq!(i.tally(), Some(Tally::Open));
+        i.files.receipt = Some("pdf".into());
+        assert_eq!(i.tally(), Some(Tally::Done));
+    }
+
+    #[test]
+    fn late_is_the_red_ring_one_day_before_the_warning_dot() {
+        // On the due day the row's own ring is already full and red; the
+        // header sits right above it, so the ring counts it late — while the
+        // month-picker dot, which is about months not on screen, waits a day.
+        let mut r = base();
+        r.ctx.today = d(2026, 9, 15);
+        assert_eq!(r.ring_progress(), Some(1.0));
+        assert_eq!(r.tally(), Some(Tally::Late));
+        assert!(!r.is_unresolved());
+    }
+
+    #[test]
+    fn rows_nothing_could_settle_are_left_out_of_the_ring() {
+        let mut plain = base();
+        plain.tracked = false;
+        assert_eq!(plain.status(), RowStatus::Plain);
+        assert_eq!(
+            plain.tally(),
+            None,
+            "untracked, no tick: no evidence either way"
+        );
+
+        let mut one_off = base();
+        one_off.rule_id = None;
+        one_off.tracked = false;
+        one_off.kind = TxKind::In;
+        assert_eq!(
+            one_off.tally(),
+            None,
+            "a one-off income would stay open forever"
+        );
+
+        let mut deleted = base();
+        deleted.flags.deleted = true;
+        assert_eq!(deleted.tally(), None);
+
+        let mut skeleton = base();
+        skeleton.state = RowState::Skeleton;
+        assert_eq!(skeleton.tally(), None);
+    }
+
+    fn arc(s: &RingSegment) -> f32 {
+        s.dash.split(' ').next().unwrap().parse().unwrap()
+    }
+
+    #[test]
+    fn one_state_is_the_whole_circle_with_no_gap() {
+        let c = TallyCounts {
+            done: 3,
+            ..Default::default()
+        };
+        let segs = c.segments();
+        assert_eq!(segs.len(), 1);
+        assert_eq!(segs[0].tone, "pos");
+        assert!((arc(&segs[0]) - RING_CIRCUMFERENCE).abs() < 0.01);
+        assert_eq!(
+            TallyCounts::default().segments(),
+            Vec::new(),
+            "no rows, no ring"
+        );
+    }
+
+    #[test]
+    fn slices_follow_the_rows_in_order_with_paper_between() {
+        let c = TallyCounts {
+            done: 2,
+            scheduled: 1,
+            late: 0,
+            open: 1,
+        };
+        let segs = c.segments();
+        let tones: Vec<&str> = segs.iter().map(|s| s.tone).collect();
+        assert_eq!(
+            tones,
+            ["pos", "info", "line-2"],
+            "an empty state draws no arc"
+        );
+
+        // Each arc is its share of the circle less one gap, so the arcs and
+        // the gaps come to exactly the circle.
+        let drawn: f32 = segs.iter().map(arc).sum();
+        assert!((drawn + 3.0 * RING_GAP - RING_CIRCUMFERENCE).abs() < 0.05);
+        assert!((arc(&segs[0]) - (RING_CIRCUMFERENCE / 2.0 - RING_GAP)).abs() < 0.01);
+
+        // Each starts where the last one's share ended, half a gap in.
+        let starts: Vec<f32> = segs
+            .iter()
+            .map(|s| -s.offset.parse::<f32>().unwrap())
+            .collect();
+        let quarter = RING_CIRCUMFERENCE / 4.0;
+        for (got, want) in starts.iter().zip([0.0, 2.0 * quarter, 3.0 * quarter]) {
+            assert!(
+                (got - (want + RING_GAP / 2.0)).abs() < 0.01,
+                "{got} vs {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_sliver_never_vanishes_into_its_gap() {
+        let c = TallyCounts {
+            done: 59,
+            late: 1,
+            ..Default::default()
+        };
+        let late = c.segments().into_iter().find(|s| s.tone == "neg").unwrap();
+        assert!(arc(&late) > 0.5);
     }
 
     // -- unresolved ------------------------------------------------------

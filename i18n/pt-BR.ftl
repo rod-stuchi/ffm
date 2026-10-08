@@ -83,6 +83,7 @@ file-none-income-scheduled = agendamento não se aplica a uma entrada
 sort-refuses-reorder = ledger.sort = "{ $sort }" — reordenar exige sort = "manual"
 group-refuses-reorder = ledger.group = "{ $group }" — reordenar exige group = "none"
 group-order-needs-group = ledger.group = "none" — S ordena os grupos; use :group bucket antes
+group-select-needs-group = ledger.group = "none" — X seleciona um grupo; use :group bucket antes
 not-a-command = não é um comando: { $name } (tente help)
 no-rule-behind-row = não foi gerado por uma regra recorrente
 read-only-ledger = somente leitura: este é o livro de { $who }
@@ -474,6 +475,17 @@ group-rows = { $n ->
         [one] 1 linha
        *[other] { $n } linhas
     }
+# O anel do cabeçalho de um grupo, em palavras: as linhas contadas pela cor da marca
+fold-done = { $n } em dia
+fold-scheduled = { $n ->
+        [one] 1 agendado
+       *[other] { $n } agendados
+    }
+fold-late = { $n ->
+        [one] 1 atrasado
+       *[other] { $n } atrasados
+    }
+fold-open = { $n } em aberto
 grep-title = Encontrado: { $term }
 grep-none = nada corresponde a isso, em nenhum mês
 grep-count = { $n ->
@@ -782,6 +794,7 @@ legend-scheduled = Agendado — o comprovante de agendamento está no arquivo, a
 legend-scheduled-overdue = Agendado, mas vencido — o vencimento passou e o comprovante não chegou
 legend-plain = Sem acompanhamento — nenhum arquivo é esperado, não há o que provar
 legend-estimated = Estimado — uma entrada que varia, projetada pelos últimos meses até chegar
+legend-fold-ring = As linhas de um grupo, contadas pela marca: um arco para em dia, agendado e atrasado, na cor dessas marcas, e o trilho vazio para o que ainda está em aberto. Avulsos e contas sem acompanhamento ficam de fora.
 legend-recurring = Recorrente — criado por uma regra todo mês. Apagado: avulso, ou a regra foi excluída.
 legend-private = Privado — escondido dos outros membros, nunca do admin. Apagado: a casa toda vê.
 legend-files = Arquivos da linha — 1 conta, 2 agendamento, 3 comprovante. g1 g2 g3 abrem, P mostra todos.

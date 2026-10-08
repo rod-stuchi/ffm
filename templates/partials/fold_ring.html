@@ -1,0 +1,18 @@
+{#- A fold header's ring, from anything bound as `s` with `ring` and
+    `ring_title` — a `FoldSummary` in the header, a `FoldRingSample` in the
+    `?` legend, so the legend draws exactly what the header does.
+
+    The group's marks, counted: each arc is the color the rows' own marks
+    wear, sized by how many rows, and what is still open is the track's
+    color — so it fills as the group is settled. Absent when no row has a
+    state to reach. -#}
+{%- if !s.ring.is_empty() -%}
+<span class="fring" role="img" title="{{ s.ring_title }}" aria-label="{{ s.ring_title }}">
+  <svg viewBox="0 0 26 26" aria-hidden="true">
+    {%- for seg in s.ring %}
+    <circle cx="13" cy="13" r="10.5" fill="none" stroke="var(--{{ seg.tone }})" stroke-width="4.5"
+            stroke-dasharray="{{ seg.dash }}" stroke-dashoffset="{{ seg.offset }}"></circle>
+    {%- endfor %}
+  </svg>
+</span>
+{%- endif -%}

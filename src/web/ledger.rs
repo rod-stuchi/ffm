@@ -14,7 +14,7 @@ use crate::state::AppState;
 use crate::ui::fmt;
 use crate::ui::i18n::Catalog;
 use crate::ui::icons;
-use crate::ui::row::{FlagView, LineNumbers, MarkView, RowCtx, RowView};
+use crate::ui::row::{FlagView, LineNumbers, MarkView, RingSegment, RowCtx, RowView, TallyCounts};
 use crate::ui::theme;
 use crate::web::session::Auth;
 use crate::web::template::Html;
@@ -214,13 +214,97 @@ async fn member_panes(st: &AppState, auth: &Auth, period: Period, ctx: RowCtx) -
 /// browsing and summarizing are one mechanism at two zoom levels.
 pub struct Group {
     pub name: String,
+    pub summary: FoldSummary,
+    pub rows: Vec<RowView>,
+}
+
+/// What a fold header says about its rows: how many, how they stand, what
+/// they come to — `partials/fold_summary.html`.
+///
+/// **A fold header is a total**, so it is also what a row's answer re-renders
+/// out of band (`web::tx::Fragment`): a mutation returns the totals it moved,
+/// and a header still counting a deleted row is the ledger disagreeing with
+/// itself on screen.
+pub struct FoldSummary {
+    /// `{member}-{key}`, the key hashed from the bucket itself — what the
+    /// group IS, not where it sits, which a bill re-ordering a by-cost pane
+    /// would change under a row's answer. Language-free too: the catch-all
+    /// hashes the empty bucket, never the word "Uncategorized".
+    pub id: String,
     /// Already pluralized — the count is a number the catalog has to agree
     /// with, so it is rendered where the catalog lives rather than cast in a
     /// template.
     pub count: String,
     pub subtotal: String,
     pub negative: bool,
-    pub rows: Vec<RowView>,
+    /// The ring beside the subtotal; empty when no row in the group has a
+    /// state to reach, and then there is no ring at all.
+    pub ring: Vec<RingSegment>,
+    /// What the ring shows, in words — its tooltip and its label.
+    pub ring_title: String,
+}
+
+/// The id half of [`FoldSummary::id`] for a bucket, `None` the catch-all.
+pub fn fold_key(bucket: Option<&str>) -> String {
+    let bucket = bucket.map(str::trim).unwrap_or_default();
+    blake3::hash(bucket.as_bytes()).to_hex()[..8].to_string()
+}
+
+impl FoldSummary {
+    fn of(
+        id: String,
+        rows: usize,
+        total: crate::domain::money::Cents,
+        counts: TallyCounts,
+        t: &Catalog,
+        currency: crate::domain::money::Currency,
+    ) -> FoldSummary {
+        FoldSummary {
+            id,
+            count: t.group_rows(rows as i64),
+            subtotal: fmt::money(total.abs(), currency),
+            negative: total.is_negative(),
+            ring: counts.segments(),
+            ring_title: ring_title(&counts, t),
+        }
+    }
+
+    /// A fold whose last live row was just deleted. The row stays on screen,
+    /// struck through, until the pane is next rendered; the header beside it
+    /// already counts what is live, like the pane's totals do.
+    pub fn emptied(
+        member: i64,
+        bucket: Option<&str>,
+        t: &Catalog,
+        currency: crate::domain::money::Currency,
+    ) -> FoldSummary {
+        FoldSummary::of(
+            format!("{member}-{}", fold_key(bucket)),
+            0,
+            crate::domain::money::Cents::ZERO,
+            TallyCounts::default(),
+            t,
+            currency,
+        )
+    }
+}
+
+/// "1 done · 1 late" — only what is there, in the ring's own order.
+fn ring_title(c: &TallyCounts, t: &Catalog) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if c.done > 0 {
+        parts.push(t.fold_done(c.done.into()).to_string());
+    }
+    if c.scheduled > 0 {
+        parts.push(t.fold_scheduled(c.scheduled.into()).to_string());
+    }
+    if c.late > 0 {
+        parts.push(t.fold_late(c.late.into()).to_string());
+    }
+    if c.open > 0 {
+        parts.push(t.fold_open(c.open.into()).to_string());
+    }
+    parts.join(" · ")
 }
 
 pub struct PaneView {
@@ -315,6 +399,8 @@ struct LedgerPage {
     group_order: Option<&'static str>,
     group_order_label: String,
     group_order_needs_group: String,
+    /// `X` on a flat pane — there is no group to select.
+    group_select_needs_group: String,
     /// The signed-in member, for the statusline's own cell. The SESSION's
     /// member, never the focused pane's — focusing somebody else's pane does
     /// not make you them.
@@ -550,6 +636,7 @@ pub async fn ledger(
             .map(|g| g.label(&t))
             .unwrap_or_default(),
         group_order_needs_group: t.group_order_needs_group().to_string(),
+        group_select_needs_group: t.group_select_needs_group().to_string(),
         me_name: fmt::name(&auth.session.member.name),
         version: crate::version(),
         // Whether admin powers are actually IN EFFECT, not what the row says
@@ -658,7 +745,12 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                     "ga",
                     "give the row to another member — picked by name, admin only",
                 ),
-                k("x", "select, for a batch operation"),
+                k(
+                    "x",
+                    "select, for a batch operation — on a group's header, every row in it",
+                ),
+                k("X", "select the group the cursor is in — or clear it"),
+                k("gx", "select every row in the pane — or clear them"),
                 k("p", "toggle private"),
                 k("m", "mark paid by hand — untracked recurring bills"),
                 k("gd", "due, cadence and receipt details"),
@@ -754,6 +846,15 @@ pub enum LegendSample {
     File { number: u8, svg: &'static str },
     /// An amount as the row writes it, e.g. a projection.
     Amount(String),
+    /// A fold header's ring, rendered by `partials/fold_ring.html` — the
+    /// header's own.
+    Ring(FoldRingSample),
+}
+
+/// What `partials/fold_ring.html` reads, without a fold around it.
+pub struct FoldRingSample {
+    pub ring: Vec<RingSegment>,
+    pub ring_title: String,
 }
 
 /// The `?` legend. Every mark is built from the same `Mark` the ledger draws
@@ -841,6 +942,21 @@ fn legend(
                 currency,
             ))],
             text: t.legend_estimated().to_string(),
+        },
+        LegendItem {
+            samples: vec![{
+                let counts = TallyCounts {
+                    done: 2,
+                    scheduled: 1,
+                    late: 1,
+                    open: 1,
+                };
+                LegendSample::Ring(FoldRingSample {
+                    ring: counts.segments(),
+                    ring_title: ring_title(&counts, t),
+                })
+            }],
+            text: t.legend_fold_ring().to_string(),
         },
     ];
     // "We don't use this concept here" removes the icon from every row, so
@@ -1173,6 +1289,16 @@ fn name_key(name: &str) -> String {
         .to_lowercase()
 }
 
+/// One `bucket`'s rows before they are rendered: its key, its rows' states
+/// counted, and where its rows sit in the pane — so the page (which also has
+/// the views) and a row's answer (which has only the rows) cluster with the
+/// same code and cannot disagree about a header.
+struct Cluster {
+    key: String,
+    counts: TallyCounts,
+    rows: Vec<usize>,
+}
+
 /// Clusters a pane's rows by `bucket`, then orders the groups by the member's
 /// `group_order` — first seen by default, so a grouped pane still reads in
 /// something like the order the household put it in.
@@ -1180,63 +1306,100 @@ fn name_key(name: &str) -> String {
 /// Nesting stops at `bucket`: one level is enough for a household-sized
 /// ledger, and a `bill_name` sub-fold would be a second gesture to learn for
 /// a distinction most rows do not make.
+fn clusters(
+    rows: &[crate::ui::row::LedgerRow],
+    t: &Catalog,
+    group_order: GroupOrder,
+) -> Vec<(String, crate::domain::money::Cents, Cluster)> {
+    let mut seen: Vec<(String, crate::domain::money::Cents, Cluster)> = Vec::new();
+    let mut at: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+    for (i, row) in rows.iter().enumerate() {
+        let bucket = row
+            .bucket
+            .as_deref()
+            .map(str::trim)
+            .filter(|b| !b.is_empty());
+        // Grouping never silently drops a row.
+        let name = bucket.map_or_else(|| t.group_uncategorized().to_string(), str::to_string);
+        let slot = *at.entry(name.clone()).or_insert_with(|| {
+            seen.push((
+                name,
+                crate::domain::money::Cents::ZERO,
+                Cluster {
+                    key: fold_key(bucket),
+                    counts: TallyCounts::default(),
+                    rows: Vec::new(),
+                },
+            ));
+            seen.len() - 1
+        });
+        let (_, total, cluster) = &mut seen[slot];
+        // A subtotal is what this bucket costs, so income counts against it —
+        // a "Renda" group summing to its own income is the useful reading.
+        if let Some(c) = row.effective_cents() {
+            if row.kind.is_income() {
+                *total += c;
+            } else {
+                *total -= c;
+            }
+        }
+        if let Some(tally) = row.tally() {
+            cluster.counts.add(tally);
+        }
+        cluster.rows.push(i);
+    }
+
+    order_groups(seen, group_order, t.group_uncategorized())
+}
+
+/// A grouped pane's folds, rows and all — what the page renders.
 pub fn group_rows(
+    member: i64,
     rows: &[crate::ui::row::LedgerRow],
     views: Vec<RowView>,
     t: &Catalog,
     currency: crate::domain::money::Currency,
     group_order: GroupOrder,
 ) -> Vec<Group> {
-    let mut order: Vec<String> = Vec::new();
-    let mut buckets: std::collections::HashMap<
-        String,
-        (crate::domain::money::Cents, Vec<RowView>),
-    > = std::collections::HashMap::new();
-
-    for (row, view) in rows.iter().zip(views) {
-        let name = match row
-            .bucket
-            .as_deref()
-            .map(str::trim)
-            .filter(|b| !b.is_empty())
-        {
-            Some(b) => b.to_string(),
-            // Grouping never silently drops a row.
-            None => t.group_uncategorized().to_string(),
-        };
-        if !buckets.contains_key(&name) {
-            order.push(name.clone());
-        }
-        let entry = buckets
-            .entry(name)
-            .or_insert((crate::domain::money::Cents::ZERO, Vec::new()));
-        // A subtotal is what this bucket costs, so income counts against it —
-        // a "Renda" group summing to its own income is the useful reading.
-        if let Some(c) = row.effective_cents() {
-            if row.kind.is_income() {
-                entry.0 += c;
-            } else {
-                entry.0 -= c;
-            }
-        }
-        entry.1.push(view);
-    }
-
-    let seen = order
+    let mut views: Vec<Option<RowView>> = views.into_iter().map(Some).collect();
+    clusters(rows, t, group_order)
         .into_iter()
-        .filter_map(|name| {
-            let (total, rows) = buckets.remove(&name)?;
-            Some((name, total, rows))
-        })
-        .collect();
-    order_groups(seen, group_order, t.group_uncategorized())
-        .into_iter()
-        .map(|(name, total, rows)| Group {
-            count: t.group_rows(rows.len() as i64),
-            subtotal: fmt::money(total.abs(), currency),
-            negative: total.is_negative(),
+        .map(|(name, total, c)| Group {
+            summary: FoldSummary::of(
+                format!("{member}-{}", c.key),
+                c.rows.len(),
+                total,
+                c.counts,
+                t,
+                currency,
+            ),
+            rows: c.rows.iter().filter_map(|&i| views[i].take()).collect(),
             name,
-            rows,
+        })
+        .collect()
+}
+
+/// Only the headers — what a row's answer swaps out of band, read off the
+/// same pane query and the same clustering the page used.
+pub fn fold_summaries(
+    member: i64,
+    rows: &[crate::ui::row::LedgerRow],
+    t: &Catalog,
+    currency: crate::domain::money::Currency,
+    group_order: GroupOrder,
+) -> Vec<FoldSummary> {
+    clusters(rows, t, group_order)
+        .into_iter()
+        .map(|(_, total, c)| {
+            FoldSummary::of(
+                format!("{member}-{}", c.key),
+                c.rows.len(),
+                total,
+                c.counts,
+                t,
+                currency,
+            )
         })
         .collect()
 }
@@ -1268,7 +1431,7 @@ pub(crate) fn view(
         },
         groups: if let Some(order) = group {
             let views = pane.rows.iter().map(|r| r.view(t)).collect();
-            group_rows(&pane.rows, views, t, currency, order)
+            group_rows(pane.member.id, &pane.rows, views, t, currency, order)
         } else {
             Vec::new()
         },
@@ -1298,6 +1461,18 @@ mod tests {
         .into_iter()
         .map(|(n, c)| (n.to_string(), Cents(c), ()))
         .collect()
+    }
+
+    #[test]
+    fn a_fold_is_keyed_by_its_bucket_not_its_place_or_language() {
+        // The id a row's answer swaps into: it must name the same header
+        // however the groups are ordered, and the catch-all must not depend
+        // on which word the viewer's language uses for it.
+        assert_eq!(fold_key(Some("Moradia")), fold_key(Some("  Moradia ")));
+        assert_ne!(fold_key(Some("Moradia")), fold_key(Some("Cartão")));
+        assert_eq!(fold_key(None), fold_key(Some("")));
+        assert_eq!(fold_key(None), fold_key(Some("   ")));
+        assert_eq!(fold_key(Some("Moradia")).len(), 8);
     }
 
     fn names(groups: Vec<(String, Cents, ())>) -> Vec<String> {

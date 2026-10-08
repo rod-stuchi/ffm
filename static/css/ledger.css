@@ -1838,13 +1838,51 @@
   color: var(--ink-3);
 }
 
+/* Every row of the fold selected with `x` on its header (or `X`, `gx`):
+ * the --info bar a selected row wears, on the header — which, with the fold
+ * closed, is the only thing on screen to show it. Focused as well, the accent
+ * rail comes first and the info bar beside it, as on a row. */
+.foldhead.is-selected {
+  box-shadow: inset 3px 0 0 var(--info);
+}
+
+.foldhead.is-focus.is-selected {
+  box-shadow: inset 3px 0 0 var(--accent), inset 6px 0 0 var(--info);
+}
+
+/* The ring and the subtotal, as one swappable unit pushed to the right edge.
+ * Centered rather than on the baseline: an svg's baseline is its bottom
+ * edge, which would sit the ring above the text. */
+.foldhead .fsum {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 8px;
+}
+
 /* The subtotal stays visible whether the fold is open or closed. That is the
  * whole reason there is no separate report screen. */
 .foldhead .fsub {
-  margin-left: auto;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-size: 12.5px;
+}
+
+/* The fold ring: the group's marks counted, an arc per state with paper
+ * between them — slices, unlike a row's ring, which is one continuous arc
+ * over a track. Started at twelve o'clock like the row's. */
+.fring {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.fring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
 }
 
 .foldrows {

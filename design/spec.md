@@ -620,7 +620,9 @@ standing out.)
 | `ga` | **re-attribute** — give the row to another member, picked from a list: their pane's number (`ga2`), or `j`/`k` + `Enter`. Admin only |
 | `a` | add a one-off spend |
 | `i` | add a one-off income |
-| `x` | toggle selection for a batch operation — the statusline counts and sums what is selected in the focused pane |
+| `x` | toggle selection for a batch operation — the statusline counts and sums what is selected in the focused pane · on a fold's header, every row in the fold |
+| `X` | select every row of the fold the cursor is in — or clear them, if all were |
+| `gx` | select every row in the pane — or clear them, if all were |
 | `e` | edit this occurrence |
 | `A` | create a recurring bill — opens the rule pane, with a placeholder row at the cursor |
 | `I` | create a recurring income — the same pane, money the other way |
@@ -750,6 +752,7 @@ whole keymap was out of reach: there was no field to focus.
 | `zo` / `zc` | open / close it explicitly |
 | `zR` / `zM` | open / close every fold in the panel |
 | `S` | order the groups: first seen → A–Z → by cost, and round again |
+| `x` on a header · `X` | select the fold's rows, or clear them — see Selecting a group |
 
 ### Files
 | Key | Action |
@@ -2616,9 +2619,10 @@ of a three-row fold followed by `j` landed four folds further down. `zR` and
 `zo` are the mirror case and keep the cursor exactly where it is, since
 nothing it could be standing on disappears.
 
-A row action on a header — `e`, `dd`, `p`, `gl`, `g1`, `x`, `J`/`K`,
+A row action on a header — `e`, `dd`, `p`, `gl`, `g1`, `J`/`K`,
 `ga` — says *"that is a group, not a row"* rather than doing
-nothing at all, the same treatment every other misplaced key gets. Relative
+nothing at all, the same treatment every other misplaced key gets. `x` is
+the exception, below: a group is exactly what it can mean there. Relative
 line numbers stay counted among **rows**: a header carries no gutter, so
 counting it would leave a hole where nothing is printed; the cursor sitting
 on one simply means no row reads `0`.
@@ -2636,6 +2640,70 @@ collision or inventing a hash-based color scheme for marginal gain.
 Rows with no `bucket` set land in an **`Uncategorized`** group — grouping never
 silently drops a row. Nesting stops at `bucket` — no nested `bill_name`
 sub-folds.
+
+### The ring beside the subtotal
+
+Left of the subtotal, a small ring says how the fold's rows stand — so a
+closed fold, and `zM`'s whole report, answers "is this category settled?"
+as well as "what does it cost?".
+
+- **It is the rows' marks, counted.** Each arc is the color a row's own mark
+  wears: `--pos` for done (paid, received, ticked by hand), `--info` for
+  scheduled, `--neg` for late, and what is still open in the track's color
+  (`--line-2`), so the ring fills as the fold is settled. No color is new,
+  which keeps the fold free of per-category color, as above.
+- **Sized by row count, not amount.** A bill still waiting for its amount
+  (`R$ __,__`) is one thing left to do; weighed by money it would weigh
+  nothing, and a card fold would read fully paid while its statement is
+  still open. The amounts are the subtotal's job.
+- **Late is a red mark** — a scheduled payment past its date, or a ring that
+  has run out (`ring_progress() >= 1.0`). That is the due day itself, one day
+  before the month-picker's dot (`is_unresolved`, strictly after): the ring
+  sits right above rows whose own rings are already red on that day, and
+  must not call them open.
+- **Left out: what nothing could settle** — a plain row (untracked, no tick:
+  the dot does not nag about it either) and a one-off, which has no rule, so
+  no file and no tick. A fold of only those — a week of groceries — has no
+  ring at all. Deleted rows are out too, as from the totals.
+- **Slices, not a pie.** A segmented ring with paper between the arcs, 16px.
+  A filled pie that size reads as a status mark — all paid is the Paid disc,
+  all late the overdue one — and a continuous arc over a track is what a
+  row's elapsed-time ring already means.
+- **Its tooltip says it in words** — *"1 done · 1 late"*, only what is there,
+  counts and never money — and the same words are its label for a screen
+  reader.
+- **`?` shows it** under Marks, drawn by the header's own partial
+  (`partials/fold_ring.html`), from real counts.
+
+**A fold header is a total, so it is never stale.** Every answer about one row
+— a file attached, a bill's amount, `m`, `p`, `dd`, `u` — carries the count,
+ring and subtotal of every fold in the row's pane, out of band, into spans the
+header gives ids to (`fcnt-` / `fsum-{member}-{key}`). The key is a hash of
+the bucket itself, not the fold's place on screen, which a bill can change
+under a by-cost order without a full render; the header element is never
+swapped, so its fold state and cursor mark stay put. Before this, a row
+deleted with `dd` went on counting in its header's subtotal until a reload.
+A fold whose last row was just deleted is told it holds nothing.
+
+### Selecting a group — `x` on a header, `X`, `gx`
+
+`x` on a fold's header selects every row in the fold; `X` does the same from
+any row inside it, and `gx` takes the whole pane. All three follow the
+trash's and `:prune`'s rule — **everything selected → none, otherwise →
+all** — so a second press undoes the first and a half-selected fold fills
+rather than empties.
+
+- **The statusline does the arithmetic it already did.** Selecting a fold
+  makes the selection cell's Σ its subtotal; two folds give two categories
+  together. Nothing new on the server: the cell is fed the ids it always was.
+- **A fully selected fold says so on its header**, with the `--info` bar a
+  selected row wears — after the accent rail when the cursor is on it too.
+  With the fold closed, the header is the only thing on screen to show it.
+- **Rows `dd` struck through are skipped**: they are out of the pane's sums
+  already, and the selection cell would ignore them.
+- **`X` on a flat pane refuses**, in `S`'s words:
+  `ledger.group = "none" — X selects a group; :group bucket first`.
+- Selection stays visual state — Alpine's `selected` map, as with `x`.
 
 ### Which group comes first — `S`
 
