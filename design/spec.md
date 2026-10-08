@@ -2681,10 +2681,27 @@ nothing it could be standing on disappears.
 A row action on a header — `e`, `dd`, `p`, `gl`, `g1`, `J`/`K`,
 `ga` — says *"that is a group, not a row"* rather than doing
 nothing at all, the same treatment every other misplaced key gets. `x` is
-the exception, below: a group is exactly what it can mean there. Relative
-line numbers stay counted among **rows**: a header carries no gutter, so
-counting it would leave a hole where nothing is printed; the cursor sitting
-on one simply means no row reads `0`.
+the exception, below: a group is exactly what it can mean there.
+
+**A header is numbered like a row** — reversing "relative line numbers stay
+counted among rows". They were, to avoid a hole in the sequence where a
+header printed nothing, and the cost was that the numbers lied: `j`/`k` step
+onto headers, so from a row reading `0`, `4k` stopped on the header the
+numbers had skipped, one line short of the row marked `4`. A gutter is a
+promise about what a count reaches, so it counts what the cursor counts.
+
+- **The header has a gutter cell of its own** (`.fgut`), in the rows'
+  column: as wide as a row's rail and gutter, the number right-aligned the
+  same 8px in, accent and bold under the cursor like a row's. `nonu`
+  narrows it with the rows'.
+- **Relative numbers count positions** — every header, and the rows of every
+  open fold. A closed fold's rows are not positions, so the line after it is
+  one further, exactly as `j` walks it.
+- **Absolute numbers count lines too, in the order they are drawn.** The pane
+  query used to number rows in its own order, before they were clustered into
+  folds, so `nu` read out of sequence in every grouped pane; `group_rows`
+  numbers them now, headers included. A closed fold keeps its numbers, so
+  the line after it jumps, as a closed fold does in Vim.
 
 ### What a fold header looks like
 

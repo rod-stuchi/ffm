@@ -1801,7 +1801,9 @@
   display: flex;
   align-items: baseline;
   gap: 9px;
-  padding: 7px 10px;
+  /* No left padding: the line number's cell (`.fgut`) starts at the edge,
+   * like a row's gutter. */
+  padding: 7px 10px 7px 0;
   background: var(--surface-2);
   cursor: pointer;
   font-size: 12.5px;
@@ -1819,6 +1821,35 @@
   font-family: var(--mono);
   color: var(--ink-3);
   width: 1ch;
+}
+
+/* The header's line number, in the rows' gutter column: as wide as a row's
+ * 3px rail and 34px gutter, right-aligned 8px in, the same as `.gut`, so the
+ * numbers read as one column down the fold. The header has no left padding
+ * of its own for that reason, which also puts the ▾ and the bucket's name
+ * over the rows' content. */
+.foldhead .fgut {
+  flex: none;
+  box-sizing: border-box;
+  width: 37px;
+  padding-right: 8px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  user-select: none;
+}
+
+.foldhead.is-focus .fgut {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* `nonu` narrows it with the rows' track (3px rail + 10px), never removes it. */
+.foldhead.is-nogut .fgut {
+  width: 13px;
+  padding-right: 0;
+  overflow: hidden;
 }
 
 .foldhead .fcount {

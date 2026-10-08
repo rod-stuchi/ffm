@@ -2241,14 +2241,16 @@ function ledger() {
     /// server and this leaves them alone.
     renumber(positions) {
       if (this.nu !== 'relative') return;
-      // Counted among ROWS, not positions: a fold header carries no gutter,
-      // so counting it would leave a hole in the sequence where nothing is
-      // printed. The cursor sitting on a header simply means no row reads 0.
-      const rows = positions.filter(el => !el.classList.contains('foldhead'));
-      const here = rows.indexOf(positions[this.row]);
-      rows.forEach((row, i) => {
-        const cell = row.querySelector('.gut');
-        if (cell) cell.textContent = here < 0 ? '' : String(Math.abs(i - here));
+      // Counted among POSITIONS, a fold's header included — exactly what
+      // `j`/`k` walk. Counting only rows made the numbers lie: from a row
+      // reading 0, `4k` landed on the header the numbers had skipped, one
+      // line short of the row marked 4. A header has its own gutter cell
+      // (`.fgut`), so there is no hole in the sequence either. The rows of a
+      // closed fold are not positions; their hidden numbers are redrawn
+      // when it opens.
+      positions.forEach((el, i) => {
+        const cell = el.querySelector(el.classList.contains('foldhead') ? '.fgut' : '.gut');
+        if (cell) cell.textContent = String(Math.abs(i - this.row));
       });
     },
 

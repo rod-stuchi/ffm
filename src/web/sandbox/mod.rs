@@ -255,22 +255,15 @@ async fn rows(Query(ctx): Query<Ctx>) -> impl IntoResponse {
         })
         .collect();
 
-    let folds = {
-        let t = Catalog::new(langs[0]);
-        let rows: Vec<LedgerRow> = fixtures::folds(rctx)
-            .into_iter()
-            .map(|r| apply_gutter(&ctx, r))
-            .collect();
-        let views = rows.iter().map(|r| r.view(&t)).collect();
-        crate::web::ledger::group_rows(
-            0,
-            &rows,
-            views,
-            &t,
-            ctx.currency(),
-            crate::web::ledger::GroupOrder::Appearance,
-        )
-    };
+    // Numbered by `group_rows` itself — by line, headers included, from the
+    // gutter setting each row carries — so no `apply_gutter` here.
+    let folds = crate::web::ledger::group_rows(
+        0,
+        &fixtures::folds(rctx),
+        &Catalog::new(langs[0]),
+        ctx.currency(),
+        crate::web::ledger::GroupOrder::Appearance,
+    );
 
     Html(RowsPage {
         folds,
@@ -595,14 +588,61 @@ mod tests {
     /// The folds the sandbox shows, counted the way a header counts them —
     /// and the page and a row's answer agree, because both go through
     /// `clusters`.
+    /// A grouped pane is numbered by line, headers included and in the order
+    /// it is drawn: `4k` from a row reading 0 must land on the line reading
+    /// 4, and a header is a line `k` stops on. The pane query used to number
+    /// rows in its own order, before clustering, and skip headers.
+    #[test]
+    fn a_grouped_pane_numbers_every_line_headers_included() {
+        use crate::ui::row::LineNumbers;
+        use crate::web::ledger::{GroupOrder, group_rows};
+        let t = Catalog::new(Lang::En);
+        let lines = |numbers: LineNumbers| {
+            let rows: Vec<LedgerRow> = fixtures::folds(RowCtx {
+                line_numbers: numbers,
+                ..ctx()
+            });
+            let groups = group_rows(7, &rows, &t, Currency::Brl, GroupOrder::Appearance);
+            let mut out = Vec::new();
+            for g in &groups {
+                out.push((g.gutter.clone(), g.nogut));
+                out.extend(g.rows.iter().map(|v| (v.gutter.clone(), false)));
+            }
+            out
+        };
+
+        // Cartão's header is line 0 — where the cursor starts — its two rows
+        // 1 and 2, Moradia's header 3, and so on to the last row.
+        let relative = lines(LineNumbers::Relative);
+        let numbers: Vec<String> = relative.iter().map(|(g, _)| g.clone()).collect();
+        let want: Vec<String> = (0..relative.len()).map(|i| i.to_string()).collect();
+        assert_eq!(numbers, want);
+        assert_eq!(relative[3].0, "3", "Moradia's header is a line of its own");
+
+        let absolute: Vec<String> = lines(LineNumbers::Absolute)
+            .into_iter()
+            .map(|(g, _)| g)
+            .collect();
+        let want: Vec<String> = (1..=absolute.len()).map(|i| i.to_string()).collect();
+        assert_eq!(
+            absolute, want,
+            "nu counts lines in drawn order, not query order"
+        );
+
+        // `nonu`: no number anywhere, and the header's track narrows with
+        // the rows' rather than leaving a column of empty 37px cells.
+        let off = lines(LineNumbers::Off);
+        assert!(off.iter().all(|(g, _)| g.is_empty()));
+        assert!(off[0].1, "a header under nonu narrows its gutter");
+    }
+
     #[test]
     fn fold_headers_count_their_rows_marks() {
         use crate::web::ledger::{GroupOrder, fold_summaries, group_rows};
         let c = ctx();
         let t = Catalog::new(Lang::En);
         let rows = fixtures::folds(c);
-        let views = rows.iter().map(|r| r.view(&t)).collect();
-        let groups = group_rows(7, &rows, views, &t, Currency::Brl, GroupOrder::Appearance);
+        let groups = group_rows(7, &rows, &t, Currency::Brl, GroupOrder::Appearance);
         let names: Vec<&str> = groups.iter().map(|g| g.name.as_str()).collect();
         assert_eq!(
             names,

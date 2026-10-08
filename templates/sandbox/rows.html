@@ -52,7 +52,8 @@
     <div class="spec-stage">
       {%- for g in folds %}
       <section class="fold">
-        <header class="foldhead">
+        <header class="foldhead{% if g.nogut %} is-nogut{% endif %}">
+          <span class="fgut">{{ g.gutter }}</span>
           <span class="fmark">▾</span>
           <b>{{ g.name }}</b>
           {%- let s = g.summary %}

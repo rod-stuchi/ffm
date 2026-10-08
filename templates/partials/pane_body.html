@@ -18,7 +18,10 @@
 <section class="fold" :class="{ 'is-closed': closed('{{ p.id }}-{{ loop.index0 }}') }">
   {#- No click handler of its own: the pane's `clickPane` puts the cursor on
       the header and then toggles it, so the index cannot go stale. -#}
-  <header class="foldhead">
+  <header class="foldhead{% if g.nogut %} is-nogut{% endif %}">
+    {#- Its line number, in the rows' gutter column: a header is a line the
+        cursor stops on, so `4k` counts it and the numbers must too. -#}
+    <span class="fgut">{{ g.gutter }}</span>
     <span class="fmark" x-text="closed('{{ p.id }}-{{ loop.index0 }}') ? '▸' : '▾'">▾</span>
     <b>{{ g.name }}</b>
     {#- The count and the ring + subtotal carry ids so a row's answer can

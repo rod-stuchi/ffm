@@ -215,6 +215,13 @@ async fn member_panes(st: &AppState, auth: &Auth, period: Period, ctx: RowCtx) -
 pub struct Group {
     pub name: String,
     pub summary: FoldSummary,
+    /// The header's line number. A header is a cursor position — `j` stops
+    /// on it and `4k` counts it — so it is numbered like a row, or the
+    /// numbers would point `4k` at the wrong line.
+    pub gutter: String,
+    /// `nonu`: the header's gutter narrows with the rows', so the two stay in
+    /// one column.
+    pub nogut: bool,
     pub rows: Vec<RowView>,
 }
 
@@ -1354,28 +1361,55 @@ fn clusters(
 }
 
 /// A grouped pane's folds, rows and all — what the page renders.
+///
+/// **Numbered by line, headers included**, the way the cursor walks it: a
+/// header is a position `j` stops on, so `4k` from a row counts it, and a
+/// gutter that skipped it sent `4k` one line short — onto the header, with
+/// the row the numbers promised one further up. The pane query numbered the
+/// rows in its own order, before they were clustered, which also left `nu`'s
+/// numbers out of sequence in every fold; they are renumbered here, in the
+/// order they are drawn. Relative numbers are measured from the first
+/// header, where the cursor starts, and kept from there by the page.
 pub fn group_rows(
     member: i64,
     rows: &[crate::ui::row::LedgerRow],
-    views: Vec<RowView>,
     t: &Catalog,
     currency: crate::domain::money::Currency,
     group_order: GroupOrder,
 ) -> Vec<Group> {
-    let mut views: Vec<Option<RowView>> = views.into_iter().map(Some).collect();
+    let numbers = rows.first().map(|r| r.ctx.line_numbers).unwrap_or_default();
+    let mut line = 0;
+    let mut next = || {
+        let g = numbers.gutter(line, 0);
+        line += 1;
+        g
+    };
     clusters(rows, t, group_order)
         .into_iter()
-        .map(|(name, total, c)| Group {
-            summary: FoldSummary::of(
-                format!("{member}-{}", c.key),
-                c.rows.len(),
-                total,
-                c.counts,
-                t,
-                currency,
-            ),
-            rows: c.rows.iter().filter_map(|&i| views[i].take()).collect(),
-            name,
+        .map(|(name, total, c)| {
+            let head = next();
+            Group {
+                summary: FoldSummary::of(
+                    format!("{member}-{}", c.key),
+                    c.rows.len(),
+                    total,
+                    c.counts,
+                    t,
+                    currency,
+                ),
+                gutter: head.text(),
+                nogut: head == crate::ui::row::Gutter::Hidden,
+                rows: c
+                    .rows
+                    .iter()
+                    .map(|&i| {
+                        let mut row = rows[i].clone();
+                        row.gutter = next();
+                        row.view(t)
+                    })
+                    .collect(),
+                name,
+            }
         })
         .collect()
 }
@@ -1430,8 +1464,7 @@ pub(crate) fn view(
             pane.rows.iter().map(|r| r.view(t)).collect()
         },
         groups: if let Some(order) = group {
-            let views = pane.rows.iter().map(|r| r.view(t)).collect();
-            group_rows(pane.member.id, &pane.rows, views, t, currency, order)
+            group_rows(pane.member.id, &pane.rows, t, currency, order)
         } else {
             Vec::new()
         },
