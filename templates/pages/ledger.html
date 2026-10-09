@@ -561,6 +561,11 @@
         <template x-if="tip.ruleDeleted">
           <div class="tiprow"><b>{{ t.details_rule() }}</b><span x-text="tip.ruleDeleted"></span></div>
         </template>
+        {#- How far the run has come — installments paid of the run, and the
+            money paid and left. Only a rule with an end, or a season. -#}
+        <template x-if="tip.progress">
+          <div class="tiprow"><b>{{ t.details_progress() }}</b><span x-text="tip.progress"></span></div>
+        </template>
         <template x-if="tip.receipt">
           <div class="tiprow"><b>{{ t.details_receipt() }}</b>
             <span class="mono" x-text="tip.receipt"></span></div>
@@ -2369,6 +2374,7 @@ function ledger() {
         cadence: row.dataset.cadence,
         receipt: row.dataset.receipt,
         ruleDeleted: row.dataset.ruleDeleted,
+        progress: row.dataset.progress,
       };
       this.tipStyle = 'top:' + (r.bottom + 6) + 'px; left:' + (r.left + 40) + 'px';
       // Dismissed by the very next keypress of ANY kind — the same way any

@@ -14,10 +14,11 @@
 use crate::domain::estimate;
 use crate::domain::money::{Cents, Currency};
 use crate::domain::period::Period;
+use crate::domain::schedule::Plan;
 use crate::domain::status::{RowFlags, RowState, TxKind, Visibility};
 use crate::domain::viewer::Viewer;
 use crate::ui::i18n::Lang;
-use crate::ui::row::{FilePresence, LedgerRow, RowCtx};
+use crate::ui::row::{FilePresence, LedgerRow, Progress, RowCtx};
 use chrono::NaiveDate;
 use sqlx::SqlitePool;
 
@@ -258,6 +259,9 @@ pub async fn pane_with_vault(
             r.bill_name          AS "rule_bill_name?: String",
             r.instance           AS "instance?: String",
             r.total_installments AS "total_installments?: i64",
+            r.start_date         AS "rule_start?: String",
+            r.end_date           AS "rule_end?: String",
+            r.months             AS "rule_months?: String",
             r.spans_period       AS "spans_period?: i64",
             r.amount_in_filename AS "amount_in_filename?: i64",
             r.varies             AS "varies?: i64",
@@ -282,16 +286,7 @@ pub async fn pane_with_vault(
                 AND p.period    = ?2
                 AND p.deleted_at IS NULL
               ORDER BY p.sort_key
-              LIMIT 1)           AS "prev_amount_cents: i64",
-
-            -- The `7/12` badge. Counts occurrences of this rule up to and
-            -- including this period, so it reads as position in the run.
-            (SELECT COUNT(*)
-               FROM transactions o
-              WHERE o.rule_id IS NOT NULL
-                AND o.rule_id = t.rule_id
-                AND o.period <= t.period
-                AND o.deleted_at IS NULL) AS "installments_paid!: i64"
+              LIMIT 1)           AS "prev_amount_cents: i64"
         FROM transactions t
         LEFT JOIN recurring_rules r ON r.id = t.rule_id
         WHERE t.member_id  = ?1
@@ -360,6 +355,9 @@ pub async fn pane_with_vault(
     let mut basis_of: Vec<Option<String>> = Vec::with_capacity(rows.len());
     let mut window_of: Vec<Option<i64>> = Vec::with_capacity(rows.len());
     let mut rule_amount_of: Vec<Option<i64>> = Vec::with_capacity(rows.len());
+    // Which months the rule runs in, for the `3/10` badge — the same
+    // `domain::schedule` answer the materializer acts on.
+    let mut plan_of: Vec<Option<Plan>> = Vec::with_capacity(rows.len());
 
     for (i, r) in rows.into_iter().enumerate() {
         let kind = TxKind::parse(&r.kind).unwrap_or(TxKind::Out);
@@ -377,6 +375,20 @@ pub async fn pane_with_vault(
         basis_of.push(r.estimate_basis.clone());
         window_of.push(r.estimate_window);
         rule_amount_of.push(r.rule_amount_cents);
+        plan_of.push(
+            r.rule_start
+                .as_deref()
+                .filter(|_| recurring)
+                .and_then(|start| {
+                    Plan::from_columns(
+                        start,
+                        r.rule_end.as_deref(),
+                        r.cadence_months.unwrap_or(1),
+                        r.rule_months.as_deref(),
+                        r.total_installments,
+                    )
+                }),
+        );
 
         out.push(LedgerRow {
             id: r.id,
@@ -415,7 +427,8 @@ pub async fn pane_with_vault(
             // freezing an old guess — and never writes a spurious "amount
             // changed" entry into the log.
             estimate_cents: None,
-            installments_paid: recurring.then_some(r.installments_paid as u16),
+            // Filled in below: it needs the rule's other months.
+            progress: None,
             // Filled in below, once the row exists to be asked about.
             files: FilePresence::default(),
 
@@ -489,6 +502,21 @@ pub async fn pane_with_vault(
         }
     }
 
+    // How far each rule's run has come as of this month: the `3/10` badge and
+    // the popup's Progress line. A rule with nothing to count to — open-ended,
+    // every month — has no run and is skipped.
+    for (i, row) in out.iter_mut().enumerate() {
+        let (Some(rule_id), Some(plan)) = (row.rule_id, plan_of.get(i).and_then(|p| p.as_ref()))
+        else {
+            continue;
+        };
+        let Some(run) = plan.run_for(row.period) else {
+            continue;
+        };
+        let fallback = rule_amount_of.get(i).copied().flatten().map(Cents);
+        row.progress = Some(progress_of(pool, root, rule_id, &run, row.period, fallback).await?);
+    }
+
     // Any projection in the pane marks its INs and Balance. Leaving
     // projections out of the totals would make a future month's balance
     // useless; putting them in unmarked would present a guess as a fact.
@@ -555,27 +583,7 @@ async fn confirmed_history(
             break;
         }
         let amount = Cents(r.amount_cents.unwrap_or(0));
-        let confirmed = if r.tracked != 0 {
-            // No manual tick for a tracked rule, ever — the disk answers, at
-            // the path `slot_of` decides (it used to be rebuilt here from the
-            // row's bucket, and with a hardcoded currency in the filename).
-            match root {
-                Some(root) => match crate::services::receipts::slot_of(pool, r.id).await {
-                    Ok(Some((slot, _))) => crate::services::receipts::presence(pool, root, &slot)
-                        .await
-                        .map(|p| p.receipt.is_some())
-                        .unwrap_or(false),
-                    _ => false,
-                },
-                // No vault to consult: nothing is confirmed, which is the
-                // honest answer rather than a convenient one.
-                _ => false,
-            }
-        } else {
-            r.manual_paid != 0
-        };
-
-        if confirmed {
+        if is_confirmed(pool, root, r.tracked != 0, r.id, r.manual_paid != 0).await {
             out.push(estimate::Confirmed {
                 period: r.period,
                 amount,
@@ -583,6 +591,118 @@ async fn confirmed_history(
         }
     }
     Ok(out)
+}
+
+/// Whether one occurrence is confirmed — the money moved. The same answer
+/// the mark gives: the receipt (or payslip) on disk for a tracked rule, the
+/// manual tick for an untracked one.
+async fn is_confirmed(
+    pool: &SqlitePool,
+    root: Option<&std::path::Path>,
+    tracked: bool,
+    transaction_id: i64,
+    manual_paid: bool,
+) -> bool {
+    if !tracked {
+        return manual_paid;
+    }
+    // No manual tick for a tracked rule, ever — the disk answers, at the path
+    // `slot_of` decides (it used to be rebuilt here from the row's bucket, and
+    // with a hardcoded currency in the filename).
+    let Some(root) = root else {
+        // No vault to consult: nothing is confirmed, which is the honest
+        // answer rather than a convenient one.
+        return false;
+    };
+    match crate::services::receipts::slot_of(pool, transaction_id).await {
+        Ok(Some((slot, _))) => crate::services::receipts::presence(pool, root, &slot)
+            .await
+            .map(|p| p.receipt.is_some())
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+/// How far a rule's run has come as of `at` (`ui::row::Progress`).
+///
+/// **Paid** counts the run's months up to and including `at` whose
+/// occurrence is confirmed — so a month missed earlier shows as a gap on every
+/// row after it. **To go** is everything else in the run, each month at its
+/// own row's amount, else its bill code's (a bill covering several months
+/// knows every month's figure), else the rule's, else the newest amount the
+/// run has seen — what carrying the amount forward would seed it with. The
+/// last two are a projection, and say so. With none of them, what is left is
+/// unknown (`None`), never `R$ 0,00`: those months are not free.
+async fn progress_of(
+    pool: &SqlitePool,
+    root: Option<&std::path::Path>,
+    rule_id: i64,
+    run: &[Period],
+    at: Period,
+    fallback: Option<Cents>,
+) -> sqlx::Result<Progress> {
+    let (Some(first), Some(last)) = (run.first(), run.last()) else {
+        return Ok(Progress::default());
+    };
+    let (first_s, last_s) = (first.to_string(), last.to_string());
+    let rows = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+                  t.amount_cents AS "amount_cents: i64",
+                  t.manual_paid AS "manual_paid!: i64",
+                  r.tracked AS "tracked!: i64"
+           FROM transactions t
+           JOIN recurring_rules r ON r.id = t.rule_id
+           WHERE t.rule_id = ?1 AND t.period BETWEEN ?2 AND ?3
+             AND t.deleted_at IS NULL"#,
+        rule_id,
+        first_s,
+        last_s,
+    )
+    .fetch_all(pool)
+    .await?;
+    let codes = crate::db::bill_codes::amounts(pool, rule_id).await?;
+    let fallback = fallback.or_else(|| {
+        rows.iter()
+            .filter(|r| r.amount_cents.is_some())
+            .max_by(|a, b| a.period.cmp(&b.period))
+            .and_then(|r| r.amount_cents)
+            .map(Cents)
+    });
+
+    let mut p = Progress {
+        total: run.len() as u16,
+        to_go_cents: Some(Cents::ZERO),
+        ..Progress::default()
+    };
+    for period in run {
+        let row = rows
+            .iter()
+            .find(|r| Period::parse(&r.period) == Some(*period));
+        let amount = row
+            .and_then(|r| r.amount_cents)
+            .map(Cents)
+            .or_else(|| codes.get(period).copied());
+        let confirmed = match row {
+            Some(r) if *period <= at => {
+                is_confirmed(pool, root, r.tracked != 0, r.id, r.manual_paid != 0).await
+            }
+            _ => false,
+        };
+        if confirmed {
+            p.paid += 1;
+            p.paid_cents += amount.unwrap_or(Cents::ZERO);
+        } else {
+            let a = amount.or_else(|| {
+                p.estimated = true;
+                fallback
+            });
+            p.to_go_cents = match (p.to_go_cents, a) {
+                (Some(t), Some(a)) => Some(t + a),
+                _ => None,
+            };
+        }
+    }
+    Ok(p)
 }
 
 /// Dates are ISO-8601 TEXT, fixed width, so this is exact rather than lenient.

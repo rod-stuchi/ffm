@@ -1071,7 +1071,20 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   permanently. Don't conflate the two.
 - **Installment progress displays as a bare `{paid}/{total}` badge** (e.g.
   `7/12`), not baked into the transaction title — the same meta slot the
-  due-date and recurring glyphs already occupy.
+  due-date and recurring glyphs already occupy. **Paid** is installments
+  confirmed (receipt on disk, or the manual tick) up to and including the
+  row's month, so a month missed earlier is a gap on every row after it —
+  the badge used to count occurrences, which read as position and named
+  every month "paid". The **total** is the rule's run
+  (`domain::schedule::Plan::run_for`): an installment count, or an end date
+  (a canceled bill reads `5/7`), or — for a seasonal rule with neither —
+  its months **this calendar year**, so IPTU's `1-10` reads `x/10` and starts
+  again each January. An open-ended monthly rule has nothing to count to
+  and no badge. `gd` adds the money: *3 of 10 · R$ 364,86 paid · R$ 851,34
+  to go*, each month left at its own row's amount, else its bill code's,
+  else the rule's, else the newest the run has seen — marked `~` when any
+  month is projected that way. With no figure at all for some month, the
+  *to go* half is left out rather than reading `R$ 0,00`.
 - **Paying off several installments early is a decoupled, manual action** — no
   guided "pay off N now" feature. Shorten `total_installments`/`end_date` on
   the rule, and record the lump payment as an ordinary one-off transaction.
@@ -1431,10 +1444,15 @@ that will otherwise be re-proposed.
    the behavior in seed data (`design/ffm-prototype.html:974`, IPTU running
    Jan–Oct; `:983`, school fees running Feb–Dec) and filtered on it in one
    line; what was missing was a control, because no mockup ever drew one.
-   - **Exactly one read site**: the reconciler skips a period whose month is
-     not in the list. Everything downstream reads occurrences, and an
-     occurrence that was never materialized is simply not there — which is
-     what keeps this a small change rather than a cross-cutting one.
+   - **One function decides which months a rule runs in** —
+     `domain::schedule::Plan`, with the cadence, the end date and the
+     installment count — and two readers ask it: the reconciler, which skips
+     a period whose month is not in the list, and the row's `x/N` badge,
+     which counts them. It was the reconciler's loop alone until the badge
+     needed the same answer; a second copy would have been two answers.
+     Everything else reads occurrences, and an occurrence that was never
+     materialized is simply not there — which is what keeps this a small
+     change rather than a cross-cutting one.
    - **Editing it affects future materializations only**, exactly like
      `due_day`. Narrowing Jan–Oct to Jan–Aug does **not** delete the
      September and October rows already recorded: a form field must not

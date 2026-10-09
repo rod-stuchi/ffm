@@ -11,6 +11,7 @@ pub mod months;
 pub mod order;
 pub mod period;
 pub mod receipt_path;
+pub mod schedule;
 pub mod slug;
 pub mod sortkey;
 pub mod status;

@@ -375,6 +375,18 @@ default, the search scope and the privacy default.
 - **Installment progress is a bare `{paid}/{total}` badge** (e.g. `7/12`), not
   baked into the title — the same meta slot the due-date and recurring glyphs
   already occupy.
+  - **Paid so far, as of the row's month** — the receipt on disk, or the
+    manual tick — so it stays on a paid row, and a month missed earlier
+    shows as a gap on every row after it: May reads `4/10` with March unpaid.
+  - **Of the rule's run**: its installment count; else its end date (a
+    canceled bill: `5/7`); else, for a seasonal rule, its months this year —
+    IPTU's `1-10` is `x/10`, back to `1/10` in January. A rule with none of
+    the three has nothing to count to and no badge, and an orphaned bill
+    stops counting with its rule.
+  - **The months are `domain::schedule`'s**, the same answer the
+    materializer acts on, so the badge cannot count a month no row is made
+    for.
+  - Compact density drops the meta line, and the badge with it.
 - **The meta line's icons are stroke SVGs, not an emoji font** — the flag
   (paid), calendar-clock (scheduled/pending) and warning triangle
   (scheduled overdue) reuse the exact same line-icon language as the file
@@ -741,6 +753,16 @@ standing out.)
     where copy and paste live.
   - Esc closes it; any other key closes it and then does its own job, and a
     cursor move off the row closes it too.
+
+- **The popup says how far a run has come, in money** — a *Progress* line
+  under Cadence on any row that carries the `x/N` badge: *3 of 10 · R$
+  364,86 paid · R$ 851,34 to go* (*received · to come* for an income). Paid
+  is what the confirmed months came to; what is left takes each month at its
+  own row's amount, else its bill code's (a bill covering several months
+  knows every month's figure), else the rule's, else the newest amount the
+  run has seen — and then reads `~R$ 851,34`, because that part is a
+  projection. When some month left has no figure at all, the line stops at
+  *paid*: an unknown is not `R$ 0,00`.
 
 - **`gd` is that same details popup with no mouse involved.** Hovering was
   the only way to see a row's due date, cadence and receipt path before this

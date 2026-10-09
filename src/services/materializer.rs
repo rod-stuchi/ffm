@@ -23,8 +23,8 @@
 
 use crate::db::changes::{Actor, Change, TxAction};
 use crate::domain::money::Cents;
-use crate::domain::months::Months;
 use crate::domain::period::Period;
+use crate::domain::schedule::Plan;
 use crate::domain::sortkey;
 use chrono::{Datelike, NaiveDate};
 use sqlx::SqlitePool;
@@ -93,72 +93,29 @@ pub async fn reconcile(pool: &SqlitePool, today: NaiveDate) -> sqlx::Result<Repo
     };
 
     for r in rules {
-        let Ok(start) = NaiveDate::parse_from_str(&r.start_date, "%Y-%m-%d") else {
+        // Which months the rule runs in is `domain::schedule`'s answer, shared
+        // with the row's `3/10` badge: its months list, cadence, end date and
+        // installment count. Everything downstream reads occurrences, and an
+        // occurrence that was never materialized is simply not there.
+        let Some(plan) = Plan::from_columns(
+            &r.start_date,
+            r.end_date.as_deref(),
+            r.cadence_months,
+            r.months.as_deref(),
+            r.total_installments,
+        ) else {
             continue;
         };
-        let end = r
-            .end_date
-            .as_deref()
-            .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
 
-        // Never past the current month. Future months stay projections
-        // rendered on the fly and are never persisted.
-        let last = match end {
-            Some(e) if Period::of(e) < current => Period::of(e),
-            _ => current,
-        };
+        // A month the member was inactive in is skipped like a month the rule
+        // does not run in, and for the same reason it is not a payment, so it
+        // does not count toward the installments either. Never past the
+        // current month: future months stay projections rendered on the fly
+        // and are never persisted.
+        let periods = plan.periods(current, |p| away(r.member_id, &p.to_string()));
 
-        // The seasonal allow-list, and the ONLY place it is read. Everything
-        // downstream reads occurrences, and an occurrence that was never
-        // materialized is simply not there — which is what keeps a rule that
-        // skips November a small change rather than a cross-cutting one.
-        //
-        // A value that no longer parses degrades to "every month" rather than
-        // silently materializing nothing: a rule that quietly stops producing
-        // rows is the worst failure this loop has.
-        let months = r.months.as_deref().and_then(Months::from_storage);
-
-        let cadence = r.cadence_months.max(1) as u32;
-        let mut period = Period::of(start);
-        let mut n = 0i64;
-
-        while period <= last {
-            // A finite run stops at its installment count, whatever the dates
-            // say — the two are kept in sync by the form, and this is the
-            // safety net if they ever disagree.
-            if let Some(total) = r.total_installments
-                && n >= total
-            {
-                break;
-            }
-
-            // A skipped month is not an occurrence that failed to appear —
-            // it is a month this rule does not run in. It still advances the
-            // cadence and the installment count, because it is a period the
-            // rule passed through.
-            if let Some(m) = &months
-                && !m.contains(period.month())
-            {
-                // It does NOT advance the installment count. `n` counts
-                // payments, and a month the rule does not run in is not one.
-                // (A rule with both a months list and a fixed installment
-                // count is an odd shape — the form's end-date sync still
-                // computes in whole months and does not know about skips —
-                // but if somebody builds one, "12 installments" has to mean
-                // twelve actual rows.)
-                period = period.succ_n(cadence);
-                continue;
-            }
-
+        for period in periods {
             let period_s = period.to_string();
-
-            // A month the member was inactive in: skipped like a month the
-            // rule does not run in, and for the same reason it is not a
-            // payment, so it does not count toward the installments either.
-            if away(r.member_id, &period_s) {
-                period = period.succ_n(cadence);
-                continue;
-            }
 
             // Soft-deleted occurrences count as PRESENT. This is where two
             // decided rules collide: deletes are soft, so a `dd`'d occurrence
@@ -203,9 +160,6 @@ pub async fn reconcile(pool: &SqlitePool, today: NaiveDate) -> sqlx::Result<Repo
                     report.created += 1;
                 }
             }
-
-            period = period.succ_n(cadence);
-            n += 1;
         }
     }
 

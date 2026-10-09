@@ -485,7 +485,7 @@ async fn deleted_row(
         manual: 0,
         prev_amount_cents: None,
         estimate_cents: None,
-        installments_paid: None,
+        progress: None,
         files: FilePresence::default(),
         state: RowState::Ok,
         flags: RowFlags {

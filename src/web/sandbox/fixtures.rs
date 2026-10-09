@@ -18,7 +18,7 @@
 use crate::domain::money::Cents;
 use crate::domain::period::Period;
 use crate::domain::status::{EditKind, RowFlags, RowState, TxKind, Visibility};
-use crate::ui::row::{FilePresence, Gutter, LedgerRow, RowCtx};
+use crate::ui::row::{FilePresence, Gutter, LedgerRow, Progress, RowCtx};
 use chrono::NaiveDate;
 
 /// The mockup's own "today" — 07/09/2026.
@@ -70,7 +70,7 @@ pub fn base(ctx: RowCtx) -> LedgerRow {
         manual: 0,
         prev_amount_cents: None,
         estimate_cents: None,
-        installments_paid: None,
+        progress: None,
         files: FilePresence::default(),
         state: RowState::Ok,
         flags: RowFlags::default(),
@@ -240,14 +240,20 @@ pub fn specs() -> Vec<Spec> {
             id: "installments",
             heading: "Fixed-length installment",
             why: "A car loan is not a subscription — it has a real end. \
-                  <code>total_installments</code> counts it down as a bare <code>7/12</code> \
-                  badge in the meta slot, not baked into the title. Distinct from a seasonal \
-                  bill, which recurs every year rather than ending for good.",
+                  Installments paid so far show as a bare <code>7/12</code> badge in the meta \
+                  slot, not baked into the title, and <code>gd</code> says what is paid and \
+                  what is left. A seasonal bill counts the same way, a year at a time.",
             build: |ctx| LedgerRow {
                 title: "Financiamento · Honda Biz".into(),
                 amount_cents: Some(Cents(68700)),
                 total_installments: Some(12),
-                installments_paid: Some(7),
+                progress: Some(Progress {
+                    paid: 7,
+                    total: 12,
+                    paid_cents: Cents(68700 * 7),
+                    to_go_cents: Some(Cents(68700 * 5)),
+                    estimated: false,
+                }),
                 tracked: false,
                 bucket: Some("Transporte".into()),
                 bill_name: Some("Financiamento".into()),

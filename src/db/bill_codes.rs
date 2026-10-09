@@ -126,6 +126,26 @@ pub async fn shared_file(
     Ok(row.map(|r| (r.path, r.ext)))
 }
 
+/// Each month's amount in a rule's live codes — what the row's Progress line
+/// counts for a month that has no row yet (`db::ledger`). One query per rule.
+pub async fn amounts(
+    pool: &SqlitePool,
+    rule_id: i64,
+) -> sqlx::Result<std::collections::HashMap<Period, Cents>> {
+    let rows = sqlx::query!(
+        r#"SELECT period AS "period!: String", amount_cents AS "amount_cents!: i64"
+           FROM rule_bill_code
+           WHERE rule_id = ?1 AND retired_at IS NULL AND amount_cents IS NOT NULL"#,
+        rule_id
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| Some((Period::parse(&r.period)?, Cents(r.amount_cents))))
+        .collect())
+}
+
 /// What a rule's live codes cover, for the rule pane's read-back.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Summary {

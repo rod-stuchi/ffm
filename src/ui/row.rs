@@ -4,7 +4,7 @@
 //! **Every visual channel is a pure function of fields on this struct.** That
 //! is what lets the sandbox render all twenty-odd states with no database, no
 //! filesystem and no clock — and it is why the query layer hangs
-//! `prev_amount_cents`, `estimate_cents`, `installments_paid` and file presence
+//! `prev_amount_cents`, `estimate_cents`, `progress` and file presence
 //! onto the row rather than leaving methods to go and fetch them. The mockup
 //! cheats here twice (`estimateFor` walks other months, `barcodePageFor` reads
 //! global config); this does not.
@@ -325,8 +325,10 @@ pub struct LedgerRow {
     /// follows new history instead of freezing an old guess — and so it never
     /// writes a spurious "amount changed" entry into the change log.
     pub estimate_cents: Option<Cents>,
-    /// Periods elapsed for this rule, for the `7/12` badge.
-    pub installments_paid: Option<u16>,
+    /// How far the rule's run has come as of this month — the `3/10` badge
+    /// and the popup's Progress line. `None` for a rule with nothing to count
+    /// to (open-ended, every month) and for a row with no rule.
+    pub progress: Option<Progress>,
     /// Whether each file exists on disk, and with which extension.
     pub files: FilePresence,
 
@@ -574,13 +576,47 @@ impl LedgerRow {
 
     // -- installments ----------------------------------------------------
 
-    /// The bare `7/12` badge. Not baked into the title — it lives in the meta
-    /// slot beside the due date and the recurrence glyph.
+    /// The bare `3/10` badge: installments paid so far, of the run. Not baked
+    /// into the title — it lives in the meta slot beside the due date and the
+    /// recurrence glyph. An orphaned bill has none: it stopped claiming to
+    /// recur.
     pub fn installments(&self) -> Option<(u16, u16)> {
         if !self.is_recurring() {
             return None;
         }
-        Some((self.installments_paid?, self.total_installments?))
+        self.progress.as_ref().map(|p| (p.paid, p.total))
+    }
+
+    /// The popup's Progress line: *3 of 10 · R$ 364,86 paid · R$ 851,34 to
+    /// go*. The rest of the run is marked `~` when a month in it had only the
+    /// rule's amount to go on.
+    fn progress_line(&self, t: &Catalog) -> Option<String> {
+        let (paid, total) = self.installments()?;
+        let p = self.progress.as_ref()?;
+        let currency = self.ctx.currency;
+        let done = fmt::money(p.paid_cents, currency);
+        let (paid, total) = (paid.to_string(), total.to_string());
+        let income = self.kind.is_income();
+        let head = if income {
+            t.details_progress_received(&paid, &total, &done)
+        } else {
+            t.details_progress_paid(&paid, &total, &done)
+        };
+        // What is left is said only when every month of it has a figure.
+        let Some(to_go) = p.to_go_cents else {
+            return Some(head);
+        };
+        let left = if p.estimated {
+            fmt::money_estimated(to_go, currency)
+        } else {
+            fmt::money(to_go, currency)
+        };
+        let tail = if income {
+            t.details_progress_to_come(&left)
+        } else {
+            t.details_progress_to_go(&left)
+        };
+        Some(format!("{head} · {tail}"))
     }
 
     // -- files -----------------------------------------------------------
@@ -828,6 +864,28 @@ pub struct Details {
     /// When the rule behind an orphaned bill was deleted — said in place of
     /// the cadence, which no longer applies.
     pub rule_deleted: Option<String>,
+    /// How far the run has come, in installments and in money.
+    pub progress: Option<String>,
+}
+
+/// How far a rule's run has come as of one row's month. Computed by the pane
+/// (`db::ledger`), because it needs the rule's other months; stored on the row
+/// so the badge and the popup stay functions of the row's fields.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Progress {
+    /// Installments confirmed — the receipt on disk, or the manual tick — up
+    /// to and including this month. A month missed earlier is a gap here.
+    pub paid: u16,
+    /// Installments in the run (`domain::schedule::Plan::run_for`).
+    pub total: u16,
+    /// What the confirmed ones came to.
+    pub paid_cents: Cents,
+    /// The rest of the run: each month's own amount, else its bill code's,
+    /// else the rule's, else the newest the run has seen. `None` when some
+    /// month left has no figure at all — unknown, not free.
+    pub to_go_cents: Option<Cents>,
+    /// Some month in `to_go_cents` is a projection, not its own figure.
+    pub estimated: bool,
 }
 
 pub struct RowView {
@@ -1191,6 +1249,7 @@ impl LedgerRow {
                 status: self.status_sentence(t),
                 recurring: self.is_recurring(),
                 rule_deleted: self.rule_deleted_on.map(fmt::date),
+                progress: self.progress_line(t),
             },
 
             error: match &self.state {
@@ -1271,7 +1330,7 @@ mod tests {
             manual: 0,
             prev_amount_cents: None,
             estimate_cents: None,
-            installments_paid: None,
+            progress: None,
             files: FilePresence::default(),
             state: RowState::Ok,
             flags: RowFlags::default(),
@@ -1301,7 +1360,11 @@ mod tests {
     fn a_deleted_rule_leaves_an_orphaned_bill_not_a_recurring_one() {
         let mut r = base();
         r.total_installments = Some(25);
-        r.installments_paid = Some(1);
+        r.progress = Some(Progress {
+            paid: 1,
+            total: 25,
+            ..Progress::default()
+        });
         r.files.receipt = Some("pdf".into());
         r.rule_deleted_on = Some(d(2026, 9, 24));
 
