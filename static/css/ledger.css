@@ -704,8 +704,14 @@
   white-space: nowrap;
 }
 
+/* The rows are a size container: whether a row fits on one line is a question
+ * about the room the pane gives it, not the device — a split pane at its floor
+ * on a desktop is as narrow as a phone. See row.css's narrow rows. Safe here
+ * because `.rows` is a plain block (its width never comes from its contents)
+ * and the fixed popups anchored to a row live outside it. */
 .rows {
   padding: 6px 0;
+  container: rows / inline-size;
 }
 
 .pane-empty,

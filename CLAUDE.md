@@ -255,6 +255,12 @@ card in plain CSS.
   It shipped as a CSS constant first, which was the wrong shape — how narrow
   a pane may get describes a person at a screen, which is the whole reason
   the `layout_*` values live on the member row at all.
+- **A row narrower than 520px puts its name on a line of its own** — the
+  rail and the amount move to a second line. On a phone the name had no room
+  at all. The 520px is a container query on `.rows`, measured on the row's
+  room rather than the device, and a fixed CSS number rather than a
+  `layout_*` value: it decides whether a row fits its pane, not how panes
+  share a screen. See `design/spec.md`'s On a narrow row.
 
 ### Editing — forms live in the ledger, not in modals
 

@@ -71,6 +71,35 @@ they live.
 - **The household seeds it** (`default_density`, starting at `comfortable`),
   with the palette and the layout — see the household schema.
 
+### On a narrow row — the name gets a line of its own
+
+On one line the name is the only part of a row that shrinks: the mark, the
+file rail and the amount keep their width. On a phone, the rail's three
+slots at `default` density and the amount took the whole row, and no row
+showed its name at all — not the title, not the meta line.
+
+- **Narrower than 520px a row is two lines.** The name alone beside the mark
+  (its meta line still under it), then the rail at the left and the amount
+  and delta at the right. The mark sits level with the title.
+- **Measured on the rows, not the viewport** — a container query on `.rows`.
+  A split pane at its 420px floor on a desktop squeezes the name just as a
+  phone does; an iPad's single tab is wide enough for one line.
+- **A fixed number in `row.css`, not a `layout_*` value.** Those decide how
+  panes share a screen; this is only whether a row fits its pane — the same
+  reasoning as the ledger bar's two breakpoints.
+- **Only the grid moves.** The four parts are re-placed into two lines; the
+  markup is the same at every width, so the skeleton and the error row, which
+  have the same four parts, follow on their own. The `e` form is a column of
+  fields and is left alone.
+- **The second line is at least a pill tall**, with or without files, so rows
+  read evenly; the skeleton's name block is held to a real one's height,
+  which on one line the mark had done for it.
+- **The focused row's file labels stay off** here at any viewport width —
+  a 500px pane on a desktop has no more room for them than a phone.
+- **Compact becomes two short lines**: the name, then the rail and the amount
+  with its delta beside it. "One line a row" cannot hold at 440px; it is
+  still the tightest of the three.
+
 ### The add form (`a` / `i`)
 
 It opens inside the pane, never in a modal, and **stays open after a save** —

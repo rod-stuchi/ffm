@@ -688,3 +688,67 @@ body:not(.kbd-nav) .row:hover .entry {
   display: none;
 }
 
+/* --- narrow rows -------------------------------------------------------- */
+
+/* On one line the name is the only part that shrinks: the rail and the amount
+ * keep their width, so in a row ~310px wide (a phone, or a split pane at its
+ * floor) the name got nothing at all. Narrower than 520px a row is two lines —
+ * the name alone, beside the mark, then the rail and the amount.
+ *
+ * Measured on `.rows` (ledger.css), not the viewport, and a fixed number, not a
+ * `layout_*` value: those decide how panes share a screen, this only whether a
+ * row fits its pane. Only the grid moves — `.name + *` is the rail, or the
+ * empty cell a row with no rail renders — so the skeleton and the error row,
+ * which have the same four children, follow with no markup of their own. The
+ * `e` form is a column of fields and is left alone. */
+@container rows (max-width: 520px) {
+  .entry:not(.editentry) {
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "mark name name"
+      "mark rail amt";
+    row-gap: 6px;
+  }
+
+  .entry:not(.editentry) > .mark {
+    grid-area: mark;
+    align-self: start;
+  }
+
+  .entry:not(.editentry) > .name {
+    grid-area: name;
+    /* Level with the middle of the 26px mark beside it. */
+    padding-top: 4px;
+  }
+
+  /* At least a pill tall, so every row's second line is the same height with
+   * or without files, and the skeleton keeps a real row's geometry. */
+  .entry:not(.editentry) > .name + * {
+    grid-area: rail;
+    min-height: 26px;
+    display: flex;
+    align-items: center;
+  }
+
+  .entry:not(.editentry) > .amt {
+    grid-area: amt;
+  }
+
+  /* On one line the 26px mark sets the skeleton's height; stacked, its name
+   * block does, and two bars are shorter than a title over a meta line. Held
+   * to a real name block's height — the title alone in compact, which drops
+   * the meta line — so nothing shifts when the row lands. */
+  .sk-row .entry > .name {
+    min-height: 38px;
+  }
+
+  .ledger-shell[data-density="compact"] .sk-row .entry > .name {
+    min-height: 25px;
+  }
+
+  /* No room for the focused row's labels here at any viewport width. */
+  .row.is-focus .fbadge .flabel {
+    max-width: 0;
+    opacity: 0;
+  }
+}
