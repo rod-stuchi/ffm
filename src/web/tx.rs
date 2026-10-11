@@ -336,14 +336,15 @@ async fn live_pane(
     auth: &Auth,
     id: i64,
 ) -> Result<(Vec<LedgerRow>, i64, Period, crate::domain::money::Currency), &'static str> {
+    let t = auth.catalog();
     let Ok(Some((member_id, period, _deleted))) = tx::one(&st.pool, id).await else {
-        return Err("that row is gone");
+        return Err(t.tx_row_gone());
     };
     let Ok(members) = ledger::members(&st.pool).await else {
-        return Err("cannot read the household");
+        return Err(t.tx_cannot_read_household());
     };
     let Some(member) = members.into_iter().find(|m| m.id == member_id) else {
-        return Err("cannot read the household");
+        return Err(t.tx_cannot_read_household());
     };
     let house = ledger::household(&st.pool).await.ok().flatten();
     let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
@@ -359,7 +360,7 @@ async fn live_pane(
     )
     .await
     else {
-        return Err("cannot read that month");
+        return Err(t.tx_cannot_read_month());
     };
     Ok((pane.rows, member_id, period, currency))
 }
@@ -429,6 +430,7 @@ async fn deleted_row(
     period: Period,
     currency: crate::domain::money::Currency,
 ) -> Result<(Fragment, Option<String>), &'static str> {
+    let t = auth.catalog();
     let row = sqlx::query!(
         r#"SELECT t.kind AS "kind!: String", t.title AS "title!: String",
                   t.amount_cents AS "amount_cents: i64",
@@ -444,13 +446,13 @@ async fn deleted_row(
     )
     .fetch_optional(&st.pool)
     .await
-    .map_err(|_| "cannot read that row")?
-    .ok_or("that row is gone")?;
+    .map_err(|_| t.tx_cannot_read_row())?
+    .ok_or(t.tx_row_gone())?;
 
     // The viewer still has to be allowed to see it — a private row must not
     // become visible by being deleted.
     if row.visibility == "private" && !auth.viewer.sees_private_of(member_id) {
-        return Err("that row is gone");
+        return Err(t.tx_row_gone());
     }
 
     let ledger_row = LedgerRow {

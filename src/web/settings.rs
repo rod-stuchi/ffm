@@ -151,7 +151,10 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
         .into_iter()
         .find(|m| m.id == auth.viewer.member_id)
         .map(|m| m.devices)
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .map(|d| crate::db::auth::device_text(&d, &t))
+        .collect();
 
     Html(ProfilePane {
         version: crate::version(),
@@ -317,7 +320,7 @@ pub async fn set_member(
                     ));
                 return crate::web::tx::say(
                     (jar, axum::response::Html(body)).into_response(),
-                    &t.settings_saved(&form.key),
+                    &t.settings_saved(&member_label(&t, key)),
                     false,
                 );
             }
@@ -339,14 +342,15 @@ pub async fn set_member(
                     // The shell carries it (`data-pdf-view`) for `P` to open on.
                     | MemberKey::PdfView
             );
-            let mut res = crate::web::tx::say_only(&t.settings_saved(&form.key), false);
+            let mut res =
+                crate::web::tx::say_only(&t.settings_saved(&member_label(&t, key)), false);
             if whole_page {
                 res.headers_mut()
                     .insert("HX-Refresh", axum::http::HeaderValue::from_static("true"));
             }
             res
         }
-        Err(e) => crate::web::tx::say_only(&e.to_string(), true),
+        Err(e) => crate::web::tx::say_only(&e.say(&t), true),
     }
 }
 
@@ -536,14 +540,15 @@ pub async fn set_household(
             // statusline and the heading. A new member's defaults move
             // nothing anybody can see — they are read only when somebody
             // joins — so they write quietly.
-            let mut res = crate::web::tx::say_only(&t.settings_saved(&form.key), false);
+            let mut res =
+                crate::web::tx::say_only(&t.settings_saved(&household_label(&t, key)), false);
             if key.changes_the_screen() {
                 res.headers_mut()
                     .insert("HX-Refresh", axum::http::HeaderValue::from_static("true"));
             }
             res
         }
-        Err(e) => crate::web::tx::say_only(&e.to_string(), true),
+        Err(e) => crate::web::tx::say_only(&e.say(&t), true),
     }
 }
 
@@ -582,7 +587,14 @@ async fn members_pane(
     if !auth.viewer.is_admin() {
         return crate::web::tx::say_only(t.settings_admin_only(), true);
     }
-    let all = members::list(&st.pool).await.unwrap_or_default();
+    let mut all = members::list(&st.pool).await.unwrap_or_default();
+    for m in &mut all {
+        m.devices = m
+            .devices
+            .iter()
+            .map(|d| crate::db::auth::device_text(d, &t))
+            .collect();
+    }
     let invites = members::pending_invites(&st.pool).await.unwrap_or_default();
     let of = |s: members::Status| all.iter().filter(|m| m.status == s).cloned().collect();
     Html(MembersPane {
@@ -843,4 +855,53 @@ pub async fn set_lang_member(st: &AppState, auth: &Auth, lang: Lang) -> Result<(
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+/// What a member setting is called where it is set — its control's label in
+/// `:profile` — for "… saved". The key itself (`theme_name`) is a column name,
+/// and reading one back in the statusline is the app talking to itself.
+/// Exhaustive, so a new setting cannot go unnamed.
+fn member_label(t: &Catalog, key: MemberKey) -> String {
+    match key {
+        MemberKey::Language => t.invite_language(),
+        MemberKey::ThemeName => t.profile_theme(),
+        MemberKey::LineNumbers => t.profile_line_numbers(),
+        MemberKey::LayoutPanes => t.profile_panes(),
+        MemberKey::LayoutMinSplitWidth => t.profile_min_split(),
+        MemberKey::LayoutMinWidth => t.profile_min_width(),
+        MemberKey::LayoutMaxWidth => t.profile_max_width(),
+        MemberKey::LayoutGap => t.profile_gap(),
+        MemberKey::LedgerSort => t.profile_sort(),
+        MemberKey::LedgerSearchScope => t.profile_search_scope(),
+        MemberKey::LedgerShowDelta => t.profile_show_delta(),
+        MemberKey::LedgerGroup => t.settings_label_group(),
+        MemberKey::GroupFoldDefault => t.profile_fold_default(),
+        MemberKey::GroupOrder => t.profile_group_order(),
+        MemberKey::DefaultVisibility => t.profile_privacy(),
+        MemberKey::Density => t.profile_density(),
+        MemberKey::PdfView => t.profile_pdf_view(),
+    }
+    .to_string()
+}
+
+/// The same for a household setting, by its control's label in `:household`.
+/// A new member's defaults are set with the very controls `:profile` uses, so
+/// they read the same.
+fn household_label(t: &Catalog, key: HouseholdKey) -> String {
+    match key {
+        HouseholdKey::Name => t.household_name(),
+        HouseholdKey::Currency => t.household_currency(),
+        HouseholdKey::DefaultLanguage => t.household_language(),
+        HouseholdKey::DefaultVisibility => t.household_visibility(),
+        HouseholdKey::ShowRecurring => t.household_show_recurring(),
+        HouseholdKey::DefaultTheme => t.profile_theme(),
+        HouseholdKey::DefaultPanes => t.profile_panes(),
+        HouseholdKey::DefaultMinSplitWidth => t.profile_min_split(),
+        HouseholdKey::DefaultMinWidth => t.profile_min_width(),
+        HouseholdKey::DefaultMaxWidth => t.profile_max_width(),
+        HouseholdKey::DefaultGap => t.profile_gap(),
+        HouseholdKey::DefaultDensity => t.profile_density(),
+        HouseholdKey::Assistant => t.household_assistant(),
+    }
+    .to_string()
 }

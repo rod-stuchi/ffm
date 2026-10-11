@@ -9,6 +9,10 @@ use crate::db::changes::{Actor, Change, RuleAction, Value};
 use crate::services::assistant::Recipe;
 use sqlx::SqlitePool;
 
+/// The log's note when a recipe is kept — `bill recipe taught by codex`.
+/// Stored in English like every note; `ui::log::note_text` words it.
+pub const TAUGHT_BY: &str = "bill recipe taught by ";
+
 /// A recipe as stored.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RuleRecipe {
@@ -136,7 +140,7 @@ pub async fn store(
             Value::Text(old.flatten()),
             Value::Text(recipe.issuer_name.clone().or(Some(source.to_string()))),
         )
-        .note(format!("bill recipe taught by {source}"))
+        .note(format!("{TAUGHT_BY}{source}"))
         .write(&mut tx)
         .await?;
     tx.commit().await?;

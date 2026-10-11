@@ -33,7 +33,7 @@
     <div class="mark"><div class="disc tone-neg">!</div></div>
     <div class="name">
       <span class="errtxt">{{ err }}</span>
-      <span class="errsub">nothing was written</span>
+      <span class="errsub">{{ t.error_not_written() }}</span>
     </div>
     <div></div>
     <div class="amt"><button class="retry" type="button">{{ t.row_try_again() }}</button></div>

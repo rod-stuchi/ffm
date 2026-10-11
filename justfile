@@ -312,6 +312,34 @@ tpl-check:
     fi
     echo "✓ every |json is paired with |safe, and none sits inside double quotes"
 
+# Words a member reads that never pass through the catalog stay English in a
+# pt-BR session: `title="previous month"` sat on the month arrows for as long
+# as they existed. A title, an aria-label, a placeholder or an alt with words
+# in it must come from `{{ t.… }}`. Alpine bindings (`:title`) are expressions
+# and are skipped; the product's name is the one literal allowed. Comments are
+# stripped first — a rule that forbids a thing will quote the thing.
+i18n-check:
+    #!/usr/bin/env python3
+    import re, sys, pathlib
+    allowed = {"FFM – Family Finances Manager"}
+    bad = []
+    for path in sorted(pathlib.Path("templates").rglob("*.html")):
+        if "sandbox" in path.parts:
+            continue
+        text = re.sub(r"\{#.*?#\}", lambda m: "\n" * m.group(0).count("\n"), path.read_text(), flags=re.S)
+        for n, line in enumerate(text.splitlines(), 1):
+            for m in re.finditer(r'(?<![:\w-])(title|aria-label|placeholder|alt)="([^"]*)"', line):
+                value = m.group(2)
+                if "{{{{" in value or "{%" in value or value in allowed:
+                    continue
+                if re.search(r"[A-Za-zÀ-ÿ]{2,}", value):
+                    bad.append(f"{path}:{n}: {m.group(1)}=\"{value}\"")
+    if bad:
+        print("\n".join(bad))
+        print("✗ words a member reads that skip the catalog — use {{{{ t.… }}", file=sys.stderr)
+        sys.exit(1)
+    print("✓ every title, aria-label, placeholder and alt comes from the catalog")
+
 # Alpine merges a component's data and its methods into ONE object, so a
 # method named after a data property silently replaces it. `pane: 0` and
 # `pane(url)` cost an afternoon: `panes[this.pane]` started indexing an array
@@ -434,7 +462,7 @@ cmd-check:
           f"the {len(told)} named in messages exist, and the keymap "
           f"documents exactly the {len(handled)} that are")
 
-check: fmt-check lint test offline-check db-check css-check tpl-check js-check cmd-check
+check: fmt-check lint test offline-check db-check css-check tpl-check i18n-check js-check cmd-check
 
 # --- docs --------------------------------------------------------------------
 

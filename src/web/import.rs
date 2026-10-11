@@ -1159,8 +1159,7 @@ async fn store_plain(
             }
             crate::web::tx::row_fragment(st, auth, tx_id, member_id, period, &message).await
         }
-        Err(receipts::StoreError::Locked) => say(t.file_pdf_locked()),
-        Err(e) => say(&e.to_string()),
+        Err(e) => say(&e.say(&t)),
     }
 }
 
@@ -1601,7 +1600,21 @@ pub async fn attach_to(
     // open slip), was read off its page, not off the barcode.
     let from_text = barcode.is_none() || parsed.import.amount_source == Some("text");
     let unresolved = || {
-        let what = parsed.import.unresolved.join(", ");
+        // The codes are `services::issuers`' fixed English; the words are the
+        // member's — a Portuguese line used to end in "due date, issuer".
+        let what = parsed
+            .import
+            .unresolved
+            .iter()
+            .map(|code| match *code {
+                "amount" => t.import_missing_amount(),
+                "due date" => t.import_missing_due(),
+                "issuer" => t.import_missing_issuer(),
+                "kind mismatch" => t.import_missing_kind(),
+                other => other,
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
         (!what.is_empty()).then(|| t.import_unresolved(&what))
     };
     let headline = match (bill_amount, bill_due) {

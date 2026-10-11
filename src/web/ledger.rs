@@ -475,8 +475,9 @@ struct LedgerPage {
     details_none: String,
     no_files: String,
     months_word: String,
-    /// The `?` modal, built from the same table `design/spec.md` documents —
-    /// so a key that exists and a key that is written down stay the same set.
+    /// The `?` modal: each key beside what it does, in the member's language.
+    /// The Type section is read from the command table, so `?` cannot
+    /// advertise a command the bar refuses.
     keymap: Vec<(String, Vec<(String, String)>)>,
     /// What every mark means, drawn with the row's own mark partial.
     legend: Vec<LegendItem>,
@@ -730,103 +731,87 @@ fn money_format(currency: crate::domain::money::Currency) -> String {
 /// window** — which is the rule the whole table follows, and the reason it can
 /// be read rather than memorized.
 fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(String, String)>)> {
+    // The keys are identifiers a member types back and stay as they are; what
+    // each does is the catalog's, in the member's language.
     let k = |key: &str, what: &str| (key.to_string(), what.to_string());
     vec![
         (
             t.keymap_move().to_string(),
             vec![
-                k("j / k", "row down / up"),
-                k("5j 7k", "counted motion"),
-                k("gg / G", "first / last row"),
-                k("H / L", "focus pane, left / right"),
-                k("gt / gT", "next / previous member tab"),
-                k("2gt", "jump straight to tab 2"),
-                k("[ / ]", "previous / next month"),
-                k("3]", "three months on — 3[ three back"),
-                k("T", "this month — today's"),
+                k("j / k", t.keymap_row_down_up()),
+                k("5j 7k", t.keymap_row_counted()),
+                k("gg / G", t.keymap_row_first_last()),
+                k("H / L", t.keymap_row_pane()),
+                k("gt / gT", t.keymap_row_tab()),
+                k("2gt", t.keymap_row_tab_n()),
+                k("[ / ]", t.keymap_row_month()),
+                k("3]", t.keymap_row_month_n()),
+                k("T", t.keymap_row_today()),
             ],
         ),
         (
             t.keymap_act().to_string(),
             vec![
-                k("a / i", "add a one-off spend / income"),
-                k("A / I", "create a recurring bill / income"),
-                k("e / E", "edit this row / its rule"),
-                k("J / K", "move the row down / up"),
-                k("s", "row order: manual · name · amount · date"),
-                k("gs", "copy this month's order to other months — :order"),
-                k(
-                    "ga",
-                    "give the row to another member — picked by name, admin only",
-                ),
-                k(
-                    "x",
-                    "select, for a batch operation — on a group's header, every row in it",
-                ),
-                k("X", "select the group the cursor is in — or clear it"),
-                k("gx", "select every row in the pane — or clear them"),
-                k("p", "toggle private"),
-                k("m", "mark paid by hand — untracked recurring bills"),
-                k("gd", "due, cadence and receipt details"),
-                k("gl", "this row's history"),
+                k("a / i", t.keymap_row_add()),
+                k("A / I", t.keymap_row_create()),
+                k("e / E", t.keymap_row_edit()),
+                k("J / K", t.keymap_row_move()),
+                k("s", t.keymap_row_sort()),
+                k("gs", t.keymap_row_copy_order()),
+                k("ga", t.keymap_row_give()),
+                k("x", t.keymap_row_select()),
+                k("X", t.keymap_row_select_group()),
+                k("gx", t.keymap_row_select_all()),
+                k("p", t.keymap_row_private()),
+                k("m", t.keymap_row_paid()),
+                k("gd", t.keymap_row_details()),
+                k("gl", t.keymap_row_history()),
             ],
         ),
         (
             t.keymap_find().to_string(),
             vec![
-                k("/", "search this month — incremental, regex"),
-                k("n / N", "next / previous match"),
-                k(":grep", "search every month"),
+                k("/", t.keymap_row_search()),
+                k("n / N", t.keymap_row_match()),
+                k(":grep", t.keymap_row_grep()),
             ],
         ),
         (
             t.keymap_fold().to_string(),
             vec![
-                k("za", "toggle the fold under the cursor"),
-                k("zo / zc", "open / close it"),
-                k("zR / zM", "open / close every fold"),
-                k("S", "order the groups: first seen · A–Z · by cost"),
+                k("za", t.keymap_row_fold_toggle()),
+                k("zo / zc", t.keymap_row_fold_one()),
+                k("zR / zM", t.keymap_row_fold_all()),
+                k("S", t.keymap_row_fold_order()),
             ],
         ),
         (
             t.keymap_files().to_string(),
             vec![
-                k("g1 / g2 / g3", "open the bill / scheduled / receipt"),
-                k("gu1 / gu2 / gu3", "attach a bill / scheduled / receipt"),
-                k("P · gp", "preview this row's files"),
-                k("1 2 3 · h l", "inside P: jump to a file · step"),
-                k("+ - 0", "inside P: zoom in, out, reset"),
-                k("j k · f", "inside P: scroll · fit height / width"),
-                k("H M L", "inside P: top, middle, bottom of the page"),
-                k("J K", "inside P: next / previous page"),
-                k("gg G", "inside P: first page, the end of the last"),
-                k("t", "inside P: trim or shrink the PDF on show"),
-                k("b", "inside P: add a page with a barcode drawn from a code"),
-                k("a", "inside P: append another PDF's pages"),
-                k(
-                    "v",
-                    "inside P: the PDF in the browser's own viewer, and back",
-                ),
-                k(
-                    "h l · J K · gg G · j k · x · s",
-                    "trim view: pages · scroll · keep / drop · shrink",
-                ),
+                k("g1 / g2 / g3", t.keymap_row_file_open()),
+                k("gu1 / gu2 / gu3", t.keymap_row_file_attach()),
+                k("P · gp", t.keymap_row_file_preview()),
+                k("1 2 3 · h l", t.keymap_row_p_jump()),
+                k("+ - 0", t.keymap_row_p_zoom()),
+                k("j k · f", t.keymap_row_p_scroll()),
+                k("H M L", t.keymap_row_p_hml()),
+                k("J K", t.keymap_row_p_page()),
+                k("gg G", t.keymap_row_p_ends()),
+                k("t", t.keymap_row_p_trim()),
+                k("b", t.keymap_row_p_barcode()),
+                k("a", t.keymap_row_p_append()),
+                k("v", t.keymap_row_p_viewer()),
+                k("h l · J K · gg G · j k · x · s", t.keymap_row_trim_view()),
             ],
         ),
         (
             t.keymap_undo().to_string(),
             vec![
-                k("dd", "delete — opens a confirmation"),
-                k("y", "confirm in a modal"),
-                k(
-                    "u / U",
-                    "undo · redo — your changes, this pane, this month; asks first",
-                ),
-                k(
-                    "Ctrl-u · :trash",
-                    "the trash — bring back any deleted row or file",
-                ),
-                k("Esc", "clear count, buffer, selection and search"),
+                k("dd", t.keymap_row_delete()),
+                k("y", t.keymap_row_confirm()),
+                k("u / U", t.keymap_row_undo()),
+                k("Ctrl-u · :trash", t.keymap_row_trash()),
+                k("Esc", t.keymap_row_clear()),
             ],
         ),
         (
@@ -842,7 +827,7 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                     }
                     (key, (c.about)(t))
                 })
-                .chain([k("?", "this — / searches it, j k scroll it")])
+                .chain([k("?", t.keymap_row_help())])
                 .collect(),
         ),
     ]
@@ -1498,6 +1483,25 @@ mod tests {
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    /// Every row of `?` says what it does in the member's language. The
+    /// catalog's own cross-check only proves a message exists in both files,
+    /// not that the Portuguese one was ever translated — the rows were English
+    /// in a pt-BR session for as long as they were literals here.
+    #[test]
+    fn every_keymap_row_is_translated() {
+        let en = keymap(&Catalog::new(Lang::En), true, true);
+        let pt = keymap(&Catalog::new(Lang::PtBr), true, true);
+        assert_eq!(en.len(), pt.len());
+        for ((en_head, en_rows), (pt_head, pt_rows)) in en.iter().zip(&pt) {
+            assert_ne!(en_head, pt_head, "section {en_head}");
+            assert_eq!(en_rows.len(), pt_rows.len());
+            for ((key, en_what), (pt_key, pt_what)) in en_rows.iter().zip(pt_rows) {
+                assert_eq!(key, pt_key, "the keys are identifiers, the same in both");
+                assert_ne!(en_what, pt_what, "{key} is still English in pt-BR");
+            }
+        }
     }
 
     /// The pane from the report that started this: an unfiled income first,

@@ -3580,4 +3580,47 @@ honest" argument already made for the row-state table, applied to the catalog �
 a message that only reads correctly in English is found by looking, not by
 waiting for a household to complain.
 
+### What stays English, on purpose — and what was English by mistake
+
+A pt-BR member is meant to read Portuguese everywhere the app speaks. A sweep
+found English in thirteen places that bypassed the catalog: the `?` keymap's
+rows, the sign-in pages' statusline, `(admin)`, the month arrows' titles,
+"theme_name salvo", the settings refusals, the change log's field names, values
+and notes, the import's list of what a bill lacked, the row and file errors,
+the device names, and the browser's own validation bubble. All of them are the
+catalog's now. What is left in English is so on purpose:
+
+- **Identifiers a member types back** — key names (`gg`, `esc`), commands
+  (`:theme`), setting values (`manual`, `date`) and setting keys in a refusal
+  (`✗ ledger.sort precisa ser um destes: …`).
+- **The mode badge** — `NORMAL` / `COMMAND` / `SEARCH`, Vim's own words.
+- **The product's name**, and the names of browsers and systems
+  (*Safari no iPhone*).
+
+Three rules keep it that way:
+
+- **Stored text is worded at display, never rewritten.** A log note
+  (`superseded`, `moved with its row`) and a device label are written once, in
+  English, and the trash and `u` match on the notes — so `ui::log::note_text`
+  and `db::auth::device_text` translate them for whoever reads them, from the
+  same constants that wrote them. A note it does not know shows as stored.
+- **A message names a setting by its control's label** (*Tema salvo*), never
+  by its column.
+- **Two checks.** A test renders `?` in both languages and fails on a pt-BR
+  row that reads like its English one — the catalog's cross-check proves a
+  message exists, not that anybody translated it. And `just i18n-check` fails
+  on a literal `title`, `aria-label`, `placeholder` or `alt` with words in it.
+
+**The date picker is the browser's.** A native `<input type="date">` writes
+its value in an order the page does not choose — Chrome takes the page's
+language (`dd/mm/yyyy` in a pt-BR session), Safari the system's region
+(`mm/dd/yyyy` on a US Mac) — so `01/05/2026` reads two ways. The picker stays,
+and beside its label the server echoes the date it holds with the month named:
+*1 mai 2026*, the same in every order. Rendered on load and asked again on
+each change (`GET /rules/day`), like the months read-back, so a date is still
+worded only by the server. A format hint (`mm/dd/aaaa`) was tried first and
+dropped: no one place says which order a given browser will use, and Chrome
+showed `dd/mm/yyyy` beside a hint saying `mm/dd`. What is sent and stored is
+ISO either way, and every date the app writes itself is `dd/mm/yyyy`.
+
 ---

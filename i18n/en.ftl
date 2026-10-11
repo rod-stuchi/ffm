@@ -252,6 +252,10 @@ order-redo-did = redone: order copied to { $months } · { $n ->
        *[other] { $n } rows moved
     }
 error-not-written = That didn't go through — nothing was written.
+tx-row-gone = that row is no longer there — deleted, or moved out of your sight
+tx-cannot-read-household = the household could not be read — try again
+tx-cannot-read-month = that month could not be read — try again
+tx-cannot-read-row = that row could not be read — try again
 
 ## The rule pane — A / I create, E edits
 
@@ -331,6 +335,8 @@ file-delete = Delete file
 file-not-tracked = this row has nothing to file under
 file-too-big = that file is too large to keep
 file-pdf-locked = this PDF opens only with a password — fill in the rule's PDF password, then attach it again — nothing was saved
+file-type-refused = that file type is not one we keep — PDF, JPG, PNG or TXT
+file-store-failed = the file could not be saved — { $detail }
 file-pdf-wrong-password = the rule's PDF password does not open this file — check it in the rule — nothing was saved
 file-pdf-no-tool = this PDF opens only with a password, and qpdf is not installed on the server to open it — nothing was saved
 file-pdf-unreadable = could not open this PDF — it may be damaged — nothing was saved
@@ -346,8 +352,17 @@ estimate-no-history = no confirmed months yet — the rule's own amount is used
 settings-profile = Your settings
 settings-household = Household
 settings-members = Members
-settings-saved = { $name } saved
+settings-saved = saved — { $name }
 settings-admin-only = that is admin only
+settings-invalid-one-of = ✗ { $key } must be one of { $allowed }
+settings-invalid-between = ✗ { $key } must be a number between { $lo } and { $hi }
+settings-invalid-palette = ✗ { $key } is not a bundled palette
+settings-invalid-empty = ✗ { $key } cannot be empty
+settings-invalid-currency = ✗ { $key } is not one we format
+settings-invalid-assistant = ✗ { $key } is not one this app runs
+settings-invalid-storage = ✗ { $key } could not be saved — { $detail }
+# Only a command sets it (`:group`); every other setting is named by its control's label.
+settings-label-group = Grouping
 pane-close = esc
 pane-maximize = Maximize · zz
 pane-restore = Restore · zz
@@ -391,6 +406,8 @@ profile-visibility-household = Shared with the household
 profile-visibility-private = Private to me
 profile-devices = Signed in on
 profile-no-devices = no other devices
+device-on = { $browser } on { $os }
+device-unknown = unknown device
 
 household-name = Household name
 household-currency = Currency
@@ -533,6 +550,39 @@ log-field-path = path
 log-field-kind = kind
 log-field-original-filename = original filename
 log-field-rows = rows renamed with it
+log-field-position = position
+log-field-sort-key = place in the order
+log-field-visibility = visibility
+log-field-months = months
+log-field-company-code = company code
+log-field-client-code = client code
+log-field-barcode = barcode
+log-field-status = status
+log-field-recipe = bill recipe
+log-field-member = member
+log-field-kept = kept
+log-value-household = shared
+log-value-private = private
+log-value-active = active
+log-value-inactive = inactive
+# Notes are stored in English (the trash matches on them) and worded here.
+log-note-manual = removed on purpose
+log-note-superseded = replaced by a newer file
+log-note-swapped = swapped aside
+log-note-with-row = moved with its row
+log-note-moved = its bill is on another row
+log-note-found-by-hand = found on disk — filed by hand
+log-note-removed-by-hand = removed from disk by hand
+log-note-refiled = re-filed where its row now points
+log-note-pruned = removed for good — a duplicate kept elsewhere
+log-note-order-copied = order copied to other months
+log-note-order-from = order copied from { $period }
+log-note-order-from-undone = order copied from { $period } — undone
+log-note-attached-unconfirmed = attached anyway — not confirmed as this rule's bill
+log-note-attached-mismatch = attached anyway — it names something else: { $detail }
+log-note-recipe = bill recipe taught by { $source }
+log-note-console-reset = reset link issued from the console
+log-note-signed-out-others = signed out of every other device
 log-on = on
 log-off = off
 moved-down = down
@@ -653,6 +703,10 @@ import-amount-differs = the barcode says { $barcode }, this row says { $row } �
 import-date-differs = the barcode says { $barcode }, this row says { $row } — left as it was
 import-replaced = replaced { $was }
 import-unresolved = the barcode did not carry { $what }
+import-missing-amount = an amount
+import-missing-due = a due date
+import-missing-issuer = who issued it
+import-missing-kind = the kind this rule's bills have
 import-no-occurrence = there is no row for this month to attach it to
 import-unlinked = bill unlinked from this rule — drop the right one
 import-already-attached = this bill is already on { $period } ({ $title } — { $amount }) — nothing was saved
@@ -763,6 +817,11 @@ drafts-parked = { $n ->
 month-leave-key = changing month loses { $drafts } — { $key } again to go anyway
 month-leave-click = changing month loses { $drafts } — click again to go anyway
 month-already-current = already on the current month
+month-prev = previous month
+month-next = next month
+status-admin = (admin)
+ledger-empty-title = No household yet.
+ledger-empty-hint = Put one in the database with:
 
 ## `gd` — the details popup, and the `P` carousel
 
@@ -838,6 +897,61 @@ keymap-fold = Fold
 keymap-files = Files
 keymap-undo = Undo
 keymap-type = Type
+
+# The `?` keymap's rows. The keys beside them are identifiers and stay in
+# Rust; these say what each does.
+keymap-row-down-up = row down / up
+keymap-row-counted = counted motion
+keymap-row-first-last = first / last row
+keymap-row-pane = focus pane, left / right
+keymap-row-tab = next / previous member tab
+keymap-row-tab-n = jump straight to tab 2
+keymap-row-month = previous / next month
+keymap-row-month-n = three months on — 3[ three back
+keymap-row-today = this month — today's
+keymap-row-add = add a one-off spend / income
+keymap-row-create = create a recurring bill / income
+keymap-row-edit = edit this row / its rule
+keymap-row-move = move the row down / up
+keymap-row-sort = row order: manual · name · amount · date
+keymap-row-copy-order = copy this month's order to other months — :order
+keymap-row-give = give the row to another member — picked by name, admin only
+keymap-row-select = select, for a batch operation — on a group's header, every row in it
+keymap-row-select-group = select the group the cursor is in — or clear it
+keymap-row-select-all = select every row in the pane — or clear them
+keymap-row-private = toggle private
+keymap-row-paid = mark paid by hand — untracked recurring bills
+keymap-row-details = due, cadence and receipt details
+keymap-row-history = this row's history
+keymap-row-search = search this month — incremental, regex
+keymap-row-match = next / previous match
+keymap-row-grep = search every month
+keymap-row-fold-toggle = toggle the fold under the cursor
+keymap-row-fold-one = open / close it
+keymap-row-fold-all = open / close every fold
+keymap-row-fold-order = order the groups: first seen · A–Z · by cost
+keymap-row-file-open = open the bill / scheduled / receipt
+keymap-row-file-attach = attach a bill / scheduled / receipt
+keymap-row-file-preview = preview this row's files
+keymap-row-p-jump = inside P: jump to a file · step
+keymap-row-p-zoom = inside P: zoom in, out, reset
+keymap-row-p-scroll = inside P: scroll · fit height / width
+keymap-row-p-hml = inside P: top, middle, bottom of the page
+keymap-row-p-page = inside P: next / previous page
+keymap-row-p-ends = inside P: first page, the end of the last
+keymap-row-p-trim = inside P: trim or shrink the PDF on show
+keymap-row-p-barcode = inside P: add a page with a barcode drawn from a code
+keymap-row-p-append = inside P: append another PDF's pages
+keymap-row-p-viewer = inside P: the PDF in the browser's own viewer, and back
+keymap-row-trim-view = trim view: pages · scroll · keep / drop · shrink
+keymap-row-delete = delete — opens a confirmation
+keymap-row-confirm = confirm in a modal
+keymap-row-undo = undo · redo — your changes, this pane, this month; asks first
+keymap-row-trash = the trash — bring back any deleted row or file
+keymap-row-clear = clear count, buffer, selection and search
+keymap-row-help = this — / searches it, j k scroll it
+
+date-echo-title = the date this field holds — the picker beside it writes it in the browser's own order
 
 ## Seasonal months — which months of the year a rule actually runs.
 ## The expression itself is digits in every language; only these words move.

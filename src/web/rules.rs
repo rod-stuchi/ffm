@@ -136,6 +136,33 @@ pub struct RulePane {
     errors: FieldErrors,
 }
 
+impl RulePane {
+    /// The date a picker holds, with its month named — `1 mai 2026` — for the
+    /// first paint; `day_preview` answers every change after it.
+    fn echo(&self, iso: &str) -> String {
+        day_echo(&self.t, iso)
+    }
+}
+
+/// A date read back with its month's name, so the picker beside it cannot be
+/// misread. The picker is the browser's own (`<input type="date">`): Chrome
+/// writes it in the page's language, Safari in the system's, and `01/05/2026`
+/// is the first of May in one and the fifth of January in the other. A month
+/// named is the same in every order. Empty for an empty or unreadable value.
+pub(crate) fn day_echo(t: &Catalog, iso: &str) -> String {
+    use chrono::Datelike;
+    NaiveDate::parse_from_str(iso.trim(), "%Y-%m-%d")
+        .map(|d| {
+            format!(
+                "{} {} {}",
+                d.day(),
+                t.month_short(d.month() as i64),
+                d.year()
+            )
+        })
+        .unwrap_or_default()
+}
+
 /// The live read-back under the months field: which months it resolved to,
 /// and a sentence saying so.
 ///
@@ -1083,6 +1110,22 @@ pub async fn months_preview(auth: Auth, Query(q): Query<MonthsQuery>) -> Respons
     Html(MonthsReadback::of(&auth.catalog(), &q.months)).into_response()
 }
 
+/// `GET /rules/day?start=…` (or `?end=…`) — a date picker's read-back,
+/// `day_echo`, worded by the server like every other date in the app.
+pub async fn day_preview(auth: Auth, Query(q): Query<DayQuery>) -> Response {
+    let iso = if q.start.is_empty() { &q.end } else { &q.start };
+    axum::response::Html(day_echo(&auth.catalog(), iso)).into_response()
+}
+
+/// Each picker sends its own `name`, so one handler serves both.
+#[derive(Deserialize)]
+pub struct DayQuery {
+    #[serde(default)]
+    start: String,
+    #[serde(default)]
+    end: String,
+}
+
 /// Named `months` rather than `expr` because HTMX sends an input's own
 /// `name` as the parameter, and renaming it here would mean the field could
 /// not simply carry `hx-get` — it would need an `hx-vals` saying the same
@@ -1218,6 +1261,26 @@ pub fn computed_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The picker's order is the browser's; the echo names the month, so it
+    /// reads one way in any of them.
+    #[test]
+    fn a_picked_date_is_echoed_with_its_month_named() {
+        use crate::ui::i18n::Lang;
+        assert_eq!(
+            day_echo(&Catalog::new(Lang::PtBr), "2026-05-01"),
+            "1 mai 2026"
+        );
+        assert_eq!(
+            day_echo(&Catalog::new(Lang::En), "2026-05-01"),
+            "1 May 2026"
+        );
+        assert_eq!(
+            day_echo(&Catalog::new(Lang::En), ""),
+            "",
+            "nothing picked, nothing said"
+        );
+    }
 
     fn input(tracked: bool, bucket: &str) -> RuleFormInput {
         RuleFormInput {

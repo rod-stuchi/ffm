@@ -11,7 +11,7 @@
 //! that is why these panes have no Save button: every control writes on
 //! `change`, so there is no moment when the form and the row disagree.
 
-use crate::ui::i18n::Lang;
+use crate::ui::i18n::{Catalog, Lang};
 use crate::ui::theme::{Overrides, ThemeName};
 use sqlx::SqlitePool;
 
@@ -190,13 +190,58 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
 /// member sees a sentence rather than a constraint violation.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Invalid {
+    /// The setting, as the identifier a member types back (`ledger.sort`) —
+    /// never translated, like the values it may take.
     pub key: &'static str,
-    pub problem: String,
+    pub problem: Problem,
+}
+
+/// What was wrong with a value. Worded by the catalog where a member reads it
+/// (`Invalid::say`); `Display` stays English, for logs and tests.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Problem {
+    /// Not one of these values, joined ` · `.
+    OneOf(String),
+    Between(i64, i64),
+    NotAPalette,
+    Empty,
+    NotACurrency,
+    NotAnAssistant,
+    /// The database refused it.
+    Storage(String),
 }
 
 impl std::fmt::Display for Invalid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "✗ {} {}", self.key, self.problem)
+        let problem = match &self.problem {
+            Problem::OneOf(allowed) => format!("must be one of {allowed}"),
+            Problem::Between(lo, hi) => format!("must be a number between {lo} and {hi}"),
+            Problem::NotAPalette => "is not a bundled palette".into(),
+            Problem::Empty => "cannot be empty".into(),
+            Problem::NotACurrency => "is not one we format".into(),
+            Problem::NotAnAssistant => "is not one this app runs".into(),
+            Problem::Storage(e) => format!("could not be saved — {e}"),
+        };
+        write!(f, "✗ {} {problem}", self.key)
+    }
+}
+
+impl Invalid {
+    /// The refusal in the member's language — the key and the values it may
+    /// take stay as typed, the words around them are translated.
+    pub fn say(&self, t: &Catalog) -> String {
+        let key = self.key;
+        match &self.problem {
+            Problem::OneOf(allowed) => t.settings_invalid_one_of(key, allowed),
+            Problem::Between(lo, hi) => {
+                t.settings_invalid_between(key, &lo.to_string(), &hi.to_string())
+            }
+            Problem::NotAPalette => t.settings_invalid_palette(key),
+            Problem::Empty => t.settings_invalid_empty(key),
+            Problem::NotACurrency => t.settings_invalid_currency(key),
+            Problem::NotAnAssistant => t.settings_invalid_assistant(key),
+            Problem::Storage(e) => t.settings_invalid_storage(key, e),
+        }
     }
 }
 
@@ -215,7 +260,7 @@ fn one_of(key: &'static str, value: &str, allowed: &[&str]) -> Result<String, In
     } else {
         Err(Invalid {
             key,
-            problem: format!("must be one of {}", allowed.join(" · ")),
+            problem: Problem::OneOf(allowed.join(" · ")),
         })
     }
 }
@@ -225,7 +270,7 @@ fn in_range(key: &'static str, value: &str, lo: i64, hi: i64) -> Result<i64, Inv
         Ok(n) if (lo..=hi).contains(&n) => Ok(n),
         _ => Err(Invalid {
             key,
-            problem: format!("must be a number between {lo} and {hi}"),
+            problem: Problem::Between(lo, hi),
         }),
     }
 }
@@ -237,7 +282,7 @@ fn in_range(key: &'static str, value: &str, lo: i64, hi: i64) -> Result<i64, Inv
 fn theme_value(value: &str) -> Result<&'static str, Invalid> {
     ThemeName::parse(value).map(ThemeName::key).ok_or(Invalid {
         key: "theme",
-        problem: "is not a bundled palette".into(),
+        problem: Problem::NotAPalette,
     })
 }
 
@@ -277,7 +322,7 @@ pub async fn set_member(
 ) -> Result<(), Invalid> {
     let db = |e: sqlx::Error| Invalid {
         key: "setting",
-        problem: e.to_string(),
+        problem: Problem::Storage(e.to_string()),
     };
 
     match key {
@@ -669,7 +714,7 @@ pub async fn set_household(
 ) -> Result<(), Invalid> {
     let db = |e: sqlx::Error| Invalid {
         key: "setting",
-        problem: e.to_string(),
+        problem: Problem::Storage(e.to_string()),
     };
     let at = crate::clock::stamp();
 
@@ -678,8 +723,8 @@ pub async fn set_household(
             let v = value.trim();
             if v.is_empty() {
                 return Err(Invalid {
-                    key: "household name",
-                    problem: "cannot be empty".into(),
+                    key: "household.name",
+                    problem: Problem::Empty,
                 });
             }
             sqlx::query!(
@@ -695,7 +740,7 @@ pub async fn set_household(
             // Picking a currency picks its whole number format as one preset.
             let v = crate::domain::money::Currency::parse(value).ok_or(Invalid {
                 key: "currency",
-                problem: "is not one we format".into(),
+                problem: Problem::NotACurrency,
             })?;
             let v = v.code();
             sqlx::query!(
@@ -770,7 +815,7 @@ pub async fn set_household(
             let v = crate::services::assistant::Provider::parse(value)
                 .ok_or(Invalid {
                     key: "assistant",
-                    problem: "is not one this app runs".into(),
+                    problem: Problem::NotAnAssistant,
                 })?
                 .code();
             sqlx::query!(
@@ -799,6 +844,23 @@ pub async fn set_household(
 
 #[cfg(test)]
 mod tests {
+    /// The key and the values stay as typed; the words around them are the
+    /// member's.
+    #[test]
+    fn a_refusal_is_said_in_the_members_language() {
+        let pt = Catalog::new(Lang::PtBr);
+        let e = one_of("ledger.sort", "sideways", &["manual", "date"]).unwrap_err();
+        assert_eq!(
+            e.say(&pt),
+            "✗ ledger.sort precisa ser um destes: manual · date"
+        );
+        let e = in_range("layout.gap", "900", 0, 64).unwrap_err();
+        assert_eq!(
+            e.say(&pt),
+            "✗ layout.gap precisa ser um número entre 0 e 64"
+        );
+    }
+
     use super::*;
 
     #[test]

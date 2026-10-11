@@ -132,6 +132,7 @@ pub fn router(state: AppState) -> Router {
         // The months read-back. A pure GET: twelve numbers of arithmetic,
         // rendered by the same parser that stores the value.
         .route("/rules/months", get(rules::months_preview))
+        .route("/rules/day", get(rules::day_preview))
         .route("/rules/{id}/edit", get(rules::edit_rule))
         // The ONE place a barcode file is ever attached: the rule's own
         // editor, where the rule is already identified.

@@ -13,6 +13,10 @@ use crate::ui::fmt;
 use chrono::NaiveDate;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
+/// The log's note for "Sign out other devices". Stored in English, like every
+/// note; `ui::log::note_text` words it for whoever reads it.
+pub const SIGNED_OUT_OTHERS: &str = "signed out of every other device";
+
 /// Where a member stands. Only an **active** member can sign in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
@@ -407,7 +411,7 @@ pub async fn sign_out_others(
             MemberAction::SessionsRevoked,
             member_id,
         )
-        .note("signed out of every other device")
+        .note(SIGNED_OUT_OTHERS)
         .write(&mut tx)
         .await?;
     }

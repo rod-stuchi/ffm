@@ -110,13 +110,13 @@
     <nav class="mnav" x-data="{ picking: false }" @click.outside="picking = false"
          @click="monthClick($event)"
          @keydown.escape.window="picking = false">
-      <a class="btn" href="?period={{ prev }}" title="previous month">‹</a>
+      <a class="btn" href="?period={{ prev }}" title="{{ t.month_prev() }}">‹</a>
       {#- The dot is ambient and persistent, like every other status in this
           app — not a toast that gets dismissed and then forgotten. It sits on
           the trigger when ANY other month this year has something overdue and
           unreceipted, and again on each flagged cell inside. -#}
       {%- include "partials/month_trigger.html" %}
-      <a class="btn" href="?period={{ next }}" title="next month">›</a>
+      <a class="btn" href="?period={{ next }}" title="{{ t.month_next() }}">›</a>
 
       {#- Each month's NET is a dozen pane reads, so it is fetched when the
           picker opens — every time, so it is never stale after an edit —
@@ -245,8 +245,8 @@
 
   {%- if empty %}
   <div class="ledger-empty">
-    <p><b>No household yet.</b></p>
-    <p>Run <code>just seed</code> to put one in the database.</p>
+    <p><b>{{ t.ledger_empty_title() }}</b></p>
+    <p>{{ t.ledger_empty_hint() }} <code>just seed</code></p>
   </div>
   {%- else %}
   {#- The tab bar exists in every layout and is *shown* by the same rule that
@@ -937,7 +937,7 @@
          @pointerdown.prevent @click="toggleKeyboard()"><span class="kbglyph">{{ crate::ui::icons::svg("keyboard")|safe }}</span><span
          x-text="commanding ? 'COMMAND' : (searching ? 'SEARCH' : 'NORMAL')">NORMAL</span></div>
     <div class="st">{{ household }} · {{ period }}</div>
-    <div class="st stmember">{{ me_name }}{% if me_admin %} (admin){% endif %}</div>
+    <div class="st stmember">{{ me_name }}{% if me_admin %} {{ t.status_admin() }}{% endif %}</div>
     <div class="st grow msg" :class="{ bad: msgBad }" x-text="msg"></div>
     {#- A request with no row or side pane to show itself on — a setting, `u`,
         a settings pane opening. Right after the message, the one cell that

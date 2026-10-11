@@ -88,11 +88,20 @@ pub struct Swatch {
     pub selected: bool,
 }
 
+/// Which pre-auth page this is, for the statusline's place cell — worded by
+/// the catalog, in the language the page itself is in.
+#[derive(Clone, Copy)]
+enum Where {
+    Login,
+    Setup,
+    Invite,
+}
+
 async fn chrome(
     st: &AppState,
     jar: &CookieJar,
     parts: &Parts,
-    where_label: &str,
+    place: Where,
     path: &str,
 ) -> (Chrome, Catalog) {
     let house = ledger::household(&st.pool).await.ok().flatten();
@@ -137,7 +146,12 @@ async fn chrome(
         },
         mode_label: mode_label.to_string(),
         next_mode,
-        where_label: where_label.to_string(),
+        where_label: match place {
+            Where::Login => t.auth_where_login(),
+            Where::Setup => t.auth_where_setup(),
+            Where::Invite => t.auth_where_invite(),
+        }
+        .to_string(),
         path: path.to_string(),
         msg: String::new(),
         msg_bad: false,
@@ -253,7 +267,7 @@ pub async fn login_page(State(st): State<AppState>, jar: CookieJar, parts: Parts
         .uri
         .query()
         .is_some_and(|q| q.split('&').any(|kv| kv == "out=1"));
-    let (chrome, t) = chrome(&st, &jar, &parts, "sign in", "/login").await;
+    let (chrome, t) = chrome(&st, &jar, &parts, Where::Login, "/login").await;
     Html(LoginPage {
         chrome,
         t,
@@ -283,7 +297,7 @@ pub async fn login(
                 .await
                 .unwrap_or(false) =>
         {
-            let (chrome, t) = chrome(&st, &jar, &parts, "sign in", "/login").await;
+            let (chrome, t) = chrome(&st, &jar, &parts, Where::Login, "/login").await;
             Html(LoginPage {
                 chrome,
                 t,
@@ -335,7 +349,7 @@ pub async fn login(
 /// password" lead to the same next action, and the copy rule says tell people
 /// what to do about it.
 async fn failed_login(st: &AppState, jar: &CookieJar, parts: &Parts, name: String) -> Response {
-    let (chrome, t) = chrome(st, jar, parts, "sign in", "/login").await;
+    let (chrome, t) = chrome(st, jar, parts, Where::Login, "/login").await;
     Html(LoginPage {
         chrome,
         t,
@@ -407,7 +421,7 @@ struct DeadPage {
 
 pub async fn setup_page(State(st): State<AppState>, jar: CookieJar, parts: Parts) -> Response {
     if !auth::is_fresh(&st.pool).await.unwrap_or(false) {
-        let (chrome, t) = chrome(&st, &jar, &parts, "sign in", "/setup").await;
+        let (chrome, t) = chrome(&st, &jar, &parts, Where::Login, "/setup").await;
         return Html(DeadPage {
             title: t.setup_done_title().to_string(),
             body: t.setup_done_body().to_string(),
@@ -417,7 +431,7 @@ pub async fn setup_page(State(st): State<AppState>, jar: CookieJar, parts: Parts
         })
         .into_response();
     }
-    let (chrome, t) = chrome(&st, &jar, &parts, "first run", "/setup").await;
+    let (chrome, t) = chrome(&st, &jar, &parts, Where::Setup, "/setup").await;
     Html(setup_form(&st, chrome, t, None, None, FieldErrors::new())).into_response()
 }
 
@@ -467,7 +481,7 @@ pub async fn setup(
     parts: Parts,
     Form(form): Form<SetupForm>,
 ) -> Response {
-    let (chrome, t) = chrome(&st, &jar, &parts, "first run", "/setup").await;
+    let (chrome, t) = chrome(&st, &jar, &parts, Where::Setup, "/setup").await;
 
     let household = form.household.trim();
     let name = form.name.trim();
@@ -578,7 +592,14 @@ pub async fn invite_page(
     parts: Parts,
     Path(token): Path<String>,
 ) -> Response {
-    let (chrome, t) = chrome(&st, &jar, &parts, "invite", &format!("/invite/{token}")).await;
+    let (chrome, t) = chrome(
+        &st,
+        &jar,
+        &parts,
+        Where::Invite,
+        &format!("/invite/{token}"),
+    )
+    .await;
     let link = auth::read_link(&st.pool, &token)
         .await
         .unwrap_or(Link::Unknown);
@@ -703,7 +724,14 @@ pub async fn accept(
     Path(token): Path<String>,
     Form(form): Form<AcceptForm>,
 ) -> Response {
-    let (chrome, t) = chrome(&st, &jar, &parts, "invite", &format!("/invite/{token}")).await;
+    let (chrome, t) = chrome(
+        &st,
+        &jar,
+        &parts,
+        Where::Invite,
+        &format!("/invite/{token}"),
+    )
+    .await;
     let link = auth::read_link(&st.pool, &token)
         .await
         .unwrap_or(Link::Unknown);

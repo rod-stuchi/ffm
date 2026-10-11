@@ -22,6 +22,12 @@ use sqlx::{SqliteConnection, SqlitePool};
 /// like `receipts::MOVED` it is a fixed English line, never translated.
 pub const COPIED: &str = "order copied to other months";
 
+/// The note on each row a copy moved — `order copied from 10/2026` — and on
+/// the undo of one, which ends in `UNDONE`. Stored in English like every note;
+/// `ui::log::note_text` words them for whoever reads them.
+pub const COPIED_FROM: &str = "order copied from ";
+pub const UNDONE: &str = " — undone";
+
 /// A pane's live rows — every visibility, since only someone who may write
 /// the pane copies its order, and they see all of it — in the order it shows
 /// them by hand.
@@ -147,7 +153,7 @@ pub async fn copy(
         .write(&mut tx)
         .await?;
 
-    let note = format!("order copied from {}", crate::ui::fmt::period(source));
+    let note = format!("{COPIED_FROM}{}", crate::ui::fmt::period(source));
     for p in &plans {
         for m in &p.moves {
             set_key(&mut tx, m.id, &m.old_key, &m.new_key).await?;
@@ -375,10 +381,7 @@ pub async fn reverse(
     let mut by_month: Vec<Period> = back.iter().map(|b| b.period).collect();
     by_month.sort();
     by_month.dedup();
-    let note = format!(
-        "order copied from {} — undone",
-        crate::ui::fmt::period(source)
-    );
+    let note = format!("{COPIED_FROM}{}{UNDONE}", crate::ui::fmt::period(source));
     for period in by_month {
         let mut pane = lines(&mut tx, rev.owner, period).await?;
         let before: Vec<i64> = pane.iter().map(|l| l.id).collect();

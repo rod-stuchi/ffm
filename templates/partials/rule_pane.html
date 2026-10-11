@@ -25,7 +25,9 @@
     <button class="btn rp-close" type="button" @click="closeRule()">esc</button>
   </header>
 
-  <form class="rp-body"
+  {#- `novalidate`: the server refuses a missing field under the field, in the
+      member's language; the browser's own bubble would use the browser's. -#}
+  <form class="rp-body" novalidate
         hx-post="{% if let Some(rid) = id %}/rules/{{ rid }}{% else %}/rules{% endif %}"
         hx-target="#rulepane" hx-swap="delete">
     <input type="hidden" name="member_id" value="{{ member_id }}">
@@ -149,8 +151,13 @@
       <div class="rp-sect-body" x-show="open.schedule">
         <div class="fgrid">
           <label class="f{% if errors.has("start") %} is-bad{% endif %}">
-            <span class="k">{{ t.rule_start() }}</span>
+            {#- The picker is the browser's, in the browser's order; beside its
+                label, the date it holds with the month named, from the server,
+                so `01/05/2026` cannot be read two ways. -#}
+            <span class="k">{{ t.rule_start() }} <span class="aside" id="rp-start-echo" title="{{ t.date_echo_title() }}">{{ self.echo(start.as_str()) }}</span></span>
             <input class="i" type="date" name="start" value="{{ start }}" x-model="start"
+                   hx-get="/rules/day" hx-target="#rp-start-echo" hx-swap="innerHTML"
+                   hx-trigger="change, input changed delay:200ms" data-busy="none"
                    {% if errors.focus("start") %}autofocus{% endif %}>
             {%- if let Some(m) = errors.get("start") %}<span class="ferr">{{ m }}</span>{% endif %}
           </label>
@@ -172,8 +179,10 @@
             fixed-length loan. -#}
         <div class="fgrid">
           <label class="f">
-            <span class="k">{{ t.rule_end() }}</span>
-            <input class="i" type="date" name="end" value="{{ end }}" x-model="end" @input="syncFromEnd()">
+            <span class="k">{{ t.rule_end() }} <span class="aside" id="rp-end-echo" title="{{ t.date_echo_title() }}">{{ self.echo(end.as_str()) }}</span></span>
+            <input class="i" type="date" name="end" value="{{ end }}" x-model="end" @input="syncFromEnd()"
+                   hx-get="/rules/day" hx-target="#rp-end-echo" hx-swap="innerHTML"
+                   hx-trigger="change, input changed delay:200ms" data-busy="none">
           </label>
           <label class="f">
             <span class="k">{% if income %}{{ t.rule_payments() }}{% else %}{{ t.rule_installments() }}{% endif %}</span>
@@ -571,6 +580,9 @@ function rulePane() {
       const end = new Date(Date.UTC(y, m - 1 + months + 1, 0));
       const day = Math.min(d, end.getUTCDate());
       this.end = new Date(Date.UTC(y, m - 1 + months, day)).toISOString().slice(0, 10);
+      // Written by the model, not typed, so the picker fires nothing: ask
+      // for its read-back once the new value is on it.
+      this.$nextTick(() => htmx.trigger(this.$root.querySelector('[name=end]'), 'change'));
     },
 
     syncFromEnd() {

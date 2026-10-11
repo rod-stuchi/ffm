@@ -93,7 +93,7 @@ pub fn render(
                 .undo_of
                 .and_then(|id| times.get(&id))
                 .map(|at| t.log_undo_of(at)),
-            note: e.note.clone(),
+            note: e.note.as_deref().map(|n| note_text(n, t)),
             fields: e
                 .fields
                 .iter()
@@ -136,6 +136,20 @@ fn value(f: &FieldEntry, raw: Option<&str>, currency: Currency, t: &Catalog) -> 
     // A re-attribution records the stored names; people read them capitalized.
     if f.field == "member" {
         return fmt::name(raw);
+    }
+    // Values stored as codes — the words are the member's language.
+    let word = match (f.field.as_str(), raw) {
+        ("visibility", "household") => Some(t.log_value_household()),
+        ("visibility", "private") => Some(t.log_value_private()),
+        ("kind", "barcode") => Some(t.file_bill()),
+        ("kind", "scheduled") => Some(t.file_scheduled()),
+        ("kind", "receipt") => Some(t.file_receipt()),
+        ("status", "active") => Some(t.log_value_active()),
+        ("status", "inactive") => Some(t.log_value_inactive()),
+        _ => None,
+    };
+    if let Some(w) = word {
+        return w.to_string();
     }
     match f.kind.as_str() {
         "money" => raw
@@ -199,9 +213,65 @@ fn field_label(field: &str, t: &Catalog) -> String {
         "kind" => t.log_field_kind(),
         "original_filename" => t.log_field_original_filename(),
         "rows" => t.log_field_rows(),
+        "position" => t.log_field_position(),
+        "sort_key" => t.log_field_sort_key(),
+        "visibility" => t.log_field_visibility(),
+        "months" => t.log_field_months(),
+        "company_code" => t.log_field_company_code(),
+        "client_code" => t.log_field_client_code(),
+        "barcode" => t.log_field_barcode(),
+        "status" => t.log_field_status(),
+        "recipe" => t.log_field_recipe(),
+        "member" => t.log_field_member(),
+        "kept" => t.log_field_kept(),
         other => return other.replace('_', " "),
     }
     .to_string()
+}
+
+/// A change's note, in the member's language.
+///
+/// Notes are stored in English and stay that way — the trash, `u` and every
+/// restore match on them (`db::trash`), so rewriting what is stored would
+/// break the very thing they mark. They are worded here, at display, from the
+/// constants that wrote them; a note this does not know shows as stored.
+pub(crate) fn note_text(note: &str, t: &Catalog) -> String {
+    use crate::services::receipts as r;
+    let fixed = match note {
+        "manual" => Some(t.log_note_manual()),
+        "superseded" => Some(t.log_note_superseded()),
+        r::SWAPPED => Some(t.log_note_swapped()),
+        r::WITH_ROW => Some(t.log_note_with_row()),
+        r::MOVED => Some(t.log_note_moved()),
+        r::FOUND_BY_HAND => Some(t.log_note_found_by_hand()),
+        r::REMOVED_BY_HAND => Some(t.log_note_removed_by_hand()),
+        r::REFILED => Some(t.log_note_refiled()),
+        crate::services::prune::PRUNED => Some(t.log_note_pruned()),
+        crate::db::order::COPIED => Some(t.log_note_order_copied()),
+        crate::web::import::ATTACHED_UNCONFIRMED => Some(t.log_note_attached_unconfirmed()),
+        crate::db::auth::CONSOLE_RESET => Some(t.log_note_console_reset()),
+        crate::db::members::SIGNED_OUT_OTHERS => Some(t.log_note_signed_out_others()),
+        _ => None,
+    };
+    if let Some(s) = fixed {
+        return s.to_string();
+    }
+    if let Some(rest) = note.strip_prefix(crate::db::order::COPIED_FROM) {
+        return match rest.strip_suffix(crate::db::order::UNDONE) {
+            Some(period) => t.log_note_order_from_undone(period),
+            None => t.log_note_order_from(rest),
+        };
+    }
+    if let Some(detail) = note
+        .strip_prefix(crate::web::import::ATTACHED_MISMATCH)
+        .and_then(|d| d.strip_prefix(": "))
+    {
+        return t.log_note_attached_mismatch(detail);
+    }
+    if let Some(source) = note.strip_prefix(crate::db::recipes::TAUGHT_BY) {
+        return t.log_note_recipe(source);
+    }
+    note.to_string()
 }
 
 fn actor_label(e: &Entry, t: &Catalog) -> String {
@@ -428,5 +498,47 @@ mod tests {
         // Attributing this to whoever happened to be signed in would be a lie
         // the log would then keep forever.
         assert_eq!(actor_label(&e, &t), "materializer");
+    }
+
+    /// Notes are stored in English, so the trash can match on them; a
+    /// Portuguese reader still reads Portuguese — fixed, with a value inside,
+    /// and an unknown one shown as it was written.
+    #[test]
+    fn a_note_is_worded_for_whoever_reads_it() {
+        let pt = Catalog::new(Lang::PtBr);
+        assert_eq!(
+            note_text(crate::services::receipts::WITH_ROW, &pt),
+            "foi junto com a linha"
+        );
+        assert_eq!(
+            note_text("superseded", &pt),
+            "substituído por um arquivo mais novo"
+        );
+        assert_eq!(
+            note_text("order copied from 10/2026 — undone", &pt),
+            "ordem copiada de 10/2026 — desfeito"
+        );
+        assert_eq!(
+            note_text("bill recipe taught by codex", &pt),
+            "receita da conta ensinada por codex"
+        );
+        assert_eq!(note_text("something older", &pt), "something older");
+    }
+
+    #[test]
+    fn a_field_and_its_coded_values_are_worded_too() {
+        let pt = Catalog::new(Lang::PtBr);
+        assert_eq!(field_label("position", &pt), "posição");
+        let f = field("visibility", "text", Some("household"), Some("private"));
+        assert_eq!(
+            value(&f, f.old.as_deref(), Currency::Brl, &pt),
+            "compartilhado"
+        );
+        assert_eq!(value(&f, f.new.as_deref(), Currency::Brl, &pt), "privado");
+        let k = field("kind", "text", None, Some("receipt"));
+        assert_eq!(
+            value(&k, k.new.as_deref(), Currency::Brl, &pt),
+            "Comprovante"
+        );
     }
 }

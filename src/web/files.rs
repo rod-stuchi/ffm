@@ -187,8 +187,7 @@ pub async fn upload(
         Ok(_) => {
             crate::web::tx::row_fragment(&st, &auth, tx_id, member_id, period, t.file_added()).await
         }
-        Err(receipts::StoreError::Locked) => crate::web::tx::say_only(t.file_pdf_locked(), true),
-        Err(e) => crate::web::tx::say_only(&e.to_string(), true),
+        Err(e) => crate::web::tx::say_only(&e.say(&t), true),
     }
 }
 
@@ -261,7 +260,7 @@ pub async fn delete(
             },
             true,
         ),
-        Err(e) => refuse(&e.to_string(), true),
+        Err(e) => refuse(&e.say(&t), true),
     }
 }
 

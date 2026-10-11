@@ -131,6 +131,20 @@ impl std::fmt::Display for StoreError {
     }
 }
 
+impl StoreError {
+    /// The refusal in the member's language. `Display` stays English, for
+    /// logs; a disk or database error keeps its own detail behind a
+    /// translated lead, since the detail is what somebody fixing it needs.
+    pub fn say(&self, t: &crate::ui::i18n::Catalog) -> String {
+        match self {
+            StoreError::Extension => t.file_type_refused().to_string(),
+            StoreError::NotTracked => t.file_not_tracked().to_string(),
+            StoreError::Locked => t.file_pdf_locked().to_string(),
+            StoreError::Io(e) | StoreError::Db(e) => t.file_store_failed(e),
+        }
+    }
+}
+
 /// Writes one file into the vault and records it.
 ///
 /// The file is renamed to the deterministic convention on disk; the user's own

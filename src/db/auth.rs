@@ -18,6 +18,10 @@ use crate::db::changes::{Actor, Change, MemberAction};
 use crate::db::ledger::Member;
 use crate::domain::slug::slugify;
 use argon2::Argon2;
+
+/// The log's note on a reset issued from the console (`ffm reset-link`).
+/// Stored in English, like every note; `ui::log::note_text` words it.
+pub const CONSOLE_RESET: &str = "reset link issued from the console";
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -134,10 +138,28 @@ pub fn device_label(user_agent: Option<&str>) -> String {
     .map(|(_, name)| *name);
 
     match (os, browser) {
-        (Some(o), Some(b)) => format!("{b} on {o}"),
+        (Some(o), Some(b)) => format!("{b}{DEVICE_ON}{o}"),
         (Some(o), None) => o.to_string(),
         (None, Some(b)) => b.to_string(),
-        (None, None) => "unknown device".into(),
+        (None, None) => UNKNOWN_DEVICE.into(),
+    }
+}
+
+/// How a device label is stored: `Safari on iPhone`, or `unknown device`.
+/// English in the table, since it is written once at sign-in and read by
+/// whoever looks — `device_text` words it for them.
+const DEVICE_ON: &str = " on ";
+const UNKNOWN_DEVICE: &str = "unknown device";
+
+/// A stored device label in the reader's language: *Safari no iPhone*. The
+/// browser and system names are names, and stay as they are.
+pub fn device_text(label: &str, t: &crate::ui::i18n::Catalog) -> String {
+    if label == UNKNOWN_DEVICE {
+        return t.device_unknown().to_string();
+    }
+    match label.split_once(DEVICE_ON) {
+        Some((browser, os)) => t.device_on(browser, os),
+        None => label.to_string(),
     }
 }
 
@@ -576,9 +598,7 @@ pub async fn issue_link(
         // app acting on its own — the note is what tells a household reading
         // this back that a person with the database file in their hands did
         // it, which is a different fact worth being able to see.
-        let note = issuer
-            .is_none()
-            .then_some("reset link issued from the console");
+        let note = issuer.is_none().then_some(CONSOLE_RESET);
         for action in [MemberAction::PasswordReset, MemberAction::SessionsRevoked] {
             let entry = Change::member(actor, action, mid);
             match note {
@@ -858,6 +878,17 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_device_is_named_in_the_readers_language() {
+        let pt = crate::ui::i18n::Catalog::new(crate::ui::i18n::Lang::PtBr);
+        assert_eq!(device_text("Safari on iPhone", &pt), "Safari no iPhone");
+        assert_eq!(
+            device_text("unknown device", &pt),
+            "dispositivo desconhecido"
+        );
+        assert_eq!(device_text("Linux", &pt), "Linux", "a lone name is a name");
+    }
 
     #[test]
     fn a_password_round_trips_and_a_wrong_one_does_not() {

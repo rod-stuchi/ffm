@@ -1871,7 +1871,12 @@ that will otherwise be re-proposed.
   structurally enforces the three-axis separation above. The pre-login choice
   lives in an `ffm.lang` cookie, not `localStorage`, so the first byte of HTML is
   already in the right language with zero JS. See `design/spec.md`'s
-  **Language & copy (i18n)** section.
+  **Language & copy (i18n)** section. **What stays English is so on purpose**
+  — identifiers a member types back, the mode badge, product and browser
+  names; stored English (log notes, device labels) is worded at display; and
+  `just i18n-check` plus a both-languages test on `?` keep the rest out. The
+  date picker is the browser's own, in the browser's order; beside it the
+  server echoes the date with its month named (*1 mai 2026*).
 - **Sample/seed data stays Brazilian-household Portuguese on purpose** — bill
   names like "Água · Sabesp", bucket labels like "Mesada". That's content a
   household typed into its own ledger, not app copy: it never passes through the

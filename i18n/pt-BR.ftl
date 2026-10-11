@@ -149,7 +149,7 @@ reset-title = Defina uma nova senha
 reset-subtitle = Sua conta continua a mesma — muda só a senha.
 reset-submit = Definir a senha
 
-field-required = { $field } não pode ficar vazio.
+field-required = { $field }: preencha este campo.
 password-too-short = Use pelo menos { $n } caracteres.
 password-mismatch = As duas senhas não são iguais.
 password-strength-weak = Fraca
@@ -213,6 +213,10 @@ order-redo-did = refeito: ordem copiada para { $months } · { $n ->
        *[other] { $n } linhas movidas
     }
 error-not-written = Não deu certo — nada foi salvo.
+tx-row-gone = essa linha não está mais aí — foi excluída, ou saiu da sua vista
+tx-cannot-read-household = não deu para ler a casa — tente de novo
+tx-cannot-read-month = não deu para ler esse mês — tente de novo
+tx-cannot-read-row = não deu para ler essa linha — tente de novo
 
 ## Regras recorrentes
 
@@ -292,6 +296,8 @@ file-delete = Excluir arquivo
 file-not-tracked = esta linha não tem onde arquivar
 file-too-big = esse arquivo é grande demais para guardar
 file-pdf-locked = este PDF só abre com senha — preencha a senha do PDF na regra e anexe de novo — nada foi salvo
+file-type-refused = esse tipo de arquivo não é guardado — PDF, JPG, PNG ou TXT
+file-store-failed = não deu para salvar o arquivo — { $detail }
 file-pdf-wrong-password = a senha do PDF da regra não abre este arquivo — confira na regra — nada foi salvo
 file-pdf-no-tool = este PDF só abre com senha, e o qpdf não está instalado no servidor para abri-lo — nada foi salvo
 file-pdf-unreadable = não consegui abrir este PDF — talvez esteja corrompido — nada foi salvo
@@ -307,8 +313,17 @@ estimate-no-history = nenhum mês confirmado ainda — usa o valor da própria r
 settings-profile = Suas preferências
 settings-household = Casa
 settings-members = Membros
-settings-saved = { $name } salvo
+settings-saved = salvo — { $name }
 settings-admin-only = isso é só para administradores
+settings-invalid-one-of = ✗ { $key } precisa ser um destes: { $allowed }
+settings-invalid-between = ✗ { $key } precisa ser um número entre { $lo } e { $hi }
+settings-invalid-palette = ✗ { $key } não é uma das paletas incluídas
+settings-invalid-empty = ✗ { $key } não pode ficar vazio
+settings-invalid-currency = ✗ { $key } não é uma moeda que formatamos
+settings-invalid-assistant = ✗ { $key } não é um assistente que este app roda
+settings-invalid-storage = ✗ { $key } não pôde ser salvo — { $detail }
+# Só um comando define (`:group`); os outros ajustes são nomeados pelo rótulo do controle.
+settings-label-group = Agrupamento
 pane-close = esc
 pane-maximize = Maximizar · zz
 pane-restore = Restaurar · zz
@@ -352,6 +367,8 @@ profile-visibility-household = Compartilhado com a casa
 profile-visibility-private = Só meu
 profile-devices = Conectado em
 profile-no-devices = nenhum outro aparelho
+device-on = { $browser } no { $os }
+device-unknown = dispositivo desconhecido
 
 household-name = Nome da casa
 household-currency = Moeda
@@ -492,6 +509,39 @@ log-field-path = caminho
 log-field-kind = tipo
 log-field-original-filename = nome original
 log-field-rows = linhas renomeadas junto
+log-field-position = posição
+log-field-sort-key = lugar na ordem
+log-field-visibility = visibilidade
+log-field-months = meses
+log-field-company-code = código da empresa
+log-field-client-code = código do cliente
+log-field-barcode = código de barras
+log-field-status = situação
+log-field-recipe = receita da conta
+log-field-member = membro
+log-field-kept = mantido
+log-value-household = compartilhado
+log-value-private = privado
+log-value-active = ativo
+log-value-inactive = inativo
+# As notas ficam em inglês no banco (a lixeira depende delas) e são traduzidas aqui.
+log-note-manual = removido de propósito
+log-note-superseded = substituído por um arquivo mais novo
+log-note-swapped = posto de lado na troca
+log-note-with-row = foi junto com a linha
+log-note-moved = a conta está em outra linha
+log-note-found-by-hand = encontrado no disco — arquivado à mão
+log-note-removed-by-hand = removido do disco à mão
+log-note-refiled = rearquivado onde a linha aponta agora
+log-note-pruned = removido de vez — uma cópia idêntica ficou em outro lugar
+log-note-order-copied = ordem copiada para outros meses
+log-note-order-from = ordem copiada de { $period }
+log-note-order-from-undone = ordem copiada de { $period } — desfeito
+log-note-attached-unconfirmed = anexado mesmo assim — não confirmado como conta desta regra
+log-note-attached-mismatch = anexado mesmo assim — ele indica outra coisa: { $detail }
+log-note-recipe = receita da conta ensinada por { $source }
+log-note-console-reset = link de redefinição emitido pelo console
+log-note-signed-out-others = saiu de todos os outros dispositivos
 log-on = ligado
 log-off = desligado
 moved-down = para baixo
@@ -616,6 +666,10 @@ import-amount-differs = o código de barras diz { $barcode }, esta linha diz { $
 import-date-differs = o código de barras diz { $barcode }, esta linha diz { $row } — mantida como estava
 import-replaced = substituiu { $was }
 import-unresolved = o código de barras não trazia { $what }
+import-missing-amount = valor
+import-missing-due = vencimento
+import-missing-issuer = quem emitiu
+import-missing-kind = o tipo das contas desta regra
 import-no-occurrence = não há linha deste mês para anexar
 import-unlinked = conta desvinculada desta regra — solte a correta
 import-already-attached = esta conta já está em { $period } ({ $title } — { $amount }) — nada foi salvo
@@ -726,6 +780,11 @@ drafts-parked = { $n ->
 month-leave-key = mudar de mês descarta { $drafts } — { $key } de novo para ir mesmo assim
 month-leave-click = mudar de mês descarta { $drafts } — clique de novo para ir mesmo assim
 month-already-current = já está no mês atual
+month-prev = mês anterior
+month-next = próximo mês
+status-admin = (admin)
+ledger-empty-title = Nenhuma casa ainda.
+ledger-empty-hint = Crie uma no banco de dados com:
 
 ## `gd` e o carrossel `P`
 
@@ -801,6 +860,60 @@ keymap-fold = Dobrar
 keymap-files = Arquivos
 keymap-undo = Desfazer
 keymap-type = Digitar
+
+# As linhas do mapa de atalhos (`?`). As teclas ficam no Rust.
+keymap-row-down-up = linha abaixo / acima
+keymap-row-counted = movimento com contagem
+keymap-row-first-last = primeira / última linha
+keymap-row-pane = painel à esquerda / à direita
+keymap-row-tab = aba seguinte / anterior
+keymap-row-tab-n = vai direto para a aba 2
+keymap-row-month = mês anterior / seguinte
+keymap-row-month-n = três meses à frente — 3[ três para trás
+keymap-row-today = este mês — o de hoje
+keymap-row-add = adiciona um gasto / uma entrada avulsa
+keymap-row-create = cria uma conta / uma entrada recorrente
+keymap-row-edit = edita esta linha / a regra dela
+keymap-row-move = move a linha para baixo / para cima
+keymap-row-sort = ordem das linhas: manual · name · amount · date
+keymap-row-copy-order = copia a ordem deste mês para outros meses — :order
+keymap-row-give = passa a linha para outro membro — escolhido pelo nome, só admin
+keymap-row-select = seleciona, para uma operação em lote — no cabeçalho de um grupo, todas as linhas dele
+keymap-row-select-group = seleciona o grupo em que o cursor está — ou limpa
+keymap-row-select-all = seleciona todas as linhas do painel — ou limpa
+keymap-row-private = liga / desliga privado
+keymap-row-paid = marca como pago à mão — contas recorrentes sem acompanhamento
+keymap-row-details = vencimento, frequência e comprovante
+keymap-row-history = o histórico desta linha
+keymap-row-search = busca neste mês — incremental, regex
+keymap-row-match = resultado seguinte / anterior
+keymap-row-grep = busca em todos os meses
+keymap-row-fold-toggle = abre / fecha o grupo sob o cursor
+keymap-row-fold-one = abre / fecha o grupo
+keymap-row-fold-all = abre / fecha todos os grupos
+keymap-row-fold-order = ordena os grupos: ordem de aparição · A–Z · por custo
+keymap-row-file-open = abre a conta / o agendamento / o comprovante
+keymap-row-file-attach = anexa uma conta / um agendamento / um comprovante
+keymap-row-file-preview = mostra os arquivos desta linha
+keymap-row-p-jump = no P: vai direto a um arquivo · passa
+keymap-row-p-zoom = no P: aproxima, afasta, volta ao normal
+keymap-row-p-scroll = no P: rola · ajusta à altura / à largura
+keymap-row-p-hml = no P: topo, meio e pé da página
+keymap-row-p-page = no P: página seguinte / anterior
+keymap-row-p-ends = no P: a primeira página, o fim da última
+keymap-row-p-trim = no P: recorta ou reduz o PDF exibido
+keymap-row-p-barcode = no P: adiciona uma página com o código de barras desenhado a partir de um código
+keymap-row-p-append = no P: junta as páginas de outro PDF ao final
+keymap-row-p-viewer = no P: o PDF no visualizador do próprio navegador, e de volta
+keymap-row-trim-view = tela de recorte: páginas · rolar · manter / tirar · reduzir
+keymap-row-delete = exclui — abre uma confirmação
+keymap-row-confirm = confirma numa janela
+keymap-row-undo = desfaz · refaz — as suas mudanças, neste painel, neste mês; pergunta antes
+keymap-row-trash = a lixeira — traz de volta qualquer linha ou arquivo excluído
+keymap-row-clear = limpa contagem, buffer, seleção e busca
+keymap-row-help = esta tela — / busca nela, j k rolam
+
+date-echo-title = a data deste campo — o seletor ao lado escreve na ordem do próprio navegador
 
 ## Meses sazonais — em que meses do ano uma regra realmente acontece.
 ## A expressão em si é numérica em qualquer idioma; só estas palavras mudam.

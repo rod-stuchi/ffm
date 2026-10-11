@@ -4,7 +4,10 @@
     very ledger you are editing. Cancel (Esc) and Save (Enter) sit at the foot
     of the row, and the rest of the ledger stays exactly where it was. -#}
 <div id="row-{{ id }}">
-  <form class="row is-editing editrow"
+  {#- `novalidate`: an empty title is refused by the server, under its own
+      field and in the member's language — the browser's own bubble would say
+      it in the browser's. `required` stays, for a screen reader. -#}
+  <form class="row is-editing editrow" novalidate
         hx-post="/tx/{{ id }}" hx-target="#row-{{ id }}" hx-swap="outerHTML"
         {#- A save ends the edit, so the shell has to hear about it: nothing
             else clears `editing`, and a stale id there means every later
