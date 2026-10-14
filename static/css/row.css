@@ -676,6 +676,35 @@ body:not(.kbd-nav) .row:hover .entry {
   display: inline-flex;
 }
 
+/* A file that is there is a solid thing, an empty slot only its outline —
+ * so `[1] +2 [3]` reads as "two files" at a glance rather than three alike
+ * boxes. Neutral on purpose: the accent is "you are here" and pos/neg are
+ * money facts, so the fill and the ink carry it, never a hue. */
+.fbadge:not(.fslot):not(.fadd) {
+  background: var(--surface-3);
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+.fbadge:not(.fslot):not(.fadd):hover,
+.fbadge:not(.fslot):not(.fadd):focus-visible {
+  border-color: var(--accent-line);
+}
+.fbadge:not(.fslot):not(.fadd) kbd {
+  background: var(--surface-2);
+}
+.fslot {
+  opacity: 0.6;
+}
+.fslot:hover,
+.fslot:focus-visible {
+  opacity: 1;
+}
+.fslot kbd {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink-3);
+}
+
 .ledger-shell[data-density="default"] .fadd,
 .ledger-shell[data-density="default"] .row.is-focus .fadd {
   display: none;

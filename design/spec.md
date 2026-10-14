@@ -454,6 +454,13 @@ standing out.)
   document, a clock-in-a-box, a checked receipt) rendered in `currentColor` —
   legible in every theme, and never competing with `pos`/`neg`/`accent` for
   attention the way a full-color emoji glyph did.
+- **A file that is there is filled; an empty slot is only its outline.** At
+  `default` density the rail shows all three slots, and `[1] +2 +3` drawn
+  alike read as three things rather than one file. A present file is a solid
+  pill — `--surface-3` fill, `--ink-3` border, the icon in the ink — and an
+  empty `+` slot stays dashed and recedes to 60% until hovered. Still no
+  hue: the fill and the ink carry it, so it never collides with the accent
+  or the money colors.
 - **The number is a real `<kbd>` built into the control itself**, not a
   floating notification-style bubble pinned to its corner — same key-cap
   styling used everywhere else in the app (surface-2 fill, bottom-weighted
@@ -468,7 +475,7 @@ standing out.)
 - **Sized as a deliberate step down from the status mark**, not by box
   height alone: the mark is a solid 26px disc, the read of the row's single
   most important fact. The file rail's controls share that 26px height but
-  as slim, low-contrast outline pills with a 14px icon — visually lighter and
+  as slim pills with a 14px icon — visually lighter and
   narrower, so they stay legible without competing with the mark for the eye.
   The recurring/private icons stay exactly as small and inline as they've
   always been in the meta line — see Specifics that carry meaning, above, for
