@@ -1,6 +1,6 @@
 //! Cookies, and the extractor every authenticated handler asks for.
 //!
-//! Four cookies, and which is which matters:
+//! Five cookies, and which is which matters:
 //!
 //! * **`ffm.sid`** — the session. Opaque, `HttpOnly`, `SameSite=Lax`. It
 //!   carries a random id and nothing else; the member it belongs to is a row.
@@ -18,6 +18,10 @@
 //!   only after a script ran, as a flash of `ffm` and a repaint. Written from
 //!   `member_settings` at sign-in, on a palette change and at sign-out; read
 //!   only before sign-in, where there is no member row to ask.
+//! * **`ffm.hide`** — whether money is pixelated (`gh`, the statusline eye).
+//!   Who might be looking at a screen is a fact about the device, like
+//!   light/dark, not about the member. Rendered as `data-hide` on `<html>`, so
+//!   the first frame is already hidden — the reason it is not `localStorage`.
 
 use crate::db::auth::{self, Session};
 use crate::db::settings::{self, MemberSettings};
@@ -36,6 +40,7 @@ pub const SID: &str = "ffm.sid";
 pub const LANG: &str = "ffm.lang";
 pub const THEME: &str = "ffm.theme";
 pub const PALETTE: &str = "ffm.palette";
+pub const HIDE: &str = "ffm.hide";
 
 /// A year. Language and light/dark are preferences, not secrets with a
 /// lifetime.
@@ -74,6 +79,12 @@ pub fn mode_of(jar: &CookieJar) -> ModePref {
     jar.get(THEME)
         .map(|c| ModePref::parse(c.value()))
         .unwrap_or(ModePref::System)
+}
+
+/// Whether this device has money hidden. Only `1` means yes: no cookie, or
+/// anything else in it, shows the figures.
+pub fn hide_of(jar: &CookieJar) -> bool {
+    jar.get(HIDE).is_some_and(|c| c.value() == "1")
 }
 
 /// The pre-auth palette. Anything the cookie does not name — no cookie, a
@@ -154,6 +165,8 @@ pub struct Auth {
     pub viewer: Viewer,
     pub settings: MemberSettings,
     pub mode: ModePref,
+    /// `ffm.hide` — money pixelated on this device.
+    pub hide: bool,
 }
 
 impl Auth {
@@ -200,6 +213,7 @@ impl FromRequestParts<AppState> for Auth {
             session,
             settings,
             mode: mode_of(&jar),
+            hide: hide_of(&jar),
         })
     }
 }
@@ -246,6 +260,18 @@ mod tests {
         for name in ThemeName::ALL {
             let jar = CookieJar::new().add(pref_cookie(PALETTE, name.key().into()));
             assert_eq!(palette_of(&jar), name);
+        }
+    }
+
+    #[test]
+    fn only_a_one_hides_the_money() {
+        assert!(!hide_of(&CookieJar::new()));
+        assert!(hide_of(
+            &CookieJar::new().add(pref_cookie(HIDE, "1".into()))
+        ));
+        for v in ["0", "", "yes", "true"] {
+            let jar = CookieJar::new().add(pref_cookie(HIDE, v.into()));
+            assert!(!hide_of(&jar), "{v:?} must show the figures");
         }
     }
 

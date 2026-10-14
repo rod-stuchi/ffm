@@ -1548,6 +1548,14 @@ that will otherwise be re-proposed.
   gives it the profile button's line height, so the two match in any font.
   The pre-auth chrome keeps its words: there the buttons sit beside their
   `Alt-L` / `Alt-T` key-caps.
+- **Hiding the amounts is a device cookie and a CSS filter** (`gh`, the
+  statusline's eye). `ffm.hide` → `data-hide` on `<html>`, rendered by the
+  server so the first frame is already hidden; `gh` flips the attribute at
+  once and `POST /hide` only remembers it. Every amount on screen carries
+  **`.money`**, which `ui.css` draws through the page's `#ffm-pixelate` SVG
+  filter — **a new money element must carry it**, or it shows while the rest
+  are hidden. The filter names no `x`/`y`: Safari places a subregion in page
+  coordinates. See `design/spec.md`'s Hiding the amounts.
 - **The member's name is on the profile button and nowhere else in the bar.**
   It used to sit in `.htotals` as well, which printed it twice within 200px.
 - **`:theme` and `:profile` both open `:profile`** — the difference is that

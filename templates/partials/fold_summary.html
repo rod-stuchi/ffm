@@ -5,4 +5,4 @@
 
     The ring has a partial of its own because the `?` legend draws it too. -#}
 {% include "partials/fold_ring.html" %}
-<span class="fsub {% if s.negative %}neg{% else %}pos{% endif %}">{% if s.negative %}−{% endif %}{{ s.subtotal }}</span>
+<span class="fsub money {% if s.negative %}neg{% else %}pos{% endif %}">{% if s.negative %}−{% endif %}{{ s.subtotal }}</span>

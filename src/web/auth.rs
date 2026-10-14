@@ -874,6 +874,34 @@ pub async fn toggle_preview(State(st): State<AppState>, auth: Auth) -> Response 
     Redirect::to("/").into_response()
 }
 
+#[derive(Deserialize)]
+pub struct HideForm {
+    #[serde(default)]
+    on: String,
+}
+
+/// `gh` and the statusline eye: money pixelated on this device, or not.
+///
+/// The page has already flipped `data-hide` by the time this arrives — hiding
+/// is visual state and waits for nobody — so all this does is remember it for
+/// the next render, which is what makes the first frame already hidden. A
+/// device cookie, not a settings row: who might be looking at a screen is not
+/// a fact about the member.
+pub async fn set_hide(jar: CookieJar, auth: Auth, Form(form): Form<HideForm>) -> Response {
+    let on = form.on == "1";
+    let t = auth.catalog();
+    let jar = jar.add(session::pref_cookie(
+        session::HIDE,
+        if on { "1" } else { "0" }.to_string(),
+    ));
+    let msg = if on {
+        t.values_hidden()
+    } else {
+        t.values_shown()
+    };
+    (jar, crate::web::tx::say_only(msg, false)).into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

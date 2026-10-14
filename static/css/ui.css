@@ -543,6 +543,66 @@ legend {
   }
 }
 
+/* `gh` — money hidden on this device (`ffm.hide`, rendered as `data-hide` on
+ * <html>). Every amount carries `.money` and is drawn through the page's
+ * `#ffm-pixelate` filter: pixelated, so the layout stays put and you can see
+ * a figure is there, without reading it. An amount field is the exception
+ * while it has focus — you cannot edit a number you cannot see, and focusing
+ * it is a deliberate `e`, not a peek. The blocks are drawn 30% darker
+ * (`brightness`), so a hidden figure reads as hidden rather than as a
+ * blurry one; a focused field, not pixelated, keeps its own color. */
+:root[data-hide] .money,
+:root[data-hide] .amt-in:not(:focus) {
+  filter: url(#ffm-pixelate) brightness(0.7);
+  user-select: none;
+}
+
+/* The filter's own <svg>: present for its <filter>, taking no room. */
+.pxdefs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* The eye. Both are rendered and the attribute picks one, so the first
+ * frame is right with no script. Kept at every width, like the version. */
+.st.eye {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  cursor: pointer;
+  border-right: none;
+  border-left: 1px solid var(--line);
+  color: var(--ink-3);
+}
+
+.st.eye:hover {
+  color: var(--ink);
+}
+
+.st.eye svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root:not([data-hide]) .eye-hidden,
+:root[data-hide] .eye-shown {
+  display: none;
+}
+
+/* Hidden is a state worth seeing from across the room: the crossed eye wears
+ * the ink, not the quiet gray the version sits in. */
+:root[data-hide] .st.eye {
+  color: var(--ink);
+}
+
 /* The running version: last, quiet, and kept at every width — unlike the
  * .right cells, it is not about the pane, and a phone is where "which version
  * is this?" gets asked. */

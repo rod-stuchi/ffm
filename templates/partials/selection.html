@@ -6,7 +6,7 @@
   {%- if let Some(count) = count -%}
   <span>{{ count }}</span>
   {%- for p in parts %}
-  <span class="sel-sep">·</span><i>{{ p.label }}</i> <b class="{{ p.class }}">{{ p.value }}</b>
+  <span class="sel-sep">·</span><i>{{ p.label }}</i> <b class="money {{ p.class }}">{{ p.value }}</b>
   {%- endfor %}
   {%- if let Some(n) = no_amount %}
   <span class="sel-sep">·</span><span class="sel-dim">{{ n }}</span>

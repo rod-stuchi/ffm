@@ -172,6 +172,7 @@ The statusline carries, left to right:
 | sort | `manual` · `name` · `amount` · `date` — **clickable, cycles**, the same as `s` |
 | group order | `First seen` · `A–Z` · `By cost` — only while the pane is grouped; **clickable, cycles**, the same as `S` |
 | line numbers | `rnu` · `nu` · `nonu` — **clickable, cycles** |
+| eye | `gh` — the amounts shown (an eye) or hidden (crossed out, in the ink). **Clickable, toggles.** Kept at every width, like the version |
 | version | the running build — `v0.0.3`, or `v0.0.4-dev` on a dev build. Last, quiet, and **kept at every width**, where the cells before it step aside below 700px: a phone is where "which version is this?" gets asked |
 
 **On a phone the household and the member cells give way** with an ellipsis,
@@ -715,6 +716,7 @@ standing out.)
 | `E` | edit the recurring rule behind the focused row; no-op with a statusline message on a plain row |
 | `gd` | show due/cadence/receipt details for the focused row *(proposal, not in the original spec)* |
 | `gl` | change log for the focused row — who changed what, when — in a side pane *(proposal, not in the original spec)* |
+| `gh` | hide every amount — pixelated, on this device — and show them again; the statusline's eye does the same. See Hiding the amounts |
 | `p` | toggle private *(proposal, not in the original spec)* |
 | `m` | mark paid by hand — an untracked recurring bill only; "received" on an income. Refused, with the reason, on a tracked row (its receipt proves it) and on a one-off |
 | `P` · `gp` | preview the row's files in a carousel — see Files below *(proposal, not in the original spec)* |
@@ -800,6 +802,47 @@ standing out.)
   cleared only when the pointer's screen position actually changes. (The CSS
   half of this, `body:not(.kbd-nav) .row:hover`, existed for a long time with
   nothing setting the class, so the hovered row stayed lit beside the cursor.)
+
+### Hiding the amounts (`gh`, the statusline eye)
+
+A banking app's eye, for opening the ledger with somebody beside you — but
+the figures are **pixelated**, not replaced: the layout does not move, and
+you can still see a figure is there without being able to read it.
+
+- **A fact about the device, in a cookie** — `ffm.hide`, beside
+  `ffm.theme`: who might be looking at a screen is a property of where it
+  is, not of the member, and the same person hides on the phone and not on
+  the desk. Rendered as `data-hide` on `<html>`, so the first frame is
+  already hidden — `localStorage` would show the real numbers for a frame.
+- **Visual state.** `gh` and the eye flip the attribute at once and then
+  `POST /hide`, which only sets the cookie for the next render; nothing
+  about the data changes. The statusline's words are the server's.
+- **One hook: `.money`.** Every element that shows an amount carries it —
+  the row's amount, the pane, tab and app-bar totals, the month picker's
+  NETs and year summary, fold subtotals, the `x` sum, `gd`'s progress, a
+  money field in `gl`, `:grep` and the trash, the rule pane's estimate and
+  a covering bill's read-back. **A new amount on screen needs the class**,
+  or it shows while the rest are hidden.
+- **The pixels are an SVG filter** (`#ffm-pixelate`, at the top of the
+  ledger page): a light blur, then one sample per 5px cell grown into its
+  block, so each block wears the figure's own color — 30% darker
+  (`brightness(0.7)` after the filter), so a hidden figure reads as
+  hidden, not as a blurry one. **No primitive names
+  an `x` or `y`**: Safari reads a primitive's subregion in page
+  coordinates on an HTML element, and drew the sampling grid in the page's
+  corner with nothing left on the figure. Without one, every primitive
+  starts at the element's own corner in both browsers.
+- **An amount field reads clearly while it has focus** — the `e` row, the
+  add row, the rule pane. You cannot edit a number you cannot see, and
+  focusing one is a deliberate act, not a peek. There is no other peek: no
+  hover, no press-and-hold.
+- **What it does not hide**: a statusline sentence that mentions an amount
+  (*read R$ … from the bill*, `u`'s *amount R$ 12,00 → R$ 10,00*), the
+  question `u` asks, and the `P` carousel and trim view, which show the bill
+  itself. And pixelation keeps a figure's width, so how many digits it has
+  still shows; the text is in the page for copy and screen readers, though
+  it cannot be selected while hidden. It is for the person beside you, not
+  for somebody with the laptop.
 
 ### On a phone — the keyboard
 

@@ -21,6 +21,8 @@ pub struct FieldView {
     pub label: String,
     pub old: String,
     pub new: String,
+    /// An amount: pixelated with every other `.money` while `gh` hides them.
+    pub money: bool,
 }
 
 pub struct EntryView {
@@ -101,6 +103,7 @@ pub fn render(
                     label: field_label(&f.field, t),
                     old: value(f, f.old.as_deref(), currency, t),
                     new: value(f, f.new.as_deref(), currency, t),
+                    money: f.kind == "money",
                 })
                 .collect(),
         };

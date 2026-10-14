@@ -347,6 +347,8 @@ struct ModeChoice {
 struct LedgerPage {
     theme_css: String,
     attr: Option<&'static str>,
+    /// `ffm.hide` — `data-hide` on `<html>`, every `.money` pixelated.
+    hide: bool,
     me: String,
     admin: bool,
     previewing: bool,
@@ -616,6 +618,7 @@ pub async fn ledger(
         )
         .to_css(),
         attr: auth.mode.attr(),
+        hide: auth.hide,
         me: fmt::name(&auth.session.member.name),
         admin: auth.viewer.is_admin(),
         previewing: auth.session.preview,
@@ -769,6 +772,7 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("m", t.keymap_row_paid()),
                 k("gd", t.keymap_row_details()),
                 k("gl", t.keymap_row_history()),
+                k("gh", t.keymap_row_hide()),
             ],
         ),
         (

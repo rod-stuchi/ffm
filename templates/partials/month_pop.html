@@ -13,7 +13,7 @@
     {#- A future month has nothing materialized, so it says so rather than
         showing a NET of zero. Before the numbers arrive the line is held open
         at its full height, so nothing shifts when they land. -#}
-    <span class="n{% if m.negative %} is-neg{% endif %}">
+    <span class="n money{% if m.negative %} is-neg{% endif %}">
       {%- if m.future %}—{% else if let Some(n) = m.net %}{{ n }}{% else %}&nbsp;{% endif -%}
     </span>
     {%- if m.unresolved > 0 %}<i class="dot"></i>{% endif %}
@@ -24,10 +24,10 @@
 <div class="mfoot">
   <div class="mfh">{{ y.heading }}</div>
   <div class="mfsum">
-    <span><i>{{ t.totals_in() }}</i> <b class="pos">{{ y.ins }}</b></span>
-    <span><i>{{ t.totals_out() }}</i> <b class="neg">{{ y.outs }}</b></span>
-    <span><i>{{ t.totals_net() }}</i> <b class="{% if y.negative %}neg{% else %}pos{% endif %}">{{ y.net }}</b></span>
+    <span><i>{{ t.totals_in() }}</i> <b class="money pos">{{ y.ins }}</b></span>
+    <span><i>{{ t.totals_out() }}</i> <b class="money neg">{{ y.outs }}</b></span>
+    <span><i>{{ t.totals_net() }}</i> <b class="money {% if y.negative %}neg{% else %}pos{% endif %}">{{ y.net }}</b></span>
   </div>
-  <div class="mfnote">{{ y.avg }}{% if !y.unresolved.is_empty() %} · <span class="mfwarn">{{ y.unresolved }}</span>{% endif %}</div>
+  <div class="mfnote"><span class="money">{{ y.avg }}</span>{% if !y.unresolved.is_empty() %} · <span class="mfwarn">{{ y.unresolved }}</span>{% endif %}</div>
 </div>
 {%- endif %}

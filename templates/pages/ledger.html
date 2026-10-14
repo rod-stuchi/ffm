@@ -11,7 +11,7 @@
       the optimistic step needs no JavaScript at all and its geometry cannot
       drift from a real row's. -#}
 <!doctype html>
-<html lang="{{ t.lang.code() }}"{% if let Some(a) = attr %} data-theme="{{ a }}"{% endif %}>
+<html lang="{{ t.lang.code() }}"{% if let Some(a) = attr %} data-theme="{{ a }}"{% endif %}{% if hide %} data-hide{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -78,6 +78,25 @@
 <script defer src="/static/js/alpine.min.js"></script>
 </head>
 <body>
+{#- `gh` / the statusline eye: every `.money` is drawn through this filter
+    while `<html>` carries `data-hide` (ui.css). Pixelated rather than
+    blurred: a block per 6px cell, sampled from a lightly blurred copy so
+    each block wears the figure's color rather than whichever stroke the
+    sample happened to hit. No primitive names an `x`/`y` — Safari reads a
+    subregion's position in page coordinates on an HTML element, and drew
+    the grid in the page's corner with nothing left on the figure. With
+    none, every primitive starts at the element's own corner in both. -#}
+<svg class="pxdefs" width="0" height="0" aria-hidden="true" focusable="false">
+  <filter id="ffm-pixelate" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+    <feGaussianBlur stdDeviation="1.5"/>
+    <feComponentTransfer result="soft"><feFuncA type="linear" slope="2.5"/></feComponentTransfer>
+    <feFlood width="1" height="1"/>
+    <feComposite width="5" height="5"/>
+    <feTile result="grid"/>
+    <feComposite in="soft" in2="grid" operator="in"/>
+    <feMorphology operator="dilate" radius="2"/>
+  </filter>
+</svg>
 <div class="ledger-shell" data-period="{{ period_key }}" data-today="{{ today_key }}" data-density="{{ density }}" data-pdf-view="{{ pdf_view }}" x-data="ledger()"
      @focusout="keyFocusOut($event)"
      :class="{ 'is-dragging': dragging }"
@@ -134,9 +153,9 @@
           the same way, into the profile menu as `:preview`: the bar is for the
           month and its money. -#}
       <span class="htot" id="htot">
-        <span><i>{{ t.totals_in() }}</i> <b class="pos">{{ house.ins }}</b></span>
-        <span><i>{{ t.totals_out() }}</i> <b class="neg">{{ house.outs }}</b></span>
-        <span><i>{{ t.totals_net() }}</i> <b class="{% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
+        <span><i>{{ t.totals_in() }}</i> <b class="money pos">{{ house.ins }}</b></span>
+        <span><i>{{ t.totals_out() }}</i> <b class="money neg">{{ house.outs }}</b></span>
+        <span><i>{{ t.totals_net() }}</i> <b class="money {% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
       </span>
     </div>
     {#- Light/dark, as a plain form. The `ffm.theme` cookie is HttpOnly, so
@@ -263,7 +282,7 @@
             :class="{ 'is-focus': pane === {{ loop.index0 }} }"
             @click="pane = {{ loop.index0 }}; row = 0; paint()">
       <b>{{ p.name }}</b>
-      <span class="tbal {% if p.totals.negative %}neg{% else %}pos{% endif %}"
+      <span class="tbal money {% if p.totals.negative %}neg{% else %}pos{% endif %}"
             id="tbal-{{ p.id }}">{% if p.totals.negative %}−{% endif %}{{ p.totals.balance }}</span>
     </button>
     {%- endfor %}
@@ -291,9 +310,9 @@
         <span class="rotag">{{ t.pane_read_only() }}</span>
         {%- endif %}
         <span class="ptotals" id="ptot-{{ p.id }}">
-          <span><i>{{ t.totals_in() }}</i> <b class="pos">{{ p.totals.ins }}</b></span>
-          <span><i>{{ t.totals_out() }}</i> <b class="neg">{{ p.totals.outs }}</b></span>
-          <span><i>{{ t.totals_balance() }}</i> <b class="{% if p.totals.negative %}neg{% else %}pos{% endif %}">{% if p.totals.negative %}−{% endif %}{{ p.totals.balance }}</b></span>
+          <span><i>{{ t.totals_in() }}</i> <b class="money pos">{{ p.totals.ins }}</b></span>
+          <span><i>{{ t.totals_out() }}</i> <b class="money neg">{{ p.totals.outs }}</b></span>
+          <span><i>{{ t.totals_balance() }}</i> <b class="money {% if p.totals.negative %}neg{% else %}pos{% endif %}">{% if p.totals.negative %}−{% endif %}{{ p.totals.balance }}</b></span>
         </span>
       </header>
 
@@ -564,7 +583,7 @@
         {#- How far the run has come — installments paid of the run, and the
             money paid and left. Only a rule with an end, or a season. -#}
         <template x-if="tip.progress">
-          <div class="tiprow"><b>{{ t.details_progress() }}</b><span x-text="tip.progress"></span></div>
+          <div class="tiprow"><b>{{ t.details_progress() }}</b><span class="money" x-text="tip.progress"></span></div>
         </template>
         <template x-if="tip.receipt">
           <div class="tiprow"><b>{{ t.details_receipt() }}</b>
@@ -966,6 +985,13 @@
     {%- endif %}
     <div class="st right is-click" @click="cycleNu()" x-text="nuLabel"
          title="{{ t.profile_line_numbers() }}">{{ nu_label }}</div>
+    {#- `gh` — money pixelated on this device, or not. Both eyes are rendered
+        and CSS shows the one `data-hide` calls for, so the first frame is
+        right with no script. Kept at every width, like the version: a phone
+        out in public is where this is wanted most. -#}
+    <div class="st eye" role="button" @pointerdown.prevent @click="toggleValues()"><span
+         class="eye-shown" title="{{ t.status_hide() }}" aria-label="{{ t.status_hide() }}">{{ crate::ui::icons::svg("eye")|safe }}</span><span
+         class="eye-hidden" title="{{ t.status_show() }}" aria-label="{{ t.status_show() }}">{{ crate::ui::icons::svg("eye_off")|safe }}</span></div>
     {#- The version, last and always shown — a phone, where the other right
         cells step aside, is exactly where "which version is this?" is asked. -#}
     <div class="st ver" title="{{ t.status_version() }}">{{ version }}</div>
@@ -4078,6 +4104,8 @@ function ledger() {
         // `gl` — "go to log", the same extension of the g vocabulary.
         if (k === 'l') { this.openLog(); return true; }
         if (k === 'd') { this.showDetails(); return true; }
+        // `gh` — "go hide": every amount pixelated on this device, or back.
+        if (k === 'h') { this.toggleValues(); return true; }
         // `gp` — "go preview": the g-prefix spelling of `P`, beside gl / gd.
         if (k === 'p') { this.openCarousel(); return true; }
         // `gs` — this month's manual order, copied to other months: the
@@ -4388,6 +4416,17 @@ function ledger() {
       f.action = url;
       document.body.appendChild(f);
       f.submit();
+    },
+
+    /// `gh` and the statusline eye. Hiding is visual state, so the page flips
+    /// at once and asks nobody; the POST only sets the device's `ffm.hide`
+    /// cookie, so the next render is already hidden. Quiet — no loader for a
+    /// write nothing on screen waits for. The statusline's words are the
+    /// server's, on the answer.
+    toggleValues() {
+      const on = !document.documentElement.hasAttribute('data-hide');
+      document.documentElement.toggleAttribute('data-hide', on);
+      this.ajax('POST', '/hide', { target: 'body', swap: 'none', values: { on: on ? '1' : '0' } }, 'none');
     },
 
     setting(url, key, value) {

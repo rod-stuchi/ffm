@@ -128,7 +128,7 @@
           first line, the months it came from dim on the second, both
           recomputing live as the basis changes — before anything is saved. -#}
       <div class="pathbox">
-        <span class="p1" x-text="estimate()"></span>
+        <span class="p1 money" x-text="estimate()"></span>
         <span class="p2" x-text="estimateFrom()"></span>
       </div>
     </div>
@@ -328,7 +328,7 @@
               </label>
             </div>
             <p class="hint bc-spans" x-show="spans && !noBarcode" x-cloak>
-              {%- if let Some(r) = spans_readback %}{{ r }}{% else %}{{ t.rule_spans_hint() }}{% endif -%}
+              {%- if let Some(r) = spans_readback %}<span class="money">{{ r }}</span>{% else %}{{ t.rule_spans_hint() }}{% endif -%}
             </p>
             <label class="bc-drop" for="rp-billfile" x-show="!noBarcode">{{ t.import_drop_replace() }}</label>
           </div>

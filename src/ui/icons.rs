@@ -57,7 +57,8 @@ pub fn svg(name: &str) -> &'static str {
         "keyboard" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>"#
         }
-        // The rule pane's PDF password: show it, and hide it again.
+        // The rule pane's PDF password: show it, and hide it again — and the
+        // statusline's eye, which does the same for every amount (`gh`).
         "eye" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>"#
         }

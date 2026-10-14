@@ -55,7 +55,7 @@
       <span class="hp">{{ h.label }}</span>
       <span class="hm">{{ h.member }}</span>
       <b class="ht">{{ h.title }}</b>
-      <span class="ha {% if h.is_income %}pos{% endif %}">{{ h.amount }}</span>
+      <span class="ha money {% if h.is_income %}pos{% endif %}">{{ h.amount }}</span>
     </a>
     {%- endfor %}
     {%- endif %}

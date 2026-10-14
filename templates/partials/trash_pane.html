@@ -78,7 +78,7 @@
         {%- endif %}
         <b class="ht">{{ it.title }}{% if let Some(f) = it.files %} <i class="tf">{{ f }}</i>{% endif %}</b>
         <span class="tw">{{ it.when }}</span>
-        <span class="ha {% if it.is_income %}pos{% endif %}">{{ it.amount }}</span>
+        <span class="ha money {% if it.is_income %}pos{% endif %}">{{ it.amount }}</span>
       </label>
       {%- endfor %}
       </div>

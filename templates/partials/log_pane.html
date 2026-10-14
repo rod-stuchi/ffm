@@ -69,9 +69,9 @@
         {%- for f in e.fields %}
         <div class="logfield">
           <span class="lf">{{ f.label }}</span>
-          <span class="lo">{{ f.old }}</span>
+          <span class="lo{% if f.money %} money{% endif %}">{{ f.old }}</span>
           <span class="lsep">→</span>
-          <span class="ln">{{ f.new }}</span>
+          <span class="ln{% if f.money %} money{% endif %}">{{ f.new }}</span>
         </div>
         {%- endfor %}
       </div>

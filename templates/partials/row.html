@@ -138,7 +138,7 @@
 
     {#- amount + delta -#}
     <div class="amt">
-      <div class="v{% if v.amount_income %} is-income{% endif %}{% if v.amount_estimated %} is-estimated{% endif %}{% if v.amount_placeholder %} is-placeholder{% endif %}">
+      <div class="v money{% if v.amount_income %} is-income{% endif %}{% if v.amount_estimated %} is-estimated{% endif %}{% if v.amount_placeholder %} is-placeholder{% endif %}">
         {%- if v.amount_income %}+ {% endif -%}{{ v.amount }}
       </div>
       {%- if let Some(d) = v.delta -%}

@@ -88,6 +88,10 @@ pub fn router(state: AppState) -> Router {
     let guarded = Router::new()
         .route("/logout", post(auth::logout))
         .route("/preview", post(auth::toggle_preview))
+        // `gh` / the statusline eye — money pixelated on this device. A
+        // cookie, like light/dark, but behind the guard: only a signed-in
+        // page has money to hide.
+        .route("/hide", post(auth::set_hide))
         // Every mutation in the app goes through one response shape: a row
         // fragment, or an error row carrying Try Again. See web::tx.
         .route("/tx", post(tx::add))
