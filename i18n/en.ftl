@@ -428,6 +428,9 @@ household-assistant-ready = { $name } · ready
 household-assistant-installed = { $name } · installed
 household-assistant-not-found = { $name } is not installed on this server
 household-assistant-logged-out = { $name } is installed but not logged in — run `{ $login }` on the server
+household-trash = Trash
+household-trash-keep = Days a removed file is kept
+household-trash-keep-hint = after that, :prune offers it for removal for good — it still asks first · 0 keeps every file forever
 household-new-members = For new members
 household-new-members-note = Copied into each new member's own settings when they join. Nobody's current settings change.
 profile-use-household = Use the household's defaults
@@ -488,7 +491,7 @@ command-about-lang = your language — words only, never dates or money
 command-about-grep = search every month — bare, the last search again
 command-about-trash = deleted rows and removed files, to bring back
 command-about-order = copy this month's order to other months
-command-about-prune = duplicate files — remove the copies in the trash
+command-about-prune = duplicate files, and files in the trash longer than the household keeps them — remove them for good
 command-about-household = the household's settings
 command-about-members = members and invite links
 command-about-invite = a new invite link
@@ -579,6 +582,7 @@ log-note-found-by-hand = found on disk — filed by hand
 log-note-removed-by-hand = removed from disk by hand
 log-note-refiled = re-filed where its row now points
 log-note-pruned = removed for good — a duplicate kept elsewhere
+log-note-expired = removed for good — kept in the trash past its time
 log-note-order-copied = order copied to other months
 log-note-order-from = order copied from { $period }
 log-note-order-from-undone = order copied from { $period } — undone
@@ -1045,32 +1049,34 @@ live-under-edit = this row's files changed on disk — Esc to see them
 
 ## Duplicate files — :prune
 
-prune-title = Duplicates
-prune-count = { $n ->
-        [one] 1 group
-       *[other] { $n } groups
-    } · { $size } can go
+prune-title = Prune the trash
+prune-count = { $size } can go
 prune-group = { $hash } · { $n } copies · { $size }
-prune-empty = No two files in the vault are the same. Nothing to prune.
-prune-hint = Only copies in a trash folder can be checked — what is live stays · x or click to check · X the group · gx all · Enter removes
+prune-empty = No two files in the vault are the same, and nothing has been in the trash longer than the household keeps it. Nothing to prune.
+prune-hint = Only files in a trash folder can be checked — what is live stays · x or click to check · X the group · gx all · Enter removes
 prune-note = Each copy here has the same bytes as one that stays, so removing it loses nothing. It is removed from the disk for good: not to the trash, and u cannot bring it back.
 prune-live = live · { $row }
 prune-live-unknown = live · on disk, not on record
 prune-trash = trash · { $row } · deleted { $day }
 prune-trash-unknown = trash · not on record
+prune-expired-group = { $n ->
+        [one] 1 file
+       *[other] { $n } files
+    } in the trash over { $days } days · { $size }
+prune-expired-note = Kept in the trash longer than the household keeps removed files — the number of days is set in :household. There is no other copy: removing one loses it.
 prune-remove = Remove
-prune-confirm = Remove the checked copies for good?
-prune-confirm-body = Every one has the same bytes as a file that stays. They do not go to the trash — they leave the disk, and u cannot bring them back.
+prune-confirm = Remove the checked files for good?
+prune-confirm-body = They do not go to the trash — they leave the disk, and u cannot bring them back.
 prune-confirm-yes = Remove for good
-prune-nothing-picked = nothing checked — x or click a copy first
+prune-nothing-picked = nothing checked — x or click a file first
 prune-done = removed { $n ->
-        [one] 1 copy
-       *[other] { $n } copies
+        [one] 1 file
+       *[other] { $n } files
     } · { $size } freed
-prune-not-in-trash = { $path } is not in a trash folder — only a copy there can be removed
-prune-not-a-duplicate = { $path } is no longer a copy of anything — the list was out of date, look again
+prune-not-in-trash = { $path } is not in a trash folder — only a file there can be removed
 prune-last-copy = every copy of { $path } is checked — keep one
-prune-failed = could not remove every copy — the list shows what is left
+prune-not-prunable = { $path } is no longer a copy of anything, nor older than the trash keeps files — the list was out of date, look again
+prune-failed = could not remove every file — the list shows what is left
 
 ## The totals' words — lowercase; the app bar and the picker uppercase them
 

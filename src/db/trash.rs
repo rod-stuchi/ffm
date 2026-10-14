@@ -78,7 +78,7 @@ pub async fn list(
                      -- A retired copy is not coming back with the row.
                      AND NOT EXISTS (SELECT 1 FROM change x
                                      WHERE x.entity = 'file' AND x.entity_id = r.id
-                                       AND x.action = 'file_unlink' AND x.note IN (?4, ?5))
+                                       AND x.action = 'file_unlink' AND x.note IN (?4, ?5, ?6))
                   ) AS "files!: i64"
            FROM transactions t
            JOIN members m ON m.id = t.member_id
@@ -92,6 +92,7 @@ pub async fn list(
         fetch,
         crate::services::receipts::RETIRED[0],
         crate::services::receipts::RETIRED[1],
+        crate::services::receipts::RETIRED[2],
     )
     .fetch_all(pool)
     .await?;
@@ -116,10 +117,11 @@ pub async fn list(
              AND (t.member_id = ?1 OR ?2)
              -- A retired copy can never come back here (`receipts::RETIRED`):
              -- a bill now on another row, whose file stays in `.delete/` and is
-             -- just no longer offered, or a duplicate `:prune` removed.
+             -- just no longer offered, or a file `:prune` removed — a
+             -- duplicate, or one kept past the household's time.
              AND NOT EXISTS (SELECT 1 FROM change x
                              WHERE x.entity = 'file' AND x.entity_id = r.id
-                               AND x.action = 'file_unlink' AND x.note IN (?4, ?6))
+                               AND x.action = 'file_unlink' AND x.note IN (?4, ?6, ?7))
              -- Nor a file deleted by hand: it left the vault without
              -- passing through the trash, so there is nothing to restore.
              AND NOT EXISTS (SELECT 1 FROM change x
@@ -133,6 +135,7 @@ pub async fn list(
         crate::services::receipts::RETIRED[0],
         crate::services::receipts::REMOVED_BY_HAND,
         crate::services::receipts::RETIRED[1],
+        crate::services::receipts::RETIRED[2],
     )
     .fetch_all(pool)
     .await?;

@@ -1,6 +1,8 @@
 //! `:prune` — byte-identical files in the vault, and removing the trash's
 //! copies of them: only from the trash, never the last copy, and a pruned
-//! copy is retired like a bill that moved to another row.
+//! copy is retired like a bill that moved to another row. And files kept in
+//! the trash longer than the household keeps them (`trash_keep_days`),
+//! counted from when they were removed.
 
 mod common;
 
@@ -125,7 +127,7 @@ async fn a_trashed_copy_of_a_live_file_is_found_and_pruned() {
     let (me, tx) = bill(&pool).await;
     let copy = replaced_twice(&pool, &root, me, tx).await;
 
-    let groups = prune::scan(&pool, &root).await.unwrap();
+    let groups = prune::scan(&pool, &root).await.unwrap().groups;
     assert_eq!(groups.len(), 1);
     let g = &groups[0];
     assert!(g.prunable());
@@ -186,7 +188,7 @@ async fn only_the_trash_is_pruned_and_never_the_last_copy() {
     // Noise the scan must not count.
     put(&root, "rodrigo/a/2026/.DS_Store", b"live twice");
 
-    let groups = prune::scan(&pool, &root).await.unwrap();
+    let groups = prune::scan(&pool, &root).await.unwrap().groups;
     assert_eq!(groups.len(), 2);
     // A group with something to prune comes first.
     assert!(groups[0].prunable() && !groups[1].prunable());
@@ -229,4 +231,185 @@ async fn only_the_trash_is_pruned_and_never_the_last_copy() {
     assert_eq!(entity_id, 0);
     // The folder the removal emptied goes with it.
     assert!(!root.join("rodrigo/.delete/x").exists());
+}
+
+/// One receipt filed and then removed — a single file in the trash, with no
+/// duplicate anywhere — marked as removed `days` ago. Its receipt id and its
+/// path in the trash.
+async fn removed_days_ago(
+    pool: &SqlitePool,
+    root: &Path,
+    me: i64,
+    tx: i64,
+    days: i64,
+) -> (i64, String) {
+    let (slot, _) = receipts::slot_of(pool, tx).await.unwrap().unwrap();
+    receipts::store(
+        pool,
+        root,
+        Actor::User(me),
+        &slot,
+        Kind::Receipt,
+        "comprovante.pdf",
+        b"%PDF only copy",
+    )
+    .await
+    .unwrap();
+    receipts::soft_delete(
+        pool,
+        root,
+        Actor::User(me),
+        &slot,
+        Kind::Receipt,
+        "manual",
+        None,
+    )
+    .await
+    .unwrap();
+    let id: i64 = sqlx::query_scalar("SELECT id FROM receipts WHERE deleted_at IS NOT NULL")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let when = (ffm::clock::now() - chrono::Duration::days(days))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    sqlx::query("UPDATE receipts SET deleted_at = ?1 WHERE id = ?2")
+        .bind(&when)
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+    let found = prune::scan(pool, root).await.unwrap();
+    let rel = found
+        .expired
+        .first()
+        .map(|e| e.rel.clone())
+        .unwrap_or_default();
+    (id, rel)
+}
+
+#[tokio::test]
+async fn a_file_in_the_trash_past_the_households_time_is_offered_and_removed() {
+    let pool = pool().await;
+    let root = vault();
+    let (me, tx) = bill(&pool).await;
+    let (id, rel) = removed_days_ago(&pool, &root, me, tx, 91).await;
+
+    let found = prune::scan(&pool, &root).await.unwrap();
+    assert!(found.groups.is_empty(), "it has no duplicate");
+    assert_eq!(found.keep_days, 90);
+    assert_eq!(found.expired.len(), 1);
+    assert!(rel.starts_with("rodrigo/.delete/"), "{rel}");
+    assert_eq!(found.expired[0].record.receipt_id, id);
+
+    let done = prune::prune(&pool, &root, me, std::slice::from_ref(&rel))
+        .await
+        .unwrap();
+    assert_eq!(done.files, 1);
+    assert!(!root.join(&rel).exists(), "it left the disk");
+
+    // Logged as a retirement, noted as expired rather than as a duplicate.
+    let (action, entity_id): (String, i64) =
+        sqlx::query_as("SELECT action, entity_id FROM change WHERE note = ?1")
+            .bind(prune::EXPIRED)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!((action.as_str(), entity_id), ("file_unlink", id));
+
+    // Retired: the trash no longer offers it, and a restore refuses it.
+    let (items, _) = trash::list(&pool, Viewer::new(me, true), 50).await.unwrap();
+    assert!(items.is_empty(), "an expired file is not in the trash");
+    assert!(
+        !receipts::restore(&pool, &root, Actor::User(me), id, None)
+            .await
+            .unwrap(),
+        "an expired file cannot be restored"
+    );
+    assert!(prune::scan(&pool, &root).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_file_removed_recently_is_kept_and_refused() {
+    let pool = pool().await;
+    let root = vault();
+    let (me, tx) = bill(&pool).await;
+    removed_days_ago(&pool, &root, me, tx, 30).await;
+
+    let found = prune::scan(&pool, &root).await.unwrap();
+    assert!(
+        found.expired.is_empty(),
+        "30 days is inside the household's 90"
+    );
+    let rel = fd_trash(&root);
+    assert!(matches!(
+        prune::prune(&pool, &root, me, std::slice::from_ref(&rel)).await,
+        Err(PruneError::Refused(Refusal::NotPrunable(_)))
+    ));
+    assert!(root.join(&rel).exists(), "a refused pick stays");
+}
+
+#[tokio::test]
+async fn zero_days_keeps_every_file_forever() {
+    let pool = pool().await;
+    let root = vault();
+    let (me, tx) = bill(&pool).await;
+    removed_days_ago(&pool, &root, me, tx, 400).await;
+    sqlx::query("UPDATE household_settings SET trash_keep_days = 0")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let found = prune::scan(&pool, &root).await.unwrap();
+    assert_eq!(found.keep_days, 0);
+    assert!(found.expired.is_empty(), "0 offers nothing by age");
+    let rel = fd_trash(&root);
+    assert!(matches!(
+        prune::prune(&pool, &root, me, std::slice::from_ref(&rel)).await,
+        Err(PruneError::Refused(Refusal::NotPrunable(_)))
+    ));
+}
+
+#[tokio::test]
+async fn an_old_duplicate_is_pruned_as_a_duplicate() {
+    let pool = pool().await;
+    let root = vault();
+    let (me, tx) = bill(&pool).await;
+    let copy = replaced_twice(&pool, &root, me, tx).await;
+    sqlx::query("UPDATE receipts SET deleted_at = '2025-01-01T00:00:00Z' WHERE id = ?1")
+        .bind(copy)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Listed once, in its group: there it goes with no bytes lost, which is
+    // the better reason.
+    let found = prune::scan(&pool, &root).await.unwrap();
+    assert_eq!(found.groups.len(), 1);
+    assert!(found.expired.is_empty());
+    let rel = found.groups[0].copies[1].rel.clone();
+    prune::prune(&pool, &root, me, &[rel]).await.unwrap();
+    let note: String = sqlx::query_scalar(
+        "SELECT note FROM change WHERE action = 'file_unlink' ORDER BY id DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(note, prune::PRUNED);
+}
+
+/// The one file in the member's trash, relative to the vault.
+fn fd_trash(root: &Path) -> String {
+    walkdir::WalkDir::new(root.join("rodrigo/.delete"))
+        .into_iter()
+        .flatten()
+        .find(|e| e.file_type().is_file())
+        .map(|e| {
+            e.path()
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .expect("a file in the trash")
 }

@@ -309,6 +309,13 @@ fn gap_value(value: &str) -> Result<i64, Invalid> {
     in_range("layout.gap", value, 0, 64)
 }
 
+/// Days a removed file is kept before `:prune` offers it. 0 is "forever" —
+/// what the app did before there was a limit — and ten years is the most: a
+/// number past it is a typo, not a policy. The schema's CHECK says the same.
+fn trash_keep_value(value: &str) -> Result<i64, Invalid> {
+    in_range("trash.keep_days", value, 0, 3650)
+}
+
 /// Writes one member setting, validated.
 ///
 /// The value arrives as text because a form sends text; it leaves as the right
@@ -549,6 +556,9 @@ pub enum HouseholdKey {
     DefaultDensity,
     /// Which CLI on the server teaches a rule how to read its bills.
     Assistant,
+    /// How many days a removed file stays in the trash before `:prune`
+    /// offers it for removal for good; 0 keeps it forever.
+    TrashKeepDays,
 }
 
 impl HouseholdKey {
@@ -567,6 +577,7 @@ impl HouseholdKey {
             "default_layout_gap" => HouseholdKey::DefaultGap,
             "default_density" => HouseholdKey::DefaultDensity,
             "assistant" => HouseholdKey::Assistant,
+            "trash_keep_days" => HouseholdKey::TrashKeepDays,
             _ => return None,
         })
     }
@@ -584,6 +595,8 @@ impl HouseholdKey {
                 | HouseholdKey::DefaultMaxWidth
                 | HouseholdKey::DefaultGap
                 | HouseholdKey::DefaultDensity
+                // Read by `:prune` when it runs, and by nothing on screen.
+                | HouseholdKey::TrashKeepDays
         )
     }
 }
@@ -704,6 +717,20 @@ pub async fn assistant(pool: &SqlitePool) -> crate::services::assistant::Provide
     .unwrap_or(Provider::None)
 }
 
+/// How long a removed file stays in the trash before `:prune` offers it for
+/// removal for good, in days; 0 keeps it forever. 90 when the row is missing —
+/// the column's own default.
+pub async fn trash_keep_days(pool: &SqlitePool) -> i64 {
+    sqlx::query_scalar!(
+        r#"SELECT trash_keep_days AS "days!: i64" FROM household_settings WHERE id = 1"#
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(90)
+}
+
 /// Writes one household setting. **Admin only** — enforced by the caller,
 /// because "may this viewer" is a question about the session, not about the
 /// value.
@@ -810,6 +837,17 @@ pub async fn set_household(
             let v = gap_value(value)?;
             sqlx::query!("UPDATE household_settings SET default_layout_gap = ?1, updated_at = ?2 WHERE id = 1", v, at)
                 .execute(pool).await.map_err(db)?;
+        }
+        HouseholdKey::TrashKeepDays => {
+            let v = trash_keep_value(value)?;
+            sqlx::query!(
+                "UPDATE household_settings SET trash_keep_days = ?1, updated_at = ?2 WHERE id = 1",
+                v,
+                at
+            )
+            .execute(pool)
+            .await
+            .map_err(db)?;
         }
         HouseholdKey::Assistant => {
             let v = crate::services::assistant::Provider::parse(value)

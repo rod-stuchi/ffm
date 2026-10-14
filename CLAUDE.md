@@ -1028,6 +1028,14 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   server against a fresh scan, never the last copy of a group, confirmed with
   `y`, and logged as a retirement (`prune::PRUNED`) that the trash, `u` and
   every restore leave alone. See `design/spec.md`'s Pruning duplicates.
+  **And a file in the trash longer than the household keeps them** —
+  `household_settings.trash_keep_days` (0020), set in `:household`, 90 by
+  default, 0 forever — is offered too, duplicate or not. Here bytes *are*
+  lost, on purpose: the trash used to only grow. So the age counts from when
+  the file was removed (`receipts.deleted_at`, never the bill's month), a
+  file with no record is never offered by age, nothing goes but at an admin's
+  `y`, and it is retired as `prune::EXPIRED` — `receipts::RETIRED` now has
+  three notes, and every query that reads it takes all three.
 - **Deleting a rule leaves its occurrences as orphaned bills** — never
   re-parented, never cleared. They keep `rule_id` (the change log and the
   files still need it), their files and their tracked status, because the

@@ -1112,7 +1112,7 @@ order, in the month on screen, to other months of the same year.
 | `:` | open the command bar |
 | `:grep vinho` | search every month — a result list, not a filter over this one · bare `:grep` reopens the last search |
 | `:trash` | deleted rows and removed files, to bring back — the same pane `Ctrl-u` opens |
-| `:prune` | admin only — byte-identical files in the vault; remove the copies in the trash, for good |
+| `:prune` | admin only — byte-identical files in the vault, and files in the trash longer than the household keeps them; remove them for good |
 | `:sort date` | row order: manual · name · amount · date |
 | `:order` | copy this month's manual order to other months — the same drawer `gs` opens |
 | `:group bucket` | group by category · `:group none` to flatten |
@@ -2637,6 +2637,31 @@ checks.
 - **Folders the removal empties go with it**, as they do when a file moves
   into the trash.
 
+#### Past the household's time in the trash
+
+Nothing else ever left `.delete/`, so the trash only grew. A file removed
+longer ago than `household_settings.trash_keep_days` (migration 0020) is
+offered too, duplicate or not.
+
+- **A household setting**, in `:household`'s *Trash* section: *Days a removed
+  file is kept*, 90 by default, 0 to 3650. **0 keeps every file forever** —
+  what the app did before there was a limit.
+- **Counted from when the file was removed** (`receipts.deleted_at`, read
+  against `clock::now`), never from its bill's month or the file's mtime: a
+  2024 bill removed yesterday gets its full 90 days. A file in `.delete/` the
+  app has no record of is offered only as a duplicate, never by age.
+- **Here bytes are lost, on purpose**, so it is never automatic: the files
+  are one more group in the same list, *3 files in the trash over 90 days ·
+  4,3 MB*, checked and removed with the same keys, and the same `y`. The
+  server re-reads the setting and the dates against a fresh scan before
+  anything goes.
+- **A file that is also a duplicate stays in its group**, where it goes with
+  no bytes lost — the better reason.
+- **It is retired** like a pruned copy: a `file_unlink` noted
+  `prune::EXPIRED` (*removed for good — kept in the trash past its time*),
+  so the trash, `u` and every restore leave it alone. A deleted row whose
+  files expired comes back without them.
+
 ### Extensions
 
 Same closed, case-insensitive set as before: `pdf`, `jpg`, `png`, `txt`. The
@@ -3368,6 +3393,10 @@ default_layout_min_width       int
 default_layout_max_width       int
 default_layout_gap             int
 default_density                text  -- "default" | "comfortable" | "compact" (0011)
+
+-- How long a removed file stays in the trash before :prune offers it for
+-- removal for good (0020). 0 keeps it forever; at most 3650.
+trash_keep_days                int   -- 90 by default
 ```
 
 **The household seeds a new member's palette and layout; it never overrides

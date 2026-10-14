@@ -389,6 +389,9 @@ household-assistant-ready = { $name } · pronto
 household-assistant-installed = { $name } · instalado
 household-assistant-not-found = { $name } não está instalado neste servidor
 household-assistant-logged-out = { $name } está instalado mas sem login — rode `{ $login }` no servidor
+household-trash = Lixeira
+household-trash-keep = Dias que um arquivo removido é guardado
+household-trash-keep-hint = depois disso, :prune o oferece para remover de vez — ainda pergunta antes · 0 guarda todos para sempre
 household-new-members = Para novos membros
 household-new-members-note = Copiado para as configurações de cada novo membro quando ele entra. As configurações de quem já está aqui não mudam.
 profile-use-household = Usar os padrões da casa
@@ -447,7 +450,7 @@ command-about-lang = seu idioma — só as palavras, nunca datas ou dinheiro
 command-about-grep = buscar em todos os meses — sozinho, repete a última busca
 command-about-trash = linhas apagadas e arquivos removidos, para trazer de volta
 command-about-order = copiar a ordem deste mês para outros meses
-command-about-prune = arquivos duplicados — remover as cópias na lixeira
+command-about-prune = arquivos duplicados, e os que estão na lixeira há mais tempo do que a casa guarda — remover de vez
 command-about-household = as configurações da casa
 command-about-members = membros e links de convite
 command-about-invite = um novo link de convite
@@ -538,6 +541,7 @@ log-note-found-by-hand = encontrado no disco — arquivado à mão
 log-note-removed-by-hand = removido do disco à mão
 log-note-refiled = rearquivado onde a linha aponta agora
 log-note-pruned = removido de vez — uma cópia idêntica ficou em outro lugar
+log-note-expired = removido de vez — ficou na lixeira além do prazo
 log-note-order-copied = ordem copiada para outros meses
 log-note-order-from = ordem copiada de { $period }
 log-note-order-from-undone = ordem copiada de { $period } — desfeito
@@ -1010,32 +1014,34 @@ live-under-edit = os arquivos desta linha mudaram no disco — Esc para vê-los
 
 ## Duplicate files — :prune
 
-prune-title = Duplicados
-prune-count = { $n ->
-        [one] 1 grupo
-       *[other] { $n } grupos
-    } · { $size } podem sair
+prune-title = Limpar a lixeira
+prune-count = { $size } podem sair
 prune-group = { $hash } · { $n } cópias · { $size }
-prune-empty = Nenhum arquivo do cofre se repete. Nada para limpar.
-prune-hint = Só cópias numa lixeira podem ser marcadas — o que está em uso fica · x ou clique para marcar · X o grupo · gx tudo · Enter remove
+prune-empty = Nenhum arquivo do cofre se repete, e nada está na lixeira há mais tempo do que a casa guarda. Nada para limpar.
+prune-hint = Só arquivos numa lixeira podem ser marcados — o que está em uso fica · x ou clique para marcar · X o grupo · gx tudo · Enter remove
 prune-note = Cada cópia aqui tem os mesmos bytes de uma que fica, então removê-la não perde nada. Ela sai do disco de vez: não vai para a lixeira, e u não a traz de volta.
 prune-live = em uso · { $row }
 prune-live-unknown = em uso · no disco, sem registro
 prune-trash = lixeira · { $row } · excluído em { $day }
 prune-trash-unknown = lixeira · sem registro
+prune-expired-group = { $n ->
+        [one] 1 arquivo
+       *[other] { $n } arquivos
+    } na lixeira há mais de { $days } dias · { $size }
+prune-expired-note = Na lixeira há mais tempo do que a casa guarda arquivos removidos — o número de dias fica em :household. Não há outra cópia: removê-lo o perde.
 prune-remove = Remover
-prune-confirm = Remover de vez as cópias marcadas?
-prune-confirm-body = Todas têm os mesmos bytes de um arquivo que fica. Elas não vão para a lixeira — saem do disco, e u não as traz de volta.
+prune-confirm = Remover de vez os arquivos marcados?
+prune-confirm-body = Eles não vão para a lixeira — saem do disco, e u não os traz de volta.
 prune-confirm-yes = Remover de vez
-prune-nothing-picked = nada marcado — x ou clique numa cópia antes
+prune-nothing-picked = nada marcado — x ou clique num arquivo antes
 prune-done = { $n ->
-        [one] 1 cópia removida
-       *[other] { $n } cópias removidas
+        [one] 1 arquivo removido
+       *[other] { $n } arquivos removidos
     } · { $size } liberados
-prune-not-in-trash = { $path } não está numa lixeira — só uma cópia ali pode ser removida
-prune-not-a-duplicate = { $path } não é mais cópia de nada — a lista estava desatualizada, veja de novo
+prune-not-in-trash = { $path } não está numa lixeira — só um arquivo ali pode ser removido
 prune-last-copy = todas as cópias de { $path } estão marcadas — deixe uma
-prune-failed = não foi possível remover todas as cópias — a lista mostra o que restou
+prune-not-prunable = { $path } não é mais cópia de nada, nem está na lixeira há mais tempo do que ela guarda — a lista estava desatualizada, veja de novo
+prune-failed = não foi possível remover todos os arquivos — a lista mostra o que restou
 
 ## The totals' words — lowercase; the app bar and the picker uppercase them
 

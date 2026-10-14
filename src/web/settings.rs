@@ -401,6 +401,9 @@ struct HouseholdPane {
     /// can run it right now.
     assistants: Vec<Choice>,
     assistant_status: String,
+    /// Days a removed file stays in the trash before `:prune` offers it for
+    /// removal for good; 0 keeps it forever.
+    trash_keep_days: i64,
     db_path: String,
     receipts_root: String,
     backup_dir: String,
@@ -468,6 +471,7 @@ pub async fn household(State(st): State<AppState>, auth: Auth) -> Response {
             })
             .collect(),
         assistant_status: assistant_status(&t, provider, status),
+        trash_keep_days: settings::trash_keep_days(&st.pool).await,
         themes: swatches(d.theme),
         panes: pane_choices(&d.panes),
         min_split: d.min_split,
@@ -902,6 +906,7 @@ fn household_label(t: &Catalog, key: HouseholdKey) -> String {
         HouseholdKey::DefaultGap => t.profile_gap(),
         HouseholdKey::DefaultDensity => t.profile_density(),
         HouseholdKey::Assistant => t.household_assistant(),
+        HouseholdKey::TrashKeepDays => t.household_trash_keep(),
     }
     .to_string()
 }

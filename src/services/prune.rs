@@ -20,6 +20,15 @@
 //!   trash, `u` and every restore leave alone exactly as they leave a
 //!   [`receipts::MOVED`] copy alone. A copy the app has no record of is logged
 //!   too, with `entity_id = 0` (no `receipts` row has id 0) and its path.
+//!
+//! **And a file kept longer than the household keeps them** —
+//! `household_settings.trash_keep_days`, 90 by default — is offered too,
+//! duplicate or not. Here bytes ARE lost, deliberately: the trash used to only
+//! grow. So it is counted from when the file was removed
+//! (`receipts.deleted_at`, never the bill's month or the file's mtime), a file
+//! the app has no record of is never offered by age, nothing goes but at an
+//! admin's `y`, and 0 keeps everything forever. It is retired like a
+//! duplicate, noted [`EXPIRED`].
 
 use crate::db::changes::{Actor, Change, FileAction, Value};
 use crate::domain::period::Period;
@@ -31,6 +40,10 @@ use std::path::{Component, Path};
 
 /// The note on the `file_unlink` that records a pruned copy.
 pub const PRUNED: &str = "removed for good — a duplicate kept elsewhere";
+
+/// The note on the `file_unlink` that records a file removed because it was
+/// in the trash longer than the household keeps them.
+pub const EXPIRED: &str = "removed for good — kept in the trash past its time";
 
 /// One file in a group.
 #[derive(Clone, Debug)]
@@ -81,9 +94,40 @@ impl Group {
     }
 }
 
-/// Every group of two or more identical files under `root`: groups with a
-/// copy in the trash first, then by the space their extra copies take.
-pub async fn scan(pool: &SqlitePool, root: &Path) -> io::Result<Vec<Group>> {
+/// A file in the trash longer than the household keeps them, with no
+/// duplicate — one with a duplicate is in its [`Group`], where it goes with
+/// no bytes lost.
+#[derive(Clone, Debug)]
+pub struct Expired {
+    /// Relative to the vault, `/`-separated.
+    pub rel: String,
+    pub size: u64,
+    pub record: Record,
+}
+
+/// What `:prune` can offer: duplicate groups, and files past the household's
+/// time in the trash.
+#[derive(Clone, Debug, Default)]
+pub struct Scan {
+    pub groups: Vec<Group>,
+    /// Largest first.
+    pub expired: Vec<Expired>,
+    /// `household_settings.trash_keep_days` as it was read; 0 offers nothing
+    /// by age.
+    pub keep_days: i64,
+}
+
+impl Scan {
+    pub fn is_empty(&self) -> bool {
+        self.groups.is_empty() && self.expired.is_empty()
+    }
+}
+
+/// Every group of two or more identical files under `root` — groups with a
+/// copy in the trash first, then by the space their extra copies take — and
+/// every trashed file kept longer than the household keeps them.
+pub async fn scan(pool: &SqlitePool, root: &Path) -> io::Result<Scan> {
+    let keep_days = crate::db::settings::trash_keep_days(pool).await;
     let (live, trashed) = records(pool, root).await.map_err(io::Error::other)?;
     let dir = root.to_path_buf();
     let found = tokio::task::spawn_blocking(move || identical(&dir))
@@ -115,7 +159,52 @@ pub async fn scan(pool: &SqlitePool, root: &Path) -> io::Result<Vec<Group>> {
             .then(waste(b).cmp(&waste(a)))
             .then(a.hash.cmp(&b.hash))
     });
-    Ok(groups)
+
+    let expired = past_their_time(root, &trashed, &groups, keep_days);
+    Ok(Scan {
+        groups,
+        expired,
+        keep_days,
+    })
+}
+
+/// The trashed files removed more than `keep_days` ago, by their record's
+/// `deleted_at` — stored as `%Y-%m-%dT%H:%M:%SZ`, so a string compare is a
+/// time compare. Measured with `clock::now`, so a dev server run as of
+/// another date agrees. One already in a duplicate group is left there.
+fn past_their_time(
+    root: &Path,
+    trashed: &HashMap<String, Record>,
+    groups: &[Group],
+    keep_days: i64,
+) -> Vec<Expired> {
+    if keep_days <= 0 {
+        return Vec::new();
+    }
+    let cutoff = (crate::clock::now() - chrono::Duration::days(keep_days))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    let grouped: std::collections::HashSet<&str> = groups
+        .iter()
+        .flat_map(|g| g.copies.iter().map(|c| c.rel.as_str()))
+        .collect();
+    let mut out: Vec<Expired> = trashed
+        .iter()
+        .filter(|(rel, r)| {
+            !grouped.contains(rel.as_str())
+                && r.deleted_at.as_deref().is_some_and(|d| d < cutoff.as_str())
+        })
+        .filter_map(|(rel, r)| {
+            let size = std::fs::metadata(root.join(rel)).ok()?.len();
+            Some(Expired {
+                rel: rel.clone(),
+                size,
+                record: r.clone(),
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| b.size.cmp(&a.size).then(a.rel.cmp(&b.rel)));
+    out
 }
 
 /// The disk half: walk, group by size, hash what shares a size.
@@ -230,8 +319,9 @@ async fn records(
 pub enum Refusal {
     /// Not a path in a member's trash — a live file, or one outside the vault.
     NotInTrash(String),
-    /// Gone already, or no longer a duplicate of anything.
-    NotADuplicate(String),
+    /// Gone already, no longer a duplicate of anything, and not in the trash
+    /// longer than the household keeps files.
+    NotPrunable(String),
     /// Every copy of a group was checked; one has to stay.
     LastCopy(String),
 }
@@ -261,38 +351,51 @@ pub async fn prune(
             return Err(PruneError::Refused(Refusal::NotInTrash(p.clone())));
         }
     }
-    let groups = scan(pool, root)
+    let found = scan(pool, root)
         .await
         .map_err(|e| PruneError::Io(e.to_string()))?;
 
-    // Each pick, with the group it is in and a copy of it that stays.
-    let mut plan: Vec<(&Copy, u64, String)> = Vec::new();
+    // Each pick, and why it may go: a duplicate, with a copy of it that
+    // stays; or a file past the household's time in the trash, with none.
+    let mut plan: Vec<Pick> = Vec::new();
     for p in picks {
-        let Some(group) = groups.iter().find(|g| g.copies.iter().any(|c| &c.rel == p)) else {
-            return Err(PruneError::Refused(Refusal::NotADuplicate(p.clone())));
-        };
-        let Some(kept) = group.copies.iter().find(|c| !picks.contains(&c.rel)) else {
-            return Err(PruneError::Refused(Refusal::LastCopy(p.clone())));
-        };
-        let copy = group
-            .copies
+        if plan.iter().any(|x| x.rel() == p) {
+            continue;
+        }
+        if let Some(group) = found
+            .groups
             .iter()
-            .find(|c| &c.rel == p)
-            .expect("found above");
-        if !plan.iter().any(|(c, _, _)| c.rel == copy.rel) {
-            plan.push((copy, group.size, kept.rel.clone()));
+            .find(|g| g.copies.iter().any(|c| &c.rel == p))
+        {
+            let Some(kept) = group.copies.iter().find(|c| !picks.contains(&c.rel)) else {
+                return Err(PruneError::Refused(Refusal::LastCopy(p.clone())));
+            };
+            let copy = group
+                .copies
+                .iter()
+                .find(|c| &c.rel == p)
+                .expect("found above");
+            plan.push(Pick::Duplicate {
+                copy,
+                size: group.size,
+                kept: kept.rel.clone(),
+            });
+        } else if let Some(file) = found.expired.iter().find(|e| &e.rel == p) {
+            plan.push(Pick::Expired(file));
+        } else {
+            return Err(PruneError::Refused(Refusal::NotPrunable(p.clone())));
         }
     }
 
     // The disk first, the log for what actually went: a removal that failed
     // halfway is still a record of the files that are gone.
-    let mut done: Vec<(&Copy, u64, String)> = Vec::new();
+    let mut done: Vec<Pick> = Vec::new();
     let mut failure = None;
-    for (copy, size, kept) in plan {
-        match std::fs::remove_file(root.join(&copy.rel)) {
+    for pick in plan {
+        match std::fs::remove_file(root.join(pick.rel())) {
             Ok(()) => {
-                receipts::prune_empty(root, &copy.rel);
-                done.push((copy, size, kept));
+                receipts::prune_empty(root, pick.rel());
+                done.push(pick);
             }
             Err(e) => {
                 failure = Some(e.to_string());
@@ -305,18 +408,24 @@ pub async fn prune(
         .begin()
         .await
         .map_err(|e| PruneError::Io(e.to_string()))?;
-    for (copy, _, kept) in &done {
-        let record = match &copy.place {
-            Place::Trash(r) | Place::Live(r) => r.as_ref(),
-        };
-        let mut entry = Change::file(
+    for pick in &done {
+        let record = pick.record();
+        let entry = Change::file(
             Actor::User(admin),
             FileAction::Unlink,
             record.map(|r| r.receipt_id).unwrap_or(0),
-        )
-        .note(PRUNED)
-        .diff("path", Value::path(&copy.rel), Value::Path(None))
-        .diff("kept", Value::Path(None), Value::path(kept));
+        );
+        let mut entry = match pick {
+            Pick::Duplicate { copy, kept, .. } => entry
+                .note(PRUNED)
+                .diff("path", Value::path(&copy.rel), Value::Path(None))
+                .diff("kept", Value::Path(None), Value::path(kept)),
+            Pick::Expired(file) => {
+                entry
+                    .note(EXPIRED)
+                    .diff("path", Value::path(&file.rel), Value::Path(None))
+            }
+        };
         if let Some(r) = record {
             entry = entry.from_rule(r.rule_id);
             if let Some(p) = r.period {
@@ -337,8 +446,45 @@ pub async fn prune(
     }
     Ok(Pruned {
         files: done.len(),
-        bytes: done.iter().map(|(_, size, _)| size).sum(),
+        bytes: done.iter().map(Pick::size).sum(),
     })
+}
+
+/// One file `prune` will remove, and why it may.
+enum Pick<'a> {
+    /// The same bytes as `kept`, which stays.
+    Duplicate {
+        copy: &'a Copy,
+        size: u64,
+        kept: String,
+    },
+    /// In the trash longer than the household keeps files.
+    Expired(&'a Expired),
+}
+
+impl Pick<'_> {
+    fn rel(&self) -> &str {
+        match self {
+            Pick::Duplicate { copy, .. } => &copy.rel,
+            Pick::Expired(file) => &file.rel,
+        }
+    }
+
+    fn size(&self) -> u64 {
+        match self {
+            Pick::Duplicate { size, .. } => *size,
+            Pick::Expired(file) => file.size,
+        }
+    }
+
+    fn record(&self) -> Option<&Record> {
+        match self {
+            Pick::Duplicate { copy, .. } => match &copy.place {
+                Place::Trash(r) | Place::Live(r) => r.as_ref(),
+            },
+            Pick::Expired(file) => Some(&file.record),
+        }
+    }
 }
 
 #[cfg(test)]

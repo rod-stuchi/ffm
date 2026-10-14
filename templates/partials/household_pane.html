@@ -117,6 +117,21 @@
     </form>
     <p class="hint mwide">{{ t.household_assistant_note() }}</p>
 
+    {#- How long a removed file is kept before `:prune` offers it for removal
+        for good — counted from when it was removed, never from its bill's
+        month. Nothing goes on its own: `:prune` still asks, with `y`. 0 keeps
+        every file forever, which is what the app did before. -#}
+    <div class="sect">{{ t.household_trash() }}</div>
+    <form class="setting" hx-post="/settings/household" hx-trigger="change" hx-swap="none">
+      <input type="hidden" name="key" value="trash_keep_days">
+      <label class="f">
+        <span class="k">{{ t.household_trash_keep() }}</span>
+        <input class="i mono" name="value" value="{{ trash_keep_days }}" inputmode="numeric"
+               autocomplete="off" @beforeinput="if ($event.data && /\D/.test($event.data)) $event.preventDefault()">
+        <span class="hint">{{ t.household_trash_keep_hint() }}</span>
+      </label>
+    </form>
+
     {#- What a new member's palette and layout START as. Seeded into their
         own row when they join and never read for them again, so changing one
         moves nobody's screen — which is also why these write without the

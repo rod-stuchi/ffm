@@ -1,11 +1,13 @@
-{#- `:prune` — byte-identical files in the vault, and removing the copies the
-    trash holds of them. Admin only.
+{#- `:prune` — byte-identical files in the vault and the copies the trash
+    holds of them, then the files kept in the trash longer than the household
+    keeps them (`:household`). Admin only.
 
     The one place this app removes a file from disk, so the one list that
     asks before it acts: Enter (or Remove) raises a `y`-only confirmation, the
-    same shape as `dd`'s, because `u` cannot bring these back. What is removed
-    is always an exact copy of a file that stays — the server checks that
-    again, against a fresh scan, before anything goes.
+    same shape as `dd`'s, because `u` cannot bring these back. A duplicate is
+    an exact copy of a file that stays; an expired file has no other copy, and
+    goes because the household said how long the trash keeps one. The server
+    checks both again, against a fresh scan, before anything goes.
 
     A real form, like the trash: the checked boxes are unsubmitted values, and
     only copies in a member's `.delete/` have a box at all. Names carry a `p`
@@ -97,7 +99,24 @@
       {%- endfor %}
       </div>
       {%- endfor %}
+      {%- if !groups.is_empty() %}
       <p class="notebox">{{ t.prune_note() }}</p>
+      {%- endif %}
+      {%- if let Some(x) = expired %}
+      {#- One more group, so `x`, `X` and `gx` work on it as on the others;
+          no file in it is `data-keep` — none has to stay. -#}
+      <div class="dupgroup">
+      <div class="logday prunehead">{{ x.head }}</div>
+      {%- for c in x.files %}
+      <label class="duprow is-trash">
+        <input type="checkbox" name="pick" value="{{ c.rel }}">
+        <span class="dupp">{{ c.rel }}</span>
+        <span class="dupw">{{ c.what }}</span>
+      </label>
+      {%- endfor %}
+      </div>
+      <p class="notebox">{{ t.prune_expired_note() }}</p>
+      {%- endif %}
       {%- endif %}
     </div>
 

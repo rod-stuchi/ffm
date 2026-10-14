@@ -1,10 +1,11 @@
-//! `:prune` — byte-identical files in the vault, and removing the copies the
-//! trash holds of them. Admin only; see `services::prune` for why this is the
-//! one place a file leaves the disk, and what keeps it safe.
+//! `:prune` — byte-identical files in the vault and the copies the trash holds
+//! of them, and the files kept in the trash longer than the household keeps
+//! them. Admin only; see `services::prune` for why this is the one place a
+//! file leaves the disk, and what keeps it safe.
 
 use crate::db::ledger;
 use crate::domain::money::Currency;
-use crate::services::prune::{self, Group, Place, PruneError, Record, Refusal};
+use crate::services::prune::{self, Place, PruneError, Record, Refusal, Scan};
 use crate::state::AppState;
 use crate::ui::fmt;
 use crate::ui::i18n::Catalog;
@@ -34,11 +35,23 @@ pub struct GroupView {
     pub copies: Vec<CopyView>,
 }
 
+/// The files in the trash longer than the household keeps them — one more
+/// group on the pane, so `x`, `X` and `gx` treat it as they treat the others.
+/// No copy is `keep`: none has to stay.
+pub struct ExpiredView {
+    /// `3 files in the trash over 90 days · 4,3 MB`.
+    pub head: String,
+    pub files: Vec<CopyView>,
+}
+
 #[derive(Template)]
 #[template(path = "partials/prune_pane.html")]
 pub struct PrunePane {
     pub t: Catalog,
     pub groups: Vec<GroupView>,
+    /// Absent when nothing has passed the household's time, or it keeps
+    /// everything (0).
+    pub expired: Option<ExpiredView>,
     pub count: String,
     pub empty: bool,
 }
@@ -56,15 +69,15 @@ pub async fn view(State(st): State<AppState>, auth: Auth) -> Response {
 }
 
 async fn pane(st: &AppState, auth: &Auth) -> Option<PrunePane> {
-    let groups = match prune::scan(&st.pool, &st.cfg.receipts_root).await {
-        Ok(g) => g,
+    let found = match prune::scan(&st.pool, &st.cfg.receipts_root).await {
+        Ok(s) => s,
         Err(e) => {
             tracing::error!("prune: scanning the vault: {e}");
             return None;
         }
     };
     let currency = currency(st).await;
-    Some(build(auth.catalog(), &groups, currency))
+    Some(build(auth.catalog(), &found, currency))
 }
 
 async fn currency(st: &AppState) -> Currency {
@@ -78,7 +91,8 @@ async fn currency(st: &AppState) -> Currency {
 
 /// The pane from what the scan found — pure, so it can be rendered from
 /// fixtures as well as from a vault.
-pub fn build(t: Catalog, groups: &[Group], currency: Currency) -> PrunePane {
+pub fn build(t: Catalog, found: &Scan, currency: Currency) -> PrunePane {
+    let groups = &found.groups;
     // What could go without losing a byte: every trashed copy, except that a
     // group made only of trashed copies has to keep one.
     let freeable: u64 = groups
@@ -87,7 +101,8 @@ pub fn build(t: Catalog, groups: &[Group], currency: Currency) -> PrunePane {
             let trashed = g.copies.iter().filter(|c| c.in_trash()).count();
             g.size * trashed.min(g.copies.len() - 1) as u64
         })
-        .sum();
+        .sum::<u64>()
+        + found.expired.iter().map(|e| e.size).sum::<u64>();
     let views = groups
         .iter()
         .map(|g| GroupView {
@@ -111,10 +126,28 @@ pub fn build(t: Catalog, groups: &[Group], currency: Currency) -> PrunePane {
             },
         })
         .collect();
+    let expired = (!found.expired.is_empty()).then(|| ExpiredView {
+        head: t.prune_expired_group(
+            found.expired.len() as i64,
+            &found.keep_days.to_string(),
+            &fmt::bytes(found.expired.iter().map(|e| e.size).sum(), currency),
+        ),
+        files: found
+            .expired
+            .iter()
+            .map(|e| CopyView {
+                rel: e.rel.clone(),
+                in_trash: true,
+                what: what(&t, &Place::Trash(Some(e.record.clone()))),
+                keep: false,
+            })
+            .collect(),
+    });
     PrunePane {
-        count: t.prune_count(groups.len() as i64, &fmt::bytes(freeable, currency)),
-        empty: groups.is_empty(),
+        count: t.prune_count(&fmt::bytes(freeable, currency)),
+        empty: found.is_empty(),
         groups: views,
+        expired,
         t,
     }
 }
@@ -177,7 +210,7 @@ pub async fn run(
         Err(PruneError::Refused(r)) => {
             let msg = match r {
                 Refusal::NotInTrash(p) => t.prune_not_in_trash(&p),
-                Refusal::NotADuplicate(p) => t.prune_not_a_duplicate(&p),
+                Refusal::NotPrunable(p) => t.prune_not_prunable(&p),
                 Refusal::LastCopy(p) => t.prune_last_copy(&p),
             };
             return say_only(&msg, true);

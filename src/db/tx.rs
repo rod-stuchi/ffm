@@ -365,14 +365,15 @@ pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Resu
                    AND NOT EXISTS (SELECT 1 FROM change p
                                    WHERE p.id = c.undo_of AND p.note IS NOT NULL AND p.note IN (?4, ?5))
                    -- A copy retired from the trash (`receipts::RETIRED`) — its bill
-                   -- is on another row now, or `:prune` removed it as a duplicate:
+                   -- is on another row now, or `:prune` removed it — a duplicate,
+                   -- or kept past the household's time in the trash:
                    -- neither its delete nor its upload can be reversed any more, so
                    -- they are not steps at all rather than ones `u` would refuse
                    -- forever.
                    AND NOT (c.entity = 'file'
                             AND EXISTS (SELECT 1 FROM change x
                                         WHERE x.entity = 'file' AND x.entity_id = c.entity_id
-                                          AND x.action = 'file_unlink' AND x.note IN (?6, ?7)))
+                                          AND x.action = 'file_unlink' AND x.note IN (?6, ?7, ?9)))
                    -- The pane: rows in this member's ledger, or a row this pane
                    -- handed to somebody else, which is still this pane's change.
                    AND (?2 IS NULL OR t.member_id = ?2
@@ -395,6 +396,7 @@ pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Resu
         crate::services::receipts::RETIRED[0],
         crate::services::receipts::RETIRED[1],
         crate::db::order::COPIED,
+        crate::services::receipts::RETIRED[2],
     )
     .fetch_all(pool)
     .await?;

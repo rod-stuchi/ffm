@@ -421,3 +421,28 @@ async fn density_starts_comfortable_and_takes_only_its_three_values() {
     assert_eq!(member_says, household_says, "one bound, whoever writes it");
     assert_eq!(settings_of(&pool, me).await.density, "comfortable");
 }
+
+#[tokio::test]
+async fn the_trash_keeps_files_between_zero_days_and_ten_years() {
+    let pool = pool().await;
+    household(&pool).await;
+    assert_eq!(settings::trash_keep_days(&pool).await, 90, "the default");
+    for bad in ["-1", "3651", "ninety", ""] {
+        assert!(
+            settings::set_household(&pool, HouseholdKey::TrashKeepDays, bad)
+                .await
+                .is_err(),
+            "{bad:?} is refused"
+        );
+    }
+    for good in ["0", "30", "3650"] {
+        settings::set_household(&pool, HouseholdKey::TrashKeepDays, good)
+            .await
+            .unwrap();
+        assert_eq!(
+            settings::trash_keep_days(&pool).await.to_string(),
+            good,
+            "{good} is kept"
+        );
+    }
+}

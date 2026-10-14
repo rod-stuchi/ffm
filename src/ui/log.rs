@@ -250,6 +250,7 @@ pub(crate) fn note_text(note: &str, t: &Catalog) -> String {
         r::REMOVED_BY_HAND => Some(t.log_note_removed_by_hand()),
         r::REFILED => Some(t.log_note_refiled()),
         crate::services::prune::PRUNED => Some(t.log_note_pruned()),
+        crate::services::prune::EXPIRED => Some(t.log_note_expired()),
         crate::db::order::COPIED => Some(t.log_note_order_copied()),
         crate::web::import::ATTACHED_UNCONFIRMED => Some(t.log_note_attached_unconfirmed()),
         crate::db::auth::CONSOLE_RESET => Some(t.log_note_console_reset()),
