@@ -411,6 +411,8 @@ struct LedgerPage {
     group_order_needs_group: String,
     /// `X` on a flat pane — there is no group to select.
     group_select_needs_group: String,
+    /// `:profile`'s *Folds start* — the fold state a window starts from.
+    fold_collapsed: bool,
     /// The signed-in member, for the statusline's own cell. The SESSION's
     /// member, never the focused pane's — focusing somebody else's pane does
     /// not make you them.
@@ -651,6 +653,7 @@ pub async fn ledger(
             .unwrap_or_default(),
         group_order_needs_group: t.group_order_needs_group().to_string(),
         group_select_needs_group: t.group_select_needs_group().to_string(),
+        fold_collapsed: auth.settings.group_fold_default == "collapsed",
         me_name: fmt::name(&auth.session.member.name),
         version: crate::version(),
         // Whether admin powers are actually IN EFFECT, not what the row says

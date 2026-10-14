@@ -1309,7 +1309,12 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   pretending.
 - **Default fold state on load (expanded vs. collapsed) is a per-member
   setting** in `member_settings`, a radio choice, not a checkbox list, since
-  the two states are mutually exclusive.
+  the two states are mutually exclusive. It was stored and never read; it is
+  now where a window starts.
+- **Fold state survives a month change.** A fold is keyed by its bucket
+  (`data-fold`, the header's hashed id), never its place, and kept per window
+  in `sessionStorage` (`ffm.folds`); `zM`/`zR` reach buckets only other months
+  have. See `design/spec.md`'s Fold state survives a month change.
 
 ### Unresolved issues across months
 

@@ -2998,6 +2998,27 @@ household-wide setting — same reasoning as theme and line numbers: it's taste,
 not household policy, and two members can disagree about it without either being
 wrong.
 
+**It was stored and never read** — choosing *collapsed* changed nothing. It is
+now where a window starts: the page renders it, and `closed()` falls back to it.
+
+### Fold state survives a month change
+
+Closing a fold and pressing `]` used to open it again: a month change is a page
+load, and the fold state lived only in the page. Now:
+
+- **A fold is keyed by its bucket, not its place** — `data-fold`, the fold
+  header's own `{member}-{hash of the bucket}` id. It was `{member}-{index}`,
+  and the index names another bucket in another month, and after `S`.
+- **It is kept for the window**, in `sessionStorage` (`ffm.folds`), the same
+  choice `ffm.follow` and the `:grep` term made: two windows keep their own
+  folds, a reload keeps them, and a new tab starts from *Folds start*.
+- **`zM` and `zR` speak for every fold**, the buckets only another month has
+  included: they set a window-wide state and forget the folds toggled one by
+  one. A single `za`/`zo`/`zc`, a click, or a `:grep` hit opening its fold,
+  is remembered for that bucket on top of it.
+- **What decides a fold**: what was done to that bucket, else the last
+  `zM`/`zR`, else *Folds start*.
+
 ---
 
 ## Unresolved issues across months

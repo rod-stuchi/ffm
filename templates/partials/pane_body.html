@@ -15,14 +15,17 @@
     is no separate report screen: zM turns the ledger into a
     per-category summary with nothing else built. -#}
 {%- for g in p.groups %}
-<section class="fold" :class="{ 'is-closed': closed('{{ p.id }}-{{ loop.index0 }}') }">
+{#- Keyed by the bucket (`FoldSummary.id`, a hash of it), never by the
+    fold's place: the place changes from month to month and under `S`, and
+    which folds are closed is remembered across both. -#}
+<section class="fold" data-fold="{{ g.summary.id }}" :class="{ 'is-closed': closed('{{ g.summary.id }}') }">
   {#- No click handler of its own: the pane's `clickPane` puts the cursor on
       the header and then toggles it, so the index cannot go stale. -#}
   <header class="foldhead{% if g.nogut %} is-nogut{% endif %}">
     {#- Its line number, in the rows' gutter column: a header is a line the
         cursor stops on, so `4k` counts it and the numbers must too. -#}
     <span class="fgut">{{ g.gutter }}</span>
-    <span class="fmark" x-text="closed('{{ p.id }}-{{ loop.index0 }}') ? '▸' : '▾'">▾</span>
+    <span class="fmark" x-text="closed('{{ g.summary.id }}') ? '▸' : '▾'">▾</span>
     <b>{{ g.name }}</b>
     {#- The count and the ring + subtotal carry ids so a row's answer can
         swap them out of band; the header itself is never swapped, so its
@@ -31,7 +34,7 @@
     <span class="fcount" id="fcnt-{{ s.id }}">{{ s.count }}</span>
     <span class="fsum" id="fsum-{{ s.id }}">{% include "partials/fold_summary.html" %}</span>
   </header>
-  <div class="foldrows" x-show="!closed('{{ p.id }}-{{ loop.index0 }}')">
+  <div class="foldrows" x-show="!closed('{{ g.summary.id }}')">
     {%- for v in g.rows %}
     <div id="row-{{ v.id }}">{% include "partials/row.html" %}</div>
     {%- endfor %}

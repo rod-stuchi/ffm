@@ -1268,7 +1268,17 @@ function ledger() {
     // Fold state is PURE visual state — the server already rendered every row
     // and its subtotal, so folding shows or hides what is in the DOM. That is
     // exactly the division of responsibility this app draws.
+    //
+    // Keyed by bucket (`data-fold`), and kept for the window in
+    // `sessionStorage` (`ffm.folds`), so a fold closed in October is still
+    // closed in November: a month change is a page load, and this map used to
+    // start empty on every one. `keys` are folds toggled one by one; `all` is
+    // what `zM`/`zR` last said, which also reaches a bucket only another month
+    // has; `foldsClosed` is the member's *Folds start* setting, for anything
+    // neither has spoken about.
     folds: {},
+    foldsAll: null,
+    foldsClosed: {{ fold_collapsed|json|safe }},
     // Parked drafts, keyed by row id. They live HERE — on the shell, outside
     // every hx-target — because an HTMX swap destroys the Alpine state inside
     // it, and a draft that vanished with the row it belonged to would leave
@@ -3122,9 +3132,36 @@ function ledger() {
 
     // --- folds -----------------------------------------------------------
 
-    closed(id) { return !!this.folds[id]; },
+    closed(id) {
+      if (id in this.folds) return this.folds[id];
+      if (this.foldsAll !== null) return this.foldsAll;
+      return this.foldsClosed;
+    },
 
-    toggle(id) { this.folds[id] = !this.folds[id]; },
+    toggle(id) { this.setFold(id, !this.closed(id)); },
+
+    setFold(id, closed) {
+      this.folds[id] = closed;
+      this.saveFolds();
+    },
+
+    /// Per window, like `?pane=` and `ffm.follow`: two windows keep their
+    /// own folds, and a new tab starts from the member's setting.
+    saveFolds() {
+      try {
+        sessionStorage.setItem('ffm.folds', JSON.stringify({ all: this.foldsAll, keys: this.folds }));
+      } catch (_) {}
+    },
+
+    loadFolds() {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('ffm.folds') || 'null');
+        if (saved) {
+          this.foldsAll = typeof saved.all === 'boolean' ? saved.all : null;
+          this.folds = saved.keys && typeof saved.keys === 'object' ? saved.keys : {};
+        }
+      } catch (_) {}
+    },
 
     /// The fold the cursor is inside, so `za` works from a row rather than
     /// only from the header.
@@ -3137,13 +3174,11 @@ function ledger() {
       return section ? this.foldIdOf(section) : null;
     },
 
-    /// A fold's key in `this.folds` — the same `{rowsId}-{index}` the template
-    /// writes, derived from the section itself so the two cannot drift.
+    /// A fold's key in `this.folds`: its bucket's id, which the template
+    /// writes on the section. It was `{member}-{index}` — the fold's place,
+    /// which names another bucket in another month or after `S`.
     foldIdOf(section) {
-      const rows = section.closest('.rows');
-      if (!rows) return null;
-      return rows.id.slice(5)
-             + '-' + Array.from(rows.querySelectorAll('.fold')).indexOf(section);
+      return section.dataset.fold || null;
     },
 
     fold(which) {
@@ -3151,13 +3186,17 @@ function ledger() {
       if (!id) return;
       const anchor = this.anchorCursor();
       if (which === 'a') this.toggle(id);
-      else this.folds[id] = which === 'c';
+      else this.setFold(id, which === 'c');
       this.settleCursor(anchor);
     },
 
     allFolds(closed) {
       const anchor = this.anchorCursor();
-      document.querySelectorAll('.fold').forEach(f => { this.folds[this.foldIdOf(f)] = closed; });
+      // Every fold, including the buckets only other months have: the folds
+      // toggled one by one before are forgotten, as `zM` means all of them.
+      this.foldsAll = closed;
+      this.folds = {};
+      this.saveFolds();
       this.settleCursor(anchor);
     },
 
@@ -3864,7 +3903,7 @@ function ledger() {
       const section = document.getElementById('row-' + id)?.closest('.fold');
       if (section) {
         const f = this.foldIdOf(section);
-        if (f && this.closed(f)) this.folds[f] = false;
+        if (f && this.closed(f)) this.setFold(f, false);
       }
     },
 
@@ -4986,6 +5025,8 @@ function ledger() {
     },
 
     init() {
+      // Before anything reads `closed()`: the folds this window left closed.
+      this.loadFolds();
       // A pane the live channel left alone because a row in it was open in
       // `e` is re-rendered the moment that form closes — saved, canceled or
       // parked. Not a retry timer: a background tab throttles those to one
