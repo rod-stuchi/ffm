@@ -268,6 +268,7 @@ rule-pdf-password-placeholder = só para extratos com senha
 rule-created = regra criada · { $n } mês(es) gerado(s)
 rule-saved = regra salva
 rule-moved-due = a linha deste mês agora vence em { $date }
+rule-renamed-row = a linha deste mês também foi renomeada
 files-refiled =
     { $n ->
         [one] 1 arquivo movido para a nova pasta

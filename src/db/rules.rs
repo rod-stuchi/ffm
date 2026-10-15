@@ -240,6 +240,8 @@ pub async fn edit(pool: &SqlitePool, actor: Actor, id: i64, form: &RuleForm) -> 
 pub struct Edited {
     /// This month's row followed a new due day — the date it moved to.
     pub moved_due: Option<NaiveDate>,
+    /// This month's row followed a new title.
+    pub renamed_row: bool,
 }
 
 /// [`edit`], saying what else moved. `None` when there is no such rule.
@@ -250,6 +252,10 @@ pub struct Edited {
 /// rule ending this month never showed the new day anywhere. Earlier months,
 /// and this month once paid or received, keep the date they were stamped with:
 /// a confirmed row's due date is what it was paid against.
+///
+/// **A new title follows the same rule.** It used to reach only the next
+/// materialized month, so a rename looked like it had not worked; past months,
+/// and this month once confirmed, keep the name they were recorded under.
 pub async fn edit_reporting(
     pool: &SqlitePool,
     actor: Actor,
@@ -396,10 +402,11 @@ pub async fn edit_reporting(
         entry.write(&mut tx).await?;
     }
 
-    let mut edited = Edited::default();
-    if old.due_day != form.due_day {
-        edited.moved_due = follow_due_day(&mut tx, actor, id, form.due_day).await?;
-    }
+    let follow = Follow {
+        due_day: (old.due_day != form.due_day).then_some(form.due_day),
+        title: (old.title != form.title).then_some((old.title.as_str(), form.title.as_str())),
+    };
+    let edited = follow_this_month(&mut tx, actor, id, follow).await?;
 
     tx.commit().await?;
     Ok(Some(edited))
@@ -419,20 +426,37 @@ fn password_field(entry: Change, old: &Option<String>, new: &Option<String>) -> 
     }
 }
 
-/// Restamps this month's occurrence of a rule with a new due day, unless it is
-/// confirmed: a live receipt (or payslip) for a tracked rule, the manual tick
-/// for an untracked one. Logged on the row as an `edit` of `due_date`, so `u`
-/// puts the old date back. Returns the new date when the row moved.
-async fn follow_due_day(
+/// What of a rule edit this month's row should follow.
+struct Follow<'a> {
+    /// A new due day (itself possibly none), when the day changed.
+    due_day: Option<Option<i64>>,
+    /// The old and new title, when the title changed.
+    title: Option<(&'a str, &'a str)>,
+}
+
+/// Brings this month's occurrence of a rule in line with a new due day and a
+/// new title, unless it is confirmed: a live receipt (or payslip) for a
+/// tracked rule, the manual tick for an untracked one. One `edit` on the row
+/// carries both, so one `u` puts them back.
+///
+/// The title moves only while the row still bears the rule's old one: a row
+/// renamed by hand with `e` said something about that month, and the rule's
+/// rename is not the place to undo it.
+async fn follow_this_month(
     tx: &mut Transaction<'_, Sqlite>,
     actor: Actor,
     rule_id: i64,
-    due_day: Option<i64>,
-) -> sqlx::Result<Option<NaiveDate>> {
+    follow: Follow<'_>,
+) -> sqlx::Result<Edited> {
+    let mut edited = Edited::default();
+    if follow.due_day.is_none() && follow.title.is_none() {
+        return Ok(edited);
+    }
     let period = Period::of(crate::clock::today());
     let key = period.to_string();
     let row = sqlx::query!(
-        r#"SELECT t.id AS "id!: i64", t.due_date AS "due_date: String"
+        r#"SELECT t.id AS "id!: i64", t.due_date AS "due_date: String",
+                  t.title AS "title!: String"
            FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id
            WHERE t.rule_id = ?1 AND t.period = ?2 AND t.deleted_at IS NULL
              AND NOT (CASE WHEN r.tracked = 1
@@ -446,33 +470,48 @@ async fn follow_due_day(
     )
     .fetch_optional(&mut **tx)
     .await?;
-    let Some(row) = row else { return Ok(None) };
+    let Some(row) = row else { return Ok(edited) };
 
-    let old = row
+    let old_due = row
         .due_date
         .as_deref()
         .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
-    let new = due_day
-        .and_then(|d| u32::try_from(d).ok())
-        .and_then(|d| period.due_date(d));
-    if old == new {
-        return Ok(None);
+    let new_due = match follow.due_day {
+        Some(day) => day
+            .and_then(|d| u32::try_from(d).ok())
+            .and_then(|d| period.due_date(d)),
+        None => old_due,
+    };
+    let new_title = match follow.title {
+        Some((was, is)) if row.title == was => is,
+        _ => row.title.as_str(),
+    };
+    if old_due == new_due && row.title == new_title {
+        return Ok(edited);
     }
-    let stamp = new.map(iso);
+
+    let stamp = new_due.map(iso);
     sqlx::query!(
-        "UPDATE transactions SET due_date = ?2, version = version + 1 WHERE id = ?1",
+        "UPDATE transactions SET due_date = ?2, title = ?3, version = version + 1
+         WHERE id = ?1",
         row.id,
-        stamp
+        stamp,
+        new_title
     )
     .execute(&mut **tx)
     .await?;
     Change::transaction(actor, crate::db::changes::TxAction::Edit, row.id)
         .from_rule(Some(rule_id))
         .in_period(period)
-        .diff("due_date", Value::Date(old), Value::Date(new))
+        .diff("title", Value::text(&row.title), Value::text(new_title))
+        .diff("due_date", Value::Date(old_due), Value::Date(new_due))
         .write(tx)
         .await?;
-    Ok(new)
+    if old_due != new_due {
+        edited.moved_due = new_due;
+    }
+    edited.renamed_row = row.title != new_title;
+    Ok(edited)
 }
 
 /// Marks a rule deleted. Its occurrences are left exactly as they are — they

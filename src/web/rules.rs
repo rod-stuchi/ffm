@@ -949,17 +949,16 @@ pub async fn save(
             // files belong, so they follow it — before the panes re-render,
             // which read the disk at the new path.
             let refiled = crate::web::files::refile_rule(&st, id).await;
-            // A new due day that reached this month's row says so: the row
+            // A new due day or title that reached this month's row says so: the row
             // moving is the part of the save a person sees. So do files that
             // moved, or could not.
-            let mut message = match edited.moved_due {
-                Some(d) => format!(
-                    "{} · {}",
-                    t.rule_saved(),
-                    t.rule_moved_due(&crate::ui::fmt::date(d))
-                ),
-                None => t.rule_saved().to_string(),
-            };
+            let mut message = t.rule_saved().to_string();
+            if let Some(d) = edited.moved_due {
+                message = format!("{message} · {}", t.rule_moved_due(&crate::ui::fmt::date(d)));
+            }
+            if edited.renamed_row {
+                message = format!("{message} · {}", t.rule_renamed_row());
+            }
             if let Some(note) = crate::web::files::refiled_note(&t, &refiled) {
                 message = format!("{message} · {note}");
             }

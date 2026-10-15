@@ -274,19 +274,32 @@ pub async fn pane_with_vault(
             -- They only stop claiming to recur.
             r.deleted_at         AS "rule_deleted_at?: String",
 
-            -- "The same line" in the previous period: exact title, same member.
-            -- Unambiguous for a recurring row (it is the same rule) and the only
-            -- workable answer for a one-off, which has no rule to match on. It
-            -- degrades the right way: rename the line and the delta disappears,
-            -- because it is not that line any more.
+            -- "The same line" in the previous period, same member: the same
+            -- rule first, then the exact title — the order the cursor follows
+            -- a row to another month. The rule is what survives a rename: a
+            -- recurring row renamed this month is still that bill. A one-off
+            -- has no rule, and for it the title degrades the right way: rename
+            -- the line and the delta disappears, because it is not that line
+            -- any more.
+            --
+            -- The row is picked by id, so a rule's row with no amount yet is
+            -- still the one compared against, never a same-titled other.
             (SELECT p.amount_cents
                FROM transactions p
-              WHERE p.member_id = t.member_id
-                AND p.title     = t.title
-                AND p.period    = ?2
-                AND p.deleted_at IS NULL
-              ORDER BY p.sort_key
-              LIMIT 1)           AS "prev_amount_cents: i64"
+              WHERE p.id = COALESCE(
+                    (SELECT q.id FROM transactions q
+                      WHERE q.member_id = t.member_id
+                        AND q.rule_id   = t.rule_id
+                        AND q.period    = ?2
+                        AND q.deleted_at IS NULL
+                      ORDER BY q.sort_key LIMIT 1),
+                    (SELECT q.id FROM transactions q
+                      WHERE q.member_id = t.member_id
+                        AND q.title     = t.title
+                        AND q.period    = ?2
+                        AND q.deleted_at IS NULL
+                      ORDER BY q.sort_key LIMIT 1))
+            )                    AS "prev_amount_cents: i64"
         FROM transactions t
         LEFT JOIN recurring_rules r ON r.id = t.rule_id
         WHERE t.member_id  = ?1

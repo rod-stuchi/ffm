@@ -349,12 +349,13 @@ default, the search scope and the privacy default.
   date. Three-quarters amber reads as "still room, but not much" with no legend. **The day you are on counts as begun**: due on the 18th, the 1st reads
   1/18. Counting only completed days drew every ring as an empty circle on the
   1st — the day a household opens the new month — the same as no ring at all.
-- **"The same line" means `(member_id, title)` in the previous period.**
-  Unambiguous for a recurring row — it is the same rule — but a one-off has no
-  rule, and the mockup shows deltas on one-offs (`Mercado ▼ −6%`), so the
-  question is real. Exact string match, same member, previous period, first
-  hit. It is what a household means by "the same line", it needs no extra
-  column, and it degrades the right way: rename the line and the delta
+- **"The same line" is the same rule, else the same title**, same member,
+  previous period — the order the cursor follows a row to another month. A
+  recurring row is matched by its rule, so renaming the rule keeps its delta:
+  it matched by title alone, and the first month under a new name lost its
+  arrow though it was still that bill. A one-off has no rule, and the mockup
+  shows deltas on one-offs (`Mercado ▼ −6%`), so it is matched by exact title,
+  first hit. That degrades the right way: rename the line and the delta
   disappears, which is arguably correct — it is not that line any more.
 - **The MoM delta is derived, not stored.** Compare each row to the same line in
   the previous month (a window function). Red ▲ up, green ▼ down, gray dash for
@@ -1470,7 +1471,10 @@ editing. So:
   length) unless it is confirmed — a receipt or payslip for a tracked rule, the
   manual tick for an untracked one — logs it as an edit of the row's due date
   that `u` reverses, and the statusline says *this month's row now due
-  05/10/2026*. Earlier months stay as recorded, and a line under the due
+  05/10/2026*. **A new title reaches it the same way**, in the same entry, so
+  one `u` puts both back — and only while the row still bears the rule's old
+  title: one renamed with `e` keeps the name it was given, which was about
+  that month. Earlier months stay as recorded, and a line under the due
   day says so — only in `E`, and only once the due day or the amount was
   changed: said when it is true, rather than a box that was always there.
 - **Due date moved from the occurrence form to the rule form.** The

@@ -1,0 +1,194 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            t.id                 AS \"id!: i64\",\n            t.rule_id            AS \"rule_id: i64\",\n            t.period             AS \"period!: String\",\n            t.kind               AS \"kind!: String\",\n            t.title              AS \"title!: String\",\n            t.amount_cents       AS \"amount_cents: i64\",\n            t.date               AS \"date: String\",\n            t.due_date           AS \"due_date: String\",\n            t.visibility         AS \"visibility!: String\",\n            t.bucket             AS \"bucket: String\",\n            t.bill_name          AS \"bill_name: String\",\n            t.manual_paid        AS \"manual_paid!: i64\",\n            t.sort_key           AS \"sort_key!: String\",\n\n            r.tracked            AS \"tracked?: i64\",\n            r.bucket             AS \"rule_bucket?: String\",\n            r.bill_name          AS \"rule_bill_name?: String\",\n            r.instance           AS \"instance?: String\",\n            r.total_installments AS \"total_installments?: i64\",\n            r.start_date         AS \"rule_start?: String\",\n            r.end_date           AS \"rule_end?: String\",\n            r.months             AS \"rule_months?: String\",\n            r.spans_period       AS \"spans_period?: i64\",\n            r.amount_in_filename AS \"amount_in_filename?: i64\",\n            r.varies             AS \"varies?: i64\",\n            r.cadence_months     AS \"cadence_months?: i64\",\n            r.estimate_basis     AS \"estimate_basis?: String\",\n            r.estimate_window    AS \"estimate_window?: i64\",\n            r.amount_cents       AS \"rule_amount_cents?: i64\",\n            -- A deleted rule still joins: its occurrences keep their files\n            -- and their tracked status, which live at the rule's taxonomy.\n            -- They only stop claiming to recur.\n            r.deleted_at         AS \"rule_deleted_at?: String\",\n\n            -- \"The same line\" in the previous period, same member: the same\n            -- rule first, then the exact title — the order the cursor follows\n            -- a row to another month. The rule is what survives a rename: a\n            -- recurring row renamed this month is still that bill. A one-off\n            -- has no rule, and for it the title degrades the right way: rename\n            -- the line and the delta disappears, because it is not that line\n            -- any more.\n            --\n            -- The row is picked by id, so a rule's row with no amount yet is\n            -- still the one compared against, never a same-titled other.\n            (SELECT p.amount_cents\n               FROM transactions p\n              WHERE p.id = COALESCE(\n                    (SELECT q.id FROM transactions q\n                      WHERE q.member_id = t.member_id\n                        AND q.rule_id   = t.rule_id\n                        AND q.period    = ?2\n                        AND q.deleted_at IS NULL\n                      ORDER BY q.sort_key LIMIT 1),\n                    (SELECT q.id FROM transactions q\n                      WHERE q.member_id = t.member_id\n                        AND q.title     = t.title\n                        AND q.period    = ?2\n                        AND q.deleted_at IS NULL\n                      ORDER BY q.sort_key LIMIT 1))\n            )                    AS \"prev_amount_cents: i64\"\n        FROM transactions t\n        LEFT JOIN recurring_rules r ON r.id = t.rule_id\n        WHERE t.member_id  = ?1\n          AND t.period     = ?3\n          AND t.deleted_at IS NULL\n          AND (t.visibility = 'household' OR ?4)\n        -- Ordered from one query rather than one per order, because the\n        -- SELECT above is the expensive part and duplicating it is how two of\n        -- them quietly stop agreeing about what a row is. `name` reads\n        -- `sort_key` here and is sorted below, in Rust: SQLite's `lower()`\n        -- folds only ASCII, and \"Água\" belongs among the A's.\n        ORDER BY\n          CASE ?5\n            -- An unpaid row has no paid-on date yet, so it sorts by the day\n            -- it is DUE. Falling back to nothing would bunch every unpaid row\n            -- at one end, which is the opposite of what sorting by date is\n            -- for.\n            WHEN 'date'   THEN coalesce(t.date, t.due_date, t.period)\n            WHEN 'amount' THEN NULL\n            ELSE t.sort_key\n          END ASC,\n          -- Biggest first: sorting a ledger by amount is asking \"what is\n          -- costing us the most\".\n          CASE ?5 WHEN 'amount' THEN t.amount_cents END DESC,\n          t.sort_key ASC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "date: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "due_date: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "visibility!: String",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "bucket: String",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "bill_name: String",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "manual_paid!: i64",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "sort_key!: String",
+        "ordinal": 12,
+        "type_info": "Text"
+      },
+      {
+        "name": "tracked?: i64",
+        "ordinal": 13,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_bucket?: String",
+        "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_bill_name?: String",
+        "ordinal": 15,
+        "type_info": "Text"
+      },
+      {
+        "name": "instance?: String",
+        "ordinal": 16,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_installments?: i64",
+        "ordinal": 17,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_start?: String",
+        "ordinal": 18,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_end?: String",
+        "ordinal": 19,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_months?: String",
+        "ordinal": 20,
+        "type_info": "Text"
+      },
+      {
+        "name": "spans_period?: i64",
+        "ordinal": 21,
+        "type_info": "Integer"
+      },
+      {
+        "name": "amount_in_filename?: i64",
+        "ordinal": 22,
+        "type_info": "Integer"
+      },
+      {
+        "name": "varies?: i64",
+        "ordinal": 23,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cadence_months?: i64",
+        "ordinal": 24,
+        "type_info": "Integer"
+      },
+      {
+        "name": "estimate_basis?: String",
+        "ordinal": 25,
+        "type_info": "Text"
+      },
+      {
+        "name": "estimate_window?: i64",
+        "ordinal": 26,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_amount_cents?: i64",
+        "ordinal": 27,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_deleted_at?: String",
+        "ordinal": 28,
+        "type_info": "Text"
+      },
+      {
+        "name": "prev_amount_cents: i64",
+        "ordinal": 29,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "54b03477bfa08436622397e48ed16e159b2b1703fb9fd65371d4681ea57a35fc"
+}

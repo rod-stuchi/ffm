@@ -307,6 +307,7 @@ rule-pdf-password-placeholder = only for locked statements
 rule-created = rule created · { $n } period(s) materialized
 rule-saved = rule saved
 rule-moved-due = this month's row now due { $date }
+rule-renamed-row = this month's row renamed too
 files-refiled =
     { $n ->
         [one] 1 file moved to its new folder

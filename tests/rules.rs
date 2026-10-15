@@ -301,6 +301,117 @@ async fn a_paid_row_keeps_the_date_it_was_paid_against() {
     assert_eq!(this_month(&pool, rule).await.1, before);
 }
 
+/// This month's row of the rule, and its title.
+async fn title_this_month(pool: &SqlitePool, rule: i64) -> (i64, String) {
+    let period = ffm::domain::period::Period::of(ffm::clock::today()).to_string();
+    sqlx::query_as("SELECT id, title FROM transactions WHERE rule_id = ? AND period = ?")
+        .bind(rule)
+        .bind(period)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_new_title_renames_this_months_unpaid_row_and_u_puts_it_back() {
+    use ffm::db::tx::{self, Direction, Scope};
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let today = ffm::clock::today();
+    let mut f = form(me);
+    f.start_date = d(2026, 1, 1);
+    let rule = rules::create(&pool, Actor::User(me), &f).await.unwrap();
+    ffm::services::materializer::reconcile(&pool, today)
+        .await
+        .unwrap();
+    let (row, before) = title_this_month(&pool, rule).await;
+    let earlier: String = sqlx::query_scalar(
+        "SELECT title FROM transactions WHERE rule_id = ? AND period = '2026-01'",
+    )
+    .bind(rule)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    f.title = "Energia · CPFL".into();
+    let edited = rules::edit_reporting(&pool, Actor::User(me), rule, &f)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(edited.renamed_row);
+    assert_eq!(edited.moved_due, None, "the due day did not change");
+    assert_eq!(title_this_month(&pool, rule).await.1, "Energia · CPFL");
+    let january: String = sqlx::query_scalar(
+        "SELECT title FROM transactions WHERE rule_id = ? AND period = '2026-01'",
+    )
+    .bind(rule)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(january, earlier, "earlier months keep what they recorded");
+
+    let period = ffm::domain::period::Period::of(today);
+    let next = tx::next(
+        &pool,
+        Scope {
+            me,
+            owner: Some(me),
+            period: Some(period),
+        },
+        Direction::Undo,
+    )
+    .await
+    .unwrap();
+    let u = next.pick.expect("the rename is undoable");
+    assert_eq!((u.action.as_str(), u.entity_id), ("edit", row));
+    assert!(tx::undo(&pool, Actor::User(me), &u).await.unwrap());
+    assert_eq!(title_this_month(&pool, rule).await.1, before);
+}
+
+#[tokio::test]
+async fn a_rename_leaves_a_paid_row_and_a_row_renamed_by_hand() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let mut f = form(me);
+    f.start_date = d(2026, 1, 1);
+    f.tracked = false;
+    let rule = rules::create(&pool, Actor::User(me), &f).await.unwrap();
+    ffm::services::materializer::reconcile(&pool, ffm::clock::today())
+        .await
+        .unwrap();
+    let (row, before) = title_this_month(&pool, rule).await;
+
+    // Paid: it keeps the name it was paid under.
+    sqlx::query("UPDATE transactions SET manual_paid = 1 WHERE id = ?")
+        .bind(row)
+        .execute(&pool)
+        .await
+        .unwrap();
+    f.title = "Energia · CPFL".into();
+    let edited = rules::edit_reporting(&pool, Actor::User(me), rule, &f)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!edited.renamed_row);
+    assert_eq!(title_this_month(&pool, rule).await.1, before);
+
+    // Unpaid but renamed by hand: that name was about this month.
+    sqlx::query(
+        "UPDATE transactions SET manual_paid = 0, title = 'Energia · 2 meses' WHERE id = ?",
+    )
+    .bind(row)
+    .execute(&pool)
+    .await
+    .unwrap();
+    f.title = "Energia · Neoenergia".into();
+    let edited = rules::edit_reporting(&pool, Actor::User(me), rule, &f)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!edited.renamed_row);
+    assert_eq!(title_this_month(&pool, rule).await.1, "Energia · 2 meses");
+}
+
 /// The PDF password opens files, so it is stored as typed — and never written
 /// to the log, which only says whether one is set, and that it moved.
 #[tokio::test]

@@ -1226,6 +1226,10 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
     moved. Earlier months, and this month once paid or received, keep the date
     they were stamped with: a confirmed row's due date is what it was paid
     against.
+  - **The rule's title follows the same rule**, in the same `edit` entry —
+    it used to reach only the next materialized month, so a rename looked
+    like it had not worked. Only while the row still bears the old title: a
+    row renamed with `e` keeps its own name.
 - **"Today" is the process's local date, and the deployment must set `TZ`.**
   The ring, `scheduled overdue`, the unresolved badge and `min(current_month,
   end_date)` all depend on it, and `ffm.toml` is three keys, none of them a

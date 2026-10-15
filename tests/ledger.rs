@@ -154,6 +154,22 @@ async fn the_delta_matches_the_same_line_in_the_previous_period() {
     assert_eq!((mercado.pct, mercado.up), (-6, false));
 }
 
+#[tokio::test]
+async fn a_renamed_recurring_row_keeps_its_delta_by_rule() {
+    let pool = seeded().await;
+    // The rule was renamed, and September is the first month with the new
+    // title: August's row still says the old one.
+    sqlx::query(
+        "UPDATE transactions SET title = 'Energia · CPFL'
+         WHERE title = 'Energia · Enel SP' AND period = '2026-09'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let row = row_in(&pool, "2026-09", "Energia · CPFL").await.unwrap();
+    assert_eq!(row.prev_amount_cents, Some(Cents(28140)), "the same rule");
+}
+
 /// The row with this title in that month's pane for the first member.
 async fn row_in(
     pool: &sqlx::SqlitePool,
