@@ -486,6 +486,27 @@ standing out.)
   margin beyond the row's normal grid gap — wider than before — so it never
   reads as fused to the value it sits next to: opening a file and reading the
   amount are two different facts, not one glued group.
+- **The rails line up down the pane, because the amounts do.** Each row is
+  its own grid, so an `auto` amount column was as wide as that row's own
+  figure: a shorter amount, or no delta, slid the rail right — and the same
+  happened to a fold header's ring beside a shorter subtotal. Now every
+  amount column, delta and fold subtotal is at least as wide as the pane's
+  widest (`min-width: calc(N * 1ch)`).
+  - **The server counts, the font measures.** Every amount is formatted by
+    the server and drawn in mono, so a string's character count is its width
+    in `ch` — `web::ledger::AmountWidths`, three numbers per pane, rendered as
+    `--amt-v` / `--amt-d` / `--fsub` on `#rows-{member}`. Nothing is measured
+    in the browser.
+  - **They ride with the totals** (`partials/amt_widths.html`, a `<style>`
+    swapped out of band), so an answer that makes one figure wider widens the
+    whole column with it — the palette's own mechanism.
+  - **The delta's arrow sits in a 1ch box**: `▲`/`▼` are not in the
+    self-hosted mono subset, and a fallback glyph would break the count.
+  - **Compact reserves the delta's room** on every row, since there it sits
+    beside the amount rather than under it.
+  - **Every key cap is two characters wide**, so a file's `3` and an empty
+    slot's `+3` make pills of one width, and at `default` density the rails
+    line up at both ends.
 - **Absent for any row with nothing to show** — not a reserved empty box. The
   row's middle column is already flexible (`1fr`), so the amount column stays
   flush against the row's right edge whether the file rail is present or not;

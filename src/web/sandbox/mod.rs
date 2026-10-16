@@ -214,6 +214,9 @@ struct RowsPage {
     specs: Vec<SpecBlock>,
     ledger: Vec<Specimen>,
     folds: Vec<crate::web::ledger::Group>,
+    /// The two stages' amount widths, as the page sets them per pane.
+    ledger_widths: String,
+    folds_widths: String,
     themes: Vec<(&'static str, &'static str, bool)>,
     langs: Vec<(&'static str, &'static str, bool)>,
     modes: Vec<(&'static str, &'static str, bool)>,
@@ -247,7 +250,10 @@ async fn rows(Query(ctx): Query<Ctx>) -> impl IntoResponse {
         })
         .collect();
 
-    let ledger = fixtures::ledger(rctx)
+    let ledger_rows = fixtures::ledger(rctx);
+    let ledger_widths =
+        crate::web::ledger::AmountWidths::of(&ledger_rows, std::iter::empty()).style();
+    let ledger = ledger_rows
         .into_iter()
         .map(|r| Specimen {
             lang: langs[0].code(),
@@ -257,16 +263,22 @@ async fn rows(Query(ctx): Query<Ctx>) -> impl IntoResponse {
 
     // Numbered by `group_rows` itself — by line, headers included, from the
     // gutter setting each row carries — so no `apply_gutter` here.
+    let fold_rows = fixtures::folds(rctx);
     let folds = crate::web::ledger::group_rows(
         0,
-        &fixtures::folds(rctx),
+        &fold_rows,
         &Catalog::new(langs[0]),
         ctx.currency(),
         crate::web::ledger::GroupOrder::Appearance,
     );
 
+    let folds_widths =
+        crate::web::ledger::AmountWidths::of(&fold_rows, folds.iter().map(|g| &g.summary)).style();
+
     Html(RowsPage {
         folds,
+        ledger_widths,
+        folds_widths,
         theme_css: ctx.theme_css(),
         attr: ctx.attr(),
         t: Catalog::new(langs[0]),

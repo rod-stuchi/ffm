@@ -39,7 +39,7 @@
 
   <div class="spec">
     <div class="spec-head"><span class="spec-n">00</span><h2>A pane, for context</h2></div>
-    <div class="spec-stage">
+    <div class="spec-stage" style="{{ ledger_widths }}">
       {% for s in ledger %}{% let v = s.view %}{% include "partials/row.html" %}{% endfor %}
     </div>
   </div>
@@ -49,7 +49,7 @@
       state, and the sandbox must not depend on the machinery it tests. -#}
   <div class="spec" id="folds">
     <div class="spec-head"><span class="spec-n">··</span><h2>Fold headers</h2></div>
-    <div class="spec-stage">
+    <div class="spec-stage" style="{{ folds_widths }}">
       {%- for g in folds %}
       <section class="fold">
         <header class="foldhead{% if g.nogut %} is-nogut{% endif %}">

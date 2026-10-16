@@ -1145,6 +1145,33 @@ impl LedgerRow {
     /// "overdue since"). Money and dates inside it do not — they come from
     /// `fmt`, which takes a currency and never a language. The three axes stay
     /// separate even where they share a line.
+    /// The delta as drawn: arrow, signed percentage, tone. Its own method
+    /// because the pane's amount column is sized from the same text
+    /// (`web::ledger::AmountWidths`), and a second spelling would drift.
+    pub fn delta_view(&self) -> Option<DeltaView> {
+        self.delta().map(|d| DeltaView {
+            arrow: if d.pct == 0 {
+                "—"
+            } else if d.up {
+                "▲"
+            } else {
+                "▼"
+            },
+            text: if d.pct == 0 {
+                "0%".to_string()
+            } else {
+                format!("{}{}%", if d.up { "+" } else { "" }, d.pct)
+            },
+            tone: if d.pct == 0 {
+                "is-flat"
+            } else if d.good {
+                "is-good"
+            } else {
+                "is-bad"
+            },
+        })
+    }
+
     pub fn view(&self, t: &Catalog) -> RowView {
         let status = self.status();
         let amount = self.amount();
@@ -1217,27 +1244,7 @@ impl LedgerRow {
             amount_income: amount.is_income,
             amount_estimated: amount.is_estimated,
             amount_placeholder: amount.is_placeholder,
-            delta: self.delta().map(|d| DeltaView {
-                arrow: if d.pct == 0 {
-                    "—"
-                } else if d.up {
-                    "▲"
-                } else {
-                    "▼"
-                },
-                text: if d.pct == 0 {
-                    "0%".to_string()
-                } else {
-                    format!("{}{}%", if d.up { "+" } else { "" }, d.pct)
-                },
-                tone: if d.pct == 0 {
-                    "is-flat"
-                } else if d.good {
-                    "is-good"
-                } else {
-                    "is-bad"
-                },
-            }),
+            delta: self.delta_view(),
 
             details: Details {
                 due: self.due_date.map(fmt::date),

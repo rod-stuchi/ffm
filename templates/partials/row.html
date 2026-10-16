@@ -142,7 +142,10 @@
         {%- if v.amount_income %}+ {% endif -%}{{ v.amount }}
       </div>
       {%- if let Some(d) = v.delta -%}
-      <div class="d {{ d.tone }}">{{ d.arrow }} {{ d.text }}</div>
+      {#- The arrow in a box exactly 1ch wide: ▲ and ▼ are not in the
+          self-hosted mono subset, and a fallback glyph would make the
+          delta's width disagree with its character count. -#}
+      <div class="d {{ d.tone }}"><span class="darr">{{ d.arrow }}</span> {{ d.text }}</div>
       {%- endif -%}
     </div>
   </div>

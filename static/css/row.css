@@ -331,6 +331,12 @@ body:not(.kbd-nav) .row:hover .entry {
   background: var(--surface-2);
   color: var(--ink);
   pointer-events: none;
+  /* Room for `+2` in every cap, centered: a file's `2` and an empty slot's
+   * `+2` then make pills of one width, so rails line up down the pane
+   * whichever slots hold a file. */
+  min-width: calc(2ch + 10px); /* + the 4px padding and 1px border, each side */
+  box-sizing: border-box;
+  text-align: center;
 }
 
 .fbadge .ficon {
@@ -403,6 +409,24 @@ body:not(.kbd-nav) .row:hover .entry {
   font-family: var(--mono);
   font-size: 14px;
   font-weight: 500;
+}
+
+/* Every row's amount column is as wide as the pane's widest figure. Each row
+ * is its own grid, so an `auto` column followed its own amount, and a shorter
+ * one slid the file rail right. The server counts the characters
+ * (`web::ledger::AmountWidths`) and the mono font makes a character a `ch`,
+ * so nothing is measured here. A minimum, not a width: a figure that outruns
+ * it before its answer lands grows rather than clips. */
+.amt .v {
+  min-width: calc(var(--amt-v, 0) * 1ch);
+}
+.amt .d {
+  min-width: calc(var(--amt-d, 0) * 1ch);
+}
+.amt .d .darr {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
 }
 
 .amt .v.is-income {
@@ -628,6 +652,13 @@ body:not(.kbd-nav) .row:hover .entry {
   align-items: baseline;
   justify-content: flex-end;
   gap: 8px;
+  /* The delta sits beside the amount here, so a row without one would be
+   * narrower than a row with one and its rail would slide right. Room for
+   * both, always: set in the amount's own font so `1ch` is the amount's,
+   * and the delta's 10.5px is three quarters of it. */
+  font-family: var(--mono);
+  font-size: 14px;
+  min-width: calc(var(--amt-v, 0) * 1ch + 8px + var(--amt-d, 0) * 0.75ch);
 }
 
 .ledger-shell[data-density="compact"] .amt .d {

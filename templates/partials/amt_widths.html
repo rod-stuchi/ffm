@@ -1,0 +1,10 @@
+{#- How wide one pane's amount column is, from `PaneTotals.widths` bound as
+    `pt` — the widest amount, delta and fold subtotal, in characters, which
+    in the monospace font is their width in `ch` (`web::ledger::AmountWidths`).
+    Every row then sizes its amount to the pane's widest, so the file rails
+    and the fold rings line up down the pane.
+
+    A `<style>`, out of band, because it rides with the totals: an answer
+    that makes one amount wider widens the whole column with it, the way a
+    palette change swaps its own block. -#}
+<style id="amtw-{{ pt.id }}" hx-swap-oob="true">#rows-{{ pt.id }}{ {{- pt.widths.style() -}} }</style>

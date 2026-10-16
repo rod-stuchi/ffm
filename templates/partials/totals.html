@@ -20,3 +20,4 @@
   <span><i>{{ t.totals_out() }}</i> <b class="money neg">{{ house.outs }}</b></span>
   <span><i>{{ t.totals_net() }}</i> <b class="money {% if house.negative %}neg{% else %}pos{% endif %}">{% if house.negative %}−{% endif %}{{ house.net }}</b></span>
 </span>
+{% include "partials/amt_widths.html" %}

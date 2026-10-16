@@ -316,6 +316,8 @@
         </span>
       </header>
 
+      {%- let pt = p.totals %}
+      {% include "partials/amt_widths.html" %}
       <div class="rows" id="rows-{{ p.id }}">
         {#- The rows — grouped into folds or flat, plus the skeleton — are ONE
             partial, shared with the pane fragment a mutation answers with.

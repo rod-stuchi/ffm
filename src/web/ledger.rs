@@ -98,6 +98,64 @@ pub struct PaneTotals {
     pub outs: String,
     pub balance: String,
     pub negative: bool,
+    /// How wide the pane's amount column is — carried with the totals because
+    /// they ride out of band with every answer, so a row that lands wider
+    /// than the rest widens them all with it (`partials/amt_widths.html`).
+    pub widths: AmountWidths,
+}
+
+/// The widest amount, delta and fold subtotal in one pane, in characters.
+///
+/// Each row is its own grid, so an `auto` amount column was as wide as that
+/// row's own figure: a shorter amount slid the row's file rail right, and a
+/// shorter subtotal slid its fold's ring. Every amount is formatted here and
+/// drawn in a monospace font, so a string's character count IS its width in
+/// `ch` — the stylesheet makes each column at least the pane's widest
+/// (`min-width: calc(N * 1ch)`), correct on the first frame with nothing
+/// measured in the browser. Counted in `chars`, never bytes: `R$`, `−` and
+/// `€` are not one byte each.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct AmountWidths {
+    /// `.amt .v` — the template prefixes an income with `+ `.
+    pub amount: usize,
+    /// `.amt .d` — the arrow, a space, the percentage.
+    pub delta: usize,
+    /// `.fsub` — with its `−` when the fold nets negative.
+    pub subtotal: usize,
+}
+
+impl AmountWidths {
+    pub fn of<'a>(
+        rows: &[crate::ui::row::LedgerRow],
+        folds: impl IntoIterator<Item = &'a FoldSummary>,
+    ) -> AmountWidths {
+        let mut w = AmountWidths::default();
+        for r in rows {
+            let a = r.amount();
+            w.amount = w
+                .amount
+                .max(a.text.chars().count() + if a.is_income { 2 } else { 0 });
+            if let Some(d) = r.delta_view() {
+                w.delta = w
+                    .delta
+                    .max(d.arrow.chars().count() + 1 + d.text.chars().count());
+            }
+        }
+        for f in folds {
+            w.subtotal = w
+                .subtotal
+                .max(f.subtotal.chars().count() + usize::from(f.negative));
+        }
+        w
+    }
+
+    /// The custom properties `row.css` and `ledger.css` read.
+    pub fn style(&self) -> String {
+        format!(
+            "--amt-v:{};--amt-d:{};--fsub:{}",
+            self.amount, self.delta, self.subtotal
+        )
+    }
 }
 
 /// Money, with the tilde when any part of it is a projection.
@@ -131,6 +189,8 @@ pub struct HouseTotals {
 pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTotals>, HouseTotals) {
     let ctx = session_ctx(st, auth).await;
     let currency = ctx.currency;
+    let t = auth.catalog();
+    let group = GroupOrder::of(&auth.settings);
 
     let mut panes = Vec::new();
     let mut ins = crate::domain::money::Cents::ZERO;
@@ -142,6 +202,9 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
         outs += pane.outs;
         any_estimated |= pane.estimated;
         let balance = pane.balance();
+        let folds = group
+            .map(|order| fold_summaries(pane.member.id, &pane.rows, &t, currency, order))
+            .unwrap_or_default();
         panes.push(PaneTotals {
             id: pane.member.id,
             ins: money(pane.ins, currency, pane.estimated),
@@ -149,6 +212,7 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
             outs: fmt::money(pane.outs, currency),
             balance: money(balance.abs(), currency, pane.estimated),
             negative: balance.is_negative(),
+            widths: AmountWidths::of(&pane.rows, &folds),
         });
     }
 
@@ -1457,6 +1521,12 @@ pub(crate) fn view(
 ) -> PaneView {
     let grouped = group.is_some();
     let balance = pane.balance();
+    let groups = if let Some(order) = group {
+        group_rows(pane.member.id, &pane.rows, t, currency, order)
+    } else {
+        Vec::new()
+    };
+    let widths = AmountWidths::of(&pane.rows, groups.iter().map(|g| &g.summary));
     PaneView {
         writable,
         id: pane.member.id,
@@ -1467,17 +1537,14 @@ pub(crate) fn view(
             outs: fmt::money(pane.outs, currency),
             balance: money(balance.abs(), currency, pane.estimated),
             negative: balance.is_negative(),
+            widths,
         },
         rows: if grouped {
             Vec::new()
         } else {
             pane.rows.iter().map(|r| r.view(t)).collect()
         },
-        groups: if let Some(order) = group {
-            group_rows(pane.member.id, &pane.rows, t, currency, order)
-        } else {
-            Vec::new()
-        },
+        groups,
         grouped,
     }
 }
@@ -1585,6 +1652,44 @@ mod tests {
         let by_name = clusters(&read_by_name(), &t, GroupOrder::Name);
         let names: Vec<&str> = by_name.iter().map(|g| g.0.as_str()).collect();
         assert_eq!(names, ["Cartão", "Consumo", "Moradia"]);
+    }
+
+    /// Each row sizes its amount column to the pane's widest figure, so the
+    /// count must be of the text as drawn: the income's `+ `, the delta's
+    /// arrow, a negative subtotal's `−` — in characters, never bytes.
+    #[test]
+    fn the_amount_column_is_as_wide_as_the_panes_widest_figure() {
+        use crate::domain::status::TxKind;
+        let base = read_by_name().remove(0);
+        let spend = crate::ui::row::LedgerRow {
+            amount_cents: Some(Cents(999)),
+            prev_amount_cents: Some(Cents(500)),
+            ..base.clone()
+        };
+        let income = crate::ui::row::LedgerRow {
+            kind: TxKind::In,
+            amount_cents: Some(Cents(123_456)),
+            prev_amount_cents: None,
+            ..base
+        };
+        let t = Catalog::new(Lang::En);
+        let fold = FoldSummary::of(
+            "0-x".into(),
+            2,
+            Cents(-123_456),
+            TallyCounts::default(),
+            &t,
+            Currency::Brl,
+        );
+        let w = AmountWidths::of(&[spend, income], [&fold]);
+        let figure = fmt::money(Cents(123_456), Currency::Brl).chars().count();
+        assert_eq!(w.amount, figure + 2, "the income's `+ ` counts");
+        assert_eq!(w.delta, "▲ +100%".chars().count());
+        assert_eq!(w.subtotal, figure + 1, "the negative subtotal's `−` counts");
+        assert_eq!(
+            w.style(),
+            format!("--amt-v:{};--amt-d:7;--fsub:{}", figure + 2, figure + 1)
+        );
     }
 
     #[test]
