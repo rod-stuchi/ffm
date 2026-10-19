@@ -2,6 +2,9 @@
 name = "ffm"
 version = "0.0.19"
 edition = "2024"
+# `ffm-anon` is a second binary, so a bare `cargo run` (what `just dev` runs)
+# would otherwise have to be told which one to start.
+default-run = "ffm"
 
 # The whole dependency tree is resolved here up front — including crates phase 1
 # never calls — so that adding the database or the parser in a later phase does
@@ -136,6 +139,19 @@ anyhow = "1"
 [features]
 default = []
 dev-reload = []
+# `ffm-anon`, the shuffled copy of a production database for development
+# (`just anon`). A feature so `cargo build --release` never builds it, and a
+# release never ships a tool whose input is the household's real data.
+anon = []
+
+[[bin]]
+name = "ffm"
+path = "src/main.rs"
+
+[[bin]]
+name = "ffm-anon"
+path = "src/bin/ffm-anon/main.rs"
+required-features = ["anon"]
 
 [build-dependencies]
 # The .ftl parser. Note it is a BUILD dependency only — the generated catalog

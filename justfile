@@ -230,6 +230,22 @@ seed: db-reset
     sqlite3 -bail {{db_path}} < seeds/household.sql
     @echo "✓ seeded {{db_path}}"
 
+# A shuffled copy of a production database to develop against: every name,
+# amount, account number and barcode made up, and a vault of stand-in files in
+# place of the real bills. The source is copied byte for byte and never opened,
+# and the run refuses while any process holds it. Lands in ./anon (gitignored)
+# only once a scan for every original string comes back clean.
+# See src/bin/ffm-anon/main.rs, or `just anon --help`.
+#
+# `just anon --from ~/prod/ffm.db --receipts ~/prod/receipts` · `--seed 7` · `--years 2` · `--scale 3`
+anon *args:
+    cargo run --quiet --features anon --bin ffm-anon -- {{args}}
+
+# The dev loop against `just anon`'s copy. The environment wins over
+# ffm.toml, so the real database is not touched.
+dev-anon:
+    FFM_DB_PATH=./anon/ffm.db FFM_RECEIPTS_ROOT=./anon/receipts FFM_BACKUP_DIR=./anon/backups just dev
+
 # Refresh .sqlx/ — the offline copy of every checked query's result shape, so a
 # clean checkout (and CI) can build with no database at all. Run this whenever a
 # query or the schema changes, and commit what it writes.

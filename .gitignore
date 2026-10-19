@@ -28,6 +28,11 @@
 # bills, same as above.
 /demo
 
+# `just anon`'s shuffled copy. Made-up by design, but the run that wrote it
+# read the real database, and an aborted run's leftovers may not be.
+/anon
+/anon.old-*
+
 # `just release`'s output — binaries and tarballs, rebuilt from a tag.
 /dist
 
