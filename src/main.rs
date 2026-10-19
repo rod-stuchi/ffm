@@ -275,7 +275,7 @@ ffm — a shared household ledger
 
 `reset-link` is the way back in when the only admin has forgotten their own
 password — the one account nobody else can reset. It prints the same link
-:members issues: single-use, good for 7 days, and it signs that member out
+:members issues: single-use, good for 5 days, and it signs that member out
 everywhere. It never prints or sets a password; the member picks their own on
 the link, exactly as they would have.
 
