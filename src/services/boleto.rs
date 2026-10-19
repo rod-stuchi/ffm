@@ -230,8 +230,9 @@ pub fn mod10(digits: &[u32]) -> u32 {
     (10 - sum % 10) % 10
 }
 
-/// Weights 2 through 9 cycling right to left. Used for a cobrança's DV geral
-/// and for an arrecadação whose position 3 is 8 or 9.
+/// Weights 2 through 9 cycling right to left. A cobrança's DV geral; an
+/// arrecadação's mod 11 is [`mod11_arrecadacao`], which writes the edge cases
+/// differently.
 pub fn mod11(digits: &[u32]) -> u32 {
     let mut sum = 0;
     let mut weight = 2;
@@ -242,6 +243,30 @@ pub fn mod11(digits: &[u32]) -> u32 {
     let dv = 11 - (sum % 11);
     // 0, 10 and 11 are all written as 1.
     if dv == 0 || dv > 9 { 1 } else { dv }
+}
+
+/// An arrecadação's mod 11, for value kinds 8 and 9: the same weights as
+/// [`mod11`], but a remainder of 0 or 1 is written as `0`, not `1`. Reading it
+/// with the cobrança's rule refused every DAS whose DV is 0 (Simples
+/// Nacional, v0.0.19).
+pub fn mod11_arrecadacao(digits: &[u32]) -> u32 {
+    let mut sum = 0;
+    let mut weight = 2;
+    for d in digits.iter().rev() {
+        sum += d * weight;
+        weight = if weight == 9 { 2 } else { weight + 1 };
+    }
+    match sum % 11 {
+        0 | 1 => 0,
+        r => 11 - r,
+    }
+}
+
+/// An arrecadação's check-digit algorithm, decided by its value kind
+/// (position 3): mod 10 for 6 and 7, mod 11 for 8 and 9 — for the DV geral
+/// and for each block of the linha digitável alike.
+fn arrecadacao_dv(value_kind: u32) -> fn(&[u32]) -> u32 {
+    if matches!(value_kind, 8 | 9) { mod11_arrecadacao } else { mod10 }
 }
 
 // ---------------------------------------------------------------------------
@@ -301,8 +326,11 @@ fn from_linha_47(d: &[u32]) -> Result<Vec<u32>, Error> {
     Ok(out)
 }
 
-/// Four blocks of eleven digits, each followed by its own mod-10 digit.
+/// Four blocks of eleven digits, each followed by its own check digit — mod 10,
+/// or mod 11 when the value kind (the third digit) is 8 or 9. Always mod 10
+/// refused every DAS, whose value kind is 8.
 fn from_linha_48(d: &[u32]) -> Result<Vec<u32>, Error> {
+    let dv = arrecadacao_dv(d[2]);
     let mut out = Vec::with_capacity(44);
     for (i, at) in ["block 1", "block 2", "block 3", "block 4"]
         .iter()
@@ -310,7 +338,7 @@ fn from_linha_48(d: &[u32]) -> Result<Vec<u32>, Error> {
     {
         let from = i * 12;
         let body = &d[from..from + 11];
-        if mod10(body) != d[from + 11] {
+        if dv(body) != d[from + 11] {
             return Err(Error::CheckDigit { at });
         }
         out.extend_from_slice(body);
@@ -375,23 +403,16 @@ fn arrecadacao(d: &[u32]) -> Result<Barcode, Error> {
     // Position 3 decides BOTH what the value means and which algorithm
     // protects it. Reading one without the other is the trap this whole sum
     // type exists for.
-    let (is_reference, uses_mod11) = match value_kind {
-        '6' => (false, false),
-        '7' => (true, false),
-        '8' => (false, true),
-        '9' => (true, true),
+    let is_reference = match value_kind {
+        '6' | '8' => false,
+        '7' | '9' => true,
         other => return Err(Error::UnknownValueKind(other)),
     };
 
     let mut without_dv: Vec<u32> = Vec::with_capacity(43);
     without_dv.extend_from_slice(&d[0..3]);
     without_dv.extend_from_slice(&d[4..44]);
-    let expected = if uses_mod11 {
-        mod11(&without_dv)
-    } else {
-        mod10(&without_dv)
-    };
-    if expected != d[3] {
+    if arrecadacao_dv(d[2])(&without_dv) != d[3] {
         return Err(Error::CheckDigit { at: "DV geral" });
     }
 
@@ -557,6 +578,25 @@ mod tests {
     }
 
     #[test]
+    fn vector_8_a_das_is_mod_11_in_every_block_and_its_dv_can_be_0() {
+        // A Simples Nacional DAS as printed (value kind 8, Receita Federal's
+        // 0328): its block digits are mod 11, and its DV geral is 0 — a
+        // remainder the cobrança's mod 11 would have written as 1. Refused
+        // as misprinted until both were read the arrecadação's way.
+        let printed = "85800000013 5 14470328262 8 93072026274 6 37737486168 1";
+        let b = parse(printed, today()).unwrap();
+        assert_eq!(b.kind, Kind::Arrecadacao);
+        assert_eq!(b.amount, Amount::Fixed(Cents(131447)));
+        assert_eq!(b.company.as_deref(), Some("0328"));
+        // No date in its free field: the DAS prints it only as text.
+        assert_eq!(b.due, DueDate::Absent);
+        assert_eq!(parse(&b.raw, today()).unwrap(), b);
+        // And a block's digit read as mod 10 is still a misprint.
+        let mod10_block = "85800000013 4 14470328262 8 93072026274 6 37737486168 1";
+        assert!(matches!(parse(mod10_block, today()), Err(Error::CheckDigit { .. })));
+    }
+
+    #[test]
     fn vector_7_consumo_with_zeros_is_open() {
         let b = parse("846600000000000056780000000000000000000000000000", today()).unwrap();
         assert_eq!(b.amount, Amount::Open);
@@ -624,8 +664,11 @@ mod tests {
 
     #[test]
     fn the_two_algorithms_match_their_published_definitions() {
-        // mod 11 writes 0, 10 and 11 all as 1.
+        // A cobrança's mod 11 writes 0, 10 and 11 all as 1; an
+        // arrecadação's writes a remainder of 0 or 1 as 0.
         assert_eq!(mod11(&[0; 43]), 1);
+        assert_eq!(mod11_arrecadacao(&[0; 43]), 0);
+        assert_eq!(mod11_arrecadacao(&[1]), 9);
         // A worked mod-10: 1+2 → 1*2=2, sum 2+1=3 → dv 7.
         assert_eq!(mod10(&[1, 1]), 7);
         assert_eq!(mod10(&[0]), 0);

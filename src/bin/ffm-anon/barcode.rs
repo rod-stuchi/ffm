@@ -10,7 +10,7 @@
 
 use anyhow::bail;
 use chrono::NaiveDate;
-use ffm::services::boleto::{self, Amount, DueDate, Kind, mod10, mod11, names_an_account};
+use ffm::services::boleto::{self, Amount, DueDate, Kind, mod10, mod11, mod11_arrecadacao, names_an_account};
 use rand::Rng;
 use rand::rngs::StdRng;
 
@@ -85,7 +85,7 @@ fn arrecadacao(d: &[u32], old: &boleto::Barcode, t: &Target, rng: &mut StdRng) -
     }
     let mut without: Vec<u32> = n[0..3].to_vec();
     without.extend_from_slice(&n[4..44]);
-    n[3] = if matches!(n[2], 8 | 9) { mod11(&without) } else { mod10(&without) };
+    n[3] = if matches!(n[2], 8 | 9) { mod11_arrecadacao(&without) } else { mod10(&without) };
     Some(n)
 }
 

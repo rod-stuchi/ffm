@@ -81,7 +81,9 @@ Energia, água, gás, telecom, tributos, multas. **This is most of your bills.**
 `9` uso exclusivo
 
 **Linha digitável — 48 digits**: 4 blocks of 11 digits, each followed by its own
-**mod 10** check digit.
+check digit — **in the same algorithm as the DV geral**: mod 10 when pos 3 is
+`6`/`7`, mod 11 when it is `8`/`9`. Reading every block as mod 10 refused every
+Simples Nacional DAS (value kind `8`) as misprinted.
 
 **Due date is NOT a dedicated field.** FEBRABAN: *"In case due date is used
 (AAAAMMDD), include it in the first 8 positions of the free field."* So when
@@ -167,8 +169,8 @@ dead code.
 | Cobrança — DV geral (pos 5) | módulo 11, weights 2→9 cycling right-to-left; `dv = 11 - (sum % 11)`; if result ∈ {0,10,11} → **1** |
 | Cobrança — linha digitável blocks | módulo 10, weights 2,1 alternating; digits > 9 → subtract 9; `dv = (10 - sum % 10) % 10` |
 | Arrecadação — pos 3 ∈ {6,7} | módulo 10 (same as above) over the other 43 digits |
-| Arrecadação — pos 3 ∈ {8,9} | módulo 11 — **⚠ variants exist in the wild for remainder 0/1; validate against real bills before trusting** |
-| Arrecadação — linha digitável blocks | módulo 10 per 11-digit block |
+| Arrecadação — pos 3 ∈ {8,9} | módulo 11, the same weights; `dv = 11 - (sum % 11)`, but a remainder of 0 or 1 → **0** (not the cobrança's 1). Confirmed on a real DAS, whose DV geral is 0 (`boleto::mod11_arrecadacao`) |
+| Arrecadação — linha digitável blocks | per 11-digit block, the algorithm pos 3 picks: mod 10 for {6,7}, mod 11 for {8,9} |
 
 **A failed check digit is a hard stop.** Do not fall back to text extraction for a
 value that failed its own checksum — report the misread and ask.
@@ -582,8 +584,8 @@ tests/fixtures/enel-sp/2026-07.expected.toml  # issuer, amount, due date, source
    doesn't settle it — the remainder returns next month with interest. The ledger
    has no concept of this. Log one OUT row for now; decide later whether a
    revolving balance is a first-class thing.
-2. **Arrecadação mod 11 DV variants** (pos 3 ∈ {8,9}) — remainder 0/1 handling
-   differs between implementations. Validate against real bills before shipping.
+2. ~~**Arrecadação mod 11 DV variants**~~ — settled by a real DAS: a remainder of
+   0 or 1 is written `0`, and the linha's blocks use mod 11 too (see §5).
 3. **PIX QR / Copia e Cola** (EMV BR Code) is increasingly present on bills and
    also encodes value + merchant deterministically. A second parser worth adding
    once the barcode path works.
