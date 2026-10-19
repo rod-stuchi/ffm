@@ -48,15 +48,7 @@ pub fn page(info: &PageInfo, width: f32, height: f32) -> Option<Vec<u8>> {
     let elements = itf::encode(&info.barcode)?;
     let mut c = String::new();
 
-    // --- text, top down ------------------------------------------------
-    let mut y = height - MARGIN - 16.0;
-    text(&mut c, "F3", 16.0, MARGIN, y, &info.heading);
-    y -= 30.0;
-    for (label, value) in &info.details {
-        text(&mut c, "F1", 11.0, MARGIN, y, label);
-        text(&mut c, "F1", 11.0, MARGIN + 130.0, y, value);
-        y -= 17.0;
-    }
+    let mut y = head(&mut c, info, height);
     y -= 8.0;
     text(&mut c, "F2", 12.0, MARGIN, y, &info.typed);
     y -= 28.0;
@@ -95,6 +87,30 @@ pub fn page(info: &PageInfo, width: f32, height: f32) -> Option<Vec<u8>> {
     text(&mut c, "F1", 8.0, MARGIN, MARGIN, &info.footer);
 
     Some(write_pdf(width, height, c.as_bytes()))
+}
+
+/// The same page with no code on it: the heading, the details and the
+/// footer. For a document that has no barcode to draw — a receipt, a
+/// scheduled-payment proof — written by the dev-only `ffm-anon` as a stand-in
+/// for a real file it must not copy.
+pub fn text_page(info: &PageInfo, width: f32, height: f32) -> Vec<u8> {
+    let mut c = String::new();
+    head(&mut c, info, height);
+    text(&mut c, "F1", 8.0, MARGIN, MARGIN, &info.footer);
+    write_pdf(width, height, c.as_bytes())
+}
+
+/// The heading and the details, top down. Returns where the next line goes.
+fn head(c: &mut String, info: &PageInfo, height: f32) -> f32 {
+    let mut y = height - MARGIN - 16.0;
+    text(c, "F3", 16.0, MARGIN, y, &info.heading);
+    y -= 30.0;
+    for (label, value) in &info.details {
+        text(c, "F1", 11.0, MARGIN, y, label);
+        text(c, "F1", 11.0, MARGIN + 130.0, y, value);
+        y -= 17.0;
+    }
+    y
 }
 
 /// A line of text at `(x, y)`, its baseline.
