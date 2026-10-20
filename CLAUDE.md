@@ -986,7 +986,7 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   the one modal in the app sized to the full window on purpose. **All but
   the statusline**, which it and the trim view stop above (`--foot-h`):
   covering it hid every answer given from inside them — a removal, a bill
-  refused on Save.
+  refused on Save. Those answers are toasts now, drawn above both overlays.
 - **Zoom (`+`/`-`, or `0` to reset) scales the preview** — the page images'
   width, so 100% is fitted to the view and above it the view scrolls to the
   rest. It is the same on every file type and in every browser, which is the
@@ -1339,9 +1339,10 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   the two states are mutually exclusive. It was stored and never read; it is
   now where a window starts.
 - **Fold state survives a month change.** A fold is keyed by its bucket
-  (`data-fold`, the header's hashed id), never its place, and kept per window
-  in `sessionStorage` (`ffm.folds`); `zM`/`zR` reach buckets only other months
-  have. See `design/spec.md`'s Fold state survives a month change.
+  (`data-fold`, the header's hashed id), never its place, and kept on the
+  device per member in `localStorage` (`ffm.folds.{member}`), so closing the
+  tab or the installed app keeps it; changing *Folds start* drops it.
+  `zM`/`zR` reach buckets only other months have. See `design/spec.md`'s Fold state survives a month change.
 
 ### Unresolved issues across months
 
@@ -1583,6 +1584,12 @@ that will otherwise be re-proposed.
   filter — **a new money element must carry it**, or it shows while the rest
   are hidden. The filter names no `x`/`y`: Safari places a subregion in page
   coordinates. See `design/spec.md`'s Hiding the amounts.
+- **The bell sits beside light/dark, at every width** — every toast this
+  window was shown, in `sessionStorage` (`ffm.notes`), cleared by every
+  pre-auth page so a sign-out takes it along. Built like the profile menu;
+  on a phone its popup is pinned to the gutters, since anchored to its button
+  it ran off the left edge. "The statusline says …" elsewhere in these docs
+  now means a toast: `say()` is the one place a message is shown.
 - **The member's name is on the profile button and nowhere else in the bar.**
   It used to sit in `.htotals` as well, which printed it twice within 200px.
 - **`:theme` and `:profile` both open `:profile`** — the difference is that
@@ -1649,6 +1656,9 @@ that will otherwise be re-proposed.
   and the full-screen overlays stop above `--foot-h` (statusline + inset),
   not `--status-h`. `fitViewport` zeroes `--safe-b` while the keyboard is
   up, which covers the home indicator anyway.
+- **The shell is `100dvh`**, never `100vh`: installed on an iPhone, the page
+  starts below the system's status bar while `100vh` is the whole screen, and
+  the statusline sat under the bottom edge.
 - **Status bar style `default`**, not `black-translucent`: the translucent
   one draws the page under white status-bar text, which vanishes on a light
   palette.
@@ -1775,8 +1785,12 @@ that will otherwise be re-proposed.
     disagreeing with itself on screen. They are computed by the same
     `ledger::pane` call a page load uses, so privacy filtering and the numbers
     cannot come apart.
-  - **The statusline travels in a response header** (`HX-Trigger`), not in the
-    body — a swap should not have to include chrome in order to say something.
+  - **The message travels in a response header** (`HX-Trigger`'s `ffm:say`),
+    not in the body — a swap should not have to include chrome in order to
+    say something. The page shows it as a **toast** and keeps it in the
+    **bell** (`say()`, the one place a message is shown); the statusline's
+    message cell reads back the last command typed instead. See
+    `design/spec.md`'s Toasts and the bell.
   - **An error row is HTTP 200.** HTMX swaps a successful response by default,
     and the error row *is* the answer; signaling failure in the status code
     means the person sees nothing at all.

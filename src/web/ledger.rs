@@ -442,6 +442,7 @@ struct LedgerPage {
     /// from `location` on submit, because `?pane=` is rewritten client-side.
     back_to: String,
     person_svg: &'static str,
+    bell_svg: &'static str,
     /// Which pane the cursor starts in, as an index into `panes` — the
     /// component counts panes, not member ids.
     focused: usize,
@@ -679,6 +680,7 @@ pub async fn ledger(
         })
         .collect(),
         person_svg: crate::ui::icons::svg("person"),
+        bell_svg: crate::ui::icons::svg("bell"),
         back_to,
         focused,
         theme_css: rendered.to_css(),

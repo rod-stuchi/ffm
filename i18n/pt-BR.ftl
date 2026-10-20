@@ -1002,6 +1002,13 @@ carousel-remove-yes = Remover
 busy-label = Carregando…
 busy-offline = O servidor não respondeu — nada foi alterado. Tente de novo.
 
+# --- toasts and the bell: what the app has said in this window ----------------
+notes-title = Notificações
+notes-empty = Nada ainda. O que o app disser aparece aqui até esta janela fechar.
+notes-clear = Limpar
+notes-dismiss = Dispensar
+command-about-messages = o que o app disse nesta janela · :messages clear esvazia
+
 ## Que tipo de servidor é este — o selo de um build de desenvolvimento (`crate::run`)
 
 run-dev-title = Um build de desenvolvimento — não é o servidor da casa. O que você muda aqui não é o livro de verdade.

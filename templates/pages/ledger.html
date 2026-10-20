@@ -183,6 +183,33 @@
               aria-label="{{ mode_label }}">{{ mode_svg|safe }}</button>
     </form>
 
+    {#- What the app has said in this window — every toast, kept (`say`,
+        `ffm.notes`). Built like `.profmenu` beside it; `:messages` opens it
+        too. Its state is the shell's, because `say` fills it. Kept at every
+        width: on a phone a toast is gone in four seconds. -#}
+    <nav class="bellmenu" @click.outside="bellOpen = false" @keydown.escape.window="bellOpen = false">
+      <button class="btn modebtn is-icon bellbtn" type="button"
+              @click="bellOpen ? (bellOpen = false) : openBell()" :aria-expanded="bellOpen"
+              title="{{ t.notes_title() }}" aria-label="{{ t.notes_title() }}">{{ bell_svg|safe }}<span
+              class="bellcount" x-show="notesUnread > 0" x-cloak x-text="notesUnread > 9 ? '9+' : notesUnread"></span></button>
+      <div class="ppop bellpop" x-show="bellOpen" x-cloak>
+        <div class="bellhead">
+          <span>{{ t.notes_title() }}</span>
+          <button class="btn" type="button" x-show="notes.length" @click="clearNotes()">{{ t.notes_clear() }}</button>
+        </div>
+        <p class="bellempty" x-show="!notes.length">{{ t.notes_empty() }}</p>
+        <ol class="belllist" x-show="notes.length">
+          <template x-for="(n, i) in notes" :key="n.at + ':' + i">
+            <li :class="{ 'is-bad': n.bad }">
+              <time x-text="noteTime(n.at)"></time>
+              <span x-text="n.text"></span>
+              <b x-show="n.n > 1" x-text="'×' + n.n"></b>
+            </li>
+          </template>
+        </ol>
+      </div>
+    </nav>
+
     {#- Everything about you, in one place. Built like `.mnav` above — trigger
         and popup in one relatively-positioned wrapper with its own small
         `x-data` — rather than like `.filemenu`, which computes `position:
@@ -949,9 +976,19 @@
     <button class="btn" type="button" @pointerdown.prevent="stripKey('/')">/</button>
   </div>
 
-  {#- The statusline. The same message channel the pre-auth pages use, so
-      there is one way the app talks to you on both sides of the login —
-      with the cells the mock carries around it. -#}
+  {#- What the app says (`say`): above the statusline, over everything —
+      the `P` carousel and the trim view included, whose refusals are the
+      reason it may not be covered. A tap ends one; the bell keeps them all. -#}
+  <div class="toasts" :class="{ 'is-raised': commanding || searching }" aria-live="polite">
+    <template x-for="m in toasts" :key="m.id">
+      <button type="button" class="toast" :class="{ 'is-bad': m.bad }"
+              :role="m.bad ? 'alert' : 'status'" title="{{ t.notes_dismiss() }}"
+              @click="dropToast(m.id)" x-text="m.text"></button>
+    </template>
+  </div>
+
+  {#- The statusline. Its message cell is the last command typed, or the
+      `/` search's hit count — what the app SAYS is a toast, above. -#}
   <div class="status">
     {#- On a touch screen the badge is also the keyboard: tap it to bring the
         phone's keyboard up for the keymap, tap again to put it away. -#}
@@ -961,7 +998,7 @@
          x-text="commanding ? 'COMMAND' : (searching ? 'SEARCH' : 'NORMAL')">NORMAL</span></div>
     <div class="st">{{ household }} · {{ period }}</div>
     <div class="st stmember">{{ me_name }}{% if me_admin %} {{ t.status_admin() }}{% endif %}</div>
-    <div class="st grow msg" :class="{ bad: msgBad }" x-text="msg"></div>
+    <div class="st grow msg" x-text="msg"></div>
     {#- A request with no row or side pane to show itself on — a setting, `u`,
         a settings pane opening. Right after the message, the one cell that
         grows, so its coming and going moves nothing to its right. -#}
@@ -1299,16 +1336,18 @@ function ledger() {
     // and its subtotal, so folding shows or hides what is in the DOM. That is
     // exactly the division of responsibility this app draws.
     //
-    // Keyed by bucket (`data-fold`), and kept for the window in
-    // `sessionStorage` (`ffm.folds`), so a fold closed in October is still
-    // closed in November: a month change is a page load, and this map used to
-    // start empty on every one. `keys` are folds toggled one by one; `all` is
+    // Keyed by bucket (`data-fold`), and kept in `localStorage` per member
+    // (`foldsKey`), so a fold closed in October is still closed in November —
+    // a month change is a page load, and this map used to start empty on
+    // every one — and still closed after the tab or the installed app is. `keys` are folds toggled one by one; `all` is
     // what `zM`/`zR` last said, which also reaches a bucket only another month
     // has; `foldsClosed` is the member's *Folds start* setting, for anything
     // neither has spoken about.
     folds: {},
     foldsAll: null,
     foldsClosed: {{ fold_collapsed|json|safe }},
+    // Per MEMBER, like `cmdHistKey`: two people on one laptop fold their own.
+    foldsKey: 'ffm.folds.{{ me_id }}',
     // Parked drafts, keyed by row id. They live HERE — on the shell, outside
     // every hx-target — because an HTMX swap destroys the Alpine state inside
     // it, and a draft that vanished with the row it belonged to would leave
@@ -1336,8 +1375,18 @@ function ledger() {
     // click its lift sends is not a tap.
     press: null,
     pressFired: false,
+    // The statusline's message cell: the last command typed, or `/`'s hit
+    // count while a search is up. What the app SAYS is a toast (`say`).
     msg: '',
-    msgBad: false,
+    lastCmd: '',
+    // On screen now — `{ id, text, bad, timer }`, newest last, three at most.
+    toasts: [],
+    toastSeq: 0,
+    // Everything said in this window, newest first — the bell's list, kept in
+    // `sessionStorage` (`ffm.notes`) so a reload or a month change keeps it.
+    notes: [],
+    notesUnread: 0,
+    bellOpen: false,
     // Requests in flight with nowhere closer to show themselves than the
     // statusline. Row and pane anchors are counted in `ffmBusy`, outside the
     // component: they hold DOM elements, which Alpine's reactivity would wrap.
@@ -1684,7 +1733,102 @@ function ledger() {
         .finally(() => this.busyEnd(anchor));
     },
 
-    say(message, bad) { this.msg = message; this.msgBad = !!bad; },
+    /// Everything the app tells you: a toast, and a line in the bell. Every
+    /// message goes through here — the server's `ffm:say`, the keymap's own
+    /// refusals, the live channel — so this is the one place it is shown.
+    say(message, bad) {
+      if (!message) return;
+      bad = !!bad;
+      this.note(message, bad);
+      this.toast(message, bad);
+    },
+
+    /// A toast lasts 4s, a refusal 8s; a tap ends either. The same words again
+    /// while they are still up (a refused key pressed twice) restart that
+    /// toast rather than stacking a second copy of it.
+    toast(text, bad) {
+      const last = this.toasts[this.toasts.length - 1];
+      let t = last && last.text === text && last.bad === bad ? last : null;
+      if (!t) {
+        t = { id: ++this.toastSeq, text, bad, timer: 0 };
+        this.toasts.push(t);
+        if (this.toasts.length > 3) this.dropToast(this.toasts[0].id);
+      }
+      clearTimeout(t.timer);
+      t.timer = setTimeout(() => this.dropToast(t.id), bad ? 8000 : 4000);
+    },
+
+    dropToast(id) {
+      const t = this.toasts.find(x => x.id === id);
+      if (t) clearTimeout(t.timer);
+      this.toasts = this.toasts.filter(x => x.id !== id);
+    },
+
+    /// The bell's line for a message. A repeat within 2s counts on the line
+    /// before (`×3`) rather than filling the list with one refusal.
+    note(text, bad) {
+      const now = Date.now();
+      const top = this.notes[0];
+      if (top && top.text === text && top.bad === bad && now - top.at < 2000) {
+        top.at = now;
+        top.n = (top.n || 1) + 1;
+      } else {
+        this.notes.unshift({ text, bad, at: now, n: 1 });
+        if (this.notes.length > 50) this.notes.length = 50;
+        if (!this.bellOpen) this.notesUnread++;
+      }
+      this.saveNotes();
+    },
+
+    /// `hh:mm`, for the bell. The arrival time in this browser: it is a
+    /// record of this window's session, not of the ledger.
+    noteTime(at) {
+      const d = new Date(at);
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    },
+
+    openBell() {
+      this.bellOpen = true;
+      this.notesUnread = 0;
+      this.saveNotes();
+    },
+
+    clearNotes() {
+      this.notes = [];
+      this.notesUnread = 0;
+      this.saveNotes();
+    },
+
+    saveNotes() {
+      try {
+        sessionStorage.setItem('ffm.notes', JSON.stringify({ notes: this.notes, unread: this.notesUnread }));
+      } catch (_) {}
+    },
+
+    /// And a message said in the last moments before this page loaded is
+    /// toasted again: a setting answers `HX-Refresh`, and its words would
+    /// otherwise reach only the bell.
+    loadNotes() {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('ffm.notes') || 'null');
+        if (saved && Array.isArray(saved.notes)) {
+          this.notes = saved.notes.slice(0, 50);
+          this.notesUnread = Number(saved.unread) || 0;
+        }
+        this.lastCmd = sessionStorage.getItem('ffm.echo') || '';
+        this.msg = this.lastCmd;
+      } catch (_) {}
+      const now = Date.now();
+      this.notes.filter(n => now - n.at < 2500).reverse().forEach(n => this.toast(n.text, n.bad));
+    },
+
+    /// The command just run, in the statusline until the next one — kept for
+    /// the window, so a command that reloads the page still shows there.
+    echoCommand(raw) {
+      this.lastCmd = ':' + raw;
+      this.msg = this.lastCmd;
+      try { sessionStorage.setItem('ffm.echo', this.lastCmd); } catch (_) {}
+    },
 
     key(e) {
       // A MODIFIER pressed on its own is not a keystroke, and must not be
@@ -3175,22 +3319,36 @@ function ledger() {
       this.saveFolds();
     },
 
-    /// Per window, like `?pane=` and `ffm.follow`: two windows keep their
-    /// own folds, and a new tab starts from the member's setting.
+    /// Kept across closing the tab — it was per window, in `sessionStorage`,
+    /// and every new tab or launch of the installed app opened on the
+    /// member's setting with the folds gone. Stamped with that setting, so
+    /// changing *Folds start* in `:profile` starts over from it rather than
+    /// being overruled for good by a `zM` made long ago.
     saveFolds() {
       try {
-        sessionStorage.setItem('ffm.folds', JSON.stringify({ all: this.foldsAll, keys: this.folds }));
+        localStorage.setItem(this.foldsKey,
+          JSON.stringify({ all: this.foldsAll, keys: this.folds, start: this.foldsClosed }));
       } catch (_) {}
     },
 
     loadFolds() {
+      let old = null;
       try {
-        const saved = JSON.parse(sessionStorage.getItem('ffm.folds') || 'null');
-        if (saved) {
+        let saved = JSON.parse(localStorage.getItem(this.foldsKey) || 'null');
+        // What a window open before this change had, carried over once.
+        old = !saved && JSON.parse(sessionStorage.getItem('ffm.folds') || 'null');
+        if (old) saved = { ...old, start: this.foldsClosed };
+        sessionStorage.removeItem('ffm.folds');
+        if (saved && saved.start === this.foldsClosed) {
           this.foldsAll = typeof saved.all === 'boolean' ? saved.all : null;
           this.folds = saved.keys && typeof saved.keys === 'object' ? saved.keys : {};
+        } else if (saved) {
+          // Made under the other *Folds start*: gone for good, so turning
+          // the setting back does not bring old folds with it.
+          localStorage.removeItem(this.foldsKey);
         }
       } catch (_) {}
+      if (old) this.saveFolds();
     },
 
     /// The fold the cursor is inside, so `za` works from a row rather than
@@ -3542,7 +3700,7 @@ function ledger() {
           this.matches.push(i);
         }
       });
-      this.say(this.matches.length ? (this.matches.length + '/' + this.rows().length) : '', false);
+      this.msg = this.matches.length ? (this.matches.length + '/' + this.rows().length) : this.lastCmd;
     },
 
     step(dir) {
@@ -3558,7 +3716,7 @@ function ledger() {
       this.searching = false;
       this.matches = [];
       document.querySelectorAll('.row.is-match').forEach(r => r.classList.remove('is-match'));
-      this.say('');
+      this.msg = this.lastCmd;
     },
 
     move(delta) {
@@ -4221,6 +4379,7 @@ function ledger() {
       if (this.keyboard) this.backToKeys();
       if (!raw) return;
       this.keepCmd(raw);
+      this.echoCommand(raw);
       const [name, ...rest] = raw.split(/\s+/);
       const arg = rest.join(' ');
 
@@ -4232,6 +4391,11 @@ function ledger() {
         case 'household': case 'config':  return this.showSplit('/household');
         case 'members':                   return this.showSplit('/members');
         case 'trash':                     return this.openTrash();
+        // The bell's list — Vim's own word for the messages it has shown.
+        case 'messages':
+          if (arg === 'clear') return this.clearNotes();
+          if (!arg) return this.openBell();
+          break;
         // This month's manual order, to other months — `gs` too.
         case 'order':                     return this.openOrder();
         // Duplicate files, admin only — the server refuses anybody else.
@@ -5083,6 +5247,7 @@ function ledger() {
     init() {
       // Before anything reads `closed()`: the folds this window left closed.
       this.loadFolds();
+      this.loadNotes();
       // A pane the live channel left alone because a row in it was open in
       // `e` is re-rendered the moment that form closes — saved, canceled or
       // parked. Not a retry timer: a background tab throttles those to one

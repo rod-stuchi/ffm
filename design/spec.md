@@ -164,7 +164,7 @@ The statusline carries, left to right:
 | mode | `NORMAL` · `COMMAND` · `SEARCH`. Accent for normal — the "you are here" token — and `--info` while typing, which already means "what I picked" |
 | household · period | which ledger, which month |
 | member | the **session's** member and `(admin)` when admin powers are actually in effect, so it reads as a member under preview-as-non-admin |
-| message | the same channel the pre-auth pages use |
+| message | the last command typed (`:sort date`), kept until the next one and across the reload a setting causes — or, while `/` is up, its hit count `3/7`. What the app *says* is a toast (see Toasts and the bell) |
 | busy | the loader, while a request with no row or pane to show itself on is in flight — a setting, `u`, a settings pane opening. After the message, the one cell that grows, so its coming and going moves nothing to its right |
 | selection | `x`: `3 of 5 selected · Σ R$ 588,20` — how many of the **focused pane's** rows are selected, and their sum written like the pane header (`Σ + …` for incomes only; `in · out · net` for a mix, `~` on a projection). Rendered by the server from the same pane query as the header; hidden while nothing in the pane is selected |
 | buffer | the pending count and key prefix, so a half-typed `3d` or `g` is visible rather than silently remembered |
@@ -536,9 +536,11 @@ standing out.)
   click away on, an `esc` button beside the zoom controls closes it, the same
   word the rule pane's close button uses.
 - **Except the statusline, which stays visible below it** — and below the
-  trim view, which shares the rule. It is the one place the app speaks, and
-  covering it meant a bill refused on the trim view's Save was refused in
-  silence. Both overlays end at `--foot-h` (`tokens.css`): the
+  trim view, which shares the rule. Covering it meant a bill refused on the
+  trim view's Save was refused in silence; what the app says is a toast now,
+  which sits above both overlays, but the foot stays uncovered — the mode
+  badge and the command echo are read from there. Both overlays end at
+  `--foot-h` (`tokens.css`): the
   statusline's own fixed height, `--status-h`, plus a phone's home-indicator
   inset when installed full screen (see On a phone — installed).
 - **Full-viewport, not a dialog-sized modal** — the few other modals left
@@ -867,8 +869,8 @@ you can still see a figure is there without being able to read it.
   add row, the rule pane. You cannot edit a number you cannot see, and
   focusing one is a deliberate act, not a peek. There is no other peek: no
   hover, no press-and-hold.
-- **What it does not hide**: a statusline sentence that mentions an amount
-  (*read R$ … from the bill*, `u`'s *amount R$ 12,00 → R$ 10,00*), the
+- **What it does not hide**: a toast that mentions an amount, and its line
+  in the bell (*read R$ … from the bill*, `u`'s *amount R$ 12,00 → R$ 10,00*), the
   question `u` asks, and the `P` carousel and trim view, which show the bill
   itself. And pixelation keeps a figure's width, so how many digits it has
   still shows; the text is in the page for copy and screen readers, though
@@ -924,10 +926,44 @@ screen, no address bar, the household's name under the icon.
 - **Nothing hides under the hardware.** The shell is padded by the notch and
   the rounded corners, and the statusline grows by the home indicator, its
   cells kept above it. While the keyboard is up that padding goes.
+- **The shell is `100dvh`, not `100vh`.** Installed, the page starts below
+  the system's status bar while `100vh` is still the whole screen, so the
+  statusline sat under the bottom edge with only its border showing.
 - **No offline mode.** The database is the source of truth; an app with no
   connection to it says so the way a browser tab does.
 - **On iOS the installed app signs in on its own** — it keeps its own cookies,
   apart from Safari's.
+
+### Toasts and the bell
+
+On a phone the statusline is a 400px bar of mono cells, and a message was the
+one of them that grows: a sentence cut to *not a comm…* by an ellipsis, and
+gone at the next message, with nowhere to read it again.
+
+- **Everything the app says is a toast**, at every width — the server's
+  `ffm:say` and every refusal the keymap makes itself. `say()` on the ledger
+  page is the one place a message is shown, so nothing else had to change:
+  the server still says it in `HX-Trigger`.
+- **Above the statusline, centered, three at most**, newest at the bottom;
+  raised over the command bar while `:` or `/` is open, and above every
+  overlay, the carousel and the trim view included. Placed from the shell's
+  height (`--app-h`), so with a phone's keyboard up it is above the keyboard.
+- **4 seconds, a refusal 8**, and a tap ends either. A refusal wears a
+  `--neg` rail; an ok one a neutral one — never the accent, "you are here".
+  The same words again while still up restart that toast, so a refused key
+  pressed five times is one toast.
+- **The bell keeps them** — in the ledger bar, beside light/dark, at every
+  width. Newest first, each with its `hh:mm`; a repeat within 2 seconds is
+  `×3` on one line. A count of the unread in `--info`, cleared by opening it.
+  **Clear** empties it; so does `:messages clear`, and `:messages` opens it.
+- **For the window, in `sessionStorage`** (`ffm.notes`, the newest 50): a
+  reload and a month change keep it, another tab has its own, and every
+  pre-auth page — where `:logout`, a revoked session and a reset all land —
+  clears it, so the next person on the laptop starts clean.
+- **A message said just before a reload is toasted again.** A setting
+  answers `HX-Refresh`; its words would otherwise reach only the bell.
+- **The statusline's message cell reads the command back** — `:sort date`
+  until the next command — which is what a command line does in Vim.
 
 ### Find
 | Key | Action |
@@ -1164,6 +1200,7 @@ order, in the month on screen, to other months of the same year.
 | `:` | open the command bar |
 | `:grep vinho` | search every month — a result list, not a filter over this one · bare `:grep` reopens the last search |
 | `:trash` | deleted rows and removed files, to bring back — the same pane `Ctrl-u` opens |
+| `:messages` | what the app has told you in this window — the bell's list · `:messages clear` empties it |
 | `:prune` | admin only — byte-identical files in the vault, and files in the trash longer than the household keeps them; remove them for good |
 | `:sort date` | row order: manual · name · amount · date |
 | `:order` | copy this month's manual order to other months — the same drawer `gs` opens |
@@ -3141,9 +3178,14 @@ load, and the fold state lived only in the page. Now:
 - **A fold is keyed by its bucket, not its place** — `data-fold`, the fold
   header's own `{member}-{hash of the bucket}` id. It was `{member}-{index}`,
   and the index names another bucket in another month, and after `S`.
-- **It is kept for the window**, in `sessionStorage` (`ffm.folds`), the same
-  choice `ffm.follow` and the `:grep` term made: two windows keep their own
-  folds, a reload keeps them, and a new tab starts from *Folds start*.
+- **It is kept on the device, per member**, in `localStorage`
+  (`ffm.folds.{member}`): a reload, a new tab and a relaunch of the installed
+  app all keep them. It was `sessionStorage`, per window, and closing the tab
+  or the app lost every fold. Two windows open at once share it — the last
+  fold toggled is what the next load starts from.
+- **Changing *Folds start* starts over.** The saved state carries the setting
+  it was made under, and is dropped when that no longer matches — otherwise a
+  `zM` from months ago would overrule the setting for good.
 - **`zM` and `zR` speak for every fold**, the buckets only another month has
   included: they set a window-wide state and forget the folds toggled one by
   one. A single `za`/`zo`/`zc`, a click, or a `:grep` hit opening its fold,

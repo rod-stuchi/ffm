@@ -1037,6 +1037,13 @@ carousel-remove-yes = Remove
 busy-label = Working…
 busy-offline = No answer from the server — nothing changed. Try again.
 
+# --- toasts and the bell: what the app has said in this window ----------------
+notes-title = Notifications
+notes-empty = Nothing yet. What the app tells you shows here until this window closes.
+notes-clear = Clear
+notes-dismiss = Dismiss
+command-about-messages = what the app has told you in this window · :messages clear empties it
+
 ## Which kind of server this is — the badge a dev build wears (`crate::run`)
 
 run-dev-title = A development build — not the household's server. What you change here is not the real ledger's.

@@ -479,12 +479,77 @@ legend {
   text-overflow: ellipsis;
 }
 
+/* The last command typed, or `/`'s hit count — read back, not news, so in
+ * the quiet ink. What the app says is a toast (below). */
 .st.msg {
-  color: var(--accent);
+  color: var(--ink-2);
 }
 
+/* The pre-auth pages' cell (`auth/base.html`), which the server fills. */
 .st.msg.bad {
   color: var(--neg);
+}
+
+/* --- toasts --------------------------------------------------------------- */
+
+/* What the app says (`say`), above the statusline. One line on a 400px bar
+ * did not hold a sentence; a toast wraps, and the bell keeps it after.
+ *
+ * Fixed, but placed from the top by the shell's height: while a phone's
+ * keyboard is up the shell is the visible screen (`--app-h`), and a bottom
+ * offset would put the toasts under the keyboard. Above every overlay — the
+ * carousel and the trim view leave the foot uncovered precisely so their
+ * refusals can be read, and a confirmation's answer belongs above it too. */
+.toasts {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--app-h, 100dvh) - var(--foot-h) - 12px);
+  transform: translate(-50%, -100%);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(480px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+/* Clear of the command bar while `:` or `/` is open. */
+.toasts.is-raised {
+  top: calc(var(--app-h, 100dvh) - var(--foot-h) - 56px);
+}
+
+.toast {
+  pointer-events: auto;
+  max-width: 100%;
+  padding: 8px 12px 8px 14px;
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--ink-3);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  color: var(--ink);
+  box-shadow: var(--shadow-md);
+  font: 12.5px/1.4 var(--sans);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  animation: toast-in 0.16s ease-out;
+}
+
+/* A refusal: the rail in `--neg`, the token every "nothing was written"
+ * already wears. An ok toast keeps a neutral rail — never the accent, which
+ * means "you are here". */
+.toast.is-bad {
+  border-left-color: var(--neg);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
 }
 
 /* `x` — the selection's count and sum. Written like the pane header: the
@@ -543,6 +608,12 @@ legend {
   .st.mode,
   .st.ver {
     flex: none;
+  }
+
+  /* The last command typed keeps room to be read; the household and the
+   * member, both on the bar above already, give way first. */
+  .st.msg {
+    min-width: 14ch;
   }
 }
 

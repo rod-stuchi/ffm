@@ -52,6 +52,10 @@ pub fn svg(name: &str) -> &'static str {
         "person" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>"#
         }
+        // The ledger bar's notifications: every message this window was told.
+        "bell" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>"#
+        }
         // The statusline's mode badge on a touch screen: tap it for the
         // keyboard, which a phone shows only for a focused field.
         "keyboard" => {
@@ -79,11 +83,11 @@ mod tests {
     use super::*;
 
     /// Every name the UI asks for by hand — the row's five, the ledger
-    /// bar's four, the pre-auth chrome's globe and the rule pane's two eyes.
+    /// bar's five, the pre-auth chrome's globe and the rule pane's two eyes.
     /// A name added to `svg()` and not to here is untested; a name used in a
     /// template and not here is worse, because the fallback circle renders
     /// and nothing complains.
-    const NAMES: [&str; 13] = [
+    const NAMES: [&str; 14] = [
         "bill",
         "scheduled",
         "receipt",
@@ -93,6 +97,7 @@ mod tests {
         "sun",
         "moon",
         "person",
+        "bell",
         "globe",
         "eye",
         "eye_off",

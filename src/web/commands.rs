@@ -58,7 +58,7 @@ fn owned(values: &[&str]) -> Vec<String> {
 }
 
 /// In the order a household reaches for them, which is the hint's order.
-pub static ALL: [Command; 17] = [
+pub static ALL: [Command; 18] = [
     Command {
         name: "help",
         aliases: &["h"],
@@ -130,6 +130,13 @@ pub static ALL: [Command; 17] = [
         args: none,
         who: Who::Anyone,
         about: |t| t.command_about_trash().to_string(),
+    },
+    Command {
+        name: "messages",
+        aliases: &[],
+        args: || owned(&["clear"]),
+        who: Who::Anyone,
+        about: |t| t.command_about_messages().to_string(),
     },
     Command {
         name: "prune",
@@ -261,6 +268,8 @@ mod tests {
                     "sort" => settings::LEDGER_SORTS.contains(&v.as_str()),
                     "group" => settings::LEDGER_GROUPS.contains(&v.as_str()),
                     "set" => ["rnu", "nu", "nonu"].contains(&v.as_str()),
+                    // The one the page's dispatcher reads (`runCommand`).
+                    "messages" => v == "clear",
                     other => panic!("{other} completes arguments nobody checks"),
                 };
                 assert!(ok, ":{} {v} would be refused", c.name);

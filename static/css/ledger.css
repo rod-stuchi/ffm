@@ -10,10 +10,14 @@
    * flow, so the shell has to have a bottom for them to sit against. With
    * min-height the stage could grow past the screen and take them with it. */
   height: 100vh;
+  /* `dvh`, not `vh`: installed on an iPhone, the page starts below the
+   * system's status bar while 100vh is still the whole screen, and the
+   * statusline sat under the bottom edge with only its border showing. */
+  height: 100dvh;
   /* While a phone's keyboard is up, what is actually visible (`fitViewport`):
    * iOS shrinks only the visual viewport, and 100vh put the statusline and
    * the command bar under the keyboard. */
-  height: var(--app-h, 100vh);
+  height: var(--app-h, 100dvh);
   /* Clear of the notch and the rounded corners. The bottom is the
    * statusline's own: it grows by the home indicator, so its surface runs
    * to the screen's edge rather than a strip of paper under it. */
@@ -203,6 +207,94 @@
   background: var(--line);
 }
 
+/* The bell: what the app has said in this window. The profile menu's popup,
+ * a little wider, since its lines are sentences. */
+.bellmenu {
+  position: relative;
+}
+
+.bellbtn {
+  position: relative;
+}
+
+/* How many arrived since the bell was last opened. `--info`: news for you,
+ * neither a money fact nor "you are here". */
+.bellcount {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--info);
+  color: var(--paper);
+  font: 700 10px/16px var(--mono);
+  text-align: center;
+}
+
+.bellpop {
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
+  gap: 6px;
+}
+
+.bellhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.ppop .bellhead .btn {
+  width: auto;
+  font-family: var(--sans);
+}
+
+.bellempty {
+  margin: 0;
+  padding: 6px 8px 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.belllist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.belllist li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  padding: 6px 8px;
+  border-left: 2px solid transparent;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.belllist li.is-bad {
+  border-left-color: var(--neg);
+}
+
+.belllist time,
+.belllist b {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
 /* While admin powers are switched off, the profile button wears the warning
  * color the bar's PREVIEW badge did — the badge moved into this button's menu
  * as `:preview`, and the state must still read at a glance. */
@@ -320,6 +412,7 @@
   .ledger-bar .runbadge { order: 3; }
   .htotals { display: contents; }
   .ledger-bar .modebtn { order: 5; }
+  .bellmenu { order: 5; }
   .profmenu { order: 6; }
   .mnav { order: 8; }
 
@@ -354,8 +447,19 @@
 
   /* Out of the bar and into the profile menu. It sits in a `.barform`,
    * which is `display: contents`, so the button is hidden directly. */
-  .ledger-bar .modebtn {
+  .ledger-bar .modebtn:not(.bellbtn) {
     display: none;
+  }
+
+  /* Anchored under its button, the bell's popup ran off the left edge: it
+   * sits left of the profile button, and is wider than what is right of it.
+   * Pinned to the screen's gutters instead. */
+  .bellpop {
+    position: fixed;
+    top: calc(var(--safe-t) + 52px);
+    left: calc(var(--safe-l) + 16px);
+    right: calc(var(--safe-r) + 16px);
+    width: auto;
   }
 
   .ppop-narrow {

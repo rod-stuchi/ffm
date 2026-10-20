@@ -67,6 +67,13 @@
     would be swallowed the moment somebody types it into a password field. -#}
 <template id="ffm-loader">{% include "partials/loader.html" %}</template>
 <script>
+// Every way out of a session lands on a page built on this one — `:logout`,
+// a revoked session, a reset — so the bell's list (`ffm.notes`) and the last
+// command typed end here, and the next person on this laptop starts clean.
+try {
+  sessionStorage.removeItem('ffm.notes');
+  sessionStorage.removeItem('ffm.echo');
+} catch (_) {}
 document.addEventListener('keydown', function (e) {
   if (!e.altKey || e.ctrlKey || e.metaKey) return;
   var k = e.key.toLowerCase();
