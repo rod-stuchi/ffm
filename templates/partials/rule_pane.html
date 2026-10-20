@@ -304,7 +304,7 @@
             <div class="bc-head">
               <b>{{ t.rule_bill_card() }}</b>
               <label class="btn bc-choose" for="rp-billfile" x-show="!noBarcode">{{ t.import_choose_file() }}</label>
-              <input type="file" id="rp-billfile" class="hidden-input" accept=".pdf,.txt,.jpg,.png"
+              <input type="file" id="rp-billfile" class="hidden-input" accept=".pdf,.txt,.jpg,.jpeg,.png"
                      @change="send($el.files[0]); $el.value = ''">
             </div>
             <div class="bc-body" x-show="!noBarcode">

@@ -24,6 +24,16 @@ pub fn is_allowed_extension(ext: &str) -> bool {
     EXTENSIONS.contains(&lower.as_str())
 }
 
+/// The extension an upload is filed under: lowercase, one of [`EXTENSIONS`],
+/// and `.jpeg` spelled `jpg`. A phone or a camera app often names a photo
+/// `.jpeg`, the file picker offers it, and the vault has one spelling per
+/// format — the existence probe tries four names, not five.
+pub fn stored_extension(ext: &str) -> Option<&'static str> {
+    let lower = ext.to_ascii_lowercase();
+    let lower = if lower == "jpeg" { "jpg".to_string() } else { lower };
+    EXTENSIONS.into_iter().find(|e| *e == lower)
+}
+
 /// The three kinds, each a separate fact about a period.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Kind {
@@ -298,5 +308,9 @@ mod tests {
         assert!(is_allowed_extension("jpg"));
         assert!(!is_allowed_extension("exe"));
         assert!(!is_allowed_extension(""));
+        assert_eq!(stored_extension("JPEG"), Some("jpg"));
+        assert_eq!(stored_extension("Jpg"), Some("jpg"));
+        assert_eq!(stored_extension("PDF"), Some("pdf"));
+        assert_eq!(stored_extension("exe"), None);
     }
 }

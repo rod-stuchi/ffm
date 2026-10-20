@@ -167,9 +167,9 @@ pub async fn store(
     let ext = Path::new(original_filename)
         .extension()
         .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        .filter(|e| receipt_path::is_allowed_extension(e))
-        .ok_or(StoreError::Extension)?;
+        .and_then(receipt_path::stored_extension)
+        .ok_or(StoreError::Extension)?
+        .to_string();
 
     if slot.bucket.trim().is_empty() || slot.bill_name.trim().is_empty() {
         return Err(StoreError::NotTracked);
