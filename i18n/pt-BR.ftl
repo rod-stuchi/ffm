@@ -65,6 +65,8 @@ row-menu-unpaid = Desmarcar pago
 row-menu-received = Marcar como recebido
 row-menu-unreceived = Desmarcar recebido
 row-menu-give = Passar para…
+row-menu-files = Arquivos
+row-menu-log = Histórico
 
 ## Arquivos
 

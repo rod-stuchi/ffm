@@ -75,6 +75,8 @@ row-menu-unpaid = Unmark paid
 row-menu-received = Mark received
 row-menu-unreceived = Unmark received
 row-menu-give = Move to…
+row-menu-files = Files
+row-menu-log = History
 
 ## File rail. Slot numbers never change; only the labels do, by direction.
 

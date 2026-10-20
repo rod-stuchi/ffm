@@ -760,7 +760,7 @@ standing out.)
 | Click a row | focus it — the same cursor `j`/`k` move, just placed by pointing instead |
 | Tap a row (phone) | the same as a click — a tap is a click, nothing separate to learn |
 | Click a fold header | put the cursor on it **and** toggle the fold — `za` from the header, so closing a fold by mouse never leaves the cursor inside it |
-| Long-press a row (touch) · right-click (mouse) | the row menu — **Edit** `e`, **Edit rule** `E` when the row has a rule, **Mark paid** `m` when the row takes the manual tick, and **Move to…** `ga` for an admin |
+| Long-press a row (touch) · right-click (mouse) | the row menu — **Edit** `e`, **Edit rule** `E` when the row has a rule, **Mark paid** `m` when the row takes the manual tick, **Move to…** `ga` for an admin, then **Files** `gp` when the row has files and **History** `gl` |
 | Hover a recurring row | show its due/cadence/receipt details — the same info `gd` shows for the focused row, keyboard-only |
 | Click a file control | open that file, new tab — the same action as `g1`/`g2`/`g3` |
 
@@ -773,9 +773,12 @@ standing out.)
   cursor already on the row, and wears that key as a `<kbd>`: the menu
   teaches the keys rather than replacing them, the way the profile menu
   teaches the command bar. An item that does not apply is **absent**, not
-  disabled — no *Edit rule* on a plain row or on an orphan — and on somebody
-  else's read-only ledger there is no menu at all, only the statusline's
-  read-only message, since every item so far writes.
+  disabled — no *Edit rule* on a plain row or on an orphan, no *Files* on a
+  row with none. A rule divides the items that change the row from the two
+  that only look at it, **Files** and **History**; on somebody else's
+  read-only ledger the menu opens with those two alone, since looking is
+  allowed there and writing is not. (It used to open nothing there, with the
+  read-only message, when every item wrote.)
   - **The long press is timed by hand** (500ms, touch and pen only), because
     iOS Safari never fires `contextmenu` for one — it opens its own text
     selection instead, which `-webkit-touch-callout` and `user-select` turn

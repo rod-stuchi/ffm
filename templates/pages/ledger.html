@@ -572,12 +572,14 @@
   {#- The row menu — a long press on a phone, a right-click with a mouse.
       Each item runs what its key runs, with the cursor already on the row,
       and wears that key, so the menu teaches the keymap. An item that does
-      not apply is absent, not disabled. The click that lifts a long press
-      lands outside this menu, so `pressFired` keeps it from closing the
-      menu it just opened. -#}
+      not apply is absent, not disabled — the write items on somebody else's
+      read-only ledger, where the menu still opens with the read ones below
+      the rule: changing the row above it, looking at it below. The click
+      that lifts a long press lands outside this menu, so `pressFired` keeps
+      it from closing the menu it just opened. -#}
   <div class="filemenu rowmenu" x-show="rowMenu" x-cloak :style="rowMenuStyle" role="menu"
        @click.outside="if (!pressFired) rowMenu = null">
-    <button class="btn" type="button" role="menuitem"
+    <button class="btn" type="button" role="menuitem" x-show="rowMenu?.write"
             @click="rowMenu = null; editRow()">{{ t.row_menu_edit() }} <kbd>e</kbd></button>
     <button class="btn" type="button" role="menuitem" x-show="rowMenu?.rule"
             @click="rowMenu = null; editRule()">{{ t.row_menu_edit_rule() }} <kbd>E</kbd></button>
@@ -590,6 +592,11 @@
       <kbd>m</kbd></button>
     <button class="btn" type="button" role="menuitem" x-show="rowMenu?.give"
             @click="rowMenu = null; askGive()">{{ t.row_menu_give() }} <kbd>ga</kbd></button>
+    <hr class="psep" x-show="rowMenu?.write">
+    <button class="btn" type="button" role="menuitem" x-show="rowMenu?.files"
+            @click="rowMenu = null; openCarousel()">{{ t.row_menu_files() }} <kbd>gp</kbd></button>
+    <button class="btn" type="button" role="menuitem"
+            @click="rowMenu = null; openLog()">{{ t.row_menu_log() }} <kbd>gl</kbd></button>
   </div>
   <input type="file" x-ref="picker" class="hidden-input"
          accept=".pdf,.jpg,.jpeg,.png,.txt" @change="send()" @cancel="pickFor = null">
@@ -3836,25 +3843,40 @@ function ledger() {
       this.row = at;
       this.tip = null;
       this.paint();
-      // Every item this phase writes, so on somebody else's ledger there is
-      // nothing to offer — the statusline says why, as the keys would.
-      if (this.readOnly(hit)) return true;
-      this.rowMenu = {
+      // On somebody else's ledger the write items are absent, and the menu
+      // still opens for the read ones — looking at a row's files and history
+      // is allowed there, as `gp` and `gl` already are from the keyboard.
+      // Read straight off the pane rather than through `readOnly()`, which
+      // would say "read-only" over a menu that just opened.
+      const write = !hit.closest('.pane')?.dataset.readonly;
+      const m = {
         id: this.focusedId(),
+        write,
         // `editRule()`'s own test, so the item and the key cannot disagree:
         // absent on a plain row, and on an orphan whose rule was deleted.
-        rule: !!hit.dataset.ruleId && !hit.dataset.ruleDeleted,
+        rule: write && !!hit.dataset.ruleId && !hit.dataset.ruleDeleted,
         // `togglePaid()`'s own test: absent where the tick does not apply.
-        paid: hit.dataset.paid === undefined ? null : hit.dataset.paid === '1',
+        paid: !write || hit.dataset.paid === undefined ? null : hit.dataset.paid === '1',
         income: !!hit.querySelector('.amt .v.is-income'),
         // `askGive()`'s own tests: an admin, and somebody else to give it to.
-        give: this.admin && document.querySelectorAll('.pane').length > 1,
+        give: write && this.admin && document.querySelectorAll('.pane').length > 1,
+        // `openCarousel()`'s own test: a row with no files refuses `gp`.
+        files: !!hit.querySelector('.fbadge[href]'),
       };
+      this.rowMenu = m;
       // Beside the press rather than under it, so a finger does not cover
       // what it just opened; clamped to the viewport with the menu's rough
-      // size, since `x-show` has not laid it out yet to be measured.
+      // size, since `x-show` has not laid it out yet to be measured. Up to
+      // six items now, so the height is counted rather than guessed once.
+      // Each item and its 4px gap, the rule (1px and its margins) when there
+      // is a write group above it, and the menu's padding and border — as
+      // measured, since a guess 18px short put the last item off-screen.
+      const items = [write, m.rule, m.paid !== null, m.give, m.files, true]
+        .filter(Boolean).length;
+      const itemH = matchMedia('(pointer: coarse)').matches ? 40 : 35;
+      const height = items * (itemH + 4) + (write ? 13 : 0) + 10;
       const left = Math.max(8, Math.min(x + 8, innerWidth - 200));
-      const top = Math.max(8, Math.min(y + 8, innerHeight - 120));
+      const top = Math.max(8, Math.min(y + 8, innerHeight - height - 8));
       this.rowMenuStyle = 'top:' + top + 'px; left:' + left + 'px';
       return true;
     },
