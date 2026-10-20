@@ -1,5 +1,6 @@
 //! The trim-and-shrink view: every PDF stops here before it is filed, and a
-//! stored one can be brought back to it from `P`.
+//! stored one can be brought back to it from `P`. So does a screenshot or a
+//! photo — one page, nothing to trim, only the shrink (`services::imgshrink`).
 //!
 //! **Save files nothing here.** The page fetches the finished bytes
 //! (`GET /prepare/{token}/file`) and sends them through the very upload the
@@ -15,7 +16,7 @@
 //! would be a guess about a program that runs here.
 
 use crate::db::rules;
-use crate::services::{pdftrim, stage};
+use crate::services::{imgshrink, pdftrim, stage};
 use crate::state::AppState;
 use crate::ui::fmt;
 use crate::ui::i18n::Catalog;
@@ -38,6 +39,8 @@ pub struct PrepareView {
     pages: Vec<u32>,
     gs: bool,
     spans: bool,
+    /// A PNG or a JPEG: one page, no strip, and a shrink that needs no `gs`.
+    image: bool,
     /// Reworking a file already in the vault, from `P`, rather than one on
     /// its way in. Only the heading says so.
     stored: bool,
@@ -130,7 +133,7 @@ pub async fn stage_upload(State(st): State<AppState>, auth: Auth, mut form: Mult
     stage_bytes(&auth, &t, filename, bytes, &ctx, false).await
 }
 
-/// `POST /tx/{id}/file/{kind}/prepare` — a stored PDF, from `P`.
+/// `POST /tx/{id}/file/{kind}/prepare` — a stored PDF or image, from `P`.
 pub async fn stage_stored(
     State(st): State<AppState>,
     auth: Auth,
@@ -144,7 +147,7 @@ pub async fn stage_stored(
     let Some((path, ext)) = crate::web::files::on_disk(&st, &auth, tx_id, &kind).await else {
         return crate::web::tx::refuse(t.error_not_written(), true);
     };
-    if ext != "pdf" {
+    if !matches!(ext.as_str(), "pdf" | "png" | "jpg") {
         return crate::web::tx::refuse(t.prepare_not_pdf(), true);
     }
     let Ok(bytes) = tokio::fs::read(&path).await else {
@@ -214,30 +217,38 @@ async fn stage_bytes(
         Ok(u) => u,
         Err(crate::web::import::Refused(m)) => return crate::web::tx::refuse(&m, true),
     };
+    let image = imgshrink::kind(&upload.filename, &upload.bytes);
     let meta = stage::Meta {
         // Staged for the viewer: it is their view, whoever's row it is for.
         member_id: auth.viewer.member_id,
         filename: upload.filename.clone(),
         pages: 1,
+        image,
         spans: ctx.spans,
     };
     let Ok(token) = stage::park(&meta, &upload.bytes) else {
         return crate::web::tx::refuse(t.error_not_written(), true);
     };
-    let Some(path) = stage::original(&token, auth.viewer.member_id) else {
-        return crate::web::tx::refuse(t.error_not_written(), true);
+    // An image is one page; only a PDF has its pages counted.
+    let pages = if image.is_some() {
+        1
+    } else {
+        let Some(path) = stage::original(&token, auth.viewer.member_id) else {
+            return crate::web::tx::refuse(t.error_not_written(), true);
+        };
+        let Some(n) = crate::web::files::page_count(&path)
+            .await
+            .filter(|n| *n > 0)
+        else {
+            stage::discard(&token, auth.viewer.member_id);
+            return crate::web::tx::refuse(t.file_pdf_unreadable(), true);
+        };
+        let pages = n as u32;
+        if stage::set_pages(&token, auth.viewer.member_id, pages).is_err() {
+            return crate::web::tx::refuse(t.error_not_written(), true);
+        }
+        pages
     };
-    let Some(n) = crate::web::files::page_count(&path)
-        .await
-        .filter(|n| *n > 0)
-    else {
-        stage::discard(&token, auth.viewer.member_id);
-        return crate::web::tx::refuse(t.file_pdf_unreadable(), true);
-    };
-    let pages = n as u32;
-    if stage::set_pages(&token, auth.viewer.member_id, pages).is_err() {
-        return crate::web::tx::refuse(t.error_not_written(), true);
-    }
 
     Html(PrepareView {
         t: *t,
@@ -246,6 +257,7 @@ async fn stage_bytes(
         pages: (1..=pages).collect(),
         gs: pdftrim::gs_available(),
         spans: ctx.spans,
+        image: image.is_some(),
         stored,
         row: ctx.row.clone(),
     })
@@ -256,20 +268,48 @@ async fn stage_bytes(
 pub struct PageParams {
     #[serde(default)]
     big: Option<u8>,
+    /// An image's large view: the shrunk copy (`1`) or the original.
+    #[serde(default)]
+    shrink: Option<u8>,
 }
 
 /// `GET /prepare/{token}/page/{n}` — a page of the staged original, small
 /// for the strip and larger (`?big=1`) for the focused page.
+///
+/// An image is its own page. Its large view shows the copy that would be
+/// filed when Shrink is on — the shrink is lossy, so what you see should be
+/// what goes to the vault.
 pub async fn page(
     auth: Auth,
     Path((token, n)): Path<(String, u32)>,
     Query(p): Query<PageParams>,
 ) -> Response {
-    let Some(path) = stage::original(&token, auth.viewer.member_id) else {
+    let member = auth.viewer.member_id;
+    let Some(path) = stage::original(&token, member) else {
         return StatusCode::NOT_FOUND.into_response();
     };
     if n == 0 {
         return StatusCode::NOT_FOUND.into_response();
+    }
+    if let Some(kind) = stage::meta(&token, member).and_then(|m| m.image) {
+        let shrink = p.shrink == Some(1);
+        let shown = tokio::task::spawn_blocking(move || {
+            stage::result(&token, member, None, shrink)
+                .ok()
+                .and_then(|o| std::fs::read(o.path).ok())
+        })
+        .await;
+        return match shown {
+            Ok(Some(bytes)) => (
+                [
+                    (header::CONTENT_TYPE, kind.mime()),
+                    (header::CACHE_CONTROL, "private, max-age=86400"),
+                ],
+                bytes,
+            )
+                .into_response(),
+            _ => StatusCode::NOT_FOUND.into_response(),
+        };
     }
     let dpi = if p.big == Some(1) { "150" } else { "36" };
     let out =
@@ -357,8 +397,8 @@ pub async fn size(
     .into_response()
 }
 
-/// `GET /prepare/{token}/file` — the finished PDF, which the page sends on
-/// through the upload it was headed for.
+/// `GET /prepare/{token}/file` — the finished PDF (or image), which the page
+/// sends on through the upload it was headed for.
 pub async fn file(
     State(st): State<AppState>,
     auth: Auth,
@@ -390,8 +430,11 @@ pub async fn file(
     let Ok(Ok(outcome)) = outcome else {
         return StatusCode::UNPROCESSABLE_ENTITY.into_response();
     };
+    let mime = stage::meta(&token, member)
+        .and_then(|m| m.image)
+        .map_or("application/pdf", imgshrink::Kind::mime);
     match tokio::fs::read(&outcome.path).await {
-        Ok(bytes) => ([(header::CONTENT_TYPE, "application/pdf")], bytes).into_response(),
+        Ok(bytes) => ([(header::CONTENT_TYPE, mime)], bytes).into_response(),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }

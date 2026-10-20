@@ -3310,6 +3310,13 @@ mark.kmhit {
   min-height: 0;
 }
 
+/* An image is one page: no strip, the stage takes the width. Also at phone
+   width, where the strip's row would otherwise be an empty first track. */
+.pz-body.is-image {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
 /* The strip: every page small, in order, with its own keep/remove. */
 .pz-strip {
   list-style: none;
@@ -3454,7 +3461,7 @@ mark.kmhit {
 }
 
 @media (max-width: 700px) {
-  .pz-body {
+  .pz-body:not(.is-image) {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
   }

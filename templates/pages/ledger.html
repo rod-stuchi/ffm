@@ -706,9 +706,9 @@
             <button class="btn" type="button" @click="askRemoveFile()">
               {{ t.carousel_remove() }} <kbd>dd</kbd>
             </button>
-            {#- The trim-and-shrink view on the PDF on show (`t`). Saving it
-                replaces the file — the old one goes to the trash. -#}
-            <button class="btn" type="button" x-show="/\.pdf$/i.test(carousel.current.path)"
+            {#- The trim-and-shrink view on the PDF or image on show (`t`).
+                Saving it replaces the file — the old one goes to the trash. -#}
+            <button class="btn" type="button" x-show="/\.(pdf|png|jpg)$/i.test(carousel.current.path)"
                     @click="trimCurrent()">{{ t.prepare_trim() }} <kbd>t</kbd></button>
             {#- More pages for the PDF on show: a barcode drawn from a code
                 (`b`), or another PDF's pages (`a`, Vim's append). Both open
@@ -4560,9 +4560,9 @@ function ledger() {
     fileFound(btn, file) {
       const id = Number(btn.dataset.tx);
       const filed = btn.dataset.filed;
-      // A PDF stops at the trim view, whose Save starts its own box; this
-      // one's steps are done. Anything else goes on under the same box.
-      if (this.isPdf(file)) this.fidgetEnd(true);
+      // A PDF or an image stops at the trim view, whose Save starts its own
+      // box; this one's steps are done. Anything else goes on under the same box.
+      if (this.prepares(file)) this.fidgetEnd(true);
       return this.prepare(file, { tx: id }, (f, extra) => this.sendUpload(id, 'barcode', f, extra).then(r => {
         if (r === true && !document.getElementById('row-' + id)) this.say(filed, false);
         return r;
@@ -4595,8 +4595,8 @@ function ledger() {
     },
 
     /// The one upload path, whichever gesture asked for it.
-    /// Every PDF on its way to a row stops at the trim-and-shrink view first;
-    /// a photo or a text file goes straight in.
+    /// Every PDF or image on its way to a row stops at the trim-and-shrink
+    /// view first; a text file goes straight in.
     upload(id, kind, file) {
       return this.prepare(file, { tx: id }, (f, extra) => this.sendUpload(id, kind, f, extra));
     },
@@ -4721,12 +4721,18 @@ function ledger() {
       return !!file && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || ''));
     },
 
-    /// Stages a PDF and opens the view; anything else is handed straight to
+    /// Whether a file stops at the trim view: a PDF, or a PNG or JPEG — the
+    /// images a slot takes. Which one it really is, the server decides.
+    prepares(file) {
+      return this.isPdf(file) || /\.(png|jpe?g)$/i.test((file && file.name) || '');
+    },
+
+    /// Stages a PDF or an image and opens the view; anything else is handed straight to
     /// `onSave`, which is the upload the file was headed for. `fields` say
     /// where it is going (`tx`, `rule`, `pdf_password`, `spans`) so the server
     /// asks the same permission and opens it with the same password.
     prepare(file, fields, onSave) {
-      if (!this.isPdf(file)) return onSave(file);
+      if (!this.prepares(file)) return onSave(file);
       const body = new FormData();
       body.append('file', file);
       for (const [k, v] of Object.entries(fields)) body.append(k, v == null ? '' : String(v));
@@ -4738,7 +4744,7 @@ function ledger() {
     trimCurrent() {
       const c = this.carousel;
       if (!c || !c.current) return;
-      if (!/\.pdf$/i.test(c.current.path || '')) { this.say(this.prepNotPdf, true); return; }
+      if (!/\.(pdf|png|jpg)$/i.test(c.current.path || '')) { this.say(this.prepNotPdf, true); return; }
       this.prepStored(fetch('/tx/' + c.id + '/file/' + c.current.kind + '/prepare',
                             { method: 'POST', headers: { 'HX-Request': 'true' } }),
                       c.id, c.current.kind);
@@ -4839,7 +4845,9 @@ function ledger() {
             focus: 0,
             gs: !!root.dataset.gs,
             spans: !!root.dataset.spans,
-            shrink: !!root.dataset.gs,
+            // An image's shrink is the server's own, with no `gs` to ask.
+            canShrink: !!root.dataset.gs || !!root.dataset.image,
+            shrink: !!root.dataset.gs || !!root.dataset.image,
             // The large page, as the carousel shows one: fitted to height
             // first, `f` for width, `+`/`-`/`0` on top of either.
             fit: 'height',
@@ -4917,7 +4925,7 @@ function ledger() {
     },
 
     prepShrink(on) {
-      if (!this.prep || !this.prep.gs) return;
+      if (!this.prep || !this.prep.canShrink) return;
       this.prep.shrink = on;
       this.prepSize();
     },
@@ -4982,7 +4990,7 @@ function ledger() {
       const job = this.fidgetStart();
       this.busyFetch(document.querySelector('.pz-actions .btn.pri') || 'status', fetch(url, { headers: { 'X-FFM-Job': job } })
         .then(r => r.ok ? r.blob() : Promise.reject(r.status))
-        .then(blob => p.onSave(new File([blob], p.name, { type: 'application/pdf' }), extra))
+        .then(blob => p.onSave(new File([blob], p.name, { type: blob.type || 'application/pdf' }), extra))
         .then(ok => {
           p.saving = false;
           this.fidgetEnd(ok);

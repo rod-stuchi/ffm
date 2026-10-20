@@ -898,7 +898,22 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   hand: `qpdf` drops the pages nobody needs (the advert at the end of a
   statement), Ghostscript's `/ebook` shrinks what is left, and the view says
   what that comes to (*987 KB → 78 KB −93%*) before anything is written. A
-  photo or a text file goes straight in.
+  text file goes straight in.
+  - **A screenshot or a photo stops there too** (`.png`, `.jpg`), as one
+    page with nothing to trim — only Shrink, done in pure Rust
+    (`services::imgshrink`), so it needs no `gs` and is always offered. It
+    replaces the household's `img2ocr` (OCR into a PDF, then Ghostscript):
+    almost all of a phone screenshot's size is its alpha channel, its 16 bits
+    a channel and colors nobody can tell apart, so the OCR bought no size on
+    top: a 297 KB Nubank receipt comes to 58 KB as a palette PNG.
+    Laid over white, 8 bits, a side capped at 2400 px; a PNG becomes a
+    palette PNG — exact at ≤ 256 colors, else 32 by NeuQuant, **never
+    dithered** (dither took it from 69 KB to 205 KB) and unfiltered; a JPEG
+    is turned upright by its EXIF orientation, which re-encoding would drop,
+    and saved at q80. **The extension never changes** — a PNG stays a PNG —
+    and a file whose name and bytes disagree is filed as it came. The large
+    view shows the copy Shrink would file, since for an image it is lossy.
+    OCR stays a later step (`services/import.rs`'s tier 5).
   - **Save re-sends the finished bytes through the same upload the file was
     headed for** (`services::stage` holds the original meanwhile). Nothing
     about filing was reimplemented, so the bill's binding check, the

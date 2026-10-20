@@ -668,11 +668,12 @@ standing out.)
   question. It is the existing soft delete into the member's trash, so `u`
   puts it back. The carousel drops the file only once the row fragment that
   comes back no longer shows it, and closes when the last one goes.
-- **A PDF on show can be trimmed or shrunk from here** — a *Trim / shrink*
-  button beside Remove, and `t`. It opens the view every PDF upload passes
-  through (see Trim and shrink, under Receipt tracking & files), on the
-  stored file; saving replaces it, and the carousel then shows the new copy.
-  On a photo or a text file the button is absent and `t` says why.
+- **A PDF or an image on show can be trimmed or shrunk from here** — a
+  *Trim / shrink* button beside Remove, and `t`. It opens the view every PDF
+  and image upload passes through (see Trim and shrink, under Receipt
+  tracking & files), on the stored file; saving replaces it, and the carousel
+  then shows the new copy. On a text file the button is absent and `t` says
+  why.
 - **A PDF on show can take more pages** — *Add barcode* (`b`) and *Append
   PDF* (`a`), beside Trim, on a PDF only. Both open **the same trim view** on
   the longer file, so nothing is filed until Save there: the pages are seen
@@ -2753,15 +2754,24 @@ state, so asking afterwards would be asking about something already decided.
 **An income row has no slot 2** in any of them — no menu entry, no drop
 target, and `gu2` refuses with the message `g2` already gives.
 
-### Trim and shrink — every PDF, before it is filed
+### Trim and shrink — every PDF and image, before it is filed
 
 All three gestures, and `A`/`E`'s bill dropzone, stop a PDF at one more
 view before it reaches the vault: the pages as a strip of thumbnails, the
 focused one large beside it, and a size line — *987 KB → 78 KB −93%*. It
 does what the household used to do by hand before uploading: `qpdf` keeps
-the pages that matter, Ghostscript (`/ebook`) shrinks the rest. A photo or a
-text file skips it. `t` in the `P` carousel opens the same view on a PDF
+the pages that matter, Ghostscript (`/ebook`) shrinks the rest. A text file
+skips it. `t` in the `P` carousel opens the same view on a PDF or an image
 already stored.
+
+- **A screenshot or a photo is one page** — no strip, no keep/remove, only
+  Shrink, which is done in Rust (`services::imgshrink`) and so is offered
+  without `gs`, on by default. The large view shows the copy Shrink would
+  file, and the original with Shrink off: an image's shrink is lossy, so what
+  you look at is what goes to the vault. A PNG stays a PNG and a JPEG a JPEG
+  — laid over white, 8 bits, a side capped at 2400 px, a palette PNG (exact
+  at ≤ 256 colors, else 32, never dithered), a JPEG turned upright and saved
+  at q80. A phone screenshot of a receipt: *290 KB → 57 KB −81%*.
 
 - **Full viewport, like `P`**, because the reason to look is to tell an
   advert from the page with the barcode, which needs the page large.

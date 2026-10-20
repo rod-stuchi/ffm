@@ -1,9 +1,11 @@
-//! A PDF waiting in the trim-and-shrink view, before it is filed.
+//! A PDF or an image waiting in the trim-and-shrink view, before it is filed.
 //!
 //! Every PDF on its way to a row or a rule stops here first, and so does a
 //! stored one opened from `P` to be reworked: the view shows its pages, the
 //! person picks which to keep and whether to shrink, and the size line says
-//! what that comes to. Only Save sends anything on — and it sends the
+//! what that comes to. A screenshot or a photo stops here too, as one page
+//! with nothing to trim — only the shrink, which for an image is done in Rust
+//! (`services::imgshrink`), not by Ghostscript. Only Save sends anything on — and it sends the
 //! finished bytes through the **same upload** the file would have taken
 //! anyway, so every check a file gets (the bill's binding, the duplicate
 //! check, `superseded`, the log) still runs, on what is actually filed.
@@ -18,16 +20,20 @@ use std::time::{Duration, SystemTime};
 
 use rand::RngCore;
 
+use crate::services::imgshrink::{self, Kind};
 use crate::services::pdftrim;
 
 const TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// What a staged PDF is, besides its bytes.
+/// What a staged file is, besides its bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Meta {
     pub member_id: i64,
     pub filename: String,
     pub pages: u32,
+    /// A PNG or a JPEG rather than a PDF — `imgshrink::kind` of the upload.
+    /// One page, nothing to trim, and shrunk without Ghostscript.
+    pub image: Option<Kind>,
     /// A bill that covers several months, one page each (`spans_period`):
     /// its pages cannot be dropped, or every month after a dropped one would
     /// be read off the wrong page.
@@ -43,7 +49,8 @@ pub enum Shrink {
     Applied,
     /// Asked for, but the shrunk copy was not smaller — thrown away.
     NoGain,
-    /// Asked for, and there is no Ghostscript on this server.
+    /// Asked for, and there is no Ghostscript on this server. Never for an
+    /// image, which needs no program.
     Unavailable,
 }
 
@@ -71,7 +78,29 @@ fn dir_of(token: &str) -> Option<PathBuf> {
     ok.then(|| root().join(token))
 }
 
-/// Stages a PDF and returns its token. Sweeps anything older than a day on
+impl Meta {
+    /// The original's name in the token's directory: `original.pdf`, or the
+    /// image's own extension, so whatever reads it knows what it is.
+    fn original_name(&self) -> String {
+        format!("original.{}", self.image.map_or("pdf", Kind::ext))
+    }
+
+    fn write(&self, dir: &Path) -> std::io::Result<()> {
+        std::fs::write(
+            dir.join("meta"),
+            format!(
+                "{}\n{}\n{}\n{}\n{}",
+                self.member_id,
+                self.pages,
+                u8::from(self.spans),
+                self.image.map_or("", Kind::ext),
+                self.filename
+            ),
+        )
+    }
+}
+
+/// Stages a file and returns its token. Sweeps anything older than a day on
 /// the way, so there is no separate job to forget to run.
 pub fn park(meta: &Meta, bytes: &[u8]) -> std::io::Result<String> {
     sweep();
@@ -80,17 +109,8 @@ pub fn park(meta: &Meta, bytes: &[u8]) -> std::io::Result<String> {
     let token: String = raw.iter().map(|b| format!("{b:02x}")).collect();
     let dir = root().join(&token);
     std::fs::create_dir_all(&dir)?;
-    std::fs::write(dir.join("original.pdf"), bytes)?;
-    std::fs::write(
-        dir.join("meta"),
-        format!(
-            "{}\n{}\n{}\n{}",
-            meta.member_id,
-            meta.pages,
-            u8::from(meta.spans),
-            meta.filename
-        ),
-    )?;
+    std::fs::write(dir.join(meta.original_name()), bytes)?;
+    meta.write(&dir)?;
     Ok(token)
 }
 
@@ -100,27 +120,23 @@ pub fn set_pages(token: &str, member_id: i64, pages: u32) -> std::io::Result<()>
     let Some((dir, meta)) = open(token, member_id) else {
         return Err(std::io::Error::other("no such staged file"));
     };
-    std::fs::write(
-        dir.join("meta"),
-        format!(
-            "{}\n{}\n{}\n{}",
-            meta.member_id,
-            pages,
-            u8::from(meta.spans),
-            meta.filename
-        ),
-    )
+    Meta { pages, ..meta }.write(&dir)
 }
 
-/// The staged PDF's directory and meta — only for the member who staged it.
+/// The staged file's directory and meta — only for the member who staged it.
 fn open(token: &str, member_id: i64) -> Option<(PathBuf, Meta)> {
     let dir = dir_of(token)?;
     let raw = std::fs::read_to_string(dir.join("meta")).ok()?;
-    let mut lines = raw.splitn(4, '\n');
+    let mut lines = raw.splitn(5, '\n');
     let meta = Meta {
         member_id: lines.next()?.parse().ok()?,
         pages: lines.next()?.parse().ok()?,
         spans: lines.next()? == "1",
+        image: match lines.next()? {
+            "png" => Some(Kind::Png),
+            "jpg" => Some(Kind::Jpeg),
+            _ => None,
+        },
         filename: lines.next()?.to_string(),
     };
     (meta.member_id == member_id).then_some((dir, meta))
@@ -132,7 +148,7 @@ pub fn meta(token: &str, member_id: i64) -> Option<Meta> {
 
 /// The original, for drawing its pages.
 pub fn original(token: &str, member_id: i64) -> Option<PathBuf> {
-    open(token, member_id).map(|(dir, _)| dir.join("original.pdf"))
+    open(token, member_id).map(|(dir, meta)| dir.join(meta.original_name()))
 }
 
 /// The file `keep` and `shrink` come to — computed once and kept, so
@@ -168,8 +184,11 @@ pub fn result_with(
     on_step: &dyn Fn(Step),
 ) -> Result<Outcome, String> {
     let (dir, meta) = open(token, member_id).ok_or("that file is no longer here")?;
-    let original = dir.join("original.pdf");
+    let original = dir.join(meta.original_name());
     let original_size = size(&original)?;
+    if let Some(kind) = meta.image {
+        return image_result(&dir, &meta, kind, original, original_size, shrink, on_step);
+    }
 
     let keep: Vec<u32> = match keep {
         Some(k) if !meta.spans => k
@@ -244,7 +263,58 @@ pub fn result_with(
     })
 }
 
-/// Drops a staged PDF and everything computed from it.
+/// An image's [`result_with`]: one page, whatever `keep` says, and the
+/// shrink is `imgshrink`'s. Its answer is kept like a PDF's — the shrunk copy,
+/// or a `none` marker when it came out no smaller — so the size line, the
+/// large view and Save do the work once.
+fn image_result(
+    dir: &Path,
+    meta: &Meta,
+    kind: Kind,
+    original: PathBuf,
+    original_size: u64,
+    shrink: bool,
+    on_step: &dyn Fn(Step),
+) -> Result<Outcome, String> {
+    let unshrunk = |shrink| Outcome {
+        path: original.clone(),
+        original: original_size,
+        size: original_size,
+        pages: 1,
+        shrink,
+    };
+    if !shrink {
+        return Ok(unshrunk(Shrink::Off));
+    }
+    let shrunk = dir.join(format!("s.{}", kind.ext()));
+    let none = dir.join("s.none");
+    if !shrunk.exists() && !none.exists() {
+        on_step(Step::Shrink);
+        let bytes = std::fs::read(&original).map_err(|e| e.to_string())?;
+        // The size line and the large view can ask at once: each writes its
+        // own copy and renames it into place, so neither reads half a file.
+        let (target, data) = match imgshrink::shrink_bytes(&meta.filename, &bytes)? {
+            Some(b) => (&shrunk, b),
+            None => (&none, Vec::new()),
+        };
+        let tmp = dir.join(format!("tmp-{:016x}", rand::random::<u64>()));
+        std::fs::write(&tmp, data)
+            .and_then(|()| std::fs::rename(&tmp, target))
+            .map_err(|e| e.to_string())?;
+    }
+    if none.exists() {
+        return Ok(unshrunk(Shrink::NoGain));
+    }
+    Ok(Outcome {
+        size: size(&shrunk)?,
+        path: shrunk,
+        original: original_size,
+        pages: 1,
+        shrink: Shrink::Applied,
+    })
+}
+
+/// Drops a staged file and everything computed from it.
 pub fn discard(token: &str, member_id: i64) {
     if let Some((dir, _)) = open(token, member_id) {
         let _ = std::fs::remove_dir_all(dir);
@@ -284,6 +354,7 @@ mod tests {
             member_id,
             filename: "conta.pdf".into(),
             pages: 1,
+            image: None,
             spans: false,
         }
     }
@@ -329,6 +400,36 @@ trailer<</Root 1 0 R>>\n%%EOF\n";
     fn keeping_no_page_is_refused() {
         let token = park(&meta(7), b"%PDF-1.4").unwrap();
         assert!(result(&token, 7, Some(&[]), false).is_err());
+        discard(&token, 7);
+    }
+
+    #[test]
+    fn an_image_is_one_page_and_shrinks_without_gs() {
+        // A 16-bit RGBA screenshot, the kind a phone saves.
+        let img: image::ImageBuffer<image::Rgba<u16>, Vec<u16>> =
+            image::ImageBuffer::from_fn(200, 120, |x, y| {
+                let v = if (x / 3 + y / 5) % 4 == 0 { 0 } else { 65535 };
+                image::Rgba([v, v, v, 65535])
+            });
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba16(img)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let meta = Meta {
+            filename: "10_scheduled.png".into(),
+            image: imgshrink::kind("10_scheduled.png", &png),
+            ..meta(7)
+        };
+        let token = park(&meta, &png).unwrap();
+        assert!(original(&token, 7).unwrap().ends_with("original.png"));
+        assert_eq!(super::meta(&token, 7).unwrap().image, Some(Kind::Png));
+
+        let off = result(&token, 7, Some(&[1, 2]), false).unwrap();
+        assert_eq!((off.shrink, off.pages, off.size), (Shrink::Off, 1, png.len() as u64));
+        let on = result(&token, 7, None, true).unwrap();
+        assert_eq!(on.shrink, Shrink::Applied);
+        assert!(on.size < on.original);
+        assert!(on.path.ends_with("s.png"));
         discard(&token, 7);
     }
 }

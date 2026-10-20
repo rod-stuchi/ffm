@@ -2,16 +2,21 @@
     stored one brought back from `P`. Full viewport, like the carousel: the
     point is to see the pages well enough to tell an advert from a barcode.
 
+    A screenshot or a photo comes here too, as one page: no strip, nothing to
+    keep or drop, only Shrink — and the large view shows the copy Shrink
+    would file, because for an image that copy is not the original.
+
     What is kept and whether to shrink are unsubmitted choices, so they are
     the shell's visual state (`prep`); the server draws the pages, works out
     the size, and builds the file. Save sends that file through the upload it
     was headed for, so nothing here files anything. -#}
 <div class="prepare" data-prep data-token="{{ token }}" data-pages="{{ pages.len() }}"
      data-gs="{% if gs %}1{% endif %}" data-spans="{% if spans %}1{% endif %}"
+     data-image="{% if image %}1{% endif %}"
      data-name="{{ filename }}" role="dialog" aria-modal="true"
      aria-label="{{ t.prepare_title() }}">
   <div class="pz-head">
-    <b>{% if stored %}{{ t.prepare_title_stored() }}{% else %}{{ t.prepare_title() }}{% endif %}</b>
+    <b>{% if stored %}{{ t.prepare_title_stored() }}{% else if image %}{{ t.prepare_title_image() }}{% else %}{{ t.prepare_title() }}{% endif %}</b>
     <span class="mono pz-name">{{ filename }}</span>
     {%- if let Some(r) = row %}<span class="pz-for">{{ t.prepare_for(r) }}</span>{% endif %}
     {#- Fit height ⇄ fit width — `f`, the carousel's switch and key. -#}
@@ -24,7 +29,8 @@
     </label>
   </div>
 
-  <div class="pz-body">
+  <div class="pz-body{% if image %} is-image{% endif %}">
+    {%- if !image %}
     {#- The strip: every page, small, with its keep/remove state. -#}
     <ol class="pz-strip">
       {%- for n in pages %}
@@ -44,24 +50,31 @@
       </li>
       {%- endfor %}
     </ol>
+    {%- endif %}
 
     {#- The focused page, large enough to read a barcode's digits. -#}
     <div class="pz-stage" :data-fit="prep ? prep.fit : 'height'"
          :style="'--z: ' + (prep ? prep.zoom : 1)">
+      {%- if image %}
+      <img class="pz-big" :src="prep ? '/prepare/{{ token }}/page/1?big=1&shrink=' + (prep.shrink ? 1 : 0) : ''" alt="">
+      {%- else %}
       <img class="pz-big" :src="prep ? '/prepare/{{ token }}/page/' + (prep.focus + 1) + '?big=1' : ''"
            :class="{ 'is-dropped': prep && !prep.keep[prep.focus] }" alt="">
+      {%- endif %}
     </div>
   </div>
 
   <div class="pz-foot">
     <div class="pz-controls">
-      {%- if gs %}
+      {%- if gs || image %}
       <label class="tog">
         <input type="checkbox" :checked="prep && prep.shrink" @change="prepShrink($event.target.checked)">
         <span>{{ t.prepare_shrink() }} <kbd>s</kbd></span>
       </label>
       {%- endif %}
-      {%- if spans %}
+      {%- if image %}
+      <span class="hint">{{ t.prepare_image_hint() }}</span>
+      {%- else if spans %}
       <span class="hint">{{ t.prepare_spans() }}</span>
       {%- else %}
       <span class="hint">{{ t.prepare_hint() }}</span>

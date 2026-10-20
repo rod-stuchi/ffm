@@ -4,6 +4,7 @@ pub mod assistant;
 pub mod backup;
 pub mod barcode_page;
 pub mod boleto;
+pub mod imgshrink;
 pub mod import;
 pub mod installments;
 pub mod issuers;

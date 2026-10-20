@@ -105,12 +105,17 @@ impl ShrinkAsk {
 /// byte for byte what was uploaded, so a stale token can never file another
 /// file. Otherwise (`A`'s Create comes after the stage was dropped) the bytes
 /// are shrunk here. A shrink that is not smaller is not used, as anywhere.
+///
+/// A PNG or a JPEG is shrunk the same way, by `imgshrink` rather than
+/// Ghostscript — nothing reads an image today, so the order costs nothing
+/// there, and it will hold the day OCR reads one.
 pub async fn filed_bytes(upload: &Upload, member_id: i64, t: &Catalog, fidget: &Fidget) -> Vec<u8> {
-    use crate::services::{pdftrim, stage};
+    use crate::services::{imgshrink, pdftrim, stage};
     let ask = &upload.shrink;
+    let image = imgshrink::kind(&upload.filename, &upload.bytes).is_some();
     let is_pdf =
         upload.filename.to_ascii_lowercase().ends_with(".pdf") || upload.bytes.starts_with(b"%PDF");
-    if !ask.on || !is_pdf || !pdftrim::gs_available() {
+    if !ask.on || !(image || (is_pdf && pdftrim::gs_available())) {
         return upload.bytes.clone();
     }
     let step = t.progress_shrink().to_string();
@@ -144,8 +149,14 @@ pub async fn filed_bytes(upload: &Upload, member_id: i64, t: &Catalog, fidget: &
         }
     }
     fidget.step(t.progress_shrink());
-    let bytes = upload.bytes.clone();
-    tokio::task::spawn_blocking(move || pdftrim::shrink_bytes(&bytes))
+    let (name, bytes) = (upload.filename.clone(), upload.bytes.clone());
+    tokio::task::spawn_blocking(move || {
+        if image {
+            imgshrink::shrink_bytes(&name, &bytes)
+        } else {
+            pdftrim::shrink_bytes(&bytes)
+        }
+    })
         .await
         .ok()
         .and_then(Result::ok)

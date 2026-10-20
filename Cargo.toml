@@ -97,6 +97,16 @@ unicode-normalization = "0.1"
 #     dates — the same enforcement build.rs gives the catalog. See clippy.toml.
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 
+# --- images ------------------------------------------------------------------
+# Shrinking a screenshot or a photo before it is filed (`services::imgshrink`).
+# Pure Rust, so the static musl releases need nothing new on the server — the
+# PDF side shells out to gs, an image needs no program at all.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# NeuQuant, for a screenshot with more than 256 colors.
+color_quant = "1"
+# image's own PNG encoder writes RGB(A) only; a palette PNG is written with this.
+png = "0.18"
+
 # --- auth --------------------------------------------------------------------
 argon2 = "0.5"          # members.password_hash
 password-hash = "0.5"   # PHC string types, kept stable across an argon2 bump
