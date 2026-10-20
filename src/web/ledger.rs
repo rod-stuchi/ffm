@@ -849,6 +849,7 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
             vec![
                 k("/", t.keymap_row_search()),
                 k("n / N", t.keymap_row_match()),
+                k("Ctrl-k / Ctrl-j", t.keymap_row_bar_history()),
                 k(":grep", t.keymap_row_grep()),
             ],
         ),

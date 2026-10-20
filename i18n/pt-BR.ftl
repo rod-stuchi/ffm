@@ -442,7 +442,8 @@ members-unknown = Esse membro não está mais aqui — o painel estava desatuali
 members-has-rows = Há linhas no livro, então não pode ir para a lixeira. Desative em vez disso.
 login-error-inactive = Esta conta está desativada. Peça a um admin para reativá-la.
 
-command-placeholder = comando · Tab completa · Ctrl-p recupera
+command-placeholder = comando · Tab completa · Ctrl-k recupera
+search-placeholder = busca · regex · Ctrl-k recupera
 command-about-help = os atalhos — o mesmo que ? · :help ga abre já buscando
 command-about-profile = suas configurações
 command-about-sort = a ordem das linhas
@@ -898,6 +899,7 @@ keymap-row-details = vencimento, frequência e comprovante
 keymap-row-history = o histórico desta linha
 keymap-row-hide = esconder ou mostrar todos os valores — pixelados, neste aparelho
 keymap-row-search = busca neste mês — incremental, regex
+keymap-row-bar-history = nas barras : e / — comandos e buscas anteriores
 keymap-row-match = resultado seguinte / anterior
 keymap-row-grep = busca em todos os meses
 keymap-row-fold-toggle = abre / fecha o grupo sob o cursor

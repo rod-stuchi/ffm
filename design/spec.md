@@ -216,15 +216,23 @@ then refuses.
 - **Tab completes** a command's name, then its argument, from the table:
   one candidate is filled in; several are cycled Vim-wildmenu style, the one
   on show lit in the hint, Shift-Tab going back. A name that takes an
-  argument gets its space, so the next Tab completes that. Only closed sets
-  are completed — `:grep`'s term is anybody's guess.
-- **Ctrl-p / Ctrl-n** (and the arrows) walk the last 30 commands, newest
+  argument gets its space, so the next Tab completes that. A value already
+  complete — typed, or recalled with Ctrl-k — cycles the command's other
+  values from it, so `:group none` Tab is `:group bucket`, and Tab again is
+  `none`. Only closed sets are completed — `:grep`'s term is anybody's guess.
+- **Ctrl-k / Ctrl-j** walk the last 30 commands, older and newer, newest
   first, and what was typed before the walk began is a prefix, as in Vim:
-  `:th` then Ctrl-p steps through past `:theme` lines only. Refused commands
+  `:th` then Ctrl-k steps through past `:theme` lines only. Refused commands
   are kept too — the usual reason to recall one is to fix it. The history is
   per member, in this browser (`localStorage`): it is a convenience, like a
   shell's, and two people on one laptop keep their own. Outside the bar
-  Ctrl-p means nothing: the months are `[` / `]`.
+  Ctrl-k and Ctrl-j keep their ledger meaning (the bottom split).
+  - **Not Ctrl-p / Ctrl-n first**, though they are Vim's: Chrome and Firefox
+    on Linux and Windows keep Ctrl-N for a new window, and the page never
+    sees the key, so "newer" opened a window instead. Ctrl-p / Ctrl-n and
+    the arrows still work wherever the browser lets them.
+  - **The `/` bar has the same walk over its own history** — past search
+    terms, kept on Enter and not on Esc, as Vim does.
 
 **Admin-only commands are absent for a non-admin**, and for an admin
 previewing as one — the same rule that removes the Household button rather
@@ -973,6 +981,7 @@ gone at the next message, with nowhere to read it again.
 |---|---|
 | `/` | search the ledger — incremental, regex |
 | `n` / `N` | next / previous match, wrapping |
+| `Ctrl-k` / `Ctrl-j` | inside the `/` bar — earlier and later searches, as in the command bar |
 | `Esc` | clear the search highlight |
 
 ### Fold

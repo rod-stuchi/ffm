@@ -483,7 +483,8 @@ login-error-inactive = This account is turned off. Ask an admin to turn it back 
 
 ## The command bar
 
-command-placeholder = command · Tab completes · Ctrl-p recalls
+command-placeholder = command · Tab completes · Ctrl-k recalls
+search-placeholder = search · regex · Ctrl-k recalls
 command-about-help = the keymap — the same as ? · :help ga opens it searched
 command-about-profile = your own settings
 command-about-sort = the order of the rows
@@ -936,6 +937,7 @@ keymap-row-details = due, cadence and receipt details
 keymap-row-history = this row's history
 keymap-row-hide = hide or show every amount — pixelated, on this device
 keymap-row-search = search this month — incremental, regex
+keymap-row-bar-history = inside the : and / bars — earlier commands and searches
 keymap-row-match = next / previous match
 keymap-row-grep = search every month
 keymap-row-fold-toggle = toggle the fold under the cursor

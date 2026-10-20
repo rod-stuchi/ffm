@@ -922,10 +922,12 @@
       instant; `:grep` is the different verb that reaches other months. -#}
   <div class="cmdbar searchbar" x-show="searching" x-cloak>
     <span class="caret">/</span>
+    {#- Enter keeps the term in the history; Esc abandons it, as in Vim. -#}
     <input class="cmdinput" x-ref="search" x-model="search" @input="runSearch()"
-           @keydown.enter.prevent="step(1); backToKeys($el)"
+           @keydown="searchKey($event)"
+           @keydown.enter.prevent="if (search) keepHist(searchHistKey, search); step(1); backToKeys($el)"
            @keydown.escape.prevent="clearSearch(); backToKeys($el)"
-           autocomplete="off" spellcheck="false">
+           placeholder="{{ t.search_placeholder() }}" autocomplete="off" spellcheck="false">
   </div>
 
   {#- The command bar. `:` is how every setting surface is reached, and the
@@ -1331,9 +1333,11 @@ function ledger() {
     cmdHintDefault: {{ command_hint|json|safe }},
     // Per MEMBER, in this browser: two people on one laptop keep their own.
     cmdHistKey: 'ffm.cmds.{{ me_id }}',
+    // The `/` bar's own history, kept the same way.
+    searchHistKey: 'ffm.searches.{{ me_id }}',
     // Tab's cycle — `{ list, i, head, tail }`, `head` being the text before
-    // the word being completed — and Ctrl-p's walk, `{ i, prefix, draft }`.
-    // Both end on any other key.
+    // the word being completed — and Ctrl-k's walk, `{ i, prefix, draft }`,
+    // in whichever bar is open. Both end on any other key.
     wild: null,
     recallAt: null,
     logFor: null,
@@ -3561,6 +3565,7 @@ function ledger() {
 
     openSearch() {
       this.searching = true;
+      this.recallAt = null;
       this.focusBar(this.$refs.search);
     },
 
@@ -4400,7 +4405,7 @@ function ledger() {
       // Inside the Enter that ran it, so a phone keeps its keyboard.
       if (this.keyboard) this.backToKeys();
       if (!raw) return;
-      this.keepCmd(raw);
+      this.keepHist(this.cmdHistKey, raw);
       this.echoCommand(raw);
       const [name, ...rest] = raw.split(/\s+/);
       const arg = rest.join(' ');
@@ -4481,7 +4486,7 @@ function ledger() {
     },
 
     /// Keys inside the `:` bar that are not Enter or Esc. Tab completes,
-    /// Ctrl-p / Ctrl-n (and the arrows) walk the history; anything else is
+    /// Ctrl-k / Ctrl-j walk the history (`histDir`); anything else is
     /// typing, and ends both. A modifier alone is not a key — see the Shift
     /// gotcha in CLAUDE.md — or Shift-Tab would end the cycle it steps back
     /// through.
@@ -4492,25 +4497,52 @@ function ledger() {
         this.completeCmd(e.shiftKey ? -1 : 1);
         return;
       }
-      const ctrl = e.ctrlKey && !e.metaKey && !e.altKey;
-      const older = (ctrl && e.key === 'p') || e.key === 'ArrowUp';
-      const newer = (ctrl && e.key === 'n') || e.key === 'ArrowDown';
-      if (older || newer) {
-        // preventDefault: Ctrl-p is Print on Linux, and the arrows would move
-        // the caret to an end of the line.
+      const dir = this.histDir(e);
+      if (dir) {
         e.preventDefault();
         this.wild = null;
-        this.recallCmd(older ? 1 : -1);
+        this.recall(dir, this.cmdHistKey, 'command');
         return;
       }
       this.wild = null;
       this.recallAt = null;
     },
 
+    /// Keys inside the `/` bar that are not Enter or Esc: the same history
+    /// walk as `:`, over past searches. No Tab — a search term is anybody's
+    /// guess, like `:grep`'s. The highlights follow the recalled term, which
+    /// assigning the model alone would not do: `@input` never fires.
+    searchKey(e) {
+      if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph'].includes(e.key)) return;
+      const dir = this.histDir(e);
+      if (dir) {
+        e.preventDefault();
+        this.recall(dir, this.searchHistKey, 'search');
+        this.runSearch();
+        return;
+      }
+      this.recallAt = null;
+    },
+
+    /// Which way a key walks a bar's history: 1 older, -1 newer, 0 neither.
+    /// Ctrl-k / Ctrl-j first, because Ctrl-n cannot work everywhere: Chrome
+    /// and Firefox on Linux and Windows keep Ctrl-N for a new window, and
+    /// the page never even sees the key. Ctrl-p / Ctrl-n (Vim's) and the
+    /// arrows still work wherever the browser lets them. preventDefault on
+    /// all of them: Ctrl-p is Print, Ctrl-j Downloads and Ctrl-k the search
+    /// box on Linux, and the arrows would move the caret to an end.
+    histDir(e) {
+      const ctrl = e.ctrlKey && !e.metaKey && !e.altKey;
+      if ((ctrl && (e.key === 'k' || e.key === 'p')) || e.key === 'ArrowUp') return 1;
+      if ((ctrl && (e.key === 'j' || e.key === 'n')) || e.key === 'ArrowDown') return -1;
+      return 0;
+    },
+
     /// Tab: the command's name, then its argument — Vim's wildmenu. One
     /// candidate is filled in; several are cycled through, Shift-Tab going
     /// back, with the candidates on show in the hint. A name that takes an
     /// argument gets its space, so the next Tab is already completing that.
+    /// A value already complete cycles through the others from it.
     /// Only a CLOSED set is completed: `:grep`'s term is anybody's guess.
     completeCmd(dir) {
       const w = this.wild;
@@ -4531,6 +4563,16 @@ function ledger() {
         if (!c || !c.args.length) return;
         head = text.slice(0, sp) + ' ';
         const word = text.slice(sp + 1).trim().toLowerCase();
+        // A value already complete — typed, or recalled with Ctrl-p — is not
+        // a prefix of itself only: Tab steps on to the next value from it.
+        const k = c.args.findIndex(a => a.toLowerCase() === word);
+        if (k >= 0) {
+          const n = c.args.length;
+          if (n < 2) return;
+          this.wild = { list: c.args, i: (k + dir + n) % n, head, tail: '' };
+          this.command = head + this.wild.list[this.wild.i];
+          return;
+        }
         list = c.args.filter(a => a.toLowerCase().startsWith(word));
       }
       if (!list.length) return;
@@ -4552,39 +4594,40 @@ function ledger() {
       }));
     },
 
-    /// Ctrl-p / Ctrl-n: back and forward through the history, newest first.
+    /// Ctrl-k / Ctrl-j: back and forward through a bar's history, newest
+    /// first, into `this[field]` — `command` for `:`, `search` for `/`.
     /// Like Vim, whatever was typed before the walk began is a PREFIX —
-    /// `:th` then Ctrl-p steps through past `:theme …` lines only — and
+    /// `:th` then Ctrl-k steps through past `:theme …` lines only — and
     /// walking forward past the newest puts back what was typed.
-    recallCmd(dir) {
-      const hist = this.cmdHistory();
-      if (!this.recallAt) this.recallAt = { i: -1, prefix: this.command, draft: this.command };
+    recall(dir, key, field) {
+      const hist = this.history(key);
+      if (!this.recallAt) this.recallAt = { i: -1, prefix: this[field], draft: this[field] };
       const r = this.recallAt;
       let i = r.i;
       do { i += dir; } while (i >= 0 && i < hist.length && !hist[i].startsWith(r.prefix));
-      if (i < 0) { r.i = -1; this.command = r.draft; return; }
+      if (i < 0) { r.i = -1; this[field] = r.draft; return; }
       if (i >= hist.length) return;
       r.i = i;
-      this.command = hist[i];
+      this[field] = hist[i];
     },
 
-    /// The last 30 commands, newest first. Browser storage can be refused (a
+    /// A bar's last 30 lines, newest first. Browser storage can be refused (a
     /// private window), and then there is simply no history.
-    cmdHistory() {
+    history(key) {
       try {
-        const v = JSON.parse(localStorage.getItem(this.cmdHistKey) || '[]');
+        const v = JSON.parse(localStorage.getItem(key) || '[]');
         return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [];
       } catch (_) { return []; }
     },
 
-    /// Remember a command as typed — refused ones too, like Vim, since the
+    /// Remember a line as typed — a refused command too, like Vim, since the
     /// usual reason to recall one is to fix it. A repeat moves to the top
     /// rather than filling the history with copies.
-    keepCmd(raw) {
+    keepHist(key, raw) {
       try {
-        const h = this.cmdHistory().filter(x => x !== raw);
+        const h = this.history(key).filter(x => x !== raw);
         h.unshift(raw);
-        localStorage.setItem(this.cmdHistKey, JSON.stringify(h.slice(0, 30)));
+        localStorage.setItem(key, JSON.stringify(h.slice(0, 30)));
       } catch (_) {}
     },
 
