@@ -164,6 +164,13 @@ clean:
 fonts:
     python3 scripts/fetch-fonts.py
 
+# Render the home-screen install icons (the manifest's) from their SVG sources
+# in design/logo/. The PNGs are committed, so this is only needed when the
+# logo changes.
+icons:
+    for s in 192 512; do inkscape design/logo/ffm-app-icon.svg -w $s -h $s -o static/icons/icon-$s.png; done
+    inkscape design/logo/ffm-app-icon-maskable.svg -w 512 -h 512 -o static/icons/icon-maskable-512.png
+
 # --- database ----------------------------------------------------------------
 
 # Create the database and apply every migration with the plain sqlite3 CLI.

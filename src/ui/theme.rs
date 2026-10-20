@@ -608,6 +608,39 @@ impl RenderedTheme {
             dark = block(&self.dark),
         )
     }
+
+    /// `<meta name="theme-color">` — the color a phone paints its own bar in
+    /// (Android's status bar, an installed app's title bar), set to `var`, the
+    /// token of whatever the page's top edge is. The same pair-or-one rule as
+    /// the CSS: both modes behind `media` for `system`, only the one the
+    /// cookie chose otherwise. Ids, so a palette change can swap them out of
+    /// band beside the `<style>` block.
+    pub fn meta_tags(&self, var: &str) -> String {
+        let pick = |vars: &[(&'static str, String)]| {
+            vars.iter()
+                .find(|(k, _)| *k == var)
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default()
+        };
+        let tag = |id: &str, color: String, media: &str| {
+            format!(r#"<meta name="theme-color" id="ffm-tc-{id}" content="{color}"{media}>"#)
+        };
+        match self.attr {
+            Some("light") => tag("light", pick(&self.light), ""),
+            Some(_) => tag("dark", pick(&self.dark), ""),
+            None => {
+                tag(
+                    "light",
+                    pick(&self.light),
+                    r#" media="(prefers-color-scheme: light)""#,
+                ) + &tag(
+                    "dark",
+                    pick(&self.dark),
+                    r#" media="(prefers-color-scheme: dark)""#,
+                )
+            }
+        }
+    }
 }
 
 impl fmt::Display for RenderedTheme {
@@ -798,5 +831,34 @@ mod tests {
         assert!(Overrides::from_json(r#"{"accent":"red"}"#).is_err());
         assert!(Overrides::from_json("not json").is_err());
         assert!(Overrides::from_json("{}").unwrap().0.is_empty());
+    }
+
+    #[test]
+    fn theme_color_follows_the_mode_the_cookie_chose() {
+        let light = palette(ThemeName::Ffm, Mode::Light).get(Token::Surface);
+        let dark = palette(ThemeName::Ffm, Mode::Dark).get(Token::Surface);
+        let none = Overrides::default();
+
+        // `system`: both, each behind its own media query.
+        let both = render(ThemeName::Ffm, ModePref::System, &none).meta_tags("surface");
+        assert!(
+            both.contains(&format!(
+                r#"content="{light}" media="(prefers-color-scheme: light)""#
+            )),
+            "{both}"
+        );
+        assert!(
+            both.contains(&format!(
+                r#"content="{dark}" media="(prefers-color-scheme: dark)""#
+            )),
+            "{both}"
+        );
+
+        // A forced mode: only that one, with no media to lose to the OS.
+        let forced = render(ThemeName::Ffm, ModePref::Dark, &none).meta_tags("surface");
+        assert_eq!(
+            forced,
+            format!(r#"<meta name="theme-color" id="ffm-tc-dark" content="{dark}">"#)
+        );
     }
 }

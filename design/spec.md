@@ -538,8 +538,9 @@ standing out.)
 - **Except the statusline, which stays visible below it** — and below the
   trim view, which shares the rule. It is the one place the app speaks, and
   covering it meant a bill refused on the trim view's Save was refused in
-  silence. Both overlays end at `--status-h` (30px, `tokens.css`), the
-  statusline's own fixed height.
+  silence. Both overlays end at `--foot-h` (`tokens.css`): the
+  statusline's own fixed height, `--status-h`, plus a phone's home-indicator
+  inset when installed full screen (see On a phone — installed).
 - **Full-viewport, not a dialog-sized modal** — the few other modals left
   in this app (confirmations, the keymap) are centered `min(560px, 100%)`
   boxes, and this is the one deliberate exception. The actual job is reading a boleto's barcode digits, or
@@ -906,6 +907,27 @@ whole keymap was out of reach: there was no field to focus.
 - **Known limit:** after a form field took the keyboard (`e`, the add row),
   saving or canceling closes the keyboard with the field; tap `NORMAL` again.
   Focus moving to a checkbox or a button (the trash's list) does the same.
+
+### On a phone — installed
+
+The ledger can be put on a phone's home screen and opened like an app: full
+screen, no address bar, the household's name under the icon.
+
+- **Android** offers *Install app* from Chrome's menu; **iOS** is *Share →
+  Add to Home Screen* in Safari. Android needs HTTPS — a household root
+  certificate trusted on the phone is enough.
+- **The icon is the houses on the touch icon's tile**, rendered from
+  `design/logo/ffm-app-icon*.svg` by `just icons`; the maskable one keeps the
+  mark inside the middle 80% circle, since Android crops it to its own shape.
+- **The phone's bar follows the palette**: the ledger bar's `--surface`, the
+  sign-in page's `--paper`, in light and dark.
+- **Nothing hides under the hardware.** The shell is padded by the notch and
+  the rounded corners, and the statusline grows by the home indicator, its
+  cells kept above it. While the keyboard is up that padding goes.
+- **No offline mode.** The database is the source of truth; an app with no
+  connection to it says so the way a browser tab does.
+- **On iOS the installed app signs in on its own** — it keeps its own cookies,
+  apart from Safari's.
 
 ### Find
 | Key | Action |

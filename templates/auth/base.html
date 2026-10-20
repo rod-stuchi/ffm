@@ -11,10 +11,12 @@
 <html lang="{{ chrome.lang_code }}"{% if let Some(a) = chrome.attr %} data-theme="{{ a }}"{% endif %}>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% if let Some(r) = chrome.run %}{{ r.tab }}{% endif %}{{ chrome.household }}</title>
 <link rel="stylesheet" href="/static/css/build.css">
 {% include "partials/icons.html" %}
+<meta name="apple-mobile-web-app-title" content="{{ chrome.household }}">
+{{ chrome.theme_meta|safe }}
 {#- The 11 tokens as the full light/dark triple, in the palette of whoever
     last signed in on this device (`ffm.palette`; `ffm` for nobody). Light/dark
     comes from its own cookie, which is the whole reason the two facts live in

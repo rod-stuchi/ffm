@@ -43,6 +43,7 @@ pub struct Chrome {
     pub household: String,
     pub household_slug: String,
     pub theme_css: String,
+    pub theme_meta: String,
     /// The palette's key, for the statusline: `ffm` unless somebody has
     /// signed in on this device.
     pub palette: &'static str,
@@ -121,6 +122,7 @@ async fn chrome(
     let mode_label = mode_label(&t, mode);
     let next_mode = mode.next();
 
+    let rendered = theme::render(palette, mode, &Overrides::default());
     let chrome = Chrome {
         run: crate::run::badge(&t),
         household_slug: crate::domain::slug::slugify(&name),
@@ -130,7 +132,9 @@ async fn chrome(
         // nobody has. Still no picker here: a palette chosen by an anonymous
         // visitor would have nowhere to live. Light/dark comes from its own
         // cookie, which is why those are two facts stored in two places.
-        theme_css: theme::render(palette, mode, &Overrides::default()).to_css(),
+        theme_css: rendered.to_css(),
+        // The card sits on paper, and so does the strip above it.
+        theme_meta: rendered.meta_tags("paper"),
         palette: palette.key(),
         attr: mode.attr(),
         lang_code: lang.code(),

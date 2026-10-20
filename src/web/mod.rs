@@ -16,6 +16,7 @@ pub mod months;
 pub mod order;
 pub mod prepare;
 pub mod prune;
+pub mod pwa;
 pub mod rules;
 pub mod selection;
 pub mod session;
@@ -46,7 +47,10 @@ pub fn router(state: AppState) -> Router {
         .route("/setup", get(auth::setup_page).post(auth::setup))
         .route("/invite/{token}", get(auth::invite_page).post(auth::accept))
         .route("/lang", post(auth::set_lang))
-        .route("/theme", post(auth::set_theme));
+        .route("/theme", post(auth::set_theme))
+        // What makes the ledger installable on a phone — see `web::pwa`.
+        // Public: the browser fetches it without the session cookie.
+        .route("/manifest.webmanifest", get(pwa::manifest));
 
     // The mutations that can move a month in or out of "overdue" — the dot on
     // the month picker's trigger. Listed once, here, and marked by one layer

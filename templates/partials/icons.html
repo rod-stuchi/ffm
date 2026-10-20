@@ -10,3 +10,14 @@
 <link rel="icon" href="/static/icons/favicon-dark-32.png" sizes="32x32" type="image/png" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+{#- Installing it on a phone — see `web::pwa` for the manifest. iOS reads none
+    of the manifest's display or name: `apple-mobile-web-app-capable` is what
+    launches it full screen from the home screen, and each page sets its own
+    `apple-mobile-web-app-title`, or the icon would be named after the tab
+    title, month and all. `default` keeps the system's own status bar above
+    the page rather than drawing the page under it, where its white text would
+    vanish on a light palette. -#}
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">

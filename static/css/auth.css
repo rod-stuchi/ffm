@@ -6,6 +6,9 @@
 
 .auth {
   min-height: 100dvh;
+  /* Clear of the notch, installed full screen; zero in a browser tab (see
+   * --safe-* in tokens.css). The home indicator is the statusline's. */
+  padding: var(--safe-t) var(--safe-r) 0 var(--safe-l);
   display: flex;
   flex-direction: column;
   background: var(--paper);

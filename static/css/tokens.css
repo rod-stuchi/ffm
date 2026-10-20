@@ -26,6 +26,19 @@
    * above it: it is the one place the app speaks, and a refusal said under
    * an overlay was a refusal nobody saw. */
   --status-h: 30px;
+  /* What a phone's hardware covers — the home indicator, the notch, the
+   * rounded corners — once `viewport-fit=cover` lets the page reach under
+   * them, which it needs to when installed full screen. Zero on a desktop
+   * and in an ordinary browser tab, so nothing moves there. The shell pads
+   * itself in by them; `--safe-b` is zeroed while the phone's keyboard is
+   * up, which covers the home indicator anyway (`fitViewport`). */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  /* The foot of the screen the overlays stop above: the statusline, and
+   * whatever the hardware keeps under it. */
+  --foot-h: calc(var(--status-h) + var(--safe-b));
 }
 
 /* Digits line up wherever they are compared down a column: amounts, dates,

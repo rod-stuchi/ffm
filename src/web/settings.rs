@@ -303,13 +303,18 @@ pub async fn set_member(
                     .await
                     .unwrap_or_default()
                     .theme;
-                let css =
-                    crate::ui::theme::render(palette, auth.mode, &auth.settings.theme_overrides)
-                        .to_css();
+                let rendered =
+                    crate::ui::theme::render(palette, auth.mode, &auth.settings.theme_overrides);
+                let css = rendered.to_css();
+                // The phone's bar follows too: the `theme-color` tags, by id.
+                let meta = rendered
+                    .meta_tags("surface")
+                    .replace("<meta ", r#"<meta hx-swap-oob="true" "#);
                 // `hx-swap-oob` is honored even though the form asks for
                 // `hx-swap="none"`: out-of-band content is matched by id and
                 // applied separately from the (absent) main swap.
-                let body = format!(r#"<style id="ffm-theme" hx-swap-oob="true">{css}</style>"#);
+                let body =
+                    format!(r#"<style id="ffm-theme" hx-swap-oob="true">{css}</style>{meta}"#);
                 // And the sign-in page follows: `ffm.palette` is kept in step
                 // with the row here, not only at sign-out, so a session that
                 // simply expires still leaves the right palette behind.

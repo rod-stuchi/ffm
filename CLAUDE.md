@@ -984,7 +984,7 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   barcode digits, or holding a phone up to its QR code, both of which need
   the file genuinely large on screen. A 560px dialog can't do that; this is
   the one modal in the app sized to the full window on purpose. **All but
-  the statusline**, which it and the trim view stop above (`--status-h`):
+  the statusline**, which it and the trim view stop above (`--foot-h`):
   covering it hid every answer given from inside them — a removal, a bill
   refused on Save.
 - **Zoom (`+`/`-`, or `0` to reset) scales the preview** — the page images'
@@ -1622,6 +1622,38 @@ that will otherwise be re-proposed.
   picker instead of answering `✗ theme is not a bundled palette` — the same
   reading `:grep` already had: a command missing its argument, not a broken
   one. **Do not put a command in that menu without checking its bare form.**
+
+### Installed on a phone (PWA)
+
+- **The ledger installs as an app** — Android's *Install app*, iOS's *Add to
+  Home Screen*, opening full screen. `GET /manifest.webmanifest`
+  (`web::pwa`) names it after the household; `partials/icons.html` carries
+  the iOS tags, each page its own `apple-mobile-web-app-title` (or the icon
+  is named after the tab title, month and all).
+- **The manifest is public**, in the `open` router: a browser fetches it
+  without cookies, and `/login` is where a new phone installs from. It says
+  nothing `/login` does not.
+- **No service worker, on purpose.** Installing no longer needs one, and the
+  one thing it could add — an offline copy of a page — is a stale copy of the
+  truth. Do not add one to "complete" the PWA.
+- **Android installs only over HTTPS.** The household's own root
+  certificate, trusted on each phone, is enough; the server's certificate
+  must name the address typed.
+- **The phone's bar takes the palette** — `<meta name="theme-color">` from
+  `RenderedTheme::meta_tags`, the same pair-or-one rule as the CSS, and
+  swapped out of band with the `<style>` block on a palette change. The
+  manifest's own colors are the bundled `ffm`'s: it cannot see a member.
+- **`viewport-fit=cover`, and the shell pads itself in** by
+  `--safe-t/r/b/l` (`env(safe-area-inset-*)`, zero on a desktop). The
+  statusline grows by the home indicator so its surface reaches the edge,
+  and the full-screen overlays stop above `--foot-h` (statusline + inset),
+  not `--status-h`. `fitViewport` zeroes `--safe-b` while the keyboard is
+  up, which covers the home indicator anyway.
+- **Status bar style `default`**, not `black-translucent`: the translucent
+  one draws the page under white status-bar text, which vanishes on a light
+  palette.
+- **An installed iOS app keeps its own cookies**, apart from Safari: it signs
+  in once on its own, and starts from its own light/dark and hide cookies.
 
 ## Server-side rules
 

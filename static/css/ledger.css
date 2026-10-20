@@ -14,6 +14,13 @@
    * iOS shrinks only the visual viewport, and 100vh put the statusline and
    * the command bar under the keyboard. */
   height: var(--app-h, 100vh);
+  /* Clear of the notch and the rounded corners. The bottom is the
+   * statusline's own: it grows by the home indicator, so its surface runs
+   * to the screen's edge rather than a strip of paper under it. */
+  padding: var(--safe-t) var(--safe-r) 0 var(--safe-l);
+  /* Again here, not only on :root: a custom property is worked out where it
+   * is declared, and `fitViewport` zeroes `--safe-b` on this element. */
+  --foot-h: calc(var(--status-h) + var(--safe-b));
   background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
@@ -2731,7 +2738,7 @@
  * file-nav row ends exactly where the statusline starts. */
 .carousel {
   position: fixed;
-  inset: 0 0 var(--status-h) 0;
+  inset: var(--safe-t) var(--safe-r) var(--foot-h) var(--safe-l);
   z-index: 50;
   display: grid;
 }
@@ -3180,7 +3187,7 @@ mark.kmhit {
  * upload, and a refusal ("wrong row?", "already on …") is said there. */
 .prepmount {
   position: fixed;
-  inset: 0 0 var(--status-h) 0;
+  inset: var(--safe-t) var(--safe-r) var(--foot-h) var(--safe-l);
   z-index: 70;
   background: var(--paper);
 }
@@ -3192,7 +3199,7 @@ mark.kmhit {
 .fidget {
   position: fixed;
   right: 16px;
-  bottom: calc(var(--status-h) + 66px);
+  bottom: calc(var(--foot-h) + 66px);
   z-index: 75;
   display: flex;
   flex-direction: column;
@@ -3260,7 +3267,7 @@ mark.kmhit {
 /* A phone's foot wraps onto two lines; the box stays above it. */
 @media (max-width: 700px) {
   .fidget {
-    bottom: calc(var(--status-h) + 112px);
+    bottom: calc(var(--foot-h) + 112px);
   }
 }
 

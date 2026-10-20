@@ -410,6 +410,7 @@ struct ModeChoice {
 #[template(path = "pages/ledger.html")]
 struct LedgerPage {
     theme_css: String,
+    theme_meta: String,
     attr: Option<&'static str>,
     /// `ffm.hide` — `data-hide` on `<html>`, every `.money` pixelated.
     hide: bool,
@@ -653,6 +654,12 @@ pub async fn ledger(
         Some(v) => format!("/?period={}&pane={}", period, v.id),
         None => format!("/?period={period}"),
     };
+    // The member's palette, the device's light/dark — two facts, two homes.
+    let rendered = theme::render(
+        auth.settings.theme,
+        auth.mode,
+        &auth.settings.theme_overrides,
+    );
 
     Html(LedgerPage {
         mode_label: crate::web::auth::mode_label(&t, auth.mode),
@@ -674,13 +681,9 @@ pub async fn ledger(
         person_svg: crate::ui::icons::svg("person"),
         back_to,
         focused,
-        // The member's palette, the device's light/dark — two facts, two homes.
-        theme_css: theme::render(
-            auth.settings.theme,
-            auth.mode,
-            &auth.settings.theme_overrides,
-        )
-        .to_css(),
+        theme_css: rendered.to_css(),
+        // The bar's color, so a phone's own bar continues the ledger bar.
+        theme_meta: rendered.meta_tags("surface"),
         attr: auth.mode.attr(),
         hide: auth.hide,
         me: fmt::name(&auth.session.member.name),

@@ -14,10 +14,12 @@
 <html lang="{{ t.lang.code() }}"{% if let Some(a) = attr %} data-theme="{{ a }}"{% endif %}{% if hide %} data-hide{% endif %}>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% if let Some(r) = run %}{{ r.tab }}{% endif %}{{ household }} · {{ period }}</title>
 <link rel="stylesheet" href="/static/css/build.css">
 {% include "partials/icons.html" %}
+<meta name="apple-mobile-web-app-title" content="{{ household }}">
+{{ theme_meta|safe }}
 <style id="ffm-theme">{{ theme_css|safe }}</style>
 {#- The layout, from the member's own row.
 
@@ -3490,16 +3492,21 @@ function ledger() {
 
     /// iOS shrinks only the VISUAL viewport for its keyboard, so a shell that
     /// is `100vh` tall puts the statusline and the command bar under it. While
-    /// the keyboard is up the shell is sized to what is actually visible.
+    /// the keyboard is up the shell is sized to what is actually visible —
+    /// and the statusline drops its home-indicator padding (`--safe-b`), since
+    /// the keyboard covers the home indicator and the padding would only float
+    /// the bar above it.
     fitViewport() {
       const vv = window.visualViewport;
       const shell = this.shell();
       if (!vv || !shell) return;
       if (!this.keyboard) {
         shell.style.removeProperty('--app-h');
+        shell.style.removeProperty('--safe-b');
         return;
       }
       shell.style.setProperty('--app-h', vv.height + 'px');
+      shell.style.setProperty('--safe-b', '0px');
       window.scrollTo(0, 0);
     },
 

@@ -392,7 +392,10 @@ legend {
   border-top: 1px solid var(--line);
   font-family: var(--mono);
   font-size: 11.5px;
-  height: var(--status-h);
+  /* Taller by the home indicator on a phone, with the cells kept above it:
+   * the bar's surface runs to the screen's edge. */
+  height: calc(var(--status-h) + var(--safe-b));
+  padding-bottom: var(--safe-b);
   /* Never shrinks: it is the last row of the screen, and a bar that gives up
    * height when the ledger is long is a bar that moves. */
   flex: none;
