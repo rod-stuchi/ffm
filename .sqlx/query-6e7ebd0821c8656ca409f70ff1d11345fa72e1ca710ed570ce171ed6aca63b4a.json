@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT o.id AS \"id!: i64\", o.undo_of AS \"undo_of: i64\"\n               FROM change o\n               -- A copy's part: its anchor is the pane's member entry. A\n               -- selection's `J` has parts too, anchored on a row.\n               JOIN change a ON a.id = o.part_of AND a.entity = 'member'\n               WHERE o.id > ?1 AND o.entity = 'transaction' AND o.entity_id = ?2\n                 AND o.action = 'reorder' AND o.part_of IS NOT NULL\n                 AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = o.id)\n               ORDER BY o.id DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "undo_of: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "6e7ebd0821c8656ca409f70ff1d11345fa72e1ca710ed570ce171ed6aca63b4a"
+}

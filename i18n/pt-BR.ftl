@@ -188,6 +188,11 @@ undo-more = { $n ->
         [one] + 1 campo
        *[other] + { $n } campos
     }
+# Um J/K numa seleção é um passo só para o u: a linha nomeada, e quantas foram junto.
+undo-moved-with = { $n ->
+        [one] + 1 linha junto
+       *[other] + { $n } linhas junto
+    }
 undo-skipped = { $who } mudou "{ $title }" depois — ficou como deixou
 undo-skipped-copy = uma ordem copiada moveu "{ $title }" depois — ficou onde está
 undo-ask-title = Desfazer isto?

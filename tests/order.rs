@@ -367,3 +367,142 @@ async fn the_months_a_copy_reached_hear_it() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// `J` / `K` on a selection — the same keys, the same one-step undo
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_selection_moves_together_and_one_u_puts_it_back() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let ids = rows(&pool, me, p(10), &["A", "B", "C", "D", "E", "F"]).await;
+    // A and C selected, two places down: the gap between them is kept.
+    let moved = tx::reorder_many(&pool, Actor::User(me), me, p(10), &[ids[0], ids[2]], 2)
+        .await
+        .unwrap();
+    assert_eq!(moved, 2);
+    assert_eq!(
+        titles(&pool, me, p(10)).await,
+        ["B", "D", "A", "E", "C", "F"]
+    );
+    // Far past the end, they pile up there in their own order.
+    tx::reorder_many(&pool, Actor::User(me), me, p(10), &[ids[0], ids[2]], 99)
+        .await
+        .unwrap();
+    assert_eq!(
+        titles(&pool, me, p(10)).await,
+        ["B", "D", "E", "F", "A", "C"]
+    );
+    // Nowhere further to go: nothing written, nothing to undo.
+    let quiet = tx::reorder_many(&pool, Actor::User(me), me, p(10), &[ids[0], ids[2]], 1)
+        .await
+        .unwrap();
+    assert_eq!(quiet, 0);
+
+    // One `u` for the whole selection, each time.
+    let u = step(&pool, here(me, p(10)), Direction::Undo).await.unwrap();
+    assert_eq!(u.action, "reorder");
+    assert_eq!(
+        titles(&pool, me, p(10)).await,
+        ["B", "D", "A", "E", "C", "F"]
+    );
+    step(&pool, here(me, p(10)), Direction::Undo).await.unwrap();
+    assert_eq!(
+        titles(&pool, me, p(10)).await,
+        ["A", "B", "C", "D", "E", "F"]
+    );
+    // And `U` moves them again, whole.
+    step(&pool, here(me, p(10)), Direction::Redo).await.unwrap();
+    assert_eq!(
+        titles(&pool, me, p(10)).await,
+        ["B", "D", "A", "E", "C", "F"]
+    );
+    step(&pool, here(me, p(10)), Direction::Undo).await.unwrap();
+    assert_eq!(
+        titles(&pool, me, p(10)).await,
+        ["A", "B", "C", "D", "E", "F"]
+    );
+}
+
+#[tokio::test]
+async fn a_selection_moved_up_and_rows_outside_the_pane_left_out() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let ids = rows(&pool, me, p(10), &["A", "B", "C", "D"]).await;
+    let other = rows(&pool, me, p(9), &["X"]).await[0];
+    let moved = tx::reorder_many(
+        &pool,
+        Actor::User(me),
+        me,
+        p(10),
+        &[ids[2], ids[3], other],
+        -1,
+    )
+    .await
+    .unwrap();
+    assert_eq!(moved, 2);
+    assert_eq!(titles(&pool, me, p(10)).await, ["A", "C", "D", "B"]);
+    assert_eq!(titles(&pool, me, p(9)).await, ["X"]);
+}
+
+#[tokio::test]
+async fn a_selection_move_is_not_taken_for_a_copied_order() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let ids = rows(&pool, me, p(10), &["A", "B", "C", "D"]).await;
+    // D moved up by hand, then D and A moved together: undoing the selection
+    // and then the hand move must not call the hand move "overtaken by a
+    // copied order" — a selection's parts are not a copy's.
+    tx::reorder(&pool, Actor::User(me), ids[3], -1, None)
+        .await
+        .unwrap();
+    tx::reorder_many(&pool, Actor::User(me), me, p(10), &[ids[0], ids[3]], 1)
+        .await
+        .unwrap();
+    step(&pool, here(me, p(10)), Direction::Undo).await.unwrap();
+    let next = tx::next(&pool, here(me, p(10)), Direction::Undo)
+        .await
+        .unwrap();
+    assert!(next.skipped.is_empty(), "{:?}", next.skipped);
+    let pick = next.pick.unwrap();
+    assert_eq!((pick.action.as_str(), pick.entity_id), ("reorder", ids[3]));
+}
+
+#[tokio::test]
+async fn a_selection_move_is_one_entry_with_its_rows_as_parts() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let ids = rows(&pool, me, p(10), &["A", "B", "C"]).await;
+    tx::reorder_many(&pool, Actor::User(me), me, p(10), &[ids[0], ids[1]], 1)
+        .await
+        .unwrap();
+    let u = tx::next(&pool, here(me, p(10)), Direction::Undo)
+        .await
+        .unwrap()
+        .pick
+        .unwrap();
+    assert_eq!(tx::parts_of(&pool, u.change_id).await.unwrap(), 1);
+}
+
+#[tokio::test]
+async fn two_rows_of_one_step_that_trade_keys_each_get_theirs_back() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    let ids = rows(&pool, me, p(10), &["A", "B", "C", "D", "E", "F", "G"]).await;
+    let sel = [ids[0], ids[2]];
+    // Down 1, down 3, then up 1 — the up can hand one row the very key the
+    // other had after the down, and undoing it must not read that as taken.
+    for d in [1, 3, -1] {
+        tx::reorder_many(&pool, Actor::User(me), me, p(10), &sel, d)
+            .await
+            .unwrap();
+    }
+    for _ in 0..3 {
+        step(&pool, here(me, p(10)), Direction::Undo).await.unwrap();
+    }
+    assert_eq!(
+        titles(&pool, me, p(10)).await,
+        ["A", "B", "C", "D", "E", "F", "G"]
+    );
+}

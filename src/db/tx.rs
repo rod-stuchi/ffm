@@ -536,6 +536,9 @@ async fn overtaken(
         let parts = sqlx::query!(
             r#"SELECT o.id AS "id!: i64", o.undo_of AS "undo_of: i64"
                FROM change o
+               -- A copy's part: its anchor is the pane's member entry. A
+               -- selection's `J` has parts too, anchored on a row.
+               JOIN change a ON a.id = o.part_of AND a.entity = 'member'
                WHERE o.id > ?1 AND o.entity = 'transaction' AND o.entity_id = ?2
                  AND o.action = 'reorder' AND o.part_of IS NOT NULL
                  AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = o.id)
@@ -629,6 +632,11 @@ pub async fn undo(pool: &SqlitePool, actor: Actor, u: &Undoable) -> sqlx::Result
             .is_some(),
         "reorder" => {
             let f = fields_of(pool, u.change_id).await?;
+            // A selection's move carries the keys; a single row's, only its
+            // place.
+            if f.iter().any(|(name, _, _)| name == "sort_key") {
+                return reorder_back(pool, actor, u.change_id).await;
+            }
             let Some((old_pos, new_pos)) = f
                 .iter()
                 .find(|(name, _, _)| name == "position")
@@ -914,6 +922,154 @@ pub async fn reorder(
 
     tx.commit().await?;
     Ok(true)
+}
+
+/// `J` / `K` on a selection: every one of `ids` that is a live row of
+/// `member`'s `period` moved `delta` places together (`domain::order::shift`).
+/// Returns how many of them changed place — 0 is the quiet no-op of a
+/// selection already piled at the end it is moved toward.
+///
+/// **One step for `u`.** Only the picked rows that changed place get new keys
+/// (spread between the rows that keep theirs, as `:order` does), each logged as a `reorder` with
+/// the key it had and the key it got; the first written is the anchor and
+/// the rest are `part_of` it, so `u` picks the anchor and [`reorder_back`]
+/// puts every one back.
+pub async fn reorder_many(
+    pool: &SqlitePool,
+    actor: Actor,
+    member: i64,
+    period: Period,
+    ids: &[i64],
+    delta: i64,
+) -> sqlx::Result<usize> {
+    use crate::domain::order;
+    let mut tx = pool.begin().await?;
+    let pane = crate::db::order::lines(&mut tx, member, period).await?;
+    let picked: std::collections::HashSet<i64> = ids
+        .iter()
+        .copied()
+        .filter(|id| pane.iter().any(|l| l.id == *id))
+        .collect();
+    let before: Vec<i64> = pane.iter().map(|l| l.id).collect();
+    let after = order::shift(&before, &picked, delta);
+    if after == before {
+        return Ok(0);
+    }
+    let line = |id: i64| pane.iter().find(|l| l.id == id).expect("a row of the pane");
+    let at = |ids: &[i64], id: i64| ids.iter().position(|i| *i == id).map_or(0, |i| i + 1);
+    let keys: Vec<&str> = after.iter().map(|&id| line(id).key.as_str()).collect();
+    // The rows that were not picked keep their keys, so the rows written —
+    // and the ones the log and `u` name — are the ones the person moved. A
+    // picked row that did not change place keeps its key too, when it fits.
+    let mut keep = vec![false; after.len()];
+    let mut last: Option<&str> = None;
+    for (i, &id) in after.iter().enumerate() {
+        let stays = !picked.contains(&id) || at(&before, id) == at(&after, id);
+        if stays && last.is_none_or(|k| keys[i] > k) {
+            keep[i] = true;
+            last = Some(keys[i]);
+        }
+    }
+
+    let mut anchor: Option<i64> = None;
+    for (&id, new_key) in after.iter().zip(order::rekey_keeping(&keys, &keep)) {
+        let Some(new_key) = new_key else { continue };
+        let l = line(id);
+        crate::db::order::set_key(&mut tx, id, &l.key, &new_key).await?;
+        let mut entry = Change::transaction(actor, TxAction::Reorder, id)
+            .from_rule(l.rule_id)
+            .in_period(period)
+            .diff(
+                "position",
+                Value::Text(Some(at(&before, id).to_string())),
+                Value::Text(Some(at(&after, id).to_string())),
+            )
+            .always("sort_key", Value::text(l.key.clone()), Value::text(new_key));
+        if let Some(a) = anchor {
+            entry = entry.part_of(a);
+        }
+        let written = entry.write(&mut tx).await?;
+        anchor.get_or_insert(written);
+    }
+    tx.commit().await?;
+    Ok(picked
+        .iter()
+        .filter(|&&id| at(&before, id) != at(&after, id))
+        .count())
+}
+
+/// How many entries are part of `change_id` — the other rows a selection's
+/// `J` moved, beside the one its anchor names.
+pub async fn parts_of(pool: &SqlitePool, change_id: i64) -> sqlx::Result<i64> {
+    sqlx::query_scalar!(
+        r#"SELECT COUNT(*) AS "n!: i64" FROM change WHERE part_of = ?1"#,
+        change_id
+    )
+    .fetch_one(pool)
+    .await
+}
+
+/// Reverses a selection's move — or the reversal of one, which is redo — from
+/// its anchor: every row the step wrote goes back on the key it had, while
+/// it still holds the key the step gave it. A row moved since keeps where it
+/// is now. The anchor's own row always writes the new anchor, so `u` moves
+/// past this step rather than sticking on it.
+async fn reorder_back(pool: &SqlitePool, actor: Actor, anchor: i64) -> sqlx::Result<bool> {
+    use crate::db::order::Back;
+    let mut tx = pool.begin().await?;
+    let rows = sqlx::query!(
+        r#"SELECT c.id AS "part!: i64", c.entity_id AS "id!: i64",
+                  c.period AS "period: String",
+                  f.old_value AS "was: String", f.new_value AS "set: String",
+                  t.sort_key AS "now?: String", t.member_id AS "member?: i64",
+                  t.period AS "row_period?: String", t.rule_id AS "rule_id?: i64",
+                  t.deleted_at AS "deleted_at?: String"
+           FROM change c
+           JOIN change_field f ON f.change_id = c.id AND f.field = 'sort_key'
+           LEFT JOIN transactions t ON t.id = c.entity_id
+           WHERE (c.id = ?1 OR c.part_of = ?1)
+             AND NOT EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id)
+           ORDER BY c.id"#,
+        anchor
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    let Some(head) = rows.first().filter(|r| r.part == anchor) else {
+        return Ok(false);
+    };
+    let (Some(owner), Some(period)) = (head.member, head.period.as_deref().and_then(Period::parse))
+    else {
+        return Ok(false);
+    };
+    let mut back = Vec::new();
+    for r in &rows {
+        let live = r.deleted_at.is_none()
+            && r.member == Some(owner)
+            && r.row_period.as_deref() == Some(&period.to_string());
+        let still = live && r.now.is_some() && r.now == r.set;
+        let to = match (still, r.part == anchor) {
+            (true, _) => r.was.clone(),
+            // Moved since: left where it is — the anchor's row too, which
+            // still writes the entry that marks this step reversed.
+            (false, true) if live => r.now.clone(),
+            _ => None,
+        };
+        if let Some(to) = to {
+            back.push(Back {
+                part: r.part,
+                id: r.id,
+                rule_id: r.rule_id,
+                period,
+                to,
+            });
+        }
+    }
+    let back: Vec<&Back> = back.iter().collect();
+    let done = crate::db::order::put_back(&mut tx, actor, owner, period, &back, None, None)
+        .await?
+        .is_some();
+    tx.commit().await?;
+    Ok(done)
 }
 
 /// What `e` can change about one occurrence.

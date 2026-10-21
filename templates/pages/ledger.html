@@ -3731,12 +3731,20 @@ function ledger() {
       this.msg = this.lastCmd;
     },
 
+    /// `J` / `K`. With rows selected in the focused pane, every one of them
+    /// moves, together, wherever the cursor is; with none, the cursor's row.
+    /// The cursor stays on its row by id either way, so it rides along when
+    /// its row was selected, and the selection — ids — is painted back on.
     move(delta) {
       const id = this.rowUnderCursor();
       if (!id || this.readOnly()) return;
+      const pane = document.querySelectorAll('.pane')[this.pane];
+      const ids = pane ? this.selectableIds(pane).filter(i => this.selected[i]) : [];
+      const values = { delta };
+      if (ids.length) values.ids = ids.join(',');
       this.ajax('POST', '/tx/' + id + '/move', {
-        target: 'body', swap: 'none', values: { delta },
-      }, this.focusedRow()).then(() => this.cursorTo(id));
+        target: 'body', swap: 'none', values,
+      }, this.focusedRow()).then(() => { this.cursorTo(id); this.paintSelection(); });
     },
 
     /// Put the cursor back on a row by id, wherever the swap left it.

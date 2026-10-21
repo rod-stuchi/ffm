@@ -485,6 +485,15 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   cannot be rebuilt for a new verb, because `change_field` and `undo_of`
   reference it and the drop fails under foreign keys inside a migration's
   transaction.
+  - **A selection's `J`/`K` uses it too, anchored on a row.** Every row it
+    writes is a `reorder` with `position` and `sort_key`; the first is the
+    anchor, an ordinary transaction entry `tx::next` picks like any move,
+    and the rest are `part_of` it. `u` reverses it by keys
+    (`tx::reorder_back`, through the same `order::put_back` the copy's
+    reversal uses), not by the position delta a single move's undo replays.
+    Which is why "a copied order moved X since" asks that a part's anchor be
+    a member entry, and why `gl` never shows a `sort_key` — `position` beside
+    it says it in words.
   - **A copy's rows still count as fresh changes in their own months**, so a
     copy onto September clears September's redo stack, as any change there
     would. And a move by hand that a later copy moved again is skipped by
@@ -1388,6 +1397,14 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   first row did nothing at all, with an empty statusline, which reads as a
   broken key rather than as a row already where it was asked to go. Being
   genuinely at the end stays the quiet no-op it always was.
+- **A selection moves together.** With rows selected (`x`) in the focused
+  pane, `J`/`K` move every one of them, wherever the cursor is; with none,
+  the cursor's row, as ever. One place is each selected row passing one
+  that is not, so a gapped selection keeps its gaps and piles up at the end
+  (`domain::order::shift`). Only the selected rows that changed place are
+  written — the others keep their keys — so the log and `u` name what was
+  moved, and one `u` puts all of it back. It had been promised in the keymap
+  table for a long time while `J` moved the cursor's row alone.
 - **`ledger.sort` gates reordering.** `J`/`K` work only in `manual`. Under `name`,
   `amount` or `date` they refuse with
   `ledger.sort = "date" — reorder needs sort = "manual"`. You cannot reorder a

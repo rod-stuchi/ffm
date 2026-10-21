@@ -741,7 +741,7 @@ standing out.)
 ### Act
 | Key | Action |
 |---|---|
-| `J` / `K` | move the row — or every selected row — down / up |
+| `J` / `K` | move the row — or, with rows selected (`x`), every selected row together, wherever the cursor is — down / up; a selection keeps its gaps and piles up at the end, and one `u` puts it all back |
 | `s` | row order: `manual` → `name` → `amount` → `date`, and round again — `S` does the same for groups |
 | `gs` | copy this month's manual order to other months — the `:order` drawer, see Copying the order to other months |
 | `3J` | move it three places — a count past the end lands on the end |
@@ -1095,7 +1095,11 @@ one. And there was no redo.
   and a live file a swap moved aside (`swapped aside`), follow the entry they
   belong to in both directions and are never picked on their own. So does
   every row `:order` moved: they are `part_of` the copy, which `u` reaches
-  from the month it was copied from, and reverses whole.
+  from the month it was copied from, and reverses whole. And every row a
+  selection's `J`/`K` moved: the first is the anchor, the rest `part_of` it,
+  and the question says how many went with it (*+ 2 more rows with it*).
+  The rows put back are put back on the exact keys they had, never moved by
+  a count.
 - **Not Ctrl-R.** Vim's redo reloads the page on Linux, and a reload drops
   every parked draft. `U` is free on every platform and pairs with `u` the
   way the rest of this keymap pairs lowercase with uppercase.

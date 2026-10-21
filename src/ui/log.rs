@@ -81,6 +81,7 @@ pub fn render(
         let day = local_date(&e.at).unwrap_or(today);
         let label = day_label(day, today, t);
 
+        let fields: Vec<&FieldEntry> = e.fields.iter().filter(|f| shown(f)).collect();
         let view = EntryView {
             id: e.id,
             time: local_time(&e.at),
@@ -89,15 +90,14 @@ pub fn render(
             is_rule: e.is_rule,
             // Delete and restore carry no fields: it is the row's existence
             // that changed, not one of its values.
-            count: (e.fields.len() > 1).then(|| t.log_fields(e.fields.len() as i64)),
-            inline: e.fields.len() == 1,
+            count: (fields.len() > 1).then(|| t.log_fields(fields.len() as i64)),
+            inline: fields.len() == 1,
             undo_of: e
                 .undo_of
                 .and_then(|id| times.get(&id))
                 .map(|at| t.log_undo_of(at)),
             note: e.note.as_deref().map(|n| note_text(n, t)),
-            fields: e
-                .fields
+            fields: fields
                 .iter()
                 .map(|f| FieldView {
                     label: field_label(&f.field, t),
@@ -293,10 +293,17 @@ fn actor_label(e: &Entry, t: &Catalog) -> String {
 /// A change's fields as the statusline says them — `amount R$ 12,00 →
 /// R$ 10,00` — formatted exactly as the log pane formats them. A stored path
 /// is left out: a vault path is a line of its own, not a clause.
+/// Whether a person is shown this field. A row's `sort_key` is kept so `u`
+/// can put a moved row back on the exact key it had (`:order`, a selection's
+/// `J`), and says nothing to anybody: its `position` beside it does.
+fn shown(f: &FieldEntry) -> bool {
+    f.field != "sort_key"
+}
+
 pub(crate) fn field_changes(fields: &[FieldEntry], currency: Currency, t: &Catalog) -> Vec<String> {
     fields
         .iter()
-        .filter(|f| f.kind != "path")
+        .filter(|f| f.kind != "path" && shown(f))
         .map(|f| {
             format!(
                 "{} {} → {}",
@@ -408,6 +415,19 @@ mod tests {
         let flag = field("tracked", "bool", Some("0"), Some("1"));
         assert_eq!(value(&flag, flag.old.as_deref(), Currency::Brl, &t), "off");
         assert_eq!(value(&flag, flag.new.as_deref(), Currency::Brl, &t), "on");
+    }
+
+    #[test]
+    fn a_rows_sort_key_is_kept_for_undo_and_never_shown() {
+        let t = Catalog::new(Lang::En);
+        let fields = [
+            field("position", "text", Some("1"), Some("3")),
+            field("sort_key", "text", Some("a0"), Some("a2")),
+        ];
+        assert_eq!(
+            field_changes(&fields, Currency::Brl, &t),
+            ["position 1 → 3"]
+        );
     }
 
     #[test]

@@ -666,7 +666,7 @@ pub(crate) async fn files_follow_row(st: &AppState, actor: Actor, id: i64, resto
     }
 }
 
-/// `J` / `K` — move the row, or refuse and say why.
+/// `J` / `K` — move the row, or every selected row, or refuse and say why.
 ///
 /// You cannot reorder a derived view: under `sort = date` the rows are in an
 /// order the household did not put them in, so moving one has nowhere to be
@@ -689,6 +689,60 @@ pub async fn move_row(
     if let Err(refused) = may_touch(&st, &auth, id).await {
         return refused;
     }
+    let dir = if form.delta > 0 {
+        t.moved_down().to_string()
+    } else {
+        t.moved_up().to_string()
+    };
+
+    // A selection in the pane moves together — every selected row, wherever
+    // the cursor is. The cursor's row only names the pane: each id must be in
+    // it, and writable.
+    let picked: Vec<i64> = form
+        .ids
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter_map(|s| s.trim().parse().ok())
+        .collect();
+    if picked.len() > 1 {
+        let Ok(Some((member_id, period, _))) = tx::one(&st.pool, id).await else {
+            return say_only(t.error_not_written(), true);
+        };
+        for &p in &picked {
+            if let Err(refused) = may_touch(&st, &auth, p).await {
+                return refused;
+            }
+            match tx::one(&st.pool, p).await {
+                Ok(Some((m, per, _))) if m == member_id && per == period => {}
+                _ => return say_only(t.error_not_written(), true),
+            }
+        }
+        return match tx::reorder_many(
+            &st.pool,
+            Actor::User(auth.viewer.member_id),
+            member_id,
+            period,
+            &picked,
+            form.delta,
+        )
+        .await
+        {
+            Ok(0) => say_only("", false),
+            Ok(n) => {
+                pane_fragment(&st, &auth, member_id, period, &t.rows_moved(n as i64, &dir)).await
+            }
+            Err(_) => say_only(t.error_not_written(), true),
+        };
+    }
+    // One selected row is that row, wherever the cursor is; none, the cursor's.
+    let one = picked.first().copied().unwrap_or(id);
+    if one != id
+        && let Err(refused) = may_touch(&st, &auth, one).await
+    {
+        return refused;
+    }
+    let id = one;
 
     match tx::reorder(
         &st.pool,
@@ -701,15 +755,7 @@ pub async fn move_row(
     {
         Ok(true) => match tx::one(&st.pool, id).await {
             Ok(Some((member_id, period, _))) => {
-                let moved = t.rows_moved(
-                    1,
-                    &if form.delta > 0 {
-                        t.moved_down().to_string()
-                    } else {
-                        t.moved_up().to_string()
-                    },
-                );
-                pane_fragment(&st, &auth, member_id, period, &moved).await
+                pane_fragment(&st, &auth, member_id, period, &t.rows_moved(1, &dir)).await
             }
             _ => say_only(t.error_not_written(), true),
         },
@@ -723,6 +769,10 @@ pub async fn move_row(
 #[derive(Deserialize)]
 pub struct MoveForm {
     delta: i64,
+    /// The selected rows in the pane, comma-separated — absent when nothing
+    /// is selected, and the cursor's row moves alone.
+    #[serde(default)]
+    ids: Option<String>,
 }
 
 /// What `u` and `U` send: the pane and the month on screen — which is the
@@ -939,10 +989,12 @@ async fn undo_question(
                         ..f
                     })
                     .collect();
-            (
-                t.undo_ask_row(verb, title, &when),
-                crate::ui::log::field_changes(&mirrored, currency, t),
-            )
+            let mut lines = crate::ui::log::field_changes(&mirrored, currency, t);
+            let with = tx::parts_of(&st.pool, u.change_id).await.unwrap_or(0);
+            if with > 0 {
+                lines.push(t.undo_moved_with(with));
+            }
+            (t.undo_ask_row(verb, title, &when), lines)
         }
         tx::Step::OrderCopy { .. } => {
             let rev = crate::db::order::preview_reverse(&st.pool, u.change_id)
@@ -1054,6 +1106,11 @@ async fn describe(
     parts.extend(changes.iter().take(shown).cloned());
     if changes.len() > shown {
         parts.push(t.undo_more((changes.len() - shown) as i64));
+    }
+    // A selection's move: the rows that went with the one named.
+    let with = tx::parts_of(&st.pool, u.change_id).await.unwrap_or(0);
+    if with > 0 {
+        parts.push(t.undo_moved_with(with));
     }
     parts.push(
         match dir {

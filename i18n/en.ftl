@@ -223,6 +223,11 @@ undo-more = { $n ->
         [one] + 1 more field
        *[other] + { $n } more fields
     }
+# A selection's J/K is one step for u: the row named, and how many moved with it.
+undo-moved-with = { $n ->
+        [one] + 1 more row with it
+       *[other] + { $n } more rows with it
+    }
 undo-skipped = { $who } changed "{ $title }" since — left as they made it
 undo-skipped-copy = a copied order moved "{ $title }" since — left where it is
 # The question before every u / U. `when` arrives formatted: "today 14:32",

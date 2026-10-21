@@ -15,7 +15,7 @@ use crate::db::changes::{Actor, Change, MemberAction, TxAction, Value};
 use crate::domain::order::{self, Line};
 use crate::domain::period::Period;
 use crate::domain::sortkey;
-use sqlx::{SqliteConnection, SqlitePool};
+use sqlx::{Sqlite, SqliteConnection, SqlitePool, Transaction};
 
 /// The note on a copy's anchor. It is what tells the anchor apart from the
 /// other member `edit` (turning a member off), and what `u` looks for — so
@@ -208,7 +208,12 @@ pub fn months_of(stored: &str) -> Vec<(Period, usize)> {
         .collect()
 }
 
-async fn set_key(conn: &mut SqliteConnection, id: i64, old: &str, new: &str) -> sqlx::Result<()> {
+pub(crate) async fn set_key(
+    conn: &mut SqliteConnection,
+    id: i64,
+    old: &str,
+    new: &str,
+) -> sqlx::Result<()> {
     sqlx::query!(
         r#"UPDATE transactions SET sort_key = ?3, version = version + 1
            WHERE id = ?1 AND sort_key = ?2"#,
@@ -245,12 +250,94 @@ impl Reversal {
 }
 
 /// One part to put back: the row, its month, and the key to restore.
-struct Back {
-    part: i64,
-    id: i64,
-    rule_id: Option<i64>,
+pub(crate) struct Back {
+    pub part: i64,
+    pub id: i64,
+    pub rule_id: Option<i64>,
+    pub period: Period,
+    pub to: String,
+}
+
+/// Puts each of `back` — rows of `owner`'s `period` — on the key it had, and
+/// logs each as a `reorder` that is `part_of(next)` and an undo of its part.
+/// The reversal of a `:order` copy and of a selection's `J`/`K` alike.
+///
+/// With no `next`, the first row written is the anchor — not a part, an undo
+/// of its own part — and the rest are `part_of` it: how a selection's move,
+/// whose anchor is one of its rows, is reversed. Returns the anchor.
+///
+/// The keys are checked against the pane as it is NOW: a row added since can
+/// have been given exactly the key one of these gave up — a midpoint is
+/// deterministic — and equal keys leave nothing between them, so that one
+/// lands just below the taken key instead. A key still held by another row
+/// of this batch is not taken: that row is about to give it up.
+pub(crate) async fn put_back(
+    tx: &mut Transaction<'_, Sqlite>,
+    actor: Actor,
+    owner: i64,
     period: Period,
-    to: String,
+    back: &[&Back],
+    mut next: Option<i64>,
+    note: Option<&str>,
+) -> sqlx::Result<Option<i64>> {
+    let mut pane = lines(tx, owner, period).await?;
+    let before: Vec<i64> = pane.iter().map(|l| l.id).collect();
+    let mut writes: Vec<(&Back, String, String)> = Vec::new();
+    // Rows of this batch not put back yet: the key one of them holds now is
+    // about to be given up, so it is not taken — two rows of one step that
+    // trade keys must each get theirs back exactly.
+    let mut pending: Vec<i64> = back.iter().map(|b| b.id).collect();
+    for &b in back {
+        pending.retain(|id| *id != b.id);
+        let Some(at) = pane.iter().position(|l| l.id == b.id) else {
+            continue;
+        };
+        let from = pane[at].key.clone();
+        let taken = pane
+            .iter()
+            .any(|l| l.id != b.id && l.key == b.to && !pending.contains(&l.id));
+        let to = if taken {
+            let below = pane
+                .iter()
+                .filter(|l| l.id != b.id && l.key < b.to)
+                .map(|l| l.key.as_str())
+                .max();
+            sortkey::between(below, Some(&b.to))
+        } else {
+            b.to.clone()
+        };
+        pane[at].key = to.clone();
+        pane.sort_by(|a, b| a.key.cmp(&b.key).then(a.id.cmp(&b.id)));
+        writes.push((b, from, to));
+    }
+    let after: Vec<i64> = pane.iter().map(|l| l.id).collect();
+    for (b, from, to) in writes {
+        set_key(tx, b.id, &from, &to).await?;
+        let pos = |ids: &[i64]| ids.iter().position(|i| *i == b.id).map(|i| i + 1);
+        let mut entry = Change::transaction(actor, TxAction::Reorder, b.id)
+            .from_rule(b.rule_id)
+            .in_period(period)
+            .undoing(b.part);
+        if let Some(next) = next {
+            entry = entry.part_of(next);
+        }
+        if let Some(note) = note {
+            entry = entry.note(note);
+        }
+        if let (Some(o), Some(n)) = (pos(&before), pos(&after)) {
+            entry = entry.diff(
+                "position",
+                Value::Text(Some(o.to_string())),
+                Value::Text(Some(n.to_string())),
+            );
+        }
+        let id = entry
+            .always("sort_key", Value::text(from), Value::text(to))
+            .write(tx)
+            .await?;
+        next.get_or_insert(id);
+    }
+    Ok(next)
 }
 
 /// The anchor's pane and fields, and the parts still in effect — read once,
@@ -383,54 +470,17 @@ pub async fn reverse(
     by_month.dedup();
     let note = format!("{COPIED_FROM}{}{UNDONE}", crate::ui::fmt::period(source));
     for period in by_month {
-        let mut pane = lines(&mut tx, rev.owner, period).await?;
-        let before: Vec<i64> = pane.iter().map(|l| l.id).collect();
-        let mut writes: Vec<(&Back, String, String)> = Vec::new();
-        for b in back.iter().filter(|b| b.period == period) {
-            let Some(at) = pane.iter().position(|l| l.id == b.id) else {
-                continue;
-            };
-            let from = pane[at].key.clone();
-            // A row added since can have been given exactly the key this one
-            // gave up — a midpoint is deterministic. Equal keys leave nothing
-            // between them, so land just below the taken one instead.
-            let taken = pane.iter().any(|l| l.id != b.id && l.key == b.to);
-            let to = if taken {
-                let below = pane
-                    .iter()
-                    .filter(|l| l.id != b.id && l.key < b.to)
-                    .map(|l| l.key.as_str())
-                    .max();
-                sortkey::between(below, Some(&b.to))
-            } else {
-                b.to.clone()
-            };
-            pane[at].key = to.clone();
-            pane.sort_by(|a, b| a.key.cmp(&b.key).then(a.id.cmp(&b.id)));
-            writes.push((b, from, to));
-        }
-        let after: Vec<i64> = pane.iter().map(|l| l.id).collect();
-        for (b, from, to) in writes {
-            set_key(&mut tx, b.id, &from, &to).await?;
-            let pos = |ids: &[i64]| ids.iter().position(|i| *i == b.id).map(|i| i + 1);
-            let mut entry = Change::transaction(actor, TxAction::Reorder, b.id)
-                .from_rule(b.rule_id)
-                .in_period(period)
-                .part_of(next)
-                .undoing(b.part)
-                .note(note.clone());
-            if let (Some(o), Some(n)) = (pos(&before), pos(&after)) {
-                entry = entry.diff(
-                    "position",
-                    Value::Text(Some(o.to_string())),
-                    Value::Text(Some(n.to_string())),
-                );
-            }
-            entry
-                .always("sort_key", Value::text(from), Value::text(to))
-                .write(&mut tx)
-                .await?;
-        }
+        let these: Vec<&Back> = back.iter().filter(|b| b.period == period).collect();
+        put_back(
+            &mut tx,
+            actor,
+            rev.owner,
+            period,
+            &these,
+            Some(next),
+            Some(&note),
+        )
+        .await?;
     }
 
     tx.commit().await?;

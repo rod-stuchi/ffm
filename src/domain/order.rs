@@ -20,7 +20,7 @@
 
 use crate::domain::period::Period;
 use crate::domain::sortkey;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// One live row of a pane, in the order the pane shows it (`sort_key`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -128,7 +128,12 @@ pub fn stay(keys: &[&str]) -> Vec<bool> {
 /// keeps its key, a key spread between its kept neighbors where it does not.
 /// The result is strictly increasing.
 pub fn rekey(keys: &[&str]) -> Vec<Option<String>> {
-    let keep = stay(keys);
+    rekey_keeping(keys, &stay(keys))
+}
+
+/// [`rekey`] with the rows that keep their key chosen by the caller — `keep`
+/// must be strictly increasing in key where true.
+pub fn rekey_keeping(keys: &[&str], keep: &[bool]) -> Vec<Option<String>> {
     let mut out: Vec<Option<String>> = vec![None; keys.len()];
     let mut i = 0;
     while i < keys.len() {
@@ -226,6 +231,36 @@ pub fn placement(source: &[Line], at: usize, target: &[Line]) -> Option<String> 
 /// puts in the source's order.
 pub fn follows(latest: Option<Period>, source: Period, ordered: &[Period]) -> bool {
     latest.is_some_and(|p| p == source || ordered.contains(&p))
+}
+
+/// `J` / `K` on a selection: `order` (a pane's ids, in manual order) with
+/// every `picked` row moved `delta` places — down when positive.
+///
+/// One place is each picked row passing one row that is not picked, so a
+/// gapped selection keeps its gaps on the way and the rows pile up at the end
+/// they are moved toward rather than passing each other — the list box's
+/// "move down" with several items chosen. The picked rows never change order
+/// among themselves, and neither do the rest.
+pub fn shift(order: &[i64], picked: &HashSet<i64>, delta: i64) -> Vec<i64> {
+    let mut out = order.to_vec();
+    let n = out.len();
+    for _ in 0..delta.unsigned_abs() {
+        if delta > 0 {
+            // From the bottom up, so the lowest picked row makes room first.
+            for i in (0..n.saturating_sub(1)).rev() {
+                if picked.contains(&out[i]) && !picked.contains(&out[i + 1]) {
+                    out.swap(i, i + 1);
+                }
+            }
+        } else {
+            for i in 1..n {
+                if picked.contains(&out[i]) && !picked.contains(&out[i - 1]) {
+                    out.swap(i, i - 1);
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -456,5 +491,23 @@ mod tests {
         assert!(follows(Some(p(10)), p(7), &[p(10)]));
         assert!(!follows(Some(p(10)), p(7), &[p(8)]));
         assert!(!follows(None, p(7), &[p(8)]));
+    }
+
+    #[test]
+    fn a_selection_moves_together_and_piles_up_at_the_end() {
+        let pick = |ids: &[i64]| ids.iter().copied().collect::<HashSet<i64>>();
+        let order = [1, 2, 3, 4, 5, 6];
+        // Gaps kept on the way.
+        assert_eq!(shift(&order, &pick(&[1, 3]), 1), vec![2, 1, 4, 3, 5, 6]);
+        assert_eq!(shift(&order, &pick(&[1, 3]), 2), vec![2, 4, 1, 5, 3, 6]);
+        // At the end they close up, in their own order.
+        assert_eq!(shift(&order, &pick(&[1, 3]), 9), vec![2, 4, 5, 6, 1, 3]);
+        assert_eq!(shift(&order, &pick(&[2, 6]), 1), vec![1, 3, 2, 4, 5, 6]);
+        // Up is the mirror.
+        assert_eq!(shift(&order, &pick(&[4, 6]), -1), vec![1, 2, 4, 3, 6, 5]);
+        assert_eq!(shift(&order, &pick(&[4, 6]), -9), vec![4, 6, 1, 2, 3, 5]);
+        // Nowhere to go, and no count.
+        assert_eq!(shift(&order, &pick(&[5, 6]), 1), order.to_vec());
+        assert_eq!(shift(&order, &pick(&[2]), 0), order.to_vec());
     }
 }
