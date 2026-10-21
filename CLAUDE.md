@@ -1387,6 +1387,10 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   and the varying-income projection through the same `ledger::projection`
   the pane calls. `tests/charts.rs` holds every month's sums to the panes',
   viewer by viewer — keep it passing when either side changes.
+- **Years opens on the last ten years**, its *from* field reaching the rest,
+  and its spent/earned-so-far cards draw this year against last or, with
+  `v` (`lines=5`), against up to four years, each fainter — shading and
+  end labels stay on last year alone.
 - **A selection (`x`) narrows every chart**, followed across months as the
   same line (rule, else exact title, in one member's ledger); `s` toggles.
 - **The viewer's keys press the stage's own links** (`data-ck`), so the

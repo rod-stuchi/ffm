@@ -51,8 +51,21 @@
          hx-get="{{ u }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage">›</a>
       {%- else %}<span class="btn is-off" aria-hidden="true">›</span>{% endif %}
     </span>
-    {%- else %}
-    <span class="per">{{ years_label }}</span>
+    {%- else if !since_options.is_empty() %}
+    {%- if !lines.is_empty() %}
+    <nav class="chchips chlines" title="{{ t.charts_lines_key() }}">
+      {%- for l in lines %}
+      <a class="chchip{% if l.on %} is-on{% endif %}" href="{{ l.url }}"{% if !l.key.is_empty() %} data-ck="{{ l.key }}"{% endif %}
+         hx-get="{{ l.url }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage">{% if loop.first %}<kbd>v</kbd>{% endif %}{{ l.label }}</a>
+      {%- endfor %}
+    </nav>
+    {%- endif %}
+    <form class="per" hx-get="/charts" hx-target="#chstage" hx-swap="innerHTML" hx-trigger="change" hx-indicator="#chstage">
+      {%- for (k, v) in hidden %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <label>{{ t.charts_from() }} <select name="since">
+        {%- for y in since_options %}<option value="{{ y }}"{% if *y == since %} selected{% endif %}>{{ y }}</option>{% endfor -%}
+      </select></label>
+    </form>
     {%- endif %}
     <button class="btn" type="button" title="{{ t.charts_close() }}" @click="closeCharts()">esc</button>
   </div>

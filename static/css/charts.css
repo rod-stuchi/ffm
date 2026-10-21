@@ -139,6 +139,13 @@
   border-left: 1px solid var(--line-2);
 }
 
+/* The Years tab's two-line / five-line switch sits in the right group,
+   beside the first-year field, so it needs no rule of its own. */
+.chcap .chlines {
+  padding-left: 0;
+  border-left: 0;
+}
+
 .selchip {
   font: var(--ch-m) var(--mono);
   color: var(--info);
@@ -342,6 +349,12 @@
 .chlegend .lg-cur { background: var(--ink); }
 .chlegend .lg-avg { background: var(--pos); }
 .chlegend .lg-old { background: var(--ink-3); }
+.chlegend .lg-old.o2,
+.chartsview .k-old.o2 { opacity: 0.66; }
+.chlegend .lg-old.o3,
+.chartsview .k-old.o3 { opacity: 0.5; }
+.chlegend .lg-old.o4,
+.chartsview .k-old.o4 { opacity: 0.38; }
 
 /* The table twin. */
 details.tbl {
@@ -535,6 +548,10 @@ details.tbl tr:last-child td { border-bottom: 0; }
 .chartsview svg.ov .l-avg { stroke: var(--pos); stroke-width: 2; }
 .chartsview svg.ov .l-sel { stroke: var(--info); stroke-width: 2; }
 .chartsview svg.ov .l-old { stroke: var(--ink-3); stroke-width: 1.5; opacity: 0.8; }
+/* `lines=5`: each year further back a step fainter, the same ink. */
+.chartsview svg.ov .l-old.o2 { opacity: 0.58; }
+.chartsview svg.ov .l-old.o3 { opacity: 0.42; }
+.chartsview svg.ov .l-old.o4 { opacity: 0.3; }
 .chartsview svg.ov .l-spark { stroke: var(--ink-2); stroke-width: 1.5; }
 .chartsview .smc.sel svg.ov .l-spark { stroke: var(--info); }
 

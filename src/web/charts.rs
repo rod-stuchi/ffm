@@ -45,6 +45,19 @@ use std::collections::{HashMap, HashSet};
 /// pixels wide, and the Years tab is the view for that.
 const MAX_MONTHS: i32 = 36;
 
+/// How many years the Years tab opens on; its first-year field reaches the
+/// rest.
+const DEFAULT_YEARS: i32 = 10;
+
+/// How many earlier years the cumulative cards draw with `lines=5`.
+const MANY_OLD: usize = 4;
+
+/// An earlier year's line, legend swatch and tip key, last year first: the
+/// same `--ink-3`, fainter one year further back.
+const OLD_LINE: [&str; MANY_OLD] = ["l-old", "l-old o2", "l-old o3", "l-old o4"];
+const OLD_LEGEND: [&str; MANY_OLD] = ["lg-old", "lg-old o2", "lg-old o3", "lg-old o4"];
+const OLD_KEY: [&str; MANY_OLD] = ["k-old", "k-old o2", "k-old o3", "k-old o4"];
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tab {
     Month,
@@ -91,6 +104,13 @@ pub struct Params {
     from: String,
     #[serde(default)]
     to: String,
+    /// The Years tab's first year.
+    #[serde(default)]
+    since: String,
+    /// `5` draws the cumulative cards with this year and four before it;
+    /// absent, this year against last (`v`).
+    #[serde(default)]
+    lines: String,
 }
 
 /// Everything a link inside the stage has to carry to land on the same view
@@ -105,6 +125,8 @@ struct Q {
     sel: bool,
     from: Period,
     to: Period,
+    since: Option<i32>,
+    many: bool,
 }
 
 impl Q {
@@ -124,6 +146,12 @@ impl Q {
             if !self.sel {
                 u.push_str("&sel=0");
             }
+        }
+        if let Some(y) = self.since {
+            u.push_str(&format!("&since={y}"));
+        }
+        if self.many {
+            u.push_str("&lines=5");
         }
         u
     }
@@ -399,8 +427,14 @@ pub struct ChartsStage {
     pub from: String,
     pub to: String,
     pub options: Vec<(String, String)>,
-    pub years_label: String,
-    /// What the from/to form carries besides the two fields.
+    /// The Years tab's first-year field, and every year it can name,
+    /// newest first.
+    pub since: String,
+    pub since_options: Vec<String>,
+    /// The cumulative cards' two modes, `v` pressing the one not on; empty
+    /// while fewer than three years are in range, where both draw the same.
+    pub lines: Vec<Link>,
+    /// What the range form carries besides its own fields.
     pub hidden: Vec<(&'static str, String)>,
     pub month: Option<MonthView>,
     pub year: Option<YearView>,
@@ -867,6 +901,8 @@ pub async fn view(State(st): State<AppState>, auth: Auth, Query(p): Query<Params
         sel: sel_on,
         from,
         to,
+        since: p.since.parse().ok(),
+        many: p.lines == "5",
     };
 
     let is_admin = auth.viewer.is_admin();
@@ -979,7 +1015,9 @@ pub async fn view(State(st): State<AppState>, auth: Auth, Query(p): Query<Params
             v.reverse();
             v
         },
-        years_label: String::new(),
+        since: String::new(),
+        since_options: Vec::new(),
+        lines: Vec::new(),
         hidden: {
             let mut h = vec![
                 ("tab", tab.code().to_string()),
@@ -994,6 +1032,17 @@ pub async fn view(State(st): State<AppState>, auth: Auth, Query(p): Query<Params
                 if !sel_on {
                     h.push(("sel", "0".to_string()));
                 }
+            }
+            // Each tab's form carries the other's fields, so a change on one
+            // does not reset the other.
+            if tab == Tab::Years {
+                h.push(("from", from.to_string()));
+                h.push(("to", to.to_string()));
+            } else if let Some(y) = q.since {
+                h.push(("since", y.to_string()));
+            }
+            if q.many {
+                h.push(("lines", "5".to_string()));
             }
             h
         },
@@ -1062,8 +1111,29 @@ pub async fn view(State(st): State<AppState>, auth: Auth, Query(p): Query<Params
                 .ok()
                 .flatten()
                 .unwrap_or(current)
-                .min(current);
-            let start = Period::new(first.year(), 1).unwrap_or(first);
+                .min(current)
+                .year();
+            let since = years_since(q.since, first, current.year());
+            let start = Period::new(since, 1).unwrap_or(current);
+            stage.since = since.to_string();
+            stage.since_options = (first..=current.year())
+                .rev()
+                .map(|y| y.to_string())
+                .collect();
+            if current.year() - since >= 2 {
+                stage.lines = [
+                    (false, t.charts_lines_last()),
+                    (true, t.charts_lines_five()),
+                ]
+                .into_iter()
+                .map(|(many, label)| Link {
+                    label: label.to_string(),
+                    url: q.with(|q| q.many = many),
+                    on: q.many == many,
+                    key: if q.many == many { "" } else { "v" },
+                })
+                .collect();
+            }
             let rows = charts::rows(
                 &st.pool,
                 Some(&st.cfg.receipts_root),
@@ -1078,12 +1148,9 @@ pub async fn view(State(st): State<AppState>, auth: Auth, Query(p): Query<Params
                 .filter(|r| member.is_none_or(|m| r.member_id == m))
                 .collect();
             stage.empty = rows.is_empty();
-            stage.years_label = t.charts_years_range(&range_label(
-                &names,
-                Period::new(current.year(), 1).unwrap_or(current),
-                current,
+            stage.years = Some(years_view(
+                t, currency, &names, current, &rows, since, q.many,
             ));
-            stage.years = Some(years_view(t, currency, &names, current, &rows));
         }
     }
     Html(stage).into_response()
@@ -1938,20 +2005,25 @@ fn year_view(
 // Years
 // ---------------------------------------------------------------------------
 
+/// The Years tab's first year: the field's, else the last ten — never
+/// before the first row, never past this year.
+fn years_since(asked: Option<i32>, first: i32, this_year: i32) -> i32 {
+    asked
+        .unwrap_or(this_year - (DEFAULT_YEARS - 1))
+        .clamp(first.min(this_year), this_year)
+}
+
 fn years_view(
     t: &Catalog,
     currency: Currency,
     names: &[String],
     current: Period,
     rows: &[ChartRow],
+    since: i32,
+    many: bool,
 ) -> YearsView {
     let last_month = current.month();
-    let first_year = rows
-        .iter()
-        .map(|r| r.period.year())
-        .min()
-        .unwrap_or(current.year());
-    let years: Vec<i32> = (first_year..=current.year()).collect();
+    let years: Vec<i32> = (since.min(current.year())..=current.year()).collect();
     let ny = years.len();
 
     // [year][month] in and out, and whether any of it is a projection.
@@ -2011,26 +2083,29 @@ fn years_view(
                 .collect::<Vec<i64>>()
         };
         let now = run(&src[ny - 1][..last_month as usize]);
-        let was: Option<Vec<i64>> = (ny > 1).then(|| run(&src[ny - 2]));
+        // The earlier years drawn, last year first: one, or with `many` up
+        // to four, never before the range's first year. Each one back is
+        // fainter; only last year is shaded against and labeled.
+        let olds: Vec<(i32, Vec<i64>)> = (1..ny)
+            .take(if many { MANY_OLD } else { 1 })
+            .map(|k| (years[ny - 1 - k], run(&src[ny - 1 - k])))
+            .collect();
+        let was = olds.first().map(|(_, w)| w);
         let hi = now
             .iter()
-            .chain(was.iter().flatten())
+            .chain(olds.iter().flat_map(|(_, w)| w))
             .copied()
             .max()
             .unwrap_or(0);
         let s = Scale::nice(0, hi, 4);
         let b = Band { n: 12 };
-        let pn: Vec<(f64, f64)> = now
-            .iter()
-            .enumerate()
-            .map(|(i, v)| (b.center(i), s.top(*v)))
-            .collect();
-        let pw: Vec<(f64, f64)> = was
-            .iter()
-            .flatten()
-            .enumerate()
-            .map(|(i, v)| (b.center(i), s.top(*v)))
-            .collect();
+        let pts = |v: &[i64]| -> Vec<(f64, f64)> {
+            v.iter()
+                .enumerate()
+                .map(|(i, v)| (b.center(i), s.top(*v)))
+                .collect()
+        };
+        let pn = pts(&now);
         let cur_y = current.year();
         let mut plot = Plot {
             h: 210,
@@ -2040,15 +2115,23 @@ fn years_view(
             ..Plot::default()
         };
         let lm = last_month as usize - 1;
-        let d = was.as_ref().and_then(|w| delta(t, now[lm], w[lm], kind_in));
-        if !pw.is_empty() {
+        let d = was.and_then(|w| delta(t, now[lm], w[lm], kind_in));
+        // Oldest first, so last year's line sits on top of the rest.
+        for (k, (_, w)) in olds.iter().enumerate().skip(1).rev() {
+            plot.paths.push(PathD {
+                class: OLD_LINE[k],
+                d: chart::line(&pts(w)),
+            });
+        }
+        if let Some(w) = was {
+            let pw = pts(w);
             let good = d.as_ref().is_none_or(|d| d.class != "bad");
             plot.paths.push(PathD {
                 class: if good { "a-good" } else { "a-bad" },
                 d: chart::between(&pn, &pw[..pn.len()]),
             });
             plot.paths.push(PathD {
-                class: "l-old",
+                class: OLD_LINE[0],
                 d: chart::line(&pw),
             });
             plot.dots.push(Dot {
@@ -2076,7 +2159,7 @@ fn years_view(
                 top: chart::pct(*y),
                 class: "",
             });
-            let below = was.as_ref().is_some_and(|w| now[lm] < w[lm]);
+            let below = was.is_some_and(|w| now[lm] < w[lm]);
             plot.labels.push(Label {
                 left: chart::pct(*x),
                 top: chart::pct(*y),
@@ -2094,11 +2177,11 @@ fn years_view(
                     key: "k-net",
                 });
             }
-            if let Some(w) = &was {
+            for (k, (y, w)) in olds.iter().enumerate() {
                 tip_rows.push(TipRow {
-                    label: (cur_y - 1).to_string(),
+                    label: y.to_string(),
                     value: money(w[i], currency),
-                    key: "k-old",
+                    key: OLD_KEY[k],
                 });
             }
             plot.hits.push(hit(
@@ -2115,12 +2198,12 @@ fn years_view(
             label: cur_y.to_string(),
         }];
         let mut head = vec![String::new(), cur_y.to_string()];
-        if was.is_some() {
+        for (k, (y, _)) in olds.iter().enumerate() {
             legend.push(Legend {
-                class: "lg-old",
-                label: (cur_y - 1).to_string(),
+                class: OLD_LEGEND[k],
+                label: y.to_string(),
             });
-            head.push((cur_y - 1).to_string());
+            head.push(y.to_string());
         }
         PlotCard {
             wide: false,
@@ -2142,9 +2225,7 @@ fn years_view(
                                 .map(|v| money(*v, currency))
                                 .unwrap_or_else(|| "—".into()),
                         ];
-                        if let Some(w) = &was {
-                            cells.push(money(w[i], currency));
-                        }
+                        cells.extend(olds.iter().map(|(_, w)| money(w[i], currency)));
                         TRow {
                             name: names[i].clone(),
                             cells,
@@ -2263,6 +2344,101 @@ mod tests {
             range_label(&names, p("2025-11"), p("2026-02")),
             "11/2025 – 02/2026"
         );
+    }
+
+    #[test]
+    fn the_years_open_on_the_last_ten() {
+        assert_eq!(years_since(None, 2010, 2026), 2017);
+        assert_eq!(years_since(None, 2024, 2026), 2024);
+        assert_eq!(years_since(Some(2012), 2010, 2026), 2012);
+        assert_eq!(years_since(Some(2001), 2010, 2026), 2010);
+        assert_eq!(years_since(Some(2030), 2010, 2026), 2026);
+        // A first row dated after today is still drawn from this year.
+        assert_eq!(years_since(None, 2027, 2026), 2026);
+    }
+
+    fn years_of(since: i32, many: bool) -> YearsView {
+        use crate::domain::status::TxKind;
+        use crate::ui::i18n::Lang;
+        let rows: Vec<ChartRow> = (2019..=2026)
+            .flat_map(|y| (1..=12).map(move |m| (y, m)))
+            .filter(|(y, m)| *y < 2026 || *m <= 10)
+            .filter(|(y, _)| *y >= since)
+            .flat_map(|(y, m)| {
+                [TxKind::In, TxKind::Out].map(|kind| ChartRow {
+                    id: 0,
+                    period: Period::new(y, m).unwrap(),
+                    member_id: 1,
+                    kind,
+                    cents: Some(Cents(100_000 * (y as i64 - 2018))),
+                    estimated: false,
+                    title: String::new(),
+                    bucket: None,
+                    rule_id: None,
+                })
+            })
+            .collect();
+        let names: Vec<String> = (1..=12).map(|m| m.to_string()).collect();
+        years_view(
+            &Catalog::new(Lang::En),
+            Currency::Brl,
+            &names,
+            Period::new(2026, 10).unwrap(),
+            &rows,
+            since,
+            many,
+        )
+    }
+
+    fn old_lines(c: &PlotCard) -> Vec<&str> {
+        c.plot
+            .paths
+            .iter()
+            .map(|p| p.class)
+            .filter(|c| c.starts_with("l-old"))
+            .collect()
+    }
+
+    #[test]
+    fn the_years_start_where_asked() {
+        let v = years_of(2024, false);
+        assert_eq!(v.flow.plot.cols.len(), 3);
+        assert_eq!(v.rows.len(), 3);
+        assert_eq!(years_of(2019, false).rows.len(), 8);
+    }
+
+    #[test]
+    fn two_lines_or_up_to_five() {
+        let two = years_of(2019, false);
+        assert_eq!(old_lines(&two.spent), ["l-old"]);
+        assert_eq!(two.spent.table.head, ["", "2026", "2025"]);
+
+        let five = years_of(2019, true);
+        // Oldest first, so last year's line is drawn on top.
+        assert_eq!(
+            old_lines(&five.earned),
+            ["l-old o4", "l-old o3", "l-old o2", "l-old"]
+        );
+        assert_eq!(five.earned.legend.len(), 5);
+        assert_eq!(five.earned.plot.hits[0].tip.rows.len(), 5);
+        assert_eq!(
+            five.earned.table.head,
+            ["", "2026", "2025", "2024", "2023", "2022"]
+        );
+        // Last year alone is shaded against and labeled.
+        assert_eq!(
+            five.earned
+                .plot
+                .paths
+                .iter()
+                .filter(|p| p.class.starts_with("a-"))
+                .count(),
+            1
+        );
+
+        // Never before the range's first year.
+        assert_eq!(old_lines(&years_of(2024, true).spent).len(), 2);
+        assert!(old_lines(&years_of(2026, true).spent).is_empty());
     }
 
     #[test]

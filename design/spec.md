@@ -3253,6 +3253,19 @@ Years follows `viewer.is_admin()`, so under preview it is absent, not
 disabled — the Household button's rule — and asked for directly it answers
 with a refusal, never data.
 
+**Years opens on the last ten years**, and its *from* field (`since=`) reaches
+back to the first row. There is no cap past that: the field is the cap, so an
+older year is a choice away rather than gone.
+
+**Spent and earned so far draw two lines or five** — `v`, or the
+*vs last year* / *5 years* switch beside the field (`lines=5`). Two is the
+default and asks "are we ahead of last year by now?"; five adds up to three
+more years, each a step fainter in the same `--ink-3`, and asks "are we above
+our usual?". In both, only last year is shaded against, dotted and labeled at
+its end — more labels would collide — and the older years are named in the
+legend, the tips and the table. Never before *from*; the switch is absent
+with fewer than three years in range, where both draw the same.
+
 ### Scope
 
 - **The household by default**, with the privacy every total already has: a
@@ -3274,6 +3287,7 @@ with a refusal, never data.
 | `[` `]` | the month before / after (Month), the range a year earlier / later (Year) |
 | `H` `L` | the member chip before / after |
 | `s` | selection ⇄ all, when rows are selected |
+| `v` | two lines ⇄ five in Years' spent and earned so far |
 | `j` `k` · `gg` `G` | scroll |
 | `Esc` | close (inside a from/to field: leave the field) |
 
