@@ -192,7 +192,15 @@ cannot drift from the real thing.
 
 ---
 
-See @design/spec.md for the keymap, row states and config schema.
+**`design/spec.md` holds the keymap, row states and config schema. It is not
+loaded each session: read the section you need** (`rg -n '^##' design/spec.md`).
+
+- **The row component**: row states, density, add form, statusline, loader, gutter, file rail, keymap (Act · Mouse · Find · Fold · Files · Undo · Type · Edit fields), hiding amounts, phone, toasts, `:order`, confirmation rule
+- **Auth & sessions**: pre-auth shell, `/setup`, invites, turning off, resets, console, `/login`, preview
+- **Income** · **Change log (`gl`)**: tables, pane
+- **Receipt tracking & files**: taxonomy, layout, file kinds, `spans_period`, watcher, live feed, `:prune`, upload, trim/shrink, bill import, manual paid
+- **Categorization & grouping**: folds, ring, `S`, fold state
+- **Unresolved issues across months** · **Configuration — three tiers**: schemas, currency, Surface · **Language & copy (i18n)**
 
 
 ## Layout
