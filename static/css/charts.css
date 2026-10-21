@@ -18,7 +18,15 @@
  * (`.tab`, `.chip`, `.hit`, `.tip`, `.legend`, `.stack`): a rule written for
  * the member tabs must never reach into a chart, nor the other way round. */
 
+/* The viewer's own type scale, a step above the ledger's micro-labels: a
+ * chart is read from further away than a row. Every size below reads one of
+ * these, so the next adjustment is one line. */
 .chartsview {
+  --ch-xs: 11.5px;
+  --ch-s: 12.5px;
+  --ch-m: 13.5px;
+  --ch-h: 15px;
+  --ch-fig: 28px;
   position: fixed;
   inset: var(--safe-t) var(--safe-r) var(--foot-h) var(--safe-l);
   z-index: 50;
@@ -89,11 +97,11 @@
 }
 
 .chtab {
-  font: 12px var(--mono);
+  font: var(--ch-m) var(--mono);
 }
 
 .chchip {
-  font: 12.5px var(--sans);
+  font: var(--ch-m) var(--sans);
 }
 
 .chtab:hover,
@@ -114,12 +122,12 @@
 
 .chtab kbd,
 .chchip kbd {
-  font: 10px var(--mono);
+  font: var(--ch-xs) var(--mono);
   color: var(--ink-3);
 }
 
 .chtab .adm {
-  font-size: 9.5px;
+  font-size: var(--ch-xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -132,7 +140,7 @@
 }
 
 .selchip {
-  font: 12px var(--mono);
+  font: var(--ch-m) var(--mono);
   color: var(--info);
   background: color-mix(in srgb, var(--info) 14%, transparent);
   border-radius: 6px;
@@ -152,7 +160,7 @@
 }
 
 .chcap .btn {
-  font: 12px var(--mono);
+  font: var(--ch-m) var(--mono);
   padding: 2px 8px;
   border-radius: 6px;
   text-decoration: none;
@@ -167,7 +175,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font: 12px var(--mono);
+  font: var(--ch-m) var(--mono);
   color: var(--ink-2);
 }
 
@@ -185,7 +193,7 @@
 }
 
 .chcap .per select {
-  font: 12px var(--mono);
+  font: var(--ch-m) var(--mono);
   background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--line-2);
@@ -237,14 +245,14 @@
   padding: 4px 16px;
   border-top: 1px solid var(--line);
   background: var(--surface-2);
-  font: 11.5px var(--mono);
+  font: var(--ch-s) var(--mono);
   color: var(--ink-3);
   white-space: nowrap;
   overflow-x: auto;
 }
 
 .chnav kbd {
-  font: 11px var(--mono);
+  font: var(--ch-s) var(--mono);
   color: var(--ink-2);
   background: var(--surface);
   border: 1px solid var(--line-2);
@@ -276,19 +284,19 @@
 }
 
 .chcard h3 {
-  font: 600 13.5px var(--sans);
+  font: 600 var(--ch-h) var(--sans);
   color: var(--ink);
 }
 
 .chcard .sub {
   margin-top: 1px;
-  font-size: 12px;
+  font-size: var(--ch-m);
   color: var(--ink-3);
 }
 
 .chcard .note {
   margin-top: 8px;
-  font-size: 11.5px;
+  font-size: var(--ch-s);
   color: var(--ink-3);
 }
 
@@ -302,7 +310,7 @@
   display: flex;
   gap: 12px;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--ch-m);
   color: var(--ink-2);
 }
 
@@ -345,7 +353,7 @@ details.tbl {
 details.tbl summary {
   display: inline-flex;
   gap: 6px;
-  font: 11.5px var(--mono);
+  font: var(--ch-s) var(--mono);
   color: var(--ink-3);
   cursor: pointer;
   list-style: none;
@@ -359,7 +367,7 @@ details.tbl table,
 .chartsview .yt {
   width: 100%;
   border-collapse: collapse;
-  font: 12px var(--mono);
+  font: var(--ch-m) var(--mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -368,7 +376,7 @@ details.tbl table { margin-top: 8px; }
 details.tbl th,
 .chartsview .yt th {
   padding: 4px 8px;
-  font: 500 11px var(--sans);
+  font: 500 var(--ch-s) var(--sans);
   color: var(--ink-3);
   text-align: right;
   border-bottom: 1px solid var(--line-2);
@@ -391,7 +399,7 @@ details.tbl td:first-child,
 details.tbl tr:last-child td { border-bottom: 0; }
 
 .chartsview .ytwrap { overflow-x: auto; }
-.chartsview .yt td { padding: 7px 10px; font-size: 12.5px; }
+.chartsview .yt td { padding: 7px 10px; font-size: var(--ch-m); }
 .chartsview .yt tr.cur td { font-weight: 600; }
 .chartsview .yt td.n { color: var(--neg); }
 
@@ -404,6 +412,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 }
 
 .chartsview .tile {
+  container-type: inline-size;
   padding: 12px 16px 13px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -411,15 +420,17 @@ details.tbl tr:last-child td { border-bottom: 0; }
 }
 
 .chartsview .tile .lab {
-  font-size: 12px;
+  font-size: var(--ch-m);
   color: var(--ink-3);
 }
 
 /* A standalone figure keeps proportional digits; tabular-nums is for
- * columns that line up. */
+ * columns that line up. It shrinks with a narrow tile rather than running
+ * out of it: two tiles side by side on a phone have ~140px for
+ * "+R$ 39.336,95". */
 .chartsview .tile .val {
   margin-top: 2px;
-  font: 600 24px var(--sans);
+  font: 600 min(var(--ch-fig), 13.5cqi) var(--sans);
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
@@ -428,7 +439,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 
 .chartsview .tile .dl {
   margin-top: 3px;
-  font: 11.5px var(--mono);
+  font: var(--ch-s) var(--mono);
   color: var(--ink-3);
 }
 
@@ -451,17 +462,17 @@ details.tbl tr:last-child td { border-bottom: 0; }
 
 .chartsview .plot {
   display: grid;
-  grid-template-columns: 52px 1fr;
-  grid-template-rows: var(--h, 220px) 22px;
+  grid-template-columns: 58px 1fr;
+  grid-template-rows: var(--h, 220px) 24px;
 }
 
-.chartsview .plot.has-pad { padding-right: 36px; }
+.chartsview .plot.has-pad { padding-right: 42px; }
 
 .chartsview .yax {
   position: relative;
-  font: 11px var(--mono);
+  font: 500 var(--ch-s) var(--mono);
   font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .chartsview .yax span {
@@ -486,8 +497,8 @@ details.tbl tr:last-child td { border-bottom: 0; }
 .chartsview .xax {
   position: relative;
   grid-column: 2;
-  font: 11px var(--mono);
-  color: var(--ink-3);
+  font: 500 var(--ch-s) var(--mono);
+  color: var(--ink-2);
 }
 
 .chartsview .xax span {
@@ -596,7 +607,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 /* A line's label beside its last point. */
 .chartsview .endl {
   position: absolute;
-  font: 600 11.5px var(--mono);
+  font: 600 var(--ch-m) var(--mono);
   color: var(--ink);
   white-space: nowrap;
   pointer-events: none;
@@ -629,13 +640,13 @@ details.tbl tr:last-child td { border-bottom: 0; }
   position: absolute;
   top: -6px;
   left: calc(100% + 6px);
-  min-width: 150px;
+  min-width: 170px;
   padding: 7px 10px;
   background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: 7px;
   box-shadow: var(--shadow-md);
-  font: 12px var(--mono);
+  font: var(--ch-m) var(--mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
@@ -653,7 +664,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 
 .chartsview .chtip .th {
   margin-bottom: 3px;
-  font: 600 11.5px var(--sans);
+  font: 600 var(--ch-m) var(--sans);
   color: var(--ink-2);
 }
 
@@ -673,7 +684,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
   display: inline-flex;
   gap: 6px;
   align-items: center;
-  font: 11.5px var(--sans);
+  font: var(--ch-s) var(--sans);
   color: var(--ink-3);
 }
 
@@ -706,7 +717,8 @@ details.tbl tr:last-child td { border-bottom: 0; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: var(--ch-m);
+  font-weight: 500;
   color: var(--ink);
 }
 
@@ -718,9 +730,9 @@ details.tbl tr:last-child td { border-bottom: 0; }
 /* Every length is a share of the track less room for the value beside it,
  * so the longest bar's label never runs off a narrow card. */
 .chartsview .hb .tr {
-  --room: 150px;
+  --room: 175px;
   position: relative;
-  height: 18px;
+  height: 20px;
   display: flex;
   align-items: center;
 }
@@ -736,7 +748,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 .chartsview .hb .b.muted { background: var(--line-2); }
 
 /* A bill's row says when it is due beside its amount: more room. */
-.chartsview .hb.topay .tr { --room: 290px; }
+.chartsview .hb.topay .tr { --room: 330px; }
 
 .chartsview .hb .at,
 .chartsview .hb .prev {
@@ -754,7 +766,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 
 .chartsview .hb .v {
   padding-left: 2px;
-  font: 11.5px var(--mono);
+  font: 500 var(--ch-m) var(--mono);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   white-space: nowrap;
@@ -762,7 +774,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 
 .chartsview .hb .d {
   margin-left: 8px;
-  font: 11px var(--mono);
+  font: var(--ch-s) var(--mono);
   white-space: nowrap;
 }
 
@@ -783,7 +795,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 }
 
 .chartsview .hb .tr .chtip {
-  top: 22px;
+  top: 24px;
   left: 0;
 }
 
@@ -806,7 +818,8 @@ details.tbl tr:last-child td { border-bottom: 0; }
 .chartsview .mir .nm,
 .chartsview .chdiv .nm {
   padding-right: 12px;
-  font-size: 12.5px;
+  font-size: var(--ch-m);
+  font-weight: 500;
 }
 
 .chartsview .mir .l,
@@ -814,7 +827,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 .chartsview .chdiv .l,
 .chartsview .chdiv .r {
   position: relative;
-  height: 20px;
+  height: 22px;
   display: flex;
   align-items: center;
 }
@@ -829,7 +842,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 .chartsview .chdiv .b {
   flex: none;
   height: 14px;
-  width: calc((100% - 120px) * var(--f));
+  width: calc((100% - 135px) * var(--f));
 }
 
 .chartsview .chdiv .b { height: 12px; }
@@ -849,7 +862,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 .chartsview .mir .v,
 .chartsview .chdiv .v {
   padding: 0 7px;
-  font: 11.5px var(--mono);
+  font: 500 var(--ch-m) var(--mono);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   white-space: nowrap;
@@ -857,13 +870,13 @@ details.tbl tr:last-child td { border-bottom: 0; }
 
 .chartsview .chdiv .v small {
   margin-left: 4px;
-  font-size: 10.5px;
+  font-size: var(--ch-xs);
   color: var(--ink-3);
 }
 
 .chartsview .mir .head {
   padding: 0 7px;
-  font-size: 11px;
+  font-size: var(--ch-s);
   color: var(--ink-3);
 }
 
@@ -896,7 +909,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
   position: absolute;
   bottom: calc(100% + 4px);
   left: 0;
-  font-size: 12px;
+  font-size: var(--ch-m);
   color: var(--ink-2);
   white-space: nowrap;
 }
@@ -907,7 +920,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
 }
 
 .chstack label b {
-  font: 600 12px var(--mono);
+  font: 600 var(--ch-m) var(--mono);
   color: var(--ink);
 }
 
@@ -937,12 +950,12 @@ details.tbl tr:last-child td { border-bottom: 0; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: var(--ch-m);
   font-weight: 500;
 }
 
 .chartsview .smc .t {
-  font: 11.5px var(--mono);
+  font: 500 var(--ch-s) var(--mono);
   color: var(--ink-2);
   white-space: nowrap;
 }
@@ -957,7 +970,7 @@ details.tbl tr:last-child td { border-bottom: 0; }
   display: flex;
   justify-content: space-between;
   margin-top: 3px;
-  font: 10.5px var(--mono);
+  font: var(--ch-xs) var(--mono);
   color: var(--ink-3);
 }
 
@@ -974,11 +987,14 @@ details.tbl tr:last-child td { border-bottom: 0; }
   .chtab kbd,
   .chchip kbd { display: none; }
 
-  .chartsview .plot { grid-template-columns: 40px 1fr; }
-  .chartsview .tile .val { font-size: 20px; }
+  /* The last month's label is centered on a column a few px wide. */
+  .chartsview .plot { grid-template-columns: 54px 1fr; padding-right: 8px; }
+  .chartsview .xax span.minor { display: none; }
+
+  .chartsview .tile { padding-inline: 12px; }
 
   .chartsview .chdiv .v small,
   .chartsview .hb .d { display: none; }
 
-  .chartsview .hb.topay .tr { --room: 150px; }
+  .chartsview .hb.topay .tr { --room: 170px; }
 }

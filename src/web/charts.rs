@@ -176,6 +176,9 @@ pub struct XTick {
     pub left: String,
     pub label: String,
     pub cur: bool,
+    /// Every other label past eight months, which a phone leaves out: twelve
+    /// "Jan"s at the chart's type size do not fit across one.
+    pub minor: bool,
 }
 
 /// A month's (or year's) pair of bars: IN up from zero, OUT down from it.
@@ -519,15 +522,36 @@ fn y_ticks(s: &Scale, currency: Currency) -> Vec<YTick> {
         .collect()
 }
 
+/// A label under every column up to a year; past that, no more than eight —
+/// every 2nd, 3rd, 4th or 6th month — counted back from the last, so the
+/// latest month is always named, and the current month always is.
+/// Thirty-six "Nov 23"s side by side ran into each other at any width.
 fn x_ticks(labels: &[String], cur: Option<usize>) -> Vec<XTick> {
-    let b = Band { n: labels.len() };
+    let n = labels.len();
+    let b = Band { n };
+    let step = if n <= 12 {
+        1
+    } else {
+        [2, 3, 4, 6, 12]
+            .into_iter()
+            .find(|s| n.div_ceil(*s) <= 8)
+            .unwrap_or(12)
+    };
     labels
         .iter()
         .enumerate()
-        .map(|(i, l)| XTick {
-            left: chart::pct(b.center(i)),
-            label: l.clone(),
-            cur: cur == Some(i),
+        .filter_map(|(i, l)| {
+            let is_cur = cur == Some(i);
+            let back = n - 1 - i;
+            let on_grid = back.is_multiple_of(step);
+            // The current month off the grid pushes aside its neighbors.
+            let crowds = cur.is_some_and(|c| c != i && c.abs_diff(i) < step);
+            (is_cur || (on_grid && !crowds)).then(|| XTick {
+                left: chart::pct(b.center(i)),
+                label: l.clone(),
+                cur: is_cur,
+                minor: !is_cur && n > 8 && !(back / step).is_multiple_of(2),
+            })
         })
         .collect()
 }
@@ -2179,6 +2203,35 @@ fn years_view(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn named(n: usize, cur: Option<usize>) -> Vec<(String, bool)> {
+        let labels: Vec<String> = (0..n).map(|i| i.to_string()).collect();
+        x_ticks(&labels, cur)
+            .into_iter()
+            .map(|x| (x.label, x.minor))
+            .collect()
+    }
+
+    #[test]
+    fn a_long_axis_names_every_few_months_from_the_last() {
+        // Up to a year, every month — a phone every other one.
+        let t = named(12, Some(11));
+        assert_eq!(t.len(), 12);
+        assert_eq!(t.iter().filter(|(_, minor)| *minor).count(), 6);
+        assert!(named(8, Some(7)).iter().all(|(_, minor)| !minor));
+        // Three years: every 6th, ending on the last; a phone, one a year.
+        let t = named(36, Some(35));
+        assert_eq!(t.len(), 6);
+        assert_eq!(t.last(), Some(&("35".to_string(), false)));
+        assert_eq!(t[t.len() - 2], ("29".to_string(), true));
+        assert_eq!(named(24, Some(23)).len(), 8);
+        // A current month off the grid is named, its crowding neighbors not.
+        let t = named(18, Some(10));
+        let names: Vec<&str> = t.iter().map(|(l, _)| l.as_str()).collect();
+        assert!(names.contains(&"10"));
+        assert!(!names.contains(&"9") && !names.contains(&"11"));
+        assert!(named(0, None).is_empty());
+    }
 
     #[test]
     fn a_line_is_its_rule_else_its_title_in_one_ledger() {

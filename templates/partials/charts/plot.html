@@ -30,6 +30,6 @@
     {%- endfor %}
   </div>
   <div class="xax">
-    {%- for x in p.xt %}<span class="{% if x.cur %}cur{% endif %}" style="left:{{ x.left }}%">{{ x.label }}</span>{% endfor -%}
+    {%- for x in p.xt %}<span class="{% if x.cur %}cur{% endif %}{% if x.minor %}minor{% endif %}" style="left:{{ x.left }}%">{{ x.label }}</span>{% endfor -%}
   </div>
 </div>

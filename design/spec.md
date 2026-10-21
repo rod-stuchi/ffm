@@ -3292,6 +3292,14 @@ cannot disagree and no decision about what to show lives in Alpine.
   client-side data model this app forbids — and a canvas cannot follow a
   palette swap without being redrawn by script; `plotters` and `charts-rs`
   because they write hex colors and their own fonts.
+- **Its own type scale, a step above the ledger's micro-labels** — 12.5px
+  ticks and notes, 13.5px names and values, 15px titles, set once as
+  `--ch-*` on `.chartsview`. A chart is read from further away than a row,
+  and the ticks are what values are read off, so they are `--ink-2` at 500,
+  not the ledger's faint `--ink-3`. Past twelve months the x-axis names at
+  most eight (every 2nd, 3rd, 4th or 6th month, counted back from the
+  last), and a phone every other one of those past eight; a tile's figure
+  shrinks with its tile (`cqi`) rather than running out of it.
 - **IN is above the zero line, OUT below it.** Position carries the
   difference, color only backs it up: no shade of `--ink` stays apart from
   `--pos` in all twenty-two palettes (four pastel dark ones fail the
