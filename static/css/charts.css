@@ -667,17 +667,39 @@ details.tbl tr:last-child td { border-bottom: 0; }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
+  display: none;
+}
+
+/* A column's tip sits in a room as wide as the plot (`Band::room`): a gap
+ * from the plot's near edge to past the column, then the tip. The gap gives
+ * way first, so a tip that would run off the plot — beside a wide column, or
+ * on a phone — slides back over its column and stops at the edge, instead of
+ * widening the stage. Flipped, the gap comes after and the tip ends before
+ * the column. */
+.chartsview .chroom {
+  position: absolute;
+  top: -6px;
+  pointer-events: none;
   /* Not `opacity: 0`: a hidden tip still counts toward the body's scroll
    * width, and the ones by the right edge scrolled a phone sideways. */
   display: none;
 }
 
-.chartsview .chhit.flip .chtip {
-  left: auto;
-  right: calc(100% + 6px);
+.chartsview .chhit:hover .chroom { display: flex; }
+.chartsview .chhit.flip .chroom { justify-content: flex-end; }
+
+.chartsview .chroom > i {
+  flex: 0 1 calc(var(--gap) + 6px);
+  min-width: 0;
 }
 
-.chartsview .chhit:hover .chtip { display: block; }
+.chartsview .chhit.flip .chroom > i { order: 1; }
+
+.chartsview .chroom .chtip {
+  position: static;
+  display: block;
+  flex: none;
+}
 
 .chartsview .chtip .th {
   margin-bottom: 3px;

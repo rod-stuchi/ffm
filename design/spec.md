@@ -3327,7 +3327,12 @@ cannot disagree and no decision about what to show lives in Alpine.
 - **A projection is marked where it is drawn**: a dashed income bar, a
   hollow dot, `~` on its figure — the income estimate's rule.
 - **Hover is pure CSS**: one box per column, the whole plot's height, with
-  its tip inside. Every chart also has a `table` twin, so no value is only
+  its tip inside. The tip opens beside its column, away from the nearer
+  edge, and when that runs past the plot — a lone wide column, a phone — it
+  slides back over the column and stops at the plot's edge
+  (`Band::room`: a gap that shrinks before the tip leaves). Placed beside
+  the column regardless, it widened the stage and scrolled the page
+  sideways. Every chart also has a `table` twin, so no value is only
   reachable by hovering.
 - **A snapshot.** Each open, tab and chip fetches fresh; nothing updates
   while it is open.

@@ -81,6 +81,22 @@ impl Band {
     pub fn flip(self, i: usize) -> bool {
         self.center(i) > 60.0
     }
+    /// Where column `i`'s tip may go: the whole plot, as a left and a width
+    /// in percent of the column itself (the hover box is the tip's
+    /// containing block), and the gap, in percent of the plot, from the
+    /// plot's near edge to the column's far side. The gap shrinks before
+    /// the tip leaves the plot, so a tip that fits beside its column sits
+    /// there and one that does not — a wide column, a phone — slides back
+    /// over it instead of scrolling the page sideways.
+    pub fn room(self, i: usize) -> (f64, f64, f64) {
+        let w = self.width();
+        let gap = if self.flip(i) {
+            100.0 - self.left(i)
+        } else {
+            self.left(i) + w
+        };
+        (-(i as f64) * 100.0, 100.0 / w * 100.0, gap)
+    }
 }
 
 /// `12.35` — two decimals is far finer than a pixel at any width a chart is
@@ -194,6 +210,13 @@ mod tests {
         assert_eq!(b.center(3), 87.5);
         assert!(!b.flip(1));
         assert!(b.flip(3));
+        // Column 1 of 4: the plot starts one column to its left and is four
+        // columns wide; its tip opens past its right side, at 50%.
+        assert_eq!(b.room(1), (-100.0, 400.0, 50.0));
+        // Column 3 flips: its tip ends before its left side, 25% from the right.
+        assert_eq!(b.room(3), (-300.0, 400.0, 25.0));
+        // A lone column is the whole plot.
+        assert_eq!(Band { n: 1 }.room(0), (0.0, 100.0, 100.0));
     }
 
     #[test]

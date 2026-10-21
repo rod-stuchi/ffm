@@ -9,8 +9,10 @@
     <div class="chdot sm spk" style="left:{{ s.dot_left }}%;top:{{ s.dot_top }}%"></div>
     {%- for h in s.hits %}
     <div class="chhit{% if h.flip %} flip{% endif %}" style="left:{{ h.left }}%;width:{{ h.width }}%">
-      <div class="chtip"><div class="th">{{ h.tip.head }}</div>
-        {%- for r in h.tip.rows %}<div class="tr"><span><i class="k {{ r.key }}"></i>{{ r.label }}</span><b class="money">{{ r.value }}</b></div>{% endfor -%}
+      <div class="chroom" style="left:{{ h.room_left }}%;width:{{ h.room_width }}%;--gap:{{ h.gap }}%"><i></i>
+        <div class="chtip"><div class="th">{{ h.tip.head }}</div>
+          {%- for r in h.tip.rows %}<div class="tr"><span><i class="k {{ r.key }}"></i>{{ r.label }}</span><b class="money">{{ r.value }}</b></div>{% endfor -%}
+        </div>
       </div>
     </div>
     {%- endfor %}

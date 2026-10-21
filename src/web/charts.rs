@@ -244,6 +244,11 @@ pub struct Hit {
     pub left: String,
     pub width: String,
     pub flip: bool,
+    /// The tip's room, the whole plot, in the column's own percentages, and
+    /// the gap that holds the tip beside its column (`ui::chart::Band::room`).
+    pub room_left: String,
+    pub room_width: String,
+    pub gap: String,
     pub tip: Tip,
 }
 
@@ -591,10 +596,14 @@ fn x_ticks(labels: &[String], cur: Option<usize>) -> Vec<XTick> {
 }
 
 fn hit(b: Band, i: usize, tip: Tip) -> Hit {
+    let (room_left, room_width, gap) = b.room(i);
     Hit {
         left: chart::pct(b.left(i)),
         width: chart::pct(b.width()),
         flip: b.flip(i),
+        room_left: chart::pct(room_left),
+        room_width: chart::pct(room_width),
+        gap: chart::pct(gap),
         tip,
     }
 }
