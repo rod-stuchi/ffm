@@ -1015,9 +1015,9 @@
          role="button" title="{{ t.status_keyboard() }}" aria-label="{{ t.status_keyboard() }}"
          @pointerdown.prevent @click="toggleKeyboard()"><span class="kbglyph">{{ crate::ui::icons::svg("keyboard")|safe }}</span><span
          x-text="commanding ? 'COMMAND' : (searching ? 'SEARCH' : 'NORMAL')">NORMAL</span></div>
-    <div class="st">{{ household }} · {{ period }}</div>
+    <div class="st sthouse">{{ household }} · {{ period }}</div>
     <div class="st stmember">{{ me_name }}{% if me_admin %} {{ t.status_admin() }}{% endif %}</div>
-    <div class="st grow msg" x-text="msg"></div>
+    <div class="st grow msg" :class="{ 'is-hits': msg !== lastCmd }" x-text="msg"></div>
     {#- A request with no row or side pane to show itself on — a setting, `u`,
         a settings pane opening. Right after the message, the one cell that
         grows, so its coming and going moves nothing to its right. -#}

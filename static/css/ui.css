@@ -610,10 +610,36 @@ legend {
     flex: none;
   }
 
-  /* The last command typed keeps room to be read; the household and the
-   * member, both on the bar above already, give way first. */
+  /* The pre-auth pages' message is a sign-in error, and keeps room to be
+   * read. */
   .st.msg {
     min-width: 14ch;
+  }
+
+  /* The ledger's is the last command typed, which the `:` bar showed a
+   * moment ago — not worth a name cut to "Rodri…". It stays only as the
+   * spacer that pushes the eye and the version right, drawing nothing.
+   * `/`'s hit count is the exception: short, and the one thing in it worth
+   * reading on a phone. */
+  .ledger-shell .st.msg {
+    min-width: 0;
+  }
+
+  .ledger-shell .st.msg:not(.is-hits) {
+    padding-inline: 0;
+    visibility: hidden;
+  }
+
+  /* Still the spacer, but sized from the count and never squeezed below it.
+   * It has to keep growing: the cell's `grow` class is also Tailwind's
+   * `grow` utility, which beats this layer and sets `flex-grow: 1` anyway. */
+  .ledger-shell .st.msg.is-hits {
+    flex: 1 0 auto;
+  }
+
+  /* The household and the month are both on the bar above, at the left. */
+  .st.sthouse {
+    display: none;
   }
 }
 

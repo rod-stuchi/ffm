@@ -162,7 +162,7 @@ The statusline carries, left to right:
 | cell | what it says |
 |---|---|
 | mode | `NORMAL` · `COMMAND` · `SEARCH`. Accent for normal — the "you are here" token — and `--info` while typing, which already means "what I picked" |
-| household · period | which ledger, which month |
+| household · period | which ledger, which month — left out on a phone, where the bar above already shows both |
 | member | the **session's** member and `(admin)` when admin powers are actually in effect, so it reads as a member under preview-as-non-admin |
 | message | the last command typed (`:sort date`), kept until the next one and across the reload a setting causes — or, while `/` is up, its hit count `3/7`. What the app *says* is a toast (see Toasts and the bell) |
 | busy | the loader, while a request with no row or pane to show itself on is in flight — a setting, `u`, a settings pane opening. After the message, the one cell that grows, so its coming and going moves nothing to its right |
@@ -175,10 +175,18 @@ The statusline carries, left to right:
 | eye | `gh` — the amounts shown (an eye) or hidden (crossed out, in the ink). **Clickable, toggles.** Kept at every width, like the version |
 | version | the running build — `v0.0.3`, or `v0.0.4-dev` on a dev build. Last, quiet, and **kept at every width**, where the cells before it step aside below 700px: a phone is where "which version is this?" gets asked |
 
-**On a phone the household and the member cells give way** with an ellipsis,
-while the mode badge and the version keep their size. They did not fit beside
-the badge on their own — 404px of cells on a 400px screen — so the bar used to
-run off the edge before the version was ever added.
+**On a phone the statusline keeps only what the bar above does not
+say**: the mode badge, the member, the eye and the version. The household
+and the month are on the bar's first row already, so their cell is left
+out, and the member keeps its full width, `(admin)` included. The member
+still gives way with an ellipsis if a name is too long for what is left.
+
+**The message cell is not drawn there either** — amended from the reverse,
+which held 14ch open for the last command and cut the names to *Contas…* and
+*Rodri…*. The readback repeats what the `:` bar showed a moment ago, so the
+cell stays only as the spacer that keeps the eye and the version at the
+right; `/`'s hit count is the exception, kept at its own width. The pre-auth
+pages' message is a sign-in error and keeps its 14ch.
 
 The last two are the single-source rule made visible: a command, a form
 control and a statusline cell are three gestures writing **one** row. Clicking
