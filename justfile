@@ -485,7 +485,20 @@ cmd-check:
           f"the {len(told)} named in messages exist, and the keymap "
           f"documents exactly the {len(handled)} that are")
 
-check: fmt-check lint test offline-check db-check css-check tpl-check i18n-check js-check cmd-check
+# What the pre-commit hook runs: everything that takes seconds — formatting,
+# the offline build (a query changed without `just prepare`), and the greps.
+check-fast: fmt-check offline-check db-check css-check tpl-check i18n-check js-check cmd-check
+
+# What the pre-push hook runs: the slow ones.
+check-slow: lint test
+
+check: check-fast check-slow
+
+# Turn the versioned hooks in .githooks/ on for this clone. Git config is not
+# versioned, so a fresh clone runs this once.
+hooks:
+    git config core.hooksPath .githooks
+    @echo "✓ hooks on — pre-commit runs just check-fast, pre-push just check-slow"
 
 # --- docs --------------------------------------------------------------------
 

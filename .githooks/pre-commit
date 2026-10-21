@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Versioned hook — `just hooks` turns it on. Runs `just check-fast`;
+# `git commit --no-verify` skips it.
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+if command -v mise >/dev/null 2>&1; then
+    run=(mise exec -- just check-fast)
+else
+    run=(just check-fast)
+fi
+
+if ! "${run[@]}"; then
+    echo >&2
+    echo "✗ pre-commit: just check-fast failed — just fmt fixes formatting; git commit --no-verify skips this hook" >&2
+    exit 1
+fi

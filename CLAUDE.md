@@ -1871,6 +1871,17 @@ that will otherwise be re-proposed.
     `release-approve` refuses when HEAD has moved since the build: the tag
     must name exactly the code the tested binary was built from. It commits
     `release: v0.0.N` and tags; nothing is pushed.
+- **Git hooks, versioned in `.githooks/`, on after `just hooks`** (once per
+  clone — git config is not versioned). `just check` is two halves now:
+  - **pre-commit runs `just check-fast`** — formatting, the offline build
+    (a query changed without `just prepare`) and the greps. Seconds, so it is
+    not worth skipping.
+  - **pre-push runs `just check-slow`** — clippy with `-D warnings`, and
+    `cargo test`.
+  - `--no-verify` skips either. They check the working tree, not only what is
+    staged: a partially staged file is checked as it stands on disk, on
+    purpose, rather than juggling stashes. They were added after 16 files had
+    drifted from `cargo fmt` unnoticed.
 - `just dev` — Tailwind build, then `cargo watch` recompiling and restarting on
   save. `just css` in a second pane for CSS-only iteration.
 - **`just dev` and `just dev-lan` first stop an earlier dev loop on their
