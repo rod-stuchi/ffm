@@ -1910,6 +1910,11 @@ that will otherwise be re-proposed.
     `release-approve` refuses when HEAD has moved since the build: the tag
     must name exactly the code the tested binary was built from. It commits
     `release: v0.0.N` and tags; nothing is pushed.
+  - **`just release` first runs `just tidy`**: when `target/` is over 30 GB
+    (`FFM_TARGET_MAX_GB`) it runs `cargo clean -p ffm`, which keeps the
+    dependencies. Cargo never deletes a superseded build of ffm, and every
+    version bump supersedes them all: `target/` reached 189 GB, and its
+    incremental cache broke linking under `just dev-lan` until cleaned.
 - **Git hooks, versioned in `.githooks/`, on after `just hooks`** (once per
   clone — git config is not versioned). `just check` is two halves now:
   - **pre-commit runs `just check-fast`** — formatting, the offline build

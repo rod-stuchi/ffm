@@ -507,6 +507,41 @@ md:
 
 # --- release -----------------------------------------------------------------
 
+# Keep target/ from growing without bound. Cargo never deletes a superseded
+# build of ffm: every feature set, every one of the test binaries and every
+# version keeps its own, and `just release` bumps the version, which leaves a
+# whole generation behind each time. target/ once reached 189 GB, and the
+# bloated incremental cache broke linking under `just dev-lan` (undefined
+# `.llvm.` symbols) until `cargo clean -p ffm`.
+#
+# - Over the limit (FFM_TARGET_MAX_GB, 30 by default) it runs
+#   `cargo clean -p ffm`: only this package's output, in every profile and
+#   target. Dependencies stay, so the next dev build is ~30 s.
+# - It never runs a full `cargo clean` on its own — that is a from-scratch
+#   build of every dependency. Still over after cleaning, it says so.
+# - `just release` runs it first.
+#
+# Clean ffm's own build output when target/ is over FFM_TARGET_MAX_GB (30)
+tidy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="${CARGO_TARGET_DIR:-target}"
+    max="${FFM_TARGET_MAX_GB:-30}"
+    [ -d "$dir" ] || { echo "✓ $dir/ does not exist — nothing to clean"; exit 0; }
+    gb() { du -sk "$dir" | awk '{ printf "%d", $1 / 1048576 }'; }
+    before=$(gb)
+    if [ "$before" -le "$max" ] && [ "$max" -gt 0 ]; then
+        echo "✓ $dir/ is $before GB, under the $max GB limit"
+        exit 0
+    fi
+    echo "→ $dir/ is $before GB, over the $max GB limit · cleaning ffm's own build output (cargo clean -p ffm)"
+    cargo clean -p ffm
+    after=$(gb)
+    echo "✓ $dir/ $before GB → $after GB"
+    if [ "$after" -gt "$max" ] && [ "$max" -gt 0 ]; then
+        echo "⚠ $dir/ is still over $max GB — the dependencies themselves; \`cargo clean\` empties it, at the cost of rebuilding them all" >&2
+    fi
+
 # Build a release into dist/v0.0.N/ — one folder and one .tar.gz per platform,
 # each holding the binary, static/, ffm.example.toml,
 # start.sh and README.md (from release/): everything a fresh machine needs
@@ -522,6 +557,7 @@ md:
 # - It refuses a dirty tree (Cargo.toml/Cargo.lock aside, which it bumps
 #   itself): the tag `release-approve` makes must name the code the tested
 #   binary was built from.
+# - Then `just tidy`: target/ over 30 GB gets ffm's own output cleaned.
 #
 # Build dist/v0.0.N for macOS arm64 and Linux x86_64/arm64 · test it · then `just release-approve`
 release:
@@ -533,6 +569,8 @@ release:
         echo "$dirty" >&2
         exit 1
     fi
+    # Before the version bump below, which supersedes every ffm build in target/.
+    just tidy
     last=$(git tag --list 'v0.0.*' | sed 's/^v0\.0\.//' | grep -E '^[0-9]+$' | sort -n | tail -1 || true)
     v="0.0.$(( ${last:-0} + 1 ))"
     tag="v$v"
