@@ -32,7 +32,8 @@ pub fn check(args: &Args) -> anyhow::Result<Option<PathBuf>> {
     holders(&from)?;
     let out_db = out.join("ffm.db");
     if out_db.exists() {
-        holders(&out_db).context("the previous shuffled copy is open — stop `just dev-anon` first")?;
+        holders(&out_db)
+            .context("the previous shuffled copy is open — stop `just dev-anon` first")?;
     }
 
     if let Some(r) = &args.receipts
@@ -99,7 +100,10 @@ fn absolute(p: &Path) -> anyhow::Result<PathBuf> {
         return Ok(p.canonicalize()?);
     }
     // Not created yet: resolve what exists of it.
-    let parent = p.parent().filter(|x| !x.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let parent = p
+        .parent()
+        .filter(|x| !x.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     let name = p.file_name().context("--out has no name")?;
     Ok(absolute(parent)?.join(name))
 }

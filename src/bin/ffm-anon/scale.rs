@@ -28,7 +28,16 @@ struct Row {
 }
 
 async fn live_rows(conn: &mut SqliteConnection, member: Option<i64>) -> anyhow::Result<Vec<Row>> {
-    type R = (i64, Option<i64>, String, String, Option<i64>, Option<String>, Option<String>, Option<String>);
+    type R = (
+        i64,
+        Option<i64>,
+        String,
+        String,
+        Option<i64>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    );
     let rows: Vec<R> = sqlx::query_as(
         "SELECT id, rule_id, period, title, amount_cents, barcode_raw, date, due_date
          FROM transactions WHERE deleted_at IS NULL AND (?1 IS NULL OR member_id = ?1) ORDER BY id",
@@ -60,12 +69,20 @@ fn scope(r: &Row) -> Scope {
 
 fn back(date: &str, months: u32) -> Option<String> {
     let d = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
-    Some(d.checked_sub_months(Months::new(months))?.format("%Y-%m-%d").to_string())
+    Some(
+        d.checked_sub_months(Months::new(months))?
+            .format("%Y-%m-%d")
+            .to_string(),
+    )
 }
 
 fn period_back(period: &str, months: u32) -> Option<String> {
     let d = NaiveDate::parse_from_str(&format!("{period}-01"), "%Y-%m-%d").ok()?;
-    Some(d.checked_sub_months(Months::new(months))?.format("%Y-%m").to_string())
+    Some(
+        d.checked_sub_months(Months::new(months))?
+            .format("%Y-%m")
+            .to_string(),
+    )
 }
 
 /// A row's code, rebuilt for a copy: the copy's amount, the copy's due date.
@@ -85,7 +102,15 @@ fn copy_barcode(
         boleto::Amount::Fixed(_) => cents,
         _ => None,
     };
-    s.fresh_barcode(raw, reference, &Target { cents: embedded, due, company: None })
+    s.fresh_barcode(
+        raw,
+        reference,
+        &Target {
+            cents: embedded,
+            due,
+            company: None,
+        },
+    )
 }
 
 /// The receipts of `from`, copied onto `to`, with the path moved by `path`.
@@ -110,10 +135,16 @@ async fn copy_receipts(
         if let (Some(old), Some(new)) = (from.amount, amount)
             && let Some((dir, name)) = new_path.rsplit_once('/')
         {
-            let name = crate::paths::filename(name, s.currency, |c| if c == old.abs() { new.abs() } else { c });
+            let name = crate::paths::filename(name, s.currency, |c| {
+                if c == old.abs() { new.abs() } else { c }
+            });
             new_path = format!("{dir}/{name}");
         }
-        let mut set = vec![("transaction_id", V::I(to)), ("path", V::T(new_path)), ("deleted_from_path", V::N)];
+        let mut set = vec![
+            ("transaction_id", V::I(to)),
+            ("path", V::T(new_path)),
+            ("deleted_from_path", V::N),
+        ];
         if let Some(u) = uploader {
             set.push(("uploaded_by", V::I(u)));
         }
@@ -154,9 +185,23 @@ async fn copy_codes(
     }
     for (id, raw, amount, due, receipt) in codes {
         let amount = amount.map(|c| s.money.map(salt, &Scope::Rule(from_rule), c));
-        let due = due.and_then(|d| if months_back > 0 { back(&d, months_back) } else { Some(d) });
-        let moved = due.as_deref().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
-        let raw = copy_barcode(s, &raw, reference_of(None, from_period), amount, moved.filter(|_| months_back > 0))?;
+        let due = due.and_then(|d| {
+            if months_back > 0 {
+                back(&d, months_back)
+            } else {
+                Some(d)
+            }
+        });
+        let moved = due
+            .as_deref()
+            .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+        let raw = copy_barcode(
+            s,
+            &raw,
+            reference_of(None, from_period),
+            amount,
+            moved.filter(|_| months_back > 0),
+        )?;
         let mut set = vec![
             ("rule_id", V::I(rule)),
             ("period", V::T(period.to_string())),
@@ -188,8 +233,13 @@ pub async fn years(conn: &mut SqliteConnection, s: &mut Shuffler, k: u32) -> any
         let months = 12 * year;
         let mut receipt_ids = HashMap::new();
         let mut done = Vec::new();
-        for r in rows.iter().filter(|r| r.rule.is_none_or(|id| !finite.contains(&id))) {
-            let Some(period) = period_back(&r.period, months) else { continue };
+        for r in rows
+            .iter()
+            .filter(|r| r.rule.is_none_or(|id| !finite.contains(&id)))
+        {
+            let Some(period) = period_back(&r.period, months) else {
+                continue;
+            };
             if let Some(rule) = r.rule {
                 let taken: bool = sqlx::query_scalar(
                     "SELECT EXISTS (SELECT 1 FROM transactions WHERE rule_id = ?1 AND period = ?2)",
@@ -206,8 +256,16 @@ pub async fn years(conn: &mut SqliteConnection, s: &mut Shuffler, k: u32) -> any
             let due = r.due.as_deref().and_then(|d| back(d, months));
             let barcode = match &r.barcode {
                 Some(raw) => {
-                    let due_date = due.as_deref().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
-                    Some(copy_barcode(s, raw, reference_of(r.due.as_deref(), &r.period), amount, due_date)?)
+                    let due_date = due
+                        .as_deref()
+                        .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+                    Some(copy_barcode(
+                        s,
+                        raw,
+                        reference_of(r.due.as_deref(), &r.period),
+                        amount,
+                        due_date,
+                    )?)
                 }
                 None => None,
             };
@@ -217,7 +275,10 @@ pub async fn years(conn: &mut SqliteConnection, s: &mut Shuffler, k: u32) -> any
                 r.id,
                 vec![
                     ("period", V::T(period.clone())),
-                    ("date", r.date.as_deref().and_then(|d| back(d, months)).into()),
+                    (
+                        "date",
+                        r.date.as_deref().and_then(|d| back(d, months)).into(),
+                    ),
                     ("due_date", due.into()),
                     ("amount_cents", amount.into()),
                     ("barcode_raw", barcode.into()),
@@ -231,7 +292,18 @@ pub async fn years(conn: &mut SqliteConnection, s: &mut Shuffler, k: u32) -> any
         }
         for (r, period) in done {
             if let Some(rule) = r.rule {
-                copy_codes(conn, s, rule, &r.period, rule, &period, months, 1000 + year, &receipt_ids).await?;
+                copy_codes(
+                    conn,
+                    s,
+                    rule,
+                    &r.period,
+                    rule,
+                    &period,
+                    months,
+                    1000 + year,
+                    &receipt_ids,
+                )
+                .await?;
             }
         }
     }
@@ -248,22 +320,35 @@ pub async fn years(conn: &mut SqliteConnection, s: &mut Shuffler, k: u32) -> any
 /// The year folder of `path` moved from `from`'s year to `to`'s.
 fn shift_year(path: &str, from: &str, to: &str) -> String {
     let (fy, ty) = (&from[..4], &to[..4]);
-    path.split('/').map(|seg| if seg == fy { ty } else { seg }).collect::<Vec<_>>().join("/")
+    path.split('/')
+        .map(|seg| if seg == fy { ty } else { seg })
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// `--scale N`: N−1 more members, each a copy of every real one, with a name,
 /// amounts, barcodes and vault folder of their own.
-pub async fn members(conn: &mut SqliteConnection, s: &mut Shuffler, n: u32, password: &str) -> anyhow::Result<()> {
+pub async fn members(
+    conn: &mut SqliteConnection,
+    s: &mut Shuffler,
+    n: u32,
+    password: &str,
+) -> anyhow::Result<()> {
     if n <= 1 {
         return Ok(());
     }
     let hash = ffm::db::auth::hash_password(password)?;
     let sources: Vec<i64> =
-        sqlx::query_scalar("SELECT id FROM members WHERE deleted_at IS NULL ORDER BY id").fetch_all(&mut *conn).await?;
+        sqlx::query_scalar("SELECT id FROM members WHERE deleted_at IS NULL ORDER BY id")
+            .fetch_all(&mut *conn)
+            .await?;
     let mut made = 0;
     for copy in 1..n {
         for source in &sources {
-            let name = ffm::db::auth::normal_name(&s.names.part(&format!("clone {copy} of {source}"), Pool::Person));
+            let name = ffm::db::auth::normal_name(
+                &s.names
+                    .part(&format!("clone {copy} of {source}"), Pool::Person),
+            );
             let slug = slugify(&name);
             let member = sqlx::query(
                 "INSERT INTO members (uuid, name, slug, password_hash, role, created_at) VALUES (?1, ?2, ?3, ?4, 1, ?5)",
@@ -276,25 +361,36 @@ pub async fn members(conn: &mut SqliteConnection, s: &mut Shuffler, n: u32, pass
             .execute(&mut *conn)
             .await?
             .last_insert_rowid();
-            let has_settings: bool =
-                sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM member_settings WHERE member_id = ?1)")
-                    .bind(source)
-                    .fetch_one(&mut *conn)
-                    .await?;
+            let has_settings: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM member_settings WHERE member_id = ?1)",
+            )
+            .bind(source)
+            .fetch_one(&mut *conn)
+            .await?;
             if has_settings {
-                clone_by(conn, "member_settings", "member_id", *source, vec![("member_id", V::I(member))]).await?;
+                clone_by(
+                    conn,
+                    "member_settings",
+                    "member_id",
+                    *source,
+                    vec![("member_id", V::I(member))],
+                )
+                .await?;
             }
 
-            let rules: Vec<i64> = sqlx::query_scalar("SELECT id FROM recurring_rules WHERE member_id = ?1 AND deleted_at IS NULL")
-                .bind(source)
-                .fetch_all(&mut *conn)
-                .await?;
+            let rules: Vec<i64> = sqlx::query_scalar(
+                "SELECT id FROM recurring_rules WHERE member_id = ?1 AND deleted_at IS NULL",
+            )
+            .bind(source)
+            .fetch_all(&mut *conn)
+            .await?;
             let mut rule_ids = HashMap::new();
             for id in rules {
-                let amount: Option<i64> = sqlx::query_scalar("SELECT amount_cents FROM recurring_rules WHERE id = ?1")
-                    .bind(id)
-                    .fetch_one(&mut *conn)
-                    .await?;
+                let amount: Option<i64> =
+                    sqlx::query_scalar("SELECT amount_cents FROM recurring_rules WHERE id = ?1")
+                        .bind(id)
+                        .fetch_one(&mut *conn)
+                        .await?;
                 let amount = amount.map(|c| s.money.map(copy, &Scope::Rule(id), c));
                 let new = clone_row(
                     conn,
@@ -304,23 +400,39 @@ pub async fn members(conn: &mut SqliteConnection, s: &mut Shuffler, n: u32, pass
                 )
                 .await?;
                 rule_ids.insert(id, new);
-                let recipe: Option<i64> =
-                    sqlx::query_scalar("SELECT id FROM rule_recipe WHERE rule_id = ?1 AND retired_at IS NULL")
-                        .bind(id)
-                        .fetch_optional(&mut *conn)
-                        .await?;
+                let recipe: Option<i64> = sqlx::query_scalar(
+                    "SELECT id FROM rule_recipe WHERE rule_id = ?1 AND retired_at IS NULL",
+                )
+                .bind(id)
+                .fetch_optional(&mut *conn)
+                .await?;
                 if let Some(r) = recipe {
-                    clone_row(conn, "rule_recipe", r, vec![("rule_id", V::I(new)), ("created_by", V::I(member))]).await?;
+                    clone_row(
+                        conn,
+                        "rule_recipe",
+                        r,
+                        vec![("rule_id", V::I(new)), ("created_by", V::I(member))],
+                    )
+                    .await?;
                 }
             }
 
             let rows = live_rows(conn, Some(*source)).await?;
             let mut receipt_ids = HashMap::new();
             let mut done = Vec::new();
-            for r in rows.iter().filter(|r| r.rule.is_none_or(|id| rule_ids.contains_key(&id))) {
+            for r in rows
+                .iter()
+                .filter(|r| r.rule.is_none_or(|id| rule_ids.contains_key(&id)))
+            {
                 let amount = r.amount.map(|c| s.money.map(copy, &scope(r), c));
                 let barcode = match &r.barcode {
-                    Some(raw) => Some(copy_barcode(s, raw, reference_of(r.due.as_deref(), &r.period), amount, None)?),
+                    Some(raw) => Some(copy_barcode(
+                        s,
+                        raw,
+                        reference_of(r.due.as_deref(), &r.period),
+                        amount,
+                        None,
+                    )?),
                     None => None,
                 };
                 let id = clone_row(
@@ -341,12 +453,24 @@ pub async fn members(conn: &mut SqliteConnection, s: &mut Shuffler, n: u32, pass
                     Some((_, rest)) => format!("{slug}/{rest}"),
                     None => p.to_string(),
                 };
-                receipt_ids.extend(copy_receipts(conn, s, r, id, Some(member), amount, retarget).await?);
+                receipt_ids
+                    .extend(copy_receipts(conn, s, r, id, Some(member), amount, retarget).await?);
                 done.push(r);
             }
             for r in done {
                 if let Some(rule) = r.rule {
-                    copy_codes(conn, s, rule, &r.period, rule_ids[&rule], &r.period, 0, copy, &receipt_ids).await?;
+                    copy_codes(
+                        conn,
+                        s,
+                        rule,
+                        &r.period,
+                        rule_ids[&rule],
+                        &r.period,
+                        0,
+                        copy,
+                        &receipt_ids,
+                    )
+                    .await?;
                 }
             }
             made += 1;

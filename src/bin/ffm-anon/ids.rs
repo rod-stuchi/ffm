@@ -53,7 +53,10 @@ pub fn cnpj(rng: &mut StdRng) -> String {
             let r = sum % 11;
             d.push(if r < 2 { 0 } else { 11 - r });
         }
-        let s: String = d.iter().map(|x| char::from_digit(*x, 10).unwrap()).collect();
+        let s: String = d
+            .iter()
+            .map(|x| char::from_digit(*x, 10).unwrap())
+            .collect();
         if cnpj_valid(&s) {
             return s;
         }
@@ -90,7 +93,14 @@ pub fn uuid(rng: &mut StdRng) -> String {
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
     let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
-    format!("{}-{}-{}-{}-{}", &h[0..8], &h[8..12], &h[12..16], &h[16..20], &h[20..32])
+    format!(
+        "{}-{}-{}-{}-{}",
+        &h[0..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..32]
+    )
 }
 
 #[cfg(test)]

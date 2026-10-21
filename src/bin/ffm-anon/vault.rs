@@ -22,7 +22,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const FOOTER: &str = "Documento ficticio gerado pelo ffm-anon a partir de dados embaralhados - nao e uma conta real";
+const FOOTER: &str =
+    "Documento ficticio gerado pelo ffm-anon a partir de dados embaralhados - nao e uma conta real";
 
 struct Job {
     rel: String,
@@ -53,10 +54,17 @@ pub struct Plan {
 
 impl Plan {
     pub fn new(real_vault: Option<PathBuf>) -> Plan {
-        Plan { real_vault, jobs: Vec::new() }
+        Plan {
+            real_vault,
+            jobs: Vec::new(),
+        }
     }
 
-    pub async fn collect(&mut self, conn: &mut SqliteConnection, s: &Shuffler) -> anyhow::Result<()> {
+    pub async fn collect(
+        &mut self,
+        conn: &mut SqliteConnection,
+        s: &Shuffler,
+    ) -> anyhow::Result<()> {
         // Files that left the disk: pruned or expired for good, or found
         // gone by the watcher. Nothing to write for those.
         let gone: HashSet<i64> = sqlx::query_scalar(
@@ -70,7 +78,8 @@ impl Plan {
         .into_iter()
         .collect();
 
-        let mut pages: HashMap<i64, Vec<(i64, String, Option<i64>, Option<String>)>> = HashMap::new();
+        let mut pages: HashMap<i64, Vec<(i64, String, Option<i64>, Option<String>)>> =
+            HashMap::new();
         let codes: Vec<(i64, Option<i64>, String, Option<i64>, Option<String>)> = sqlx::query_as(
             "SELECT receipt_id, page, barcode_raw, amount_cents, due_date FROM rule_bill_code
              WHERE receipt_id IS NOT NULL ORDER BY id",
@@ -78,7 +87,10 @@ impl Plan {
         .fetch_all(&mut *conn)
         .await?;
         for (receipt, page, code, amount, due) in codes {
-            pages.entry(receipt).or_default().push((page.unwrap_or(1).max(1), code, amount, due));
+            pages
+                .entry(receipt)
+                .or_default()
+                .push((page.unwrap_or(1).max(1), code, amount, due));
         }
 
         type Row = (
@@ -115,7 +127,11 @@ impl Plan {
             if gone.contains(&id) || !self.exists_in_real(id, deleted, s) {
                 continue;
             }
-            let rel = if deleted { deleted_path_for(&path, id) } else { path };
+            let rel = if deleted {
+                deleted_path_for(&path, id)
+            } else {
+                path
+            };
             let spans = r.14.unwrap_or(0) == 1;
             self.jobs.push(Job {
                 rel,
@@ -131,7 +147,11 @@ impl Plan {
                     amount: r.7,
                     barcode: r.8,
                 },
-                pages: if spans { pages.remove(&id).unwrap_or_default() } else { Vec::new() },
+                pages: if spans {
+                    pages.remove(&id).unwrap_or_default()
+                } else {
+                    Vec::new()
+                },
             });
         }
         Ok(())
@@ -146,9 +166,13 @@ impl Plan {
         if !deleted {
             return root.join(orig).is_file();
         }
-        [deleted_path_for(orig, id), deleted_path_beside(orig, id), deleted_path(orig)]
-            .iter()
-            .any(|p| root.join(p).is_file())
+        [
+            deleted_path_for(orig, id),
+            deleted_path_beside(orig, id),
+            deleted_path(orig),
+        ]
+        .iter()
+        .any(|p| root.join(p).is_file())
     }
 
     pub fn write(&self, vault: &Path, s: &Shuffler) -> anyhow::Result<usize> {
@@ -245,7 +269,11 @@ fn draw(pdf: &Path, target: &Path, png: bool) -> anyhow::Result<()> {
     }
     // pdftoppm names a JPEG `.jpg`, a PNG `.png` — the extensions the vault
     // uses — so the file is already where it belongs.
-    anyhow::ensure!(target.is_file(), "pdftoppm wrote nothing at {}", target.display());
+    anyhow::ensure!(
+        target.is_file(),
+        "pdftoppm wrote nothing at {}",
+        target.display()
+    );
     Ok(())
 }
 
@@ -254,7 +282,9 @@ fn money(cents: i64, s: &Shuffler) -> String {
 }
 
 fn date(d: &str) -> String {
-    NaiveDate::parse_from_str(d, "%Y-%m-%d").map(fmt::date).unwrap_or_else(|_| d.to_string())
+    NaiveDate::parse_from_str(d, "%Y-%m-%d")
+        .map(fmt::date)
+        .unwrap_or_else(|_| d.to_string())
 }
 
 fn month(period: &str) -> String {
@@ -268,7 +298,14 @@ fn cnpj(d: &str) -> String {
     if d.len() != 14 {
         return d.to_string();
     }
-    format!("{}.{}.{}/{}-{}", &d[0..2], &d[2..5], &d[5..8], &d[8..12], &d[12..14])
+    format!(
+        "{}.{}.{}/{}-{}",
+        &d[0..2],
+        &d[2..5],
+        &d[5..8],
+        &d[8..12],
+        &d[12..14]
+    )
 }
 
 /// Labels without accents: the recipe patterns match them as typed.
@@ -306,7 +343,10 @@ fn proof_info(job: &Job, s: &Shuffler) -> PageInfo {
     } else {
         "Comprovante de pagamento"
     };
-    let mut details = vec![("Favorecido".into(), b.issuer.clone()), ("Referencia".into(), month(&b.period))];
+    let mut details = vec![
+        ("Favorecido".into(), b.issuer.clone()),
+        ("Referencia".into(), month(&b.period)),
+    ];
     if let Some(a) = b.amount {
         details.push(("Valor".into(), money(a, s)));
     }
@@ -322,7 +362,11 @@ fn proof_info(job: &Job, s: &Shuffler) -> PageInfo {
 }
 
 fn proof_text(job: &Job, s: &Shuffler) -> String {
-    let info = if job.kind == "barcode" { bill_info(&job.bill, s) } else { proof_info(job, s) };
+    let info = if job.kind == "barcode" {
+        bill_info(&job.bill, s)
+    } else {
+        proof_info(job, s)
+    };
     let mut out = format!("{}\n\n", info.heading);
     for (k, v) in &info.details {
         out.push_str(&format!("{k}: {v}\n"));

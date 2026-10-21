@@ -135,7 +135,8 @@ fn flat(img: DynamicImage) -> RgbImage {
     if long <= MAX_SIDE {
         return rgb;
     }
-    let scale = |side: u32| ((u64::from(side) * u64::from(MAX_SIDE) / u64::from(long)) as u32).max(1);
+    let scale =
+        |side: u32| ((u64::from(side) * u64::from(MAX_SIDE) / u64::from(long)) as u32).max(1);
     image::imageops::resize(&rgb, scale(w), scale(h), FilterType::Lanczos3)
 }
 
@@ -169,9 +170,9 @@ fn png_palette(rgb: &RgbImage) -> Result<Vec<u8>, String> {
         let indices = rgb
             .pixels()
             .map(|px| {
-                *seen.entry(px.0).or_insert_with(|| {
-                    quant.index_of(&[px.0[0], px.0[1], px.0[2], 255]) as u8
-                })
+                *seen
+                    .entry(px.0)
+                    .or_insert_with(|| quant.index_of(&[px.0[0], px.0[1], px.0[2], 255]) as u8)
             })
             .collect();
         (quant.color_map_rgb(), indices)
@@ -212,7 +213,9 @@ fn write_indexed(w: u32, h: u32, palette: &[u8], indices: &[u8]) -> Result<Vec<u
     // feeds on. Unfiltered was 13% smaller on that receipt.
     enc.set_filter(png::Filter::NoFilter);
     let mut writer = enc.write_header().map_err(|e| e.to_string())?;
-    writer.write_image_data(&packed).map_err(|e| e.to_string())?;
+    writer
+        .write_image_data(&packed)
+        .map_err(|e| e.to_string())?;
     writer.finish().map_err(|e| e.to_string())?;
     Ok(out)
 }
@@ -234,7 +237,11 @@ mod tests {
     /// a few antialiased shades — few colors, a lot of bytes per pixel.
     fn screenshot_png() -> Vec<u8> {
         let img: ImageBuffer<Rgba<u16>, Vec<u16>> = ImageBuffer::from_fn(400, 300, |x, y| {
-            let ink = if (x / 3 + y / 7) % 5 == 0 { (x % 4) as u16 * 16000 } else { 65535 };
+            let ink = if (x / 3 + y / 7) % 5 == 0 {
+                (x % 4) as u16 * 16000
+            } else {
+                65535
+            };
             let ground = if y > 150 { 61000 } else { ink };
             Rgba([ground, ground, ground, 65535])
         });
@@ -248,7 +255,9 @@ mod tests {
     #[test]
     fn a_16_bit_screenshot_becomes_a_smaller_palette_png() {
         let original = screenshot_png();
-        let shrunk = shrink_bytes("10_scheduled.png", &original).unwrap().unwrap();
+        let shrunk = shrink_bytes("10_scheduled.png", &original)
+            .unwrap()
+            .unwrap();
         assert!(shrunk.len() < original.len());
         let decoder = png::Decoder::new(Cursor::new(&shrunk));
         let reader = decoder.read_info().unwrap();
@@ -266,10 +275,15 @@ mod tests {
 
     #[test]
     fn many_colors_are_cut_to_the_palette() {
-        let img = RgbImage::from_fn(300, 200, |x, y| image::Rgb([x as u8, y as u8, (x ^ y) as u8]));
+        let img = RgbImage::from_fn(300, 200, |x, y| {
+            image::Rgb([x as u8, y as u8, (x ^ y) as u8])
+        });
         let png = png_palette(&img).unwrap();
         let reader = png::Decoder::new(Cursor::new(&png)).read_info().unwrap();
-        assert_eq!(reader.info().palette.as_ref().unwrap().len(), PNG_COLORS * 3);
+        assert_eq!(
+            reader.info().palette.as_ref().unwrap().len(),
+            PNG_COLORS * 3
+        );
     }
 
     #[test]
@@ -295,8 +309,8 @@ mod tests {
         // APP1 right after SOI: "Exif\0\0", a big-endian TIFF header, one IFD
         // entry — Orientation (0x0112), SHORT, 1, value 6.
         let tiff: &[u8] = &[
-            b'M', b'M', 0, 42, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0, 0,
-            0, 0, 0,
+            b'M', b'M', 0, 42, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0, 0, 0, 0,
+            0,
         ];
         let mut app1 = b"Exif\0\0".to_vec();
         app1.extend_from_slice(tiff);

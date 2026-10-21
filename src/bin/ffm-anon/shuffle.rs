@@ -134,12 +134,17 @@ pub async fn drop_guards(conn: &mut SqliteConnection) -> anyhow::Result<Vec<(Str
     .fetch_all(&mut *conn)
     .await?;
     for (name, _) in &triggers {
-        sqlx::query(&format!("DROP TRIGGER \"{name}\"")).execute(&mut *conn).await?;
+        sqlx::query(&format!("DROP TRIGGER \"{name}\""))
+            .execute(&mut *conn)
+            .await?;
     }
     Ok(triggers)
 }
 
-pub async fn restore_guards(conn: &mut SqliteConnection, triggers: &[(String, String)]) -> anyhow::Result<()> {
+pub async fn restore_guards(
+    conn: &mut SqliteConnection,
+    triggers: &[(String, String)],
+) -> anyhow::Result<()> {
     for (_, sql) in triggers {
         sqlx::query(sql).execute(&mut *conn).await?;
     }
@@ -150,21 +155,29 @@ pub async fn finish(conn: &mut SqliteConnection) -> anyhow::Result<()> {
     sqlx::query("INSERT INTO transactions_fts (transactions_fts) VALUES ('rebuild')")
         .execute(&mut *conn)
         .await?;
-    let fk: Vec<(String, i64)> = sqlx::query_as("SELECT \"table\", rowid FROM pragma_foreign_key_check")
-        .fetch_all(&mut *conn)
-        .await?;
+    let fk: Vec<(String, i64)> =
+        sqlx::query_as("SELECT \"table\", rowid FROM pragma_foreign_key_check")
+            .fetch_all(&mut *conn)
+            .await?;
     anyhow::ensure!(fk.is_empty(), "foreign keys broken in the copy: {fk:?}");
-    let ok: String = sqlx::query_scalar("PRAGMA integrity_check").fetch_one(&mut *conn).await?;
+    let ok: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(&mut *conn)
+        .await?;
     anyhow::ensure!(ok == "ok", "integrity check failed: {ok}");
     Ok(())
 }
 
 pub async fn summary(conn: &mut SqliteConnection, files: usize) -> anyhow::Result<crate::Summary> {
-    let members: Vec<String> = sqlx::query_scalar("SELECT name FROM members WHERE deleted_at IS NULL ORDER BY id")
-        .fetch_all(&mut *conn)
+    let members: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM members WHERE deleted_at IS NULL ORDER BY id")
+            .fetch_all(&mut *conn)
+            .await?;
+    let transactions = sqlx::query_scalar("SELECT count(*) FROM transactions")
+        .fetch_one(&mut *conn)
         .await?;
-    let transactions = sqlx::query_scalar("SELECT count(*) FROM transactions").fetch_one(&mut *conn).await?;
-    let rules = sqlx::query_scalar("SELECT count(*) FROM recurring_rules").fetch_one(&mut *conn).await?;
+    let rules = sqlx::query_scalar("SELECT count(*) FROM recurring_rules")
+        .fetch_one(&mut *conn)
+        .await?;
     Ok(crate::Summary {
         members: members.iter().map(|n| ffm::ui::fmt::name(n)).collect(),
         transactions,
@@ -181,12 +194,14 @@ impl Shuffler {
                 .await?;
         let currency = Currency::parse(&currency).context("the household's currency")?;
 
-        let members = sqlx::query_as::<_, (i64, String, String)>("SELECT id, name, slug FROM members ORDER BY id")
-            .fetch_all(&mut *conn)
-            .await?
-            .into_iter()
-            .map(|(id, name, slug)| Member { id, name, slug })
-            .collect::<Vec<_>>();
+        let members = sqlx::query_as::<_, (i64, String, String)>(
+            "SELECT id, name, slug FROM members ORDER BY id",
+        )
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .map(|(id, name, slug)| Member { id, name, slug })
+        .collect::<Vec<_>>();
 
         type RuleRow = (
             i64,
@@ -284,7 +299,17 @@ impl Shuffler {
         .fetch_all(&mut *conn)
         .await?
         .into_iter()
-        .map(|r| (r.0, Change { entity: r.1, entity_id: r.2, rule_id: r.3, period: r.4 }))
+        .map(|r| {
+            (
+                r.0,
+                Change {
+                    entity: r.1,
+                    entity_id: r.2,
+                    rule_id: r.3,
+                    period: r.4,
+                },
+            )
+        })
         .collect::<HashMap<_, _>>();
 
         let fields = sqlx::query_as::<_, (i64, i64, String, Option<String>, Option<String>, String)>(
@@ -297,7 +322,9 @@ impl Shuffler {
         .collect::<Vec<_>>();
 
         let recipes: Vec<(Option<String>, Option<String>)> =
-            sqlx::query_as("SELECT cnpj, issuer_name FROM rule_recipe").fetch_all(&mut *conn).await?;
+            sqlx::query_as("SELECT cnpj, issuer_name FROM rule_recipe")
+                .fetch_all(&mut *conn)
+                .await?;
         let codes: Vec<String> = sqlx::query_scalar("SELECT barcode_raw FROM rule_bill_code")
             .fetch_all(&mut *conn)
             .await?;
@@ -319,7 +346,12 @@ impl Shuffler {
             text.insert(m.slug.clone());
         }
         for r in &rules {
-            for s in [Some(r.title.clone()), r.bucket.clone(), r.bill_name.clone(), r.instance.clone()] {
+            for s in [
+                Some(r.title.clone()),
+                r.bucket.clone(),
+                r.bill_name.clone(),
+                r.instance.clone(),
+            ] {
                 typed(&s, &mut text);
             }
             for s in [&r.client_code, &r.issuer_id].into_iter().flatten() {
@@ -344,8 +376,12 @@ impl Shuffler {
         for f in &fields {
             for v in [&f.old, &f.new].into_iter().flatten() {
                 match f.field.as_str() {
-                    "title" | "bucket" | "instance" | "bill_name" => typed(&Some(v.clone()), &mut text),
-                    "recipe" if !ASSISTANTS.contains(&v.as_str()) => typed(&Some(v.clone()), &mut text),
+                    "title" | "bucket" | "instance" | "bill_name" => {
+                        typed(&Some(v.clone()), &mut text)
+                    }
+                    "recipe" if !ASSISTANTS.contains(&v.as_str()) => {
+                        typed(&Some(v.clone()), &mut text)
+                    }
                     "barcode" | "issuer" | "client_code" => {
                         numbers.insert(v.clone());
                     }
@@ -403,17 +439,20 @@ impl Shuffler {
 
     fn map_client(&mut self, v: &str) -> String {
         let rng = &mut self.rng;
-        self.client.get_or(v, &self.forbidden_ids, || ids::same_shape(v, rng))
+        self.client
+            .get_or(v, &self.forbidden_ids, || ids::same_shape(v, rng))
     }
 
     pub fn map_company(&mut self, v: &str) -> String {
         let rng = &mut self.rng;
-        self.company.get_or(v, &self.forbidden_ids, || ids::digits(v.len().max(4), rng))
+        self.company
+            .get_or(v, &self.forbidden_ids, || ids::digits(v.len().max(4), rng))
     }
 
     fn map_card(&mut self, v: &str) -> String {
         let rng = &mut self.rng;
-        self.card.get_or(v, &self.forbidden_ids, || ids::digits(4, rng))
+        self.card
+            .get_or(v, &self.forbidden_ids, || ids::digits(4, rng))
     }
 
     /// A title: each part reuses what it already became as a bill name or a
@@ -447,7 +486,9 @@ impl Shuffler {
             return Scope::Title(String::new());
         };
         match c.entity.as_str() {
-            "transaction" => self.scope_of_tx(c.entity_id).unwrap_or(Scope::Title(String::new())),
+            "transaction" => self
+                .scope_of_tx(c.entity_id)
+                .unwrap_or(Scope::Title(String::new())),
             "rule" => Scope::Rule(c.entity_id),
             _ => match c.rule_id {
                 Some(r) => Scope::Rule(r),
@@ -461,8 +502,16 @@ impl Shuffler {
             return ("out".into(), false);
         };
         let t = match c.entity.as_str() {
-            "transaction" => self.txs.iter().find(|t| t.id == c.entity_id).map(|t| (t.kind.clone(), t.rule_id.is_some())),
-            "rule" => self.rules.iter().find(|r| r.id == c.entity_id).map(|r| (r.kind.clone(), true)),
+            "transaction" => self
+                .txs
+                .iter()
+                .find(|t| t.id == c.entity_id)
+                .map(|t| (t.kind.clone(), t.rule_id.is_some())),
+            "rule" => self
+                .rules
+                .iter()
+                .find(|r| r.id == c.entity_id)
+                .map(|r| (r.kind.clone(), true)),
             _ => None,
         };
         t.unwrap_or(("out".into(), c.rule_id.is_some()))
@@ -470,7 +519,12 @@ impl Shuffler {
 
     /// One original barcode → one fake, carrying the amount its scope maps
     /// the original's to. `reference` disambiguates a cobrança's due factor.
-    pub fn map_barcode(&mut self, raw: &str, scope: &Scope, reference: NaiveDate) -> anyhow::Result<String> {
+    pub fn map_barcode(
+        &mut self,
+        raw: &str,
+        scope: &Scope,
+        reference: NaiveDate,
+    ) -> anyhow::Result<String> {
         if let Some(v) = self.barcodes.get(raw) {
             return Ok(v.clone());
         }
@@ -485,18 +539,29 @@ impl Shuffler {
             _ => None,
         };
         let company = parsed.company.as_deref().map(|c| self.map_company(c));
-        let target = barcode::Target { cents, due: None, company };
+        let target = barcode::Target {
+            cents,
+            due: None,
+            company,
+        };
         let fake = self.fresh_barcode(raw, reference, &target)?;
         self.barcodes.insert(raw.to_string(), fake.clone());
         Ok(fake)
     }
 
     /// A rebuilt code no other row has, and that is no original.
-    pub fn fresh_barcode(&mut self, raw: &str, reference: NaiveDate, target: &barcode::Target) -> anyhow::Result<String> {
+    pub fn fresh_barcode(
+        &mut self,
+        raw: &str,
+        reference: NaiveDate,
+        target: &barcode::Target,
+    ) -> anyhow::Result<String> {
         for _ in 0..20 {
             let fake = barcode::rebuild(raw, reference, target, &mut self.rng)?;
             let shared = boleto::names_an_account(boleto::Kind::Cobranca, &fake);
-            if shared || (!self.used_barcodes.contains(&fake) && !self.forbidden_ids.contains(&fake)) {
+            if shared
+                || (!self.used_barcodes.contains(&fake) && !self.forbidden_ids.contains(&fake))
+            {
                 self.used_barcodes.insert(fake.clone());
                 return Ok(fake);
             }
@@ -524,7 +589,12 @@ impl Shuffler {
                 out = replace_ci(&out, &orig, &fake);
             }
         }
-        for (orig, fake) in self.cnpj.pairs().chain(self.client.pairs()).chain(self.barcodes.iter()) {
+        for (orig, fake) in self
+            .cnpj
+            .pairs()
+            .chain(self.client.pairs())
+            .chain(self.barcodes.iter())
+        {
             out = out.replace(orig.as_str(), fake);
         }
         out
@@ -534,7 +604,11 @@ impl Shuffler {
     // the writes
     // ------------------------------------------------------------------
 
-    pub async fn apply(&mut self, conn: &mut SqliteConnection, password: &str) -> anyhow::Result<()> {
+    pub async fn apply(
+        &mut self,
+        conn: &mut SqliteConnection,
+        password: &str,
+    ) -> anyhow::Result<()> {
         self.members(conn, password).await?;
         self.rules(conn).await?;
         self.transactions(conn).await?;
@@ -543,8 +617,12 @@ impl Shuffler {
         self.receipts(conn).await?;
         self.windows(conn).await?;
         self.log(conn).await?;
-        sqlx::query("DELETE FROM sessions").execute(&mut *conn).await?;
-        sqlx::query("DELETE FROM member_invites").execute(&mut *conn).await?;
+        sqlx::query("DELETE FROM sessions")
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query("DELETE FROM member_invites")
+            .execute(&mut *conn)
+            .await?;
         Ok(())
     }
 
@@ -579,7 +657,8 @@ impl Shuffler {
         for i in 0..self.rules.len() {
             let r = &self.rules[i];
             let (id, kind, title) = (r.id, r.kind.clone(), r.title.clone());
-            let (bucket, bill, instance) = (r.bucket.clone(), r.bill_name.clone(), r.instance.clone());
+            let (bucket, bill, instance) =
+                (r.bucket.clone(), r.bill_name.clone(), r.instance.clone());
             let (amount, client, issuer, company, card, pw) = (
                 r.amount,
                 r.client_code.clone(),
@@ -589,7 +668,11 @@ impl Shuffler {
                 r.pdf_password.clone(),
             );
             let bucket = bucket.map(|b| self.taxonomy(&b, Pool::Bucket));
-            let bill_pool = if kind == "in" { Pool::Income } else { Pool::Company };
+            let bill_pool = if kind == "in" {
+                Pool::Income
+            } else {
+                Pool::Company
+            };
             let bill = bill.map(|b| self.taxonomy(&b, bill_pool));
             let instance = instance.map(|v| self.taxonomy(&v, Pool::Instance));
             let title = self.map_title(&title, &kind, true);
@@ -634,14 +717,21 @@ impl Shuffler {
             let t = self.txs[i].clone();
             let scope = tx_scope(&t);
             let bucket = t.bucket.as_ref().map(|b| self.taxonomy(b, Pool::Bucket));
-            let bill_pool = if t.kind == "in" { Pool::Income } else { Pool::Company };
+            let bill_pool = if t.kind == "in" {
+                Pool::Income
+            } else {
+                Pool::Company
+            };
             let bill = t.bill_name.as_ref().map(|b| self.taxonomy(b, bill_pool));
             let title = self.map_title(&t.title, &t.kind, t.rule_id.is_some());
             let amount = t.amount.map(|c| self.money.map(0, &scope, c));
             let issuer = t.issuer_id.as_ref().map(|v| self.map_cnpj(v));
             let reference = reference_of(t.due_date.as_deref(), &t.period);
             let barcode = match &t.barcode {
-                Some(raw) => Some(self.map_barcode(raw, &scope, reference).with_context(|| format!("transaction {}", t.id))?),
+                Some(raw) => Some(
+                    self.map_barcode(raw, &scope, reference)
+                        .with_context(|| format!("transaction {}", t.id))?,
+                ),
                 None => None,
             };
             sqlx::query(
@@ -672,18 +762,28 @@ impl Shuffler {
             let scope = Scope::Rule(rule);
             let barcode = self.map_barcode(&raw, &scope, reference_of(due.as_deref(), &period))?;
             let amount = amount.map(|c| self.money.map(0, &scope, c));
-            sqlx::query("UPDATE rule_bill_code SET barcode_raw = ?1, amount_cents = ?2 WHERE id = ?3")
-                .bind(barcode)
-                .bind(amount)
-                .bind(id)
-                .execute(&mut *conn)
-                .await?;
+            sqlx::query(
+                "UPDATE rule_bill_code SET barcode_raw = ?1, amount_cents = ?2 WHERE id = ?3",
+            )
+            .bind(barcode)
+            .bind(amount)
+            .bind(id)
+            .execute(&mut *conn)
+            .await?;
         }
         Ok(())
     }
 
     async fn recipes(&mut self, conn: &mut SqliteConnection) -> anyhow::Result<()> {
-        type Row = (i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>);
+        type Row = (
+            i64,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        );
         let rows: Vec<Row> = sqlx::query_as(
             "SELECT id, cnpj, issuer_name, amount_regex, due_regex, client_regex, card_regex FROM rule_recipe ORDER BY id",
         )
@@ -713,7 +813,14 @@ impl Shuffler {
         for i in 0..self.receipts.len() {
             let (id, tx, kind, path, ext, from) = {
                 let r = &self.receipts[i];
-                (r.id, r.tx, r.kind.clone(), r.path.clone(), r.ext.clone(), r.deleted_from.clone())
+                (
+                    r.id,
+                    r.tx,
+                    r.kind.clone(),
+                    r.path.clone(),
+                    r.ext.clone(),
+                    r.deleted_from.clone(),
+                )
             };
             let scope = self.scope_of_tx(tx).unwrap_or(Scope::Title(String::new()));
             let path = self.map_path(&path, &scope);
@@ -734,7 +841,9 @@ impl Shuffler {
 
     async fn windows(&mut self, conn: &mut SqliteConnection) -> anyhow::Result<()> {
         let rows: Vec<(i64, i64, Option<String>)> =
-            sqlx::query_as("SELECT id, rule_id, file_path FROM rule_barcode_window").fetch_all(&mut *conn).await?;
+            sqlx::query_as("SELECT id, rule_id, file_path FROM rule_barcode_window")
+                .fetch_all(&mut *conn)
+                .await?;
         for (id, rule, path) in rows {
             let path = path.map(|p| self.map_path(&p, &Scope::Rule(rule)));
             sqlx::query("UPDATE rule_barcode_window SET file_path = ?1 WHERE id = ?2")
@@ -768,7 +877,11 @@ impl Shuffler {
                     (_, "bucket") => self.taxonomy(v, Pool::Bucket),
                     (_, "instance") => self.taxonomy(v, Pool::Instance),
                     (_, "bill_name") => {
-                        let pool = if kind == "in" { Pool::Income } else { Pool::Company };
+                        let pool = if kind == "in" {
+                            Pool::Income
+                        } else {
+                            Pool::Company
+                        };
                         self.taxonomy(v, pool)
                     }
                     (_, "issuer") if v.chars().all(|c| c.is_ascii_digit()) => self.map_cnpj(v),
@@ -787,8 +900,18 @@ impl Shuffler {
                     _ => v.to_string(),
                 })
             };
-            let old = f.old.as_deref().filter(|v| !v.is_empty()).map(&mut map).transpose()?;
-            let new = f.new.as_deref().filter(|v| !v.is_empty()).map(&mut map).transpose()?;
+            let old = f
+                .old
+                .as_deref()
+                .filter(|v| !v.is_empty())
+                .map(&mut map)
+                .transpose()?;
+            let new = f
+                .new
+                .as_deref()
+                .filter(|v| !v.is_empty())
+                .map(&mut map)
+                .transpose()?;
             if old.as_deref() != f.old.as_deref().filter(|v| !v.is_empty())
                 || new.as_deref() != f.new.as_deref().filter(|v| !v.is_empty())
             {
@@ -803,7 +926,9 @@ impl Shuffler {
         self.fields = fields;
 
         let notes: Vec<(i64, String)> =
-            sqlx::query_as("SELECT id, note FROM change WHERE note IS NOT NULL ORDER BY id").fetch_all(&mut *conn).await?;
+            sqlx::query_as("SELECT id, note FROM change WHERE note IS NOT NULL ORDER BY id")
+                .fetch_all(&mut *conn)
+                .await?;
         for (id, note) in notes {
             let new = self.scrub(&note);
             if new != note {

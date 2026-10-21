@@ -13,15 +13,39 @@ use std::path::Path;
 /// Where household content lives. Anything else is identifiers, dates and
 /// settings — and the raw-bytes pass covers it anyway.
 const COLUMNS: &[(&str, &[&str])] = &[
-    ("transactions", &["title", "bucket", "bill_name", "barcode_raw", "issuer_id"]),
+    (
+        "transactions",
+        &["title", "bucket", "bill_name", "barcode_raw", "issuer_id"],
+    ),
     (
         "recurring_rules",
-        &["title", "bucket", "bill_name", "instance", "client_code", "issuer_id", "pdf_password"],
+        &[
+            "title",
+            "bucket",
+            "bill_name",
+            "instance",
+            "client_code",
+            "issuer_id",
+            "pdf_password",
+        ],
     ),
-    ("receipts", &["path", "original_filename", "deleted_from_path"]),
+    (
+        "receipts",
+        &["path", "original_filename", "deleted_from_path"],
+    ),
     ("change", &["note"]),
     ("change_field", &["old_value", "new_value"]),
-    ("rule_recipe", &["cnpj", "issuer_name", "amount_regex", "due_regex", "client_regex", "card_regex"]),
+    (
+        "rule_recipe",
+        &[
+            "cnpj",
+            "issuer_name",
+            "amount_regex",
+            "due_regex",
+            "client_regex",
+            "card_regex",
+        ],
+    ),
     ("rule_bill_code", &["barcode_raw"]),
     ("rule_barcode_window", &["file_path"]),
     ("members", &["name", "slug", "email"]),
@@ -30,12 +54,18 @@ const COLUMNS: &[(&str, &[&str])] = &[
     ("member_invites", &["label"]),
 ];
 
-pub async fn check(conn: &mut SqliteConnection, o: &Originals, db: &Path, vault: &Path) -> anyhow::Result<()> {
+pub async fn check(
+    conn: &mut SqliteConnection,
+    o: &Originals,
+    db: &Path,
+    vault: &Path,
+) -> anyhow::Result<()> {
     // A string the schema itself contains (a column comment quoting sample
     // data) is in every copy of the database, shuffled or not.
-    let schema: String = sqlx::query_scalar("SELECT coalesce(group_concat(sql, ' '), '') FROM sqlite_master")
-        .fetch_one(&mut *conn)
-        .await?;
+    let schema: String =
+        sqlx::query_scalar("SELECT coalesce(group_concat(sql, ' '), '') FROM sqlite_master")
+            .fetch_one(&mut *conn)
+            .await?;
     let schema = schema.to_lowercase();
 
     let text: Vec<String> = o
@@ -63,7 +93,8 @@ pub async fn check(conn: &mut SqliteConnection, o: &Originals, db: &Path, vault:
 
     for (table, cols) in COLUMNS {
         for col in *cols {
-            let sql = format!("SELECT rowid, \"{col}\" FROM \"{table}\" WHERE \"{col}\" IS NOT NULL");
+            let sql =
+                format!("SELECT rowid, \"{col}\" FROM \"{table}\" WHERE \"{col}\" IS NOT NULL");
             let rows: Vec<(i64, String)> = sqlx::query_as(&sql).fetch_all(&mut *conn).await?;
             for (rowid, v) in rows {
                 look(format!("{table}.{col} row {rowid}"), &v, &mut hits);
@@ -72,7 +103,11 @@ pub async fn check(conn: &mut SqliteConnection, o: &Originals, db: &Path, vault:
     }
 
     for entry in walk(vault)? {
-        let rel = entry.strip_prefix(vault).unwrap_or(&entry).to_string_lossy().to_string();
+        let rel = entry
+            .strip_prefix(vault)
+            .unwrap_or(&entry)
+            .to_string_lossy()
+            .to_string();
         look(format!("vault file {rel}"), &rel, &mut hits);
     }
 
@@ -100,7 +135,11 @@ pub async fn check(conn: &mut SqliteConnection, o: &Originals, db: &Path, vault:
         anyhow::bail!(
             "the copy still holds {} original value(s), so it was thrown away:\n  {}{}",
             hits.len(),
-            shown.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n  "),
+            shown
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join("\n  "),
             if hits.len() > 25 { "\n  …" } else { "" }
         );
     }
@@ -114,7 +153,10 @@ fn contains_number(s: &str, n: &str) -> bool {
     while let Some(at) = s[from..].find(n) {
         let start = from + at;
         let end = start + n.len();
-        let before = s[..start].chars().next_back().is_some_and(|c| c.is_ascii_digit());
+        let before = s[..start]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_digit());
         let after = s[end..].chars().next().is_some_and(|c| c.is_ascii_digit());
         if !before && !after {
             return true;

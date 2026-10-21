@@ -28,53 +28,185 @@ pub enum Pool {
 }
 
 const BUCKETS: &[&str] = &[
-    "Moradia", "Consumo", "Transporte", "Saúde", "Educação", "Lazer", "Alimentação",
-    "Assinaturas", "Impostos", "Seguros", "Pets", "Vestuário", "Viagens", "Investimentos",
-    "Doações", "Manutenção", "Serviços", "Filhos", "Cuidados", "Utilidades", "Tributos",
-    "Mobilidade", "Comunicação", "Bem-estar", "Hobbies", "Reformas", "Presentes",
+    "Moradia",
+    "Consumo",
+    "Transporte",
+    "Saúde",
+    "Educação",
+    "Lazer",
+    "Alimentação",
+    "Assinaturas",
+    "Impostos",
+    "Seguros",
+    "Pets",
+    "Vestuário",
+    "Viagens",
+    "Investimentos",
+    "Doações",
+    "Manutenção",
+    "Serviços",
+    "Filhos",
+    "Cuidados",
+    "Utilidades",
+    "Tributos",
+    "Mobilidade",
+    "Comunicação",
+    "Bem-estar",
+    "Hobbies",
+    "Reformas",
+    "Presentes",
 ];
 
 const COMPANY_HEADS: &[&str] = &[
-    "Águas", "Luz", "Gás", "Fibra", "Tele", "Banco", "Card", "Seguradora", "Auto", "Rede",
-    "Vida", "Prev", "Conecta", "Força", "Saneamento", "Crédito", "Mobi", "Clube", "Condomínio",
+    "Águas",
+    "Luz",
+    "Gás",
+    "Fibra",
+    "Tele",
+    "Banco",
+    "Card",
+    "Seguradora",
+    "Auto",
+    "Rede",
+    "Vida",
+    "Prev",
+    "Conecta",
+    "Força",
+    "Saneamento",
+    "Crédito",
+    "Mobi",
+    "Clube",
+    "Condomínio",
     "Prefeitura de",
 ];
 
 const COMPANY_TAILS: &[&str] = &[
-    "do Vale", "Serra Clara", "Paulista", "do Sul", "Norte", "Mais", "Brasil", "Central",
-    "Prime", "Litoral", "Azul", "Horizonte", "Planalto", "Real", "das Flores", "Bela Vista",
+    "do Vale",
+    "Serra Clara",
+    "Paulista",
+    "do Sul",
+    "Norte",
+    "Mais",
+    "Brasil",
+    "Central",
+    "Prime",
+    "Litoral",
+    "Azul",
+    "Horizonte",
+    "Planalto",
+    "Real",
+    "das Flores",
+    "Bela Vista",
 ];
 
 const SPENDS: &[&str] = &[
-    "Padaria", "Feira", "Farmácia", "Açougue", "Posto", "Restaurante", "Cinema", "Presente",
-    "Livraria", "Pet shop", "Sorveteria", "Papelaria", "Lavanderia", "Barbearia", "Hortifruti",
-    "Lanchonete", "Pizzaria", "Estacionamento", "Pedágio", "Academia", "Floricultura",
-    "Sapataria", "Ótica", "Chaveiro", "Marmitaria", "Doceria", "Empório", "Quitanda",
-    "Mercearia", "Bazar", "Conserto", "Corrida de app", "Táxi", "Ingresso", "Revista",
-    "Café", "Brinquedo", "Material escolar", "Remédio", "Costureira", "Encanador", "Eletricista",
+    "Padaria",
+    "Feira",
+    "Farmácia",
+    "Açougue",
+    "Posto",
+    "Restaurante",
+    "Cinema",
+    "Presente",
+    "Livraria",
+    "Pet shop",
+    "Sorveteria",
+    "Papelaria",
+    "Lavanderia",
+    "Barbearia",
+    "Hortifruti",
+    "Lanchonete",
+    "Pizzaria",
+    "Estacionamento",
+    "Pedágio",
+    "Academia",
+    "Floricultura",
+    "Sapataria",
+    "Ótica",
+    "Chaveiro",
+    "Marmitaria",
+    "Doceria",
+    "Empório",
+    "Quitanda",
+    "Mercearia",
+    "Bazar",
+    "Conserto",
+    "Corrida de app",
+    "Táxi",
+    "Ingresso",
+    "Revista",
+    "Café",
+    "Brinquedo",
+    "Material escolar",
+    "Remédio",
+    "Costureira",
+    "Encanador",
+    "Eletricista",
 ];
 
 const INCOMES: &[&str] = &[
-    "Salário", "Freelance", "Aluguel recebido", "Reembolso", "Dividendos", "Bônus",
-    "Consultoria", "Venda", "Aulas particulares", "Pró-labore", "Comissão", "13º salário",
-    "Férias", "Restituição", "Cashback", "Rendimento", "Pensão", "Bico", "Prêmio", "Juros",
+    "Salário",
+    "Freelance",
+    "Aluguel recebido",
+    "Reembolso",
+    "Dividendos",
+    "Bônus",
+    "Consultoria",
+    "Venda",
+    "Aulas particulares",
+    "Pró-labore",
+    "Comissão",
+    "13º salário",
+    "Férias",
+    "Restituição",
+    "Cashback",
+    "Rendimento",
+    "Pensão",
+    "Bico",
+    "Prêmio",
+    "Juros",
 ];
 
 const INSTANCES: &[&str] = &[
-    "Casa 12", "Apto 31", "Sítio", "Chácara", "Loja", "Escritório", "Casa da praia", "Apto 204",
-    "Galpão", "Sala 5", "Casa 7", "Edícula",
+    "Casa 12",
+    "Apto 31",
+    "Sítio",
+    "Chácara",
+    "Loja",
+    "Escritório",
+    "Casa da praia",
+    "Apto 204",
+    "Galpão",
+    "Sala 5",
+    "Casa 7",
+    "Edícula",
 ];
 
 const PEOPLE: &[&str] = &[
-    "ana", "bruno", "carla", "diego", "elisa", "fábio", "gabriela", "heitor", "isabel",
-    "joão", "karina", "lucas", "marina", "nicolas", "olívia", "paulo", "rafael", "sofia",
-    "tiago", "vitor", "yasmin", "zeca", "beatriz", "caio", "denise", "eduardo",
+    "ana", "bruno", "carla", "diego", "elisa", "fábio", "gabriela", "heitor", "isabel", "joão",
+    "karina", "lucas", "marina", "nicolas", "olívia", "paulo", "rafael", "sofia", "tiago", "vitor",
+    "yasmin", "zeca", "beatriz", "caio", "denise", "eduardo",
 ];
 
 const SURNAMES: &[&str] = &[
-    "Almeida", "Barros", "Cardoso", "Duarte", "Esteves", "Farias", "Gouveia", "Holanda",
-    "Junqueira", "Lacerda", "Moraes", "Nogueira", "Pacheco", "Queiroz", "Rezende", "Siqueira",
-    "Teixeira", "Vasconcelos",
+    "Almeida",
+    "Barros",
+    "Cardoso",
+    "Duarte",
+    "Esteves",
+    "Farias",
+    "Gouveia",
+    "Holanda",
+    "Junqueira",
+    "Lacerda",
+    "Moraes",
+    "Nogueira",
+    "Pacheco",
+    "Queiroz",
+    "Rezende",
+    "Siqueira",
+    "Teixeira",
+    "Vasconcelos",
 ];
 
 pub struct Names {
@@ -173,7 +305,9 @@ impl Names {
                 format!("{base} {}", roman(round + 1))
             };
             let lower = candidate.to_lowercase();
-            if !self.used.contains(&lower) && !self.forbidden.iter().any(|f| lower.contains(f.as_str())) {
+            if !self.used.contains(&lower)
+                && !self.forbidden.iter().any(|f| lower.contains(f.as_str()))
+            {
                 return candidate;
             }
             if *self.next.get(&pool).unwrap() > items.len() * 40 {
@@ -186,17 +320,23 @@ impl Names {
     /// Every original part and what it became, longest first — for replacing
     /// inside free text (a change log note).
     pub fn pairs(&self) -> Vec<(String, String)> {
-        let mut v: Vec<(String, String)> = self.map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let mut v: Vec<(String, String)> = self
+            .map
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
         v.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then(a.0.cmp(&b.0)));
         v
     }
 }
 
 fn roman(n: usize) -> &'static str {
-    ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
-        .get(n)
-        .copied()
-        .unwrap_or("X")
+    [
+        "", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
+    ]
+    .get(n)
+    .copied()
+    .unwrap_or("X")
 }
 
 #[cfg(test)]
@@ -218,7 +358,10 @@ mod tests {
     #[test]
     fn a_fake_never_contains_an_original() {
         let mut rng = StdRng::seed_from_u64(4);
-        let originals: HashSet<String> = ["Padaria", "Moradia", "Banco"].iter().map(|s| s.to_string()).collect();
+        let originals: HashSet<String> = ["Padaria", "Moradia", "Banco"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let mut n = Names::new(&mut rng, &originals);
         for i in 0..60 {
             let f = n.map(&format!("x{i}"), Pool::Company).to_lowercase();

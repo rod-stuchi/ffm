@@ -45,13 +45,19 @@ impl PathMap {
             .enumerate()
             .map(|(i, seg)| {
                 if i == 0 {
-                    self.members.get(*seg).cloned().unwrap_or_else(|| unknown(seg))
+                    self.members
+                        .get(*seg)
+                        .cloned()
+                        .unwrap_or_else(|| unknown(seg))
                 } else if i == last {
                     filename(seg, currency, &amount)
                 } else if *seg == ".delete" || is_year(seg) {
                     seg.to_string()
                 } else {
-                    self.segments.get(*seg).cloned().unwrap_or_else(|| unknown(seg))
+                    self.segments
+                        .get(*seg)
+                        .cloned()
+                        .unwrap_or_else(|| unknown(seg))
                 }
             })
             .collect::<Vec<_>>()
@@ -67,7 +73,11 @@ fn is_year(s: &str) -> bool {
 /// app's own name (`09.pdf`, `09_barcode.pdf`) and stays.
 pub fn filename(name: &str, currency: Currency, amount: impl Fn(i64) -> i64) -> String {
     let tag = currency.filename_tag();
-    let Some(rest) = name.get(2..).and_then(|r| r.strip_prefix('_')).and_then(|r| r.strip_prefix(tag)) else {
+    let Some(rest) = name
+        .get(2..)
+        .and_then(|r| r.strip_prefix('_'))
+        .and_then(|r| r.strip_prefix(tag))
+    else {
         return name.to_string();
     };
     if !name[..2].bytes().all(|b| b.is_ascii_digit()) {
@@ -78,7 +88,10 @@ pub fn filename(name: &str, currency: Currency, amount: impl Fn(i64) -> i64) -> 
     let Some(after_dot) = after_units.strip_prefix('.') else {
         return name.to_string();
     };
-    let frac: String = after_dot.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let frac: String = after_dot
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
     let tail = &after_dot[frac.len()..];
     let decimals = currency.format().decimals;
     let (Ok(u), Ok(f)) = (units.parse::<i64>(), frac.parse::<i64>()) else {
@@ -88,7 +101,11 @@ pub fn filename(name: &str, currency: Currency, amount: impl Fn(i64) -> i64) -> 
         return name.to_string();
     }
     let cents = u * 10_i64.pow(decimals) + f;
-    format!("{}_{}{tail}", &name[..2], money_filename(Cents(amount(cents)), currency))
+    format!(
+        "{}_{}{tail}",
+        &name[..2],
+        money_filename(Cents(amount(cents)), currency)
+    )
 }
 
 #[cfg(test)]
@@ -107,12 +124,18 @@ mod tests {
             |c| c * 2,
             |s| panic!("{s} is known"),
         );
-        assert_eq!(p, "ana/.delete/moradia/luz_do_vale/2026/09_brl1100.00.r4.pdf");
+        assert_eq!(
+            p,
+            "ana/.delete/moradia/luz_do_vale/2026/09_brl1100.00.r4.pdf"
+        );
     }
 
     #[test]
     fn the_apps_own_names_stay() {
-        assert_eq!(filename("09_barcode.pdf", Currency::Brl, |c| c), "09_barcode.pdf");
+        assert_eq!(
+            filename("09_barcode.pdf", Currency::Brl, |c| c),
+            "09_barcode.pdf"
+        );
         assert_eq!(filename("09.png", Currency::Brl, |c| c), "09.png");
     }
 }

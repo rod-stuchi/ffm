@@ -30,7 +30,11 @@ pub fn is_allowed_extension(ext: &str) -> bool {
 /// format — the existence probe tries four names, not five.
 pub fn stored_extension(ext: &str) -> Option<&'static str> {
     let lower = ext.to_ascii_lowercase();
-    let lower = if lower == "jpeg" { "jpg".to_string() } else { lower };
+    let lower = if lower == "jpeg" {
+        "jpg".to_string()
+    } else {
+        lower
+    };
     EXTENSIONS.into_iter().find(|e| *e == lower)
 }
 

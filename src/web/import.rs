@@ -157,11 +157,11 @@ pub async fn filed_bytes(upload: &Upload, member_id: i64, t: &Catalog, fidget: &
             pdftrim::shrink_bytes(&bytes)
         }
     })
-        .await
-        .ok()
-        .and_then(Result::ok)
-        .flatten()
-        .unwrap_or_else(|| upload.bytes.clone())
+    .await
+    .ok()
+    .and_then(Result::ok)
+    .flatten()
+    .unwrap_or_else(|| upload.bytes.clone())
 }
 
 /// Why an attach did not happen — always a statusline message, and always

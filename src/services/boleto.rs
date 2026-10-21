@@ -266,7 +266,11 @@ pub fn mod11_arrecadacao(digits: &[u32]) -> u32 {
 /// (position 3): mod 10 for 6 and 7, mod 11 for 8 and 9 — for the DV geral
 /// and for each block of the linha digitável alike.
 fn arrecadacao_dv(value_kind: u32) -> fn(&[u32]) -> u32 {
-    if matches!(value_kind, 8 | 9) { mod11_arrecadacao } else { mod10 }
+    if matches!(value_kind, 8 | 9) {
+        mod11_arrecadacao
+    } else {
+        mod10
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -593,7 +597,10 @@ mod tests {
         assert_eq!(parse(&b.raw, today()).unwrap(), b);
         // And a block's digit read as mod 10 is still a misprint.
         let mod10_block = "85800000013 4 14470328262 8 93072026274 6 37737486168 1";
-        assert!(matches!(parse(mod10_block, today()), Err(Error::CheckDigit { .. })));
+        assert!(matches!(
+            parse(mod10_block, today()),
+            Err(Error::CheckDigit { .. })
+        ));
     }
 
     #[test]

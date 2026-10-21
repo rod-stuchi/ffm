@@ -425,7 +425,10 @@ trailer<</Root 1 0 R>>\n%%EOF\n";
         assert_eq!(super::meta(&token, 7).unwrap().image, Some(Kind::Png));
 
         let off = result(&token, 7, Some(&[1, 2]), false).unwrap();
-        assert_eq!((off.shrink, off.pages, off.size), (Shrink::Off, 1, png.len() as u64));
+        assert_eq!(
+            (off.shrink, off.pages, off.size),
+            (Shrink::Off, 1, png.len() as u64)
+        );
         let on = result(&token, 7, None, true).unwrap();
         assert_eq!(on.shrink, Shrink::Applied);
         assert!(on.size < on.original);

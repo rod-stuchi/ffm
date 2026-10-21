@@ -10,7 +10,9 @@
 
 use anyhow::bail;
 use chrono::NaiveDate;
-use ffm::services::boleto::{self, Amount, DueDate, Kind, mod10, mod11, mod11_arrecadacao, names_an_account};
+use ffm::services::boleto::{
+    self, Amount, DueDate, Kind, mod10, mod11, mod11_arrecadacao, names_an_account,
+};
 use rand::Rng;
 use rand::rngs::StdRng;
 
@@ -27,8 +29,14 @@ pub struct Target {
 }
 
 /// Rebuilds `raw` (44 digits) to say `target`, with a free field of its own.
-pub fn rebuild(raw: &str, reference: NaiveDate, target: &Target, rng: &mut StdRng) -> anyhow::Result<String> {
-    let old = boleto::parse(raw, reference).map_err(|e| anyhow::anyhow!("a stored barcode does not parse ({e}): {raw}"))?;
+pub fn rebuild(
+    raw: &str,
+    reference: NaiveDate,
+    target: &Target,
+    rng: &mut StdRng,
+) -> anyhow::Result<String> {
+    let old = boleto::parse(raw, reference)
+        .map_err(|e| anyhow::anyhow!("a stored barcode does not parse ({e}): {raw}"))?;
     let d: Vec<u32> = old.raw.chars().map(|c| c.to_digit(10).unwrap()).collect();
     for _ in 0..50 {
         let new = match old.kind {
@@ -36,7 +44,10 @@ pub fn rebuild(raw: &str, reference: NaiveDate, target: &Target, rng: &mut StdRn
             Kind::Arrecadacao => arrecadacao(&d, &old, target, rng),
         };
         let Some(new) = new else { continue };
-        let s: String = new.iter().map(|x| char::from_digit(*x, 10).unwrap()).collect();
+        let s: String = new
+            .iter()
+            .map(|x| char::from_digit(*x, 10).unwrap())
+            .collect();
         if agrees(&s, &old, target, reference) {
             return Ok(s);
         }
@@ -53,7 +64,10 @@ fn cobranca(d: &[u32], old: &boleto::Barcode, t: &Target, rng: &mut StdRng) -> O
             put(&mut n[5..9], fator(due)? as u64);
         }
         if let (Amount::Fixed(_), Some(c)) = (old.amount, t.cents) {
-            put(&mut n[9..19], u64::try_from(c).ok().filter(|c| *c < 10_000_000_000)?);
+            put(
+                &mut n[9..19],
+                u64::try_from(c).ok().filter(|c| *c < 10_000_000_000)?,
+            );
         }
     }
     random(&mut n[19..44], rng);
@@ -68,7 +82,10 @@ fn arrecadacao(d: &[u32], old: &boleto::Barcode, t: &Target, rng: &mut StdRng) -
     if let (Amount::Fixed(_), Some(c)) = (old.amount, t.cents)
         && matches!(n[2], 6 | 8)
     {
-        put(&mut n[4..15], u64::try_from(c).ok().filter(|c| *c < 100_000_000_000)?);
+        put(
+            &mut n[4..15],
+            u64::try_from(c).ok().filter(|c| *c < 100_000_000_000)?,
+        );
     }
     if let Some(company) = &t.company {
         for (i, ch) in company.chars().take(4).enumerate() {
@@ -85,7 +102,11 @@ fn arrecadacao(d: &[u32], old: &boleto::Barcode, t: &Target, rng: &mut StdRng) -
     }
     let mut without: Vec<u32> = n[0..3].to_vec();
     without.extend_from_slice(&n[4..44]);
-    n[3] = if matches!(n[2], 8 | 9) { mod11_arrecadacao(&without) } else { mod10(&without) };
+    n[3] = if matches!(n[2], 8 | 9) {
+        mod11_arrecadacao(&without)
+    } else {
+        mod10(&without)
+    };
     Some(n)
 }
 
@@ -106,9 +127,8 @@ fn agrees(s: &str, old: &boleto::Barcode, t: &Target, reference: NaiveDate) -> b
     // the original had none, nor the other way round.
     let due_ok = match (old.due, b.due) {
         (DueDate::Absent, DueDate::Absent) => true,
-        (DueDate::Encoded(o), DueDate::Encoded(n)) | (DueDate::FreeField(o), DueDate::FreeField(n)) => {
-            n == t.due.unwrap_or(o)
-        }
+        (DueDate::Encoded(o), DueDate::Encoded(n))
+        | (DueDate::FreeField(o), DueDate::FreeField(n)) => n == t.due.unwrap_or(o),
         _ => false,
     };
     amount_ok && due_ok
@@ -123,7 +143,9 @@ fn fator(due: NaiveDate) -> Option<u16> {
         NaiveDate::from_ymd_opt(1997, 10, 7)?
     };
     let days = (due - base).num_days();
-    u16::try_from(days).ok().filter(|f| (1000..=9999).contains(f))
+    u16::try_from(days)
+        .ok()
+        .filter(|f| (1000..=9999).contains(f))
 }
 
 fn put(slot: &mut [u32], mut v: u64) {
@@ -168,7 +190,11 @@ mod tests {
     fn a_cobranca_carries_its_new_amount_and_keeps_its_date() {
         let mut rng = StdRng::seed_from_u64(1);
         let raw = cobranca_raw();
-        let t = Target { cents: Some(51_234), due: None, company: None };
+        let t = Target {
+            cents: Some(51_234),
+            due: None,
+            company: None,
+        };
         let new = rebuild(&raw, d(2026, 9, 21), &t, &mut rng).unwrap();
         let b = boleto::parse(&new, d(2026, 9, 21)).unwrap();
         assert_ne!(new, raw);
@@ -179,9 +205,16 @@ mod tests {
     #[test]
     fn a_cobranca_moves_a_year_back() {
         let mut rng = StdRng::seed_from_u64(1);
-        let t = Target { cents: Some(100), due: Some(d(2025, 9, 15)), company: None };
+        let t = Target {
+            cents: Some(100),
+            due: Some(d(2025, 9, 15)),
+            company: None,
+        };
         let new = rebuild(&cobranca_raw(), d(2025, 9, 15), &t, &mut rng).unwrap();
-        assert_eq!(boleto::parse(&new, d(2025, 9, 15)).unwrap().due, DueDate::Encoded(d(2025, 9, 15)));
+        assert_eq!(
+            boleto::parse(&new, d(2025, 9, 15)).unwrap().due,
+            DueDate::Encoded(d(2025, 9, 15))
+        );
     }
 
     #[test]
@@ -197,11 +230,18 @@ mod tests {
         let mut n = body[0..3].to_vec();
         n.push(mod10(&body));
         n.extend_from_slice(&body[3..]);
-        let raw: String = n.iter().map(|x| char::from_digit(*x, 10).unwrap()).collect();
+        let raw: String = n
+            .iter()
+            .map(|x| char::from_digit(*x, 10).unwrap())
+            .collect();
         let reference = d(2026, 1, 1);
         assert!(boleto::parse(&raw, reference).is_ok(), "fixture parses");
 
-        let t = Target { cents: Some(9_999), due: Some(d(2026, 1, 12)), company: Some("4711".into()) };
+        let t = Target {
+            cents: Some(9_999),
+            due: Some(d(2026, 1, 12)),
+            company: Some("4711".into()),
+        };
         let new = rebuild(&raw, reference, &t, &mut rng).unwrap();
         let b = boleto::parse(&new, reference).unwrap();
         assert_eq!(b.amount, Amount::Fixed(ffm::domain::money::Cents(9_999)));
@@ -220,10 +260,20 @@ mod tests {
         let mut n = body[0..3].to_vec();
         n.push(mod10(&body));
         n.extend_from_slice(&body[3..]);
-        let raw: String = n.iter().map(|x| char::from_digit(*x, 10).unwrap()).collect();
-        let t = Target { cents: Some(5_000), due: None, company: None };
+        let raw: String = n
+            .iter()
+            .map(|x| char::from_digit(*x, 10).unwrap())
+            .collect();
+        let t = Target {
+            cents: Some(5_000),
+            due: None,
+            company: None,
+        };
         let new = rebuild(&raw, d(2026, 1, 1), &t, &mut rng).unwrap();
-        assert_eq!(boleto::parse(&new, d(2026, 1, 1)).unwrap().due, DueDate::FreeField(d(2026, 1, 12)));
+        assert_eq!(
+            boleto::parse(&new, d(2026, 1, 1)).unwrap().due,
+            DueDate::FreeField(d(2026, 1, 12))
+        );
     }
 
     #[test]
@@ -237,12 +287,22 @@ mod tests {
         let mut n = body[0..4].to_vec();
         n.push(mod11(&body));
         n.extend_from_slice(&body[4..]);
-        let raw: String = n.iter().map(|x| char::from_digit(*x, 10).unwrap()).collect();
+        let raw: String = n
+            .iter()
+            .map(|x| char::from_digit(*x, 10).unwrap())
+            .collect();
         let reference = d(2026, 1, 1);
-        assert!(names_an_account(Kind::Cobranca, &raw), "fixture names an account");
+        assert!(
+            names_an_account(Kind::Cobranca, &raw),
+            "fixture names an account"
+        );
 
         let mut rng = StdRng::seed_from_u64(3);
-        let t = Target { cents: Some(777), due: None, company: None };
+        let t = Target {
+            cents: Some(777),
+            due: None,
+            company: None,
+        };
         let new = rebuild(&raw, reference, &t, &mut rng).unwrap();
         assert!(names_an_account(Kind::Cobranca, &new));
         assert_eq!(boleto::parse(&new, reference).unwrap().amount, Amount::Open);

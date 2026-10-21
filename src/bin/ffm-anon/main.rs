@@ -165,7 +165,11 @@ async fn run(args: &Args) -> anyhow::Result<()> {
     work.discard();
     let result = build(args, &work).await;
     if result.is_err() && args.keep_failed {
-        eprintln!("· kept for inspection: {} and {}", work.db.display(), work.vault.display());
+        eprintln!(
+            "· kept for inspection: {} and {}",
+            work.db.display(),
+            work.vault.display()
+        );
         return result.map(|_| ());
     }
     if result.is_err() {
@@ -188,7 +192,10 @@ async fn run(args: &Args) -> anyhow::Result<()> {
     println!("✓ shuffled copy written");
     println!("  database   {}", db.display());
     println!("  vault      {}", vault.display());
-    println!("  seed       {}   (--seed {} makes this copy again)", args.seed, args.seed);
+    println!(
+        "  seed       {}   (--seed {} makes this copy again)",
+        args.seed, args.seed
+    );
     println!("  password   {}   (every member)", args.password);
     println!("  members    {}", summary.members.join(", "));
     println!(
@@ -247,7 +254,9 @@ async fn build(args: &Args, work: &Work) -> anyhow::Result<Summary> {
     let files = plan.write(&work.vault, &s)?;
 
     // --- 4. purge freed pages, then look for anything left -------------------
-    sqlx::query("PRAGMA secure_delete = ON").execute(&mut conn).await?;
+    sqlx::query("PRAGMA secure_delete = ON")
+        .execute(&mut conn)
+        .await?;
     sqlx::query("VACUUM").execute(&mut conn).await?;
     let summary = shuffle::summary(&mut conn, files).await?;
     leak::check(&mut conn, &originals, &work.db, &work.vault).await?;
