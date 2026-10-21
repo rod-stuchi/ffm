@@ -1,0 +1,16 @@
+{#- A horizontal bar, `b: HBar` — a bucket's spend with last month's tick, or
+    a bill still to pay. Lengths are shares of the track less the room its
+    value takes (`--f`), so a label never runs off a narrow card. -#}
+<div class="nm{% if b.unc %} unc{% endif %}">{{ b.name }}</div>
+<div class="tr">
+  <div class="b{% if b.muted %} muted{% endif %}" style="--f:{{ b.f }}"></div>
+  {%- if let Some(p) = b.prev %}<div class="prev" style="--f:{{ p }}"></div>{% endif %}
+  <span class="at" style="--f:{{ b.at }}"><span class="v money">{{ b.value }}</span>
+    {%- if let Some(d) = b.delta %}{% if d.arrow.is_empty() %}<span class="d flat">{{ d.text }}</span>{% else %}<span class="d {{ d.class }}">{{ d.arrow }} {{ d.text }}</span>{% endif %}{% endif %}
+    {%- if !b.note.is_empty() %}<span class="d {{ b.note_class }}">{{ b.note }}</span>{% endif %}</span>
+  {%- if let Some(tip) = b.tip %}
+  <div class="chtip"><div class="th">{{ tip.head }}</div>
+    {%- for r in tip.rows %}<div class="tr"><span><i class="k {{ r.key }}"></i>{{ r.label }}</span><b class="money">{{ r.value }}</b></div>{% endfor -%}
+  </div>
+  {%- endif %}
+</div>

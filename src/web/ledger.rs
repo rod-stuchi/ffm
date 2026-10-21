@@ -232,7 +232,7 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
 /// household row. Sort, gutter and delta do not move a sum, but the pane query
 /// takes them all, and building it in one place keeps two callers from
 /// disagreeing about the currency.
-async fn session_ctx(st: &AppState, auth: &Auth) -> RowCtx {
+pub(crate) async fn session_ctx(st: &AppState, auth: &Auth) -> RowCtx {
     let house = ledger::household(&st.pool).await.ok().flatten();
     RowCtx {
         today: crate::clock::today(),
@@ -248,7 +248,12 @@ async fn session_ctx(st: &AppState, auth: &Auth) -> RowCtx {
 /// Every member's pane for one period, as this viewer sees it — the one loop
 /// the header totals and the month picker both sum from. Privacy is applied
 /// inside the pane query, so neither can count a row the ledger hides.
-async fn member_panes(st: &AppState, auth: &Auth, period: Period, ctx: RowCtx) -> Vec<Pane> {
+pub(crate) async fn member_panes(
+    st: &AppState,
+    auth: &Auth,
+    period: Period,
+    ctx: RowCtx,
+) -> Vec<Pane> {
     let mut out = Vec::new();
     for m in ledger::members_in(&st.pool, period)
         .await
@@ -841,6 +846,7 @@ fn keymap(t: &Catalog, admin: bool, holds_role: bool) -> Vec<(String, Vec<(Strin
                 k("m", t.keymap_row_paid()),
                 k("gd", t.keymap_row_details()),
                 k("gl", t.keymap_row_history()),
+                k("gc", t.keymap_row_charts()),
                 k("gh", t.keymap_row_hide()),
             ],
         ),

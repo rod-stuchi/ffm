@@ -1119,3 +1119,110 @@ prepare-failed = Could not work out the size — the file is as it was
 prepare-shrink-no-gain = no smaller — kept as is
 prepare-not-pdf = Only a PDF or an image can be trimmed or shrunk
 prepare-trim = Trim / shrink
+
+# --- :charts / gc -----------------------------------------------------------------
+charts-title = Charts
+charts-menu = charts of the money — this month, this year, every year
+charts-tab-month = Month
+charts-tab-year = Year
+charts-tab-years = Years
+charts-admin = admin
+charts-household = Household
+charts-from = from
+charts-to = to
+charts-close = Close
+charts-table = table
+charts-empty = Nothing recorded in these months yet.
+charts-refused = The Years tab is for an admin.
+charts-selected = { $n ->
+        [one] 1 selected row · s to show all
+       *[other] { $n } selected rows · s to show all
+    }
+charts-selected-off = { $n ->
+        [one] 1 selected row · s to show only it
+       *[other] { $n } selected rows · s to show only them
+    }
+charts-in = IN
+charts-out = OUT
+charts-net = NET
+charts-vs = vs { $period }
+charts-flat = flat
+charts-new = new
+charts-includes-estimate = { $n ->
+        [one] income ~ includes 1 estimate
+       *[other] income ~ includes { $n } estimates
+    }
+charts-kept = Kept of what came in
+charts-to-pay = Still to pay
+charts-to-pay-none = nothing left this month
+charts-to-pay-note = { $n ->
+        [one] 1 bill · next { $day }
+       *[other] { $n } bills · next { $day }
+    }
+charts-bills = { $n ->
+        [one] 1 bill
+       *[other] { $n } bills
+    }
+charts-buckets-title = Spend by bucket
+charts-buckets-sub = { $period } · biggest first
+charts-this-month = this month
+charts-bucket = Bucket
+charts-members-title = Who moved the money
+charts-members-sub = { $period } · spending left, income right
+charts-fixed-title = Fixed and variable
+charts-fixed-sub = what recurs every month, and what does not
+charts-recurring = Recurring
+charts-oneoff = One-off
+charts-fixed-note = Recurring is what a rule brought in; one-off is what was typed by hand.
+charts-topay-title = Still to pay this month
+charts-topay-sub = bills not yet confirmed, by due date
+charts-due = due { $day }
+charts-late = late since { $day }
+charts-scheduled = scheduled
+charts-flow-title = Cash flow
+charts-flow-sub = { $range } · income above the line, spending below
+charts-kept-title = Kept so far
+charts-kept-sub = NET added up, month by month
+charts-kept-so-far = kept so far
+charts-that-month = that month
+charts-trend-title = Is income growing?
+charts-trend-sub = 3-month average, since { $month } ·
+charts-trend-short = the average needs four months
+charts-month = month
+charts-avg = 3-month avg
+charts-moved-title = What moved
+charts-moved-sub = monthly average, { $now } against { $before } · biggest change first
+charts-moved-none = Nothing moved by much.
+charts-moved-short = Needs six months: the last three against the three before.
+charts-per-month = { $amount }/mo
+charts-change = change per month
+charts-each-bucket-title = Every bucket, month by month
+charts-each-bucket-sub = { $range } · one shared scale, so heights compare across cards
+charts-together = together
+charts-together-title = { $n ->
+        [one] The selected row
+       *[other] The { $n } selected rows, together
+    }
+charts-together-sub = followed across months by their rule, or their title · { $range }
+charts-each-title = Each one
+charts-each-sub = followed across months by their rule, or their title · one shared scale
+charts-years-range = { $range } of each year
+charts-years-flow-title = The same months, every year
+charts-years-flow-sub = { $range } of each year, so this year is not a part-year against whole ones
+charts-spent-so-far = Spent so far, by year
+charts-earned-so-far = Earned so far, by year
+charts-by-month-against = by { $month }, against { $year } ·
+charts-years-table-title = Year by year
+charts-years-table-sub = { $range } · the last column is the whole year, for years that are over
+charts-col-year = Year
+charts-col-kept = kept
+charts-col-vs = NET vs year before
+charts-col-whole = whole year NET
+charts-key-tab = tab
+charts-key-period = earlier · later
+charts-key-member = member
+charts-key-sel = selection ⇄ all
+charts-key-scroll = scroll
+charts-key-close = close
+command-about-charts = charts of the money — this month, this year, every year
+keymap-row-charts = charts — this month, this year, every year

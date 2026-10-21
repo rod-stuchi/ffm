@@ -258,6 +258,8 @@
                 @click="open = false; openColors()">:theme</button>
         <button class="btn" type="button" title="{{ t.trash_menu() }}"
                 @click="open = false; openTrash()">:trash</button>
+        <button class="btn" type="button" title="{{ t.charts_menu() }}"
+                @click="open = false; openCharts()">:charts</button>
         {#- On a phone the bar has no room for the light/dark button, so it
             moves in here. `.ppop-narrow` is shown by the SAME media query that
             hides it from the bar, so there is never a width with both copies,
@@ -761,6 +763,14 @@
     </template>
   </div>
 
+  {#- `:charts` / `gc` — the chart viewer, in the carousel's frame: the whole
+      viewport down to the statusline. Only the frame is here; the stage is
+      `partials/charts.html`, fetched whole on open and on every tab, chip,
+      month and range change (`web::charts`). -#}
+  <div class="chartsview" x-show="charts" x-cloak>
+    <div class="chstage" id="chstage"></div>
+  </div>
+
   {#- The trim-and-shrink view (`partials/prepare.html`), mounted here when a
       PDF is on its way in or brought back from `P`. Above the carousel. -#}
   <div id="prepmount" class="prepmount" x-show="prep" x-cloak></div>
@@ -1237,6 +1247,9 @@ function ledger() {
     pointerAt: null,
     tipStyle: '',
     carousel: null,
+    // `:charts` open; and the `g` of a `gg` typed inside it.
+    charts: false,
+    chartsBuf: '',
     /// The trim-and-shrink view while it is open: the staged token, which
     /// pages are kept, the focused page, whether to shrink, and what Save
     /// does with the finished file. Visual state — unsubmitted choices; the
@@ -1929,6 +1942,16 @@ function ledger() {
         // As on the row's own confirm: `y` is the only yes, Enter is unbound.
         if (e.key === 'y') { e.preventDefault(); this.doRemoveFile(); }
         if (e.key === 'Escape') { e.preventDefault(); this.removingFile = null; }
+        return;
+      }
+      // The chart viewer owns every key while it is open, except in its own
+      // from/to fields, where Esc only leaves the field. Tab and the
+      // browser's own chords pass through.
+      if (this.charts) {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.key === 'Tab') return;
+        if (typing) { if (e.key === 'Escape') { e.preventDefault(); el.blur(); } return; }
+        e.preventDefault();
+        this.chartsKey(e.key);
         return;
       }
       // A modifier on its own is not a keystroke — it must not clear the
@@ -4039,6 +4062,50 @@ function ledger() {
     /// `Ctrl-u` / `:trash`. Opened with the keyboard already on the first item,
     /// because the only thing to do there is pick one — and the month on
     /// screen rides along, so a restore can swap the panes it lands in.
+    /// `:charts` / `gc` — opened on the month on screen. The page sends only
+    /// what it already holds: that month, and the ids picked with `x` in the
+    /// focused pane, which the server follows across months. Everything
+    /// drawn is the server's.
+    openCharts() {
+      const pane = document.querySelectorAll('.pane')[this.pane];
+      const ids = pane
+        ? Object.keys(this.selected).filter(id => pane.querySelector('#row-' + id)).sort()
+        : [];
+      const period = document.querySelector('.ledger-shell')?.dataset.period || '';
+      let url = '/charts?period=' + encodeURIComponent(period);
+      if (ids.length) url += '&selp=' + encodeURIComponent(period) + '&ids=' + ids.join(',');
+      this.charts = true;
+      this.chartsBuf = '';
+      this.ajax('GET', url, { target: '#chstage', swap: 'innerHTML' }, 'status');
+    },
+
+    closeCharts() {
+      this.charts = false;
+      const stage = document.getElementById('chstage');
+      if (stage) stage.innerHTML = '';
+    },
+
+    /// The viewer's keys press the stage's own links — each carries its key
+    /// in `data-ck` — so a key and a click cannot disagree, and nothing here
+    /// decides what is shown. Only scrolling is the page's own.
+    chartsKey(k) {
+      const body = document.querySelector('#chstage .chbody');
+      const g = this.chartsBuf;
+      this.chartsBuf = '';
+      if (k === 'Escape') return this.closeCharts();
+      if (!body) return;
+      if (k === 'j' || k === 'ArrowDown') return body.scrollBy({ top: 80 });
+      if (k === 'k' || k === 'ArrowUp') return body.scrollBy({ top: -80 });
+      if (k === 'G') return body.scrollTo({ top: body.scrollHeight });
+      if (k === 'g') {
+        if (g === 'g') body.scrollTo({ top: 0 });
+        else this.chartsBuf = 'g';
+        return;
+      }
+      const el = [...document.querySelectorAll('#chstage [data-ck]')].find(a => a.dataset.ck === k);
+      if (el) el.click();
+    },
+
     openTrash() {
       const period = document.querySelector('.ledger-shell')?.dataset.period || '';
       this.showSplit('/trash?period=' + encodeURIComponent(period))
@@ -4310,6 +4377,8 @@ function ledger() {
         if (k === 'h') { this.toggleValues(); return true; }
         // `gp` — "go preview": the g-prefix spelling of `P`, beside gl / gd.
         if (k === 'p') { this.openCarousel(); return true; }
+        // `gc` — "go charts": the `:charts` viewer, on the month on screen.
+        if (k === 'c') { this.openCharts(); return true; }
         // `gs` — this month's manual order, copied to other months: the
         // `:order` drawer. Beside `s`, which picks the order to read by.
         if (k === 's') { this.openOrder(); return true; }
@@ -4426,6 +4495,7 @@ function ledger() {
         case 'household': case 'config':  return this.showSplit('/household');
         case 'members':                   return this.showSplit('/members');
         case 'trash':                     return this.openTrash();
+        case 'charts':                    return this.openCharts();
         // The bell's list — Vim's own word for the messages it has shown.
         case 'messages':
           if (arg === 'clear') return this.clearNotes();

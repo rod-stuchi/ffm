@@ -1,0 +1,198 @@
+{#- `:charts` / `gc` — the stage inside the full-viewport frame
+    (`.chartsview` in ledger.html), replaced whole by every tab, chip, month
+    step and range change. See `web::charts`.
+
+    Every control is a link or a form that asks the server for the next
+    stage. The keys inside the viewer press those same links — each carries
+    its key in `data-ck` — so the keyboard and the mouse cannot disagree, and
+    no decision about what to show is made in Alpine. -#}
+<div class="chcap">
+  <span class="chicon" title="{{ t.charts_title() }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>
+  <nav class="chtabs" aria-label="{{ t.charts_title() }}">
+    {%- for l in tabs %}
+    <a class="chtab{% if l.on %} is-on{% endif %}" href="{{ l.url }}" data-ck="{{ l.key }}"
+       hx-get="{{ l.url }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage"><kbd>{{ l.key }}</kbd>{{ l.label }}
+      {%- if l.key == "3" %} <span class="adm">{{ t.charts_admin() }}</span>{% endif %}</a>
+    {%- endfor %}
+  </nav>
+  <nav class="chchips">
+    {%- for l in chips %}
+    <a class="chchip{% if l.on %} is-on{% endif %}" href="{{ l.url }}"
+       hx-get="{{ l.url }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage">{% if loop.first %}<kbd>H L</kbd>{% endif %}{{ l.label }}</a>
+    {%- endfor %}
+    <a hidden data-ck="H" hx-get="{{ chip_prev }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage"></a>
+    <a hidden data-ck="L" hx-get="{{ chip_next }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage"></a>
+  </nav>
+  {%- if let Some(s) = sel_label %}
+  <a class="selchip" href="{{ sel_url }}" data-ck="s"
+     hx-get="{{ sel_url }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage">{{ s }}</a>
+  {%- endif %}
+  <div class="cright">
+    {%- if tab == "year" %}
+    <form class="per" hx-get="/charts" hx-target="#chstage" hx-swap="innerHTML" hx-trigger="change" hx-indicator="#chstage">
+      {%- for (k, v) in hidden %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      {%- if let Some(u) = prev_url %}<a class="btn" href="{{ u }}" data-ck="[" title="{{ t.month_prev() }}"
+         hx-get="{{ u }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage">‹</a>{% endif %}
+      <label>{{ t.charts_from() }} <select name="from">
+        {%- for (v, l) in options %}<option value="{{ v }}"{% if *v == from %} selected{% endif %}>{{ l }}</option>{% endfor -%}
+      </select></label>
+      <label>{{ t.charts_to() }} <select name="to">
+        {%- for (v, l) in options %}<option value="{{ v }}"{% if *v == to %} selected{% endif %}>{{ l }}</option>{% endfor -%}
+      </select></label>
+      {%- if let Some(u) = next_url %}<a class="btn" href="{{ u }}" data-ck="]" title="{{ t.month_next() }}"
+         hx-get="{{ u }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage">›</a>{% endif %}
+    </form>
+    {%- else if tab == "month" %}
+    <span class="per">
+      {%- if let Some(u) = prev_url %}<a class="btn" href="{{ u }}" data-ck="[" title="{{ t.month_prev() }}"
+         hx-get="{{ u }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage">‹</a>{% endif %}
+      <b>{{ period_label }}</b>
+      {%- if let Some(u) = next_url %}<a class="btn" href="{{ u }}" data-ck="]" title="{{ t.month_next() }}"
+         hx-get="{{ u }}" hx-target="#chstage" hx-swap="innerHTML" hx-indicator="#chstage">›</a>
+      {%- else %}<span class="btn is-off" aria-hidden="true">›</span>{% endif %}
+    </span>
+    {%- else %}
+    <span class="per">{{ years_label }}</span>
+    {%- endif %}
+    <button class="btn" type="button" title="{{ t.charts_close() }}" @click="closeCharts()">esc</button>
+  </div>
+</div>
+
+<div class="chbody" tabindex="-1">
+  {%- if refused %}
+  <p class="chnote">{{ t.charts_refused() }}</p>
+  {%- else if empty %}
+  <p class="chnote">{{ t.charts_empty() }}</p>
+  {%- else %}
+  <div class="chgrid">
+
+  {%- if let Some(m) = month %}
+    <div class="tiles span-12">
+      {%- for tl in m.tiles %}
+      <div class="tile">
+        <div class="lab">{{ tl.label }}</div>
+        <div class="val{% if tl.neg %} neg{% endif %}"><span class="money">{{ tl.value }}</span></div>
+        {%- if let Some(w) = tl.meter %}<div class="meter"><span style="width:{{ w }}%"></span></div>{% endif %}
+        {%- if tl.delta.is_some() || !tl.note.is_empty() %}
+        <div class="dl">{% if let Some(d) = tl.delta %}{% if d.arrow.is_empty() %}{{ d.text }}{% else %}<span class="{{ d.class }}">{{ d.arrow }} {{ d.text }}</span>{% endif %} {% endif %}{{ tl.note }}</div>
+        {%- endif %}
+      </div>
+      {%- endfor %}
+    </div>
+
+    {%- if !m.buckets.is_empty() %}
+    <article class="chcard {% if m.members.is_empty() %}span-12{% else %}span-7{% endif %}">
+      <header>
+        <div class="hl"><h3>{{ t.charts_buckets_title() }}</h3><p class="sub">{{ m.buckets_sub }}</p></div>
+        <div class="chlegend"><span><i class="lg-out"></i>{{ t.charts_this_month() }}</span><span><i class="lg-tick"></i>{{ m.prev_label }}</span></div>
+      </header>
+      <div class="hb">{% for b in m.buckets %}{% include "partials/charts/hbar.html" %}{% endfor %}</div>
+      {%- let tb = m.buckets_table %}
+      {%- include "partials/charts/table.html" %}
+    </article>
+    {%- endif %}
+
+    {%- if !m.members.is_empty() %}
+    <article class="chcard span-5">
+      <header><div class="hl"><h3>{{ t.charts_members_title() }}</h3><p class="sub">{{ m.members_sub }}</p></div></header>
+      <div class="mir">
+        <div></div><div class="head l">{{ t.charts_out() }}</div><div class="head">{{ t.charts_in() }}</div>
+        {%- for r in m.members %}
+        <div class="nm">{{ r.name }}</div>
+        <div class="l"><span class="v money">{{ r.out_v }}</span><div class="b" style="--f:{{ r.out_f }}"></div></div>
+        <div class="r"><div class="b{% if r.in_est %} est{% endif %}" style="--f:{{ r.in_f }}"></div><span class="v money">{{ r.in_v }}</span></div>
+        {%- endfor %}
+      </div>
+      {%- let tb = m.members_table %}
+      {%- include "partials/charts/table.html" %}
+    </article>
+    {%- endif %}
+
+    {%- if let Some(sk) = m.stack %}
+    <article class="chcard span-5">
+      <header><div class="hl"><h3>{{ t.charts_fixed_title() }}</h3><p class="sub">{{ t.charts_fixed_sub() }}</p></div></header>
+      <div class="chstack">
+        <span style="width:{{ sk.rec_f }}%"><label>{{ t.charts_recurring() }} <b class="money">{{ sk.rec_v }}</b> · {{ sk.rec_pct }}</label></span>
+        <span style="width:{{ sk.one_f }}%"><label>{{ t.charts_oneoff() }} <b class="money">{{ sk.one_v }}</b> · {{ sk.one_pct }}</label></span>
+      </div>
+      <p class="note">{{ t.charts_fixed_note() }}</p>
+    </article>
+    {%- endif %}
+
+    {%- if !m.to_pay.is_empty() %}
+    <article class="chcard {% if m.stack.is_some() %}span-7{% else %}span-12{% endif %}">
+      <header><div class="hl"><h3>{{ t.charts_topay_title() }}</h3><p class="sub">{{ t.charts_topay_sub() }}</p></div></header>
+      <div class="hb topay">{% for b in m.to_pay %}{% include "partials/charts/hbar.html" %}{% endfor %}</div>
+    </article>
+    {%- endif %}
+  {%- endif %}
+
+  {%- if let Some(y) = year %}
+    {%- if let Some(c) = y.together %}{% include "partials/charts/plot_card.html" %}{% endif %}
+    {%- if !y.each.is_empty() %}
+    <article class="chcard span-12">
+      <header><div class="hl"><h3>{{ t.charts_each_title() }}</h3><p class="sub">{{ t.charts_each_sub() }}</p></div></header>
+      <div class="sm">{% for s in y.each %}{% include "partials/charts/spark.html" %}{% endfor %}</div>
+    </article>
+    {%- endif %}
+    {%- if let Some(c) = y.flow %}{% include "partials/charts/plot_card.html" %}{% endif %}
+    {%- if let Some(c) = y.kept %}{% include "partials/charts/plot_card.html" %}{% endif %}
+    {%- if let Some(c) = y.trend %}{% include "partials/charts/plot_card.html" %}{% endif %}
+    {%- if y.flow.is_some() %}
+    <article class="chcard span-12">
+      <header><div class="hl"><h3>{{ t.charts_moved_title() }}</h3><p class="sub">{{ y.moved_sub }}</p></div></header>
+      {%- if y.moved_short %}
+      <p class="note">{{ t.charts_moved_short() }}</p>
+      {%- else if y.moved.is_empty() %}
+      <p class="note">{{ t.charts_moved_none() }}</p>
+      {%- else %}
+      <div class="chdiv">
+        {%- for r in y.moved %}
+        <div class="nm">{{ r.name }}</div>
+        <div class="l">{% if !r.up %}<span class="v"><span class="money">{{ r.amount }}</span><small>{{ r.pct }}</small></span><div class="b" style="--f:{{ r.f }}"></div>{% endif %}</div>
+        <div class="r">{% if r.up %}<div class="b" style="--f:{{ r.f }}"></div><span class="v"><span class="money">{{ r.amount }}</span><small>{{ r.pct }}</small></span>{% endif %}</div>
+        {%- endfor %}
+      </div>
+      {%- let tb = y.moved_table %}
+      {%- include "partials/charts/table.html" %}
+      {%- endif %}
+    </article>
+    {%- endif %}
+    {%- if !y.sparks.is_empty() %}
+    <article class="chcard span-12">
+      <header><div class="hl"><h3>{{ t.charts_each_bucket_title() }}</h3><p class="sub">{{ y.sparks_sub }}</p></div></header>
+      <div class="sm">{% for s in y.sparks %}{% include "partials/charts/spark.html" %}{% endfor %}</div>
+    </article>
+    {%- endif %}
+  {%- endif %}
+
+  {%- if let Some(ys) = years %}
+    {%- let c = ys.flow %}{% include "partials/charts/plot_card.html" %}
+    {%- let c = ys.spent %}{% include "partials/charts/plot_card.html" %}
+    {%- let c = ys.earned %}{% include "partials/charts/plot_card.html" %}
+    <article class="chcard span-12">
+      <header><div class="hl"><h3>{{ t.charts_years_table_title() }}</h3><p class="sub">{{ ys.table_sub }}</p></div></header>
+      <div class="ytwrap"><table class="yt">
+        <tr><th>{{ t.charts_col_year() }}</th><th>{{ t.charts_in() }}</th><th>{{ t.charts_out() }}</th><th>{{ t.charts_net() }}</th><th>{{ t.charts_col_kept() }}</th><th>{{ t.charts_col_vs() }}</th><th>{{ t.charts_col_whole() }}</th></tr>
+        {%- for r in ys.rows %}
+        <tr{% if r.cur %} class="cur"{% endif %}><td>{{ r.year }}</td><td class="money">{{ r.ins }}</td><td class="money">{{ r.outs }}</td>
+          <td class="money{% if r.neg %} n{% endif %}">{{ r.net }}</td><td>{{ r.kept }}</td>
+          <td>{% if let Some(d) = r.vs %}<span class="{{ d.class }}">{{ d.text }}</span>{% else %}—{% endif %}</td>
+          <td class="money old">{{ r.whole }}</td></tr>
+        {%- endfor %}
+      </table></div>
+    </article>
+  {%- endif %}
+
+  </div>
+  {%- endif %}
+</div>
+
+<div class="chnav">
+  <span><kbd>1</kbd><kbd>2</kbd>{% if tabs.len() > 2 %}<kbd>3</kbd>{% endif %}{{ t.charts_key_tab() }}</span>
+  {%- if tab != "years" %}<span><kbd>[</kbd><kbd>]</kbd>{{ t.charts_key_period() }}</span>{% endif %}
+  <span><kbd>H</kbd><kbd>L</kbd>{{ t.charts_key_member() }}</span>
+  {%- if sel_label.is_some() %}<span><kbd>s</kbd>{{ t.charts_key_sel() }}</span>{% endif %}
+  <span><kbd>j</kbd><kbd>k</kbd>{{ t.charts_key_scroll() }}</span>
+  <span><kbd>esc</kbd>{{ t.charts_key_close() }}</span>
+</div>

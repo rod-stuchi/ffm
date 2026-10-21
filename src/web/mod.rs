@@ -1,6 +1,7 @@
 //! HTTP. Routing, and the one place a template becomes a response.
 
 pub mod auth;
+pub mod charts;
 pub mod commands;
 pub mod csrf;
 #[cfg(feature = "dev-reload")]
@@ -128,6 +129,8 @@ pub fn router(state: AppState) -> Router {
         .route("/tx/{id}/log", get(log::log))
         // `:grep` — every month, which is what makes it a different verb.
         .route("/grep", get(log::grep))
+        // `:charts` / `gc` — read-only, a whole stage per request.
+        .route("/charts", get(charts::view))
         // The month picker's numbers — fetched when it opens, not on every
         // ledger load. See `ledger::month_pop`.
         .route("/months", get(ledger::month_pop))

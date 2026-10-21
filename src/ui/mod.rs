@@ -4,6 +4,7 @@
 //! `ui` is where it is rendered. A template can reach `ui::fmt`; it cannot
 //! reach a database or a filesystem.
 
+pub mod chart;
 pub mod fmt;
 pub mod i18n;
 pub mod icons;

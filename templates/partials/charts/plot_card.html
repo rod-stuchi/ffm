@@ -1,0 +1,17 @@
+{#- A card holding one plotted chart, `c: PlotCard`. -#}
+<article class="chcard {% if c.wide %}span-12{% else %}span-6{% endif %}">
+  <header>
+    <div class="hl"><h3>{{ c.title }}</h3>
+      {%- if !c.sub.is_empty() || c.delta.is_some() %}
+      <p class="sub">{{ c.sub }}{% if let Some(d) = c.delta %} <span class="{{ d.class }}">{{ d.arrow }} {{ d.text }}</span>{% endif %}</p>
+      {%- endif %}
+    </div>
+    {%- if !c.legend.is_empty() %}
+    <div class="chlegend">{% for l in c.legend %}<span><i class="{{ l.class }}"></i>{{ l.label }}</span>{% endfor %}</div>
+    {%- endif %}
+  </header>
+  {%- let p = c.plot %}
+  {%- include "partials/charts/plot.html" %}
+  {%- let tb = c.table %}
+  {%- include "partials/charts/table.html" %}
+</article>

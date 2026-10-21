@@ -1,0 +1,35 @@
+{#- One plotted chart, `p: Plot` — see `ui::chart` for the shape: HTML boxes
+    for everything with text or a fixed size, one stretched SVG for the lines,
+    and a hover box per column whose tip is pure CSS. Every position is a
+    percentage the server computed; nothing here does arithmetic. -#}
+<div class="plot{% if p.pad %} has-pad{% endif %}" style="--h:{{ p.h }}px">
+  <div class="yax">
+    {%- for y in p.yt %}<span class="money" style="top:{{ y.top }}%">{{ y.label }}</span>{% endfor -%}
+  </div>
+  <div class="pa">
+    {%- for y in p.yt %}<div class="gl{% if y.zero %} zero{% endif %}" style="top:{{ y.top }}%"></div>{% endfor %}
+    {%- for c in p.cols %}
+    <div class="col" style="left:{{ c.left }}%;width:{{ c.width }}%">
+      <div class="bar in{% if c.in_est %} est{% endif %}" style="top:{{ c.in_top }}%;height:{{ c.in_h }}%"></div>
+      <div class="bar out" style="top:{{ c.out_top }}%;height:{{ c.out_h }}%"></div>
+    </div>
+    {%- endfor %}
+    {%- if !p.paths.is_empty() %}
+    <svg class="ov" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      {%- for d in p.paths %}<path class="{{ d.class }}" d="{{ d.d }}"/>{% endfor -%}
+    </svg>
+    {%- endif %}
+    {%- for d in p.dots %}<div class="chdot {{ d.class }}" style="left:{{ d.left }}%;top:{{ d.top }}%"></div>{% endfor %}
+    {%- for l in p.labels %}<div class="endl at-{{ l.at }} {{ l.class }}" style="left:{{ l.left }}%;top:{{ l.top }}%">{{ l.text }}</div>{% endfor %}
+    {%- for h in p.hits %}
+    <div class="chhit{% if h.flip %} flip{% endif %}" style="left:{{ h.left }}%;width:{{ h.width }}%">
+      <div class="chtip"><div class="th">{{ h.tip.head }}</div>
+        {%- for r in h.tip.rows %}<div class="tr"><span><i class="k {{ r.key }}"></i>{{ r.label }}</span><b class="money">{{ r.value }}</b></div>{% endfor -%}
+      </div>
+    </div>
+    {%- endfor %}
+  </div>
+  <div class="xax">
+    {%- for x in p.xt %}<span class="{% if x.cur %}cur{% endif %}" style="left:{{ x.left }}%">{{ x.label }}</span>{% endfor -%}
+  </div>
+</div>

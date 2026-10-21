@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT min(t.period) AS \"period: String\"\n           FROM transactions t\n           WHERE t.deleted_at IS NULL\n             AND (t.visibility = 'household' OR t.member_id = ?1 OR ?2)",
+  "describe": {
+    "columns": [
+      {
+        "name": "period: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "4d213d29e05295400fc69ed4be6e99c1dbdbf1316970143daee781a70ccd5b92"
+}

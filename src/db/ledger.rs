@@ -468,22 +468,17 @@ pub async fn pane_with_vault(
         if !row.kind.is_income() || !row.varies {
             continue;
         }
-        let basis =
-            estimate::Basis::parse(basis_of.get(i).and_then(|b| b.as_deref()).unwrap_or(""))
-                .unwrap_or_default();
-        let window = window_of
-            .get(i)
-            .copied()
-            .flatten()
-            .unwrap_or(3)
-            .clamp(1, 12) as usize;
-        let fallback = rule_amount_of.get(i).copied().flatten().map(Cents);
         let Some(rule_id) = row.rule_id else { continue };
-
-        let history = confirmed_history(pool, root, rule_id, row.period, window).await?;
-        if let Some(p) = estimate::project(&history, basis, window, fallback) {
-            row.estimate_cents = Some(p.amount);
-        }
+        row.estimate_cents = projection(
+            pool,
+            root,
+            rule_id,
+            row.period,
+            basis_of.get(i).and_then(|b| b.as_deref()),
+            window_of.get(i).copied().flatten(),
+            rule_amount_of.get(i).copied().flatten(),
+        )
+        .await?;
     }
 
     // The disk decides `paid`, so it is consulted per tracked row — one exact
@@ -554,6 +549,29 @@ pub async fn pane_with_vault(
     })
 }
 
+/// What a varying income is projected at in `period`, from the rule's
+/// `estimate_basis`, `estimate_window` and own amount — `None` when there is
+/// nothing to project from. Whether the row shows it is the row's question
+/// (`LedgerRow::is_estimated`: only while unconfirmed).
+///
+/// One function, because two readers ask: the pane, and `:charts`, which reads
+/// months by the year and must put the same `~` figure in a month's IN that
+/// the pane header does.
+pub(crate) async fn projection(
+    pool: &SqlitePool,
+    root: Option<&std::path::Path>,
+    rule_id: i64,
+    period: Period,
+    basis: Option<&str>,
+    window: Option<i64>,
+    rule_amount: Option<i64>,
+) -> sqlx::Result<Option<Cents>> {
+    let basis = estimate::Basis::parse(basis.unwrap_or("")).unwrap_or_default();
+    let window = window.unwrap_or(3).clamp(1, 12) as usize;
+    let history = confirmed_history(pool, root, rule_id, period, window).await?;
+    Ok(estimate::project(&history, basis, window, rule_amount.map(Cents)).map(|p| p.amount))
+}
+
 /// The last `window` **confirmed** periods of a rule, newest first.
 ///
 /// Confirmed means the same thing it means everywhere else: a payslip on disk
@@ -609,7 +627,7 @@ async fn confirmed_history(
 /// Whether one occurrence is confirmed — the money moved. The same answer
 /// the mark gives: the receipt (or payslip) on disk for a tracked rule, the
 /// manual tick for an untracked one.
-async fn is_confirmed(
+pub(crate) async fn is_confirmed(
     pool: &SqlitePool,
     root: Option<&std::path::Path>,
     tracked: bool,

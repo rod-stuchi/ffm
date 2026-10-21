@@ -757,6 +757,7 @@ standing out.)
 | `E` | edit the recurring rule behind the focused row; no-op with a statusline message on a plain row |
 | `gd` | show due/cadence/receipt details for the focused row *(proposal, not in the original spec)* |
 | `gl` | change log for the focused row — who changed what, when — in a side pane *(proposal, not in the original spec)* |
+| `gc` | the chart viewer, `:charts` — on the month on screen, and on the rows selected with `x` if any |
 | `gh` | hide every amount — pixelated, on this device — and show them again; the statusline's eye does the same. See Hiding the amounts |
 | `p` | toggle private *(proposal, not in the original spec)* |
 | `m` | mark paid by hand — an untracked recurring bill only; "received" on an income. Refused, with the reason, on a tracked row (its receipt proves it) and on a one-off |
@@ -1216,6 +1217,7 @@ order, in the month on screen, to other months of the same year.
 | `:` | open the command bar |
 | `:grep vinho` | search every month — a result list, not a filter over this one · bare `:grep` reopens the last search |
 | `:trash` | deleted rows and removed files, to bring back — the same pane `Ctrl-u` opens |
+| `:charts` | the money drawn — this month, a range of months, every year (admin) — the same viewer `gc` opens; see Charts |
 | `:messages` | what the app has told you in this window — the bell's list · `:messages clear` empties it |
 | `:prune` | admin only — byte-identical files in the vault, and files in the trash longer than the household keeps them; remove them for good |
 | `:sort date` | row order: manual · name · amount · date |
@@ -3154,6 +3156,13 @@ ledger straight into a per-category summary — Consumption R$ 1.556,92,
 Subscriptions R$ 59,90, and so on — with zero additional screen to build.
 Browsing and summarizing are the same mechanism at two zoom levels.
 
+**Amended: there is now one more screen, and it is not this one.** `zM` is
+still the month's report. What neither it nor the picker's year could show
+is *trend* — is income growing, which bucket is getting dearer, are we ahead
+of last year by October — and that is what `:charts` is for (see Charts,
+below). It does not repeat the fold summary; its Month tab's bucket bars
+add the one thing a fold header lacks, last month's figure beside this one.
+
 ### A change that moves a row re-renders the pane
 
 In a grouped pane — and under `sort = date` / `amount` — where a row sits
@@ -3210,6 +3219,97 @@ load, and the fold state lived only in the page. Now:
   `zM`/`zR`, else *Folds start*.
 
 ---
+
+## Charts (`:charts` / `gc`)
+
+The money drawn, in a full-viewport viewer with the `P` carousel's frame —
+the whole window down to the statusline, which stays visible under it.
+Read-only. Opened by `:charts`, `gc` and the profile menu's `:charts`,
+always on the month on screen. `design/ffm-charts-mockup.html` is the
+visual reference.
+
+### Tabs
+
+| Tab | What it shows |
+|---|---|
+| `1` Month | the month on screen: tiles (IN, OUT, NET, kept of what came in, still to pay) · spend by bucket with a tick at last month · who moved the money (spending left, income right) · fixed against one-off · the bills still to pay, by due date |
+| `2` Year | a range of months, January to now by default, at most 36: cash flow (IN up from zero, OUT down, NET a line) · kept so far · is income growing (each month a dot, a 3-month average a line) · what moved (the last three months against the three before, in money per month) · every bucket as a small chart of its own |
+| `3` Years | **admin only** — the same months of every year side by side (January to the current month of each), so a part-year is never set against whole ones · spent and earned so far, this year against last, the gap shaded · a year-by-year table |
+
+Years follows `viewer.is_admin()`, so under preview it is absent, not
+disabled — the Household button's rule — and asked for directly it answers
+with a refusal, never data.
+
+### Scope
+
+- **The household by default**, with the privacy every total already has: a
+  private row counts for its owner and the admin, never under preview. Member
+  chips (`H` / `L`, or a click) narrow every chart to one member.
+- **Rows selected with `x` narrow it to them.** The ids of the focused pane
+  are sent, and each becomes *the same line* in other months — the same rule
+  in the same member's ledger, else the same exact title there, the order the
+  MoM delta and `:order` follow. The Month tab then sums only those lines;
+  the Year tab replaces its charts with the lines together and one small
+  chart each. `s` switches between them and everything.
+- **A turned-off member's months are out**, as the ledger hides their pane.
+
+### Keys
+
+| Key | Action |
+|---|---|
+| `1` `2` `3` | tab |
+| `[` `]` | the month before / after (Month), the range a year earlier / later (Year) |
+| `H` `L` | the member chip before / after |
+| `s` | selection ⇄ all, when rows are selected |
+| `j` `k` · `gg` `G` | scroll |
+| `Esc` | close (inside a from/to field: leave the field) |
+
+Every key presses a link the stage carries (`data-ck`), so a key and a click
+cannot disagree and no decision about what to show lives in Alpine.
+
+### How it is drawn
+
+- **On the server, as HTML and SVG — no chart library, no crate.** A chart is
+  boxes (bars, dots, labels, ticks) placed by a percentage of the plot, plus
+  one SVG per line stretched over it with a non-scaling stroke
+  (`ui::chart`). Text therefore stays the size the stylesheet says at any
+  width; every mark reads a `var(--token)`, so a palette swap and light/dark
+  reach it; every amount carries `.money`, so `gh` hides it. A JS charting
+  library was rejected because it needs the data as JSON in the page — the
+  client-side data model this app forbids — and a canvas cannot follow a
+  palette swap without being redrawn by script; `plotters` and `charts-rs`
+  because they write hex colors and their own fonts.
+- **IN is above the zero line, OUT below it.** Position carries the
+  difference, color only backs it up: no shade of `--ink` stays apart from
+  `--pos` in all twenty-two palettes (four pastel dark ones fail the
+  normal-vision floor).
+- **OUT is a neutral, not red.** Red is a deficit, a late bill, or a bucket
+  that got dearer — the month picker's rule; twelve red bars would be noise.
+  NET is an `--ink` line whose dot turns `--neg` below zero. A selection is
+  `--info`, the selection color. The accent is never data.
+- **No color per bucket** (see Categorization & grouping): buckets are small
+  multiples in one color on one shared scale.
+- **A projection is marked where it is drawn**: a dashed income bar, a
+  hollow dot, `~` on its figure — the income estimate's rule.
+- **Hover is pure CSS**: one box per column, the whole plot's height, with
+  its tip inside. Every chart also has a `table` twin, so no value is only
+  reachable by hovering.
+- **A snapshot.** Each open, tab and chip fetches fresh; nothing updates
+  while it is open.
+
+### Where the numbers come from
+
+- **Month reads `member_panes`** — the very loop the ledger bar sums — so a
+  tile is the figure the screen behind it shows, and "still to pay" is the
+  fold ring's open, late and scheduled slices: a plain untracked row and a
+  one-off are left out, for the ring's reason.
+- **Year and Years read `db::charts::rows`**, one query for the range. A pane
+  read per month asks the vault about every tracked row, which Years over
+  several years cannot afford and a chart does not need. It applies the
+  pane's privacy and turned-off predicates, and puts a varying income's
+  projection in through the same `ledger::projection` the pane uses; a test
+  (`tests/charts.rs`) holds every month's sums to the panes', viewer by
+  viewer.
 
 ## Unresolved issues across months
 

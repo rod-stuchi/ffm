@@ -1,0 +1,984 @@
+/* --- :charts / gc — the chart viewer ------------------------------------------
+ *
+ * Ported from design/ffm-charts-mockup.html. The frame is the `P` carousel's:
+ * the whole viewport down to the statusline, which stays visible under it.
+ *
+ * A chart is HTML boxes plus one stretched SVG for its lines (`ui::chart`):
+ * bars, dots, labels and ticks are elements placed by percentage, so text
+ * stays the size written here at any width, and a line keeps its width
+ * through `vector-effect: non-scaling-stroke`. Every color is a token.
+ *
+ * Position, not color, tells IN from OUT: income grows up from the zero line,
+ * spending down from it. No shade of --ink separates from --pos in every one
+ * of the eleven palettes (four dark ones fail the normal-vision floor), so
+ * color only backs position up. OUT is a neutral, not red — red marks only a
+ * deficit, or a bucket that got dearer.
+ *
+ * Names carry a `ch` prefix wherever the app already has the bare one
+ * (`.tab`, `.chip`, `.hit`, `.tip`, `.legend`, `.stack`): a rule written for
+ * the member tabs must never reach into a chart, nor the other way round. */
+
+.chartsview {
+  position: fixed;
+  inset: var(--safe-t) var(--safe-r) var(--foot-h) var(--safe-l);
+  z-index: 50;
+  display: grid;
+}
+
+.chstage {
+  --cbar-h: 34px;
+  width: 100vw;
+  height: 100%;
+  background: var(--surface);
+  display: grid;
+  grid-template-rows: max-content 1fr max-content;
+  overflow: hidden;
+}
+
+/* While the next stage loads, the current one stays, faded — no skeleton,
+ * no layout jump. */
+.chstage.htmx-request .chbody {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+/* --- the caption: tabs, member chips, the period ---------------------------- */
+
+.chcap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 4px;
+  min-height: var(--cbar-h);
+  padding: 4px 12px 4px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.chicon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chtabs,
+.chchips {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.chtab,
+.chchip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chtab {
+  font: 12px var(--mono);
+}
+
+.chchip {
+  font: 12.5px var(--sans);
+}
+
+.chtab:hover,
+.chchip:hover {
+  background: var(--surface);
+}
+
+.chtab.is-on,
+.chchip.is-on {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line-2);
+}
+
+.chtab.is-on {
+  font-weight: 600;
+}
+
+.chtab kbd,
+.chchip kbd {
+  font: 10px var(--mono);
+  color: var(--ink-3);
+}
+
+.chtab .adm {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.chchips {
+  padding-left: 12px;
+  border-left: 1px solid var(--line-2);
+}
+
+.selchip {
+  font: 12px var(--mono);
+  color: var(--info);
+  background: color-mix(in srgb, var(--info) 14%, transparent);
+  border-radius: 6px;
+  padding: 2px 9px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.chcap .cright {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chcap .btn {
+  font: 12px var(--mono);
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.chcap .btn.is-off {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.chcap .per {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 12px var(--mono);
+  color: var(--ink-2);
+}
+
+.chcap .per b {
+  min-width: 64px;
+  text-align: center;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.chcap .per label {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.chcap .per select {
+  font: 12px var(--mono);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  padding: 1px 4px;
+}
+
+/* --- the body: a grid of cards ---------------------------------------------- */
+
+.chbody {
+  overflow: auto;
+  padding: 18px clamp(10px, 3vw, 32px) 28px;
+  outline: none;
+}
+
+.chgrid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.chgrid .span-12 { grid-column: span 12; }
+.chgrid .span-7 { grid-column: span 7; }
+.chgrid .span-6 { grid-column: span 6; }
+.chgrid .span-5 { grid-column: span 5; }
+
+@media (max-width: 980px) {
+  .chgrid .span-7,
+  .chgrid .span-6,
+  .chgrid .span-5 {
+    grid-column: span 12;
+  }
+}
+
+.chnote {
+  max-width: 1360px;
+  margin: 40px auto;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.chnav {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: var(--cbar-h);
+  padding: 4px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  font: 11.5px var(--mono);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.chnav kbd {
+  font: 11px var(--mono);
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-right: 4px;
+}
+
+.chcard {
+  min-width: 0;
+  padding: 14px 16px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.chcard header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin-bottom: 12px;
+}
+
+.chcard header .hl {
+  flex: 1;
+  min-width: 180px;
+}
+
+.chcard h3 {
+  font: 600 13.5px var(--sans);
+  color: var(--ink);
+}
+
+.chcard .sub {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.chcard .note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.chartsview .good { color: var(--pos); }
+.chartsview .bad { color: var(--neg); }
+.chartsview .flat { color: var(--ink-3); }
+.chartsview .old { color: var(--ink-3); }
+
+/* The legend mirrors the mark: a box for bars, a stroke for lines. */
+.chlegend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.chlegend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.chlegend .lg-in { background: var(--pos); }
+.chlegend .lg-out { background: var(--ink-2); }
+.chlegend .lg-tick { width: 2px; height: 12px; background: var(--ink); }
+.chlegend .lg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pos); }
+
+.chlegend .lg-net,
+.chlegend .lg-avg,
+.chlegend .lg-cur,
+.chlegend .lg-old {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  vertical-align: 3px;
+}
+
+.chlegend .lg-net,
+.chlegend .lg-cur { background: var(--ink); }
+.chlegend .lg-avg { background: var(--pos); }
+.chlegend .lg-old { background: var(--ink-3); }
+
+/* The table twin. */
+details.tbl {
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+details.tbl summary {
+  display: inline-flex;
+  gap: 6px;
+  font: 11.5px var(--mono);
+  color: var(--ink-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+details.tbl summary::-webkit-details-marker { display: none; }
+details.tbl summary::before { content: "▸"; }
+details.tbl[open] summary::before { content: "▾"; }
+
+details.tbl table,
+.chartsview .yt {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+details.tbl table { margin-top: 8px; }
+
+details.tbl th,
+.chartsview .yt th {
+  padding: 4px 8px;
+  font: 500 11px var(--sans);
+  color: var(--ink-3);
+  text-align: right;
+  border-bottom: 1px solid var(--line-2);
+}
+
+details.tbl td,
+.chartsview .yt td {
+  padding: 4px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+details.tbl th:first-child,
+details.tbl td:first-child,
+.chartsview .yt th:first-child,
+.chartsview .yt td:first-child {
+  text-align: left;
+}
+
+details.tbl tr:last-child td { border-bottom: 0; }
+
+.chartsview .ytwrap { overflow-x: auto; }
+.chartsview .yt td { padding: 7px 10px; font-size: 12.5px; }
+.chartsview .yt tr.cur td { font-weight: 600; }
+.chartsview .yt td.n { color: var(--neg); }
+
+/* --- stat tiles ------------------------------------------------------------- */
+
+.chartsview .tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px;
+}
+
+.chartsview .tile {
+  padding: 12px 16px 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.chartsview .tile .lab {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* A standalone figure keeps proportional digits; tabular-nums is for
+ * columns that line up. */
+.chartsview .tile .val {
+  margin-top: 2px;
+  font: 600 24px var(--sans);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.chartsview .tile .val.neg { color: var(--neg); }
+
+.chartsview .tile .dl {
+  margin-top: 3px;
+  font: 11.5px var(--mono);
+  color: var(--ink-3);
+}
+
+.chartsview .tile .meter {
+  height: 6px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.chartsview .tile .meter span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--pos);
+}
+
+/* --- the plot frame --------------------------------------------------------- */
+
+.chartsview .plot {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  grid-template-rows: var(--h, 220px) 22px;
+}
+
+.chartsview .plot.has-pad { padding-right: 36px; }
+
+.chartsview .yax {
+  position: relative;
+  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+.chartsview .yax span {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.chartsview .pa { position: relative; }
+
+.chartsview .gl {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--line);
+}
+
+.chartsview .gl.zero { border-top-color: var(--line-2); }
+
+.chartsview .xax {
+  position: relative;
+  grid-column: 2;
+  font: 11px var(--mono);
+  color: var(--ink-3);
+}
+
+.chartsview .xax span {
+  position: absolute;
+  top: 5px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.chartsview .xax span.cur {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.chartsview svg.ov {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.chartsview svg.ov path {
+  vector-effect: non-scaling-stroke;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chartsview svg.ov .l-net,
+.chartsview svg.ov .l-cur { stroke: var(--ink); stroke-width: 2; }
+.chartsview svg.ov .l-cur { stroke-width: 2.25; }
+.chartsview svg.ov .l-avg { stroke: var(--pos); stroke-width: 2; }
+.chartsview svg.ov .l-sel { stroke: var(--info); stroke-width: 2; }
+.chartsview svg.ov .l-old { stroke: var(--ink-3); stroke-width: 1.5; opacity: 0.8; }
+.chartsview svg.ov .l-spark { stroke: var(--ink-2); stroke-width: 1.5; }
+.chartsview .smc.sel svg.ov .l-spark { stroke: var(--info); }
+
+/* Areas are a wash of their line's color, never a block. */
+.chartsview svg.ov .a-net { fill: var(--ink); fill-opacity: 0.07; stroke: none; }
+.chartsview svg.ov .a-sel { fill: var(--info); fill-opacity: 0.1; stroke: none; }
+.chartsview svg.ov .a-spark { fill: var(--ink-2); fill-opacity: 0.12; stroke: none; }
+.chartsview .smc.sel svg.ov .a-spark { fill: var(--info); }
+.chartsview svg.ov .a-good { fill: var(--pos); fill-opacity: 0.13; stroke: none; }
+.chartsview svg.ov .a-bad { fill: var(--neg); fill-opacity: 0.13; stroke: none; }
+
+/* IN up from zero, OUT down from it: 4px rounded data ends, square at the
+ * baseline, a 2px gap between the two. */
+.chartsview .col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.chartsview .bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(22px, 56%);
+}
+
+.chartsview .bar.in {
+  margin-top: -1px;
+  background: var(--pos);
+  border-radius: 4px 4px 0 0;
+}
+
+.chartsview .bar.out {
+  margin-top: 1px;
+  background: var(--ink-2);
+  border-radius: 0 0 4px 4px;
+}
+
+/* A projected income: the same place, drawn as a promise. */
+.chartsview .bar.in.est {
+  background: var(--pos-soft);
+  border: 1.5px dashed var(--pos);
+  border-bottom: 0;
+}
+
+.chartsview .chdot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
+
+.chartsview .chdot.sm { width: 7px; height: 7px; }
+.chartsview .chdot.d-neg { background: var(--neg); }
+.chartsview .chdot.d-pos { background: var(--pos); }
+.chartsview .chdot.d-sel { background: var(--info); }
+.chartsview .chdot.d-old { background: var(--ink-3); }
+.chartsview .chdot.spk { background: var(--ink-2); }
+.chartsview .smc.sel .chdot.spk { background: var(--info); }
+
+.chartsview .chdot.d-est {
+  background: var(--surface);
+  box-shadow: 0 0 0 1.5px var(--pos);
+}
+
+/* A line's label beside its last point. */
+.chartsview .endl {
+  position: absolute;
+  font: 600 11.5px var(--mono);
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.chartsview .endl.old {
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.chartsview .endl.at-above { transform: translate(-100%, -150%); padding-right: 6px; }
+.chartsview .endl.at-below { transform: translate(-100%, 60%); padding-right: 6px; }
+.chartsview .endl.at-end { transform: translateY(-50%); padding-left: 8px; }
+
+/* Hover: one box per column, the whole height — a reader aims at a month,
+ * never at a 2px line. The tip is inside it, so raising the box raises it. */
+.chartsview .chhit {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+}
+
+.chartsview .chhit:hover {
+  z-index: 3;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.chartsview .chtip {
+  position: absolute;
+  top: -6px;
+  left: calc(100% + 6px);
+  min-width: 150px;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  box-shadow: var(--shadow-md);
+  font: 12px var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  /* Not `opacity: 0`: a hidden tip still counts toward the body's scroll
+   * width, and the ones by the right edge scrolled a phone sideways. */
+  display: none;
+}
+
+.chartsview .chhit.flip .chtip {
+  left: auto;
+  right: calc(100% + 6px);
+}
+
+.chartsview .chhit:hover .chtip { display: block; }
+
+.chartsview .chtip .th {
+  margin-bottom: 3px;
+  font: 600 11.5px var(--sans);
+  color: var(--ink-2);
+}
+
+.chartsview .chtip .tr {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chartsview .chtip .tr b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.chartsview .chtip .tr span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font: 11.5px var(--sans);
+  color: var(--ink-3);
+}
+
+/* A short stroke keys each row of a tip, not a box. */
+.chartsview .chtip .k {
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.chartsview .k-in { background: var(--pos); }
+.chartsview .k-out { background: var(--ink-2); }
+.chartsview .k-net { background: var(--ink); }
+.chartsview .k-neg { background: var(--neg); }
+.chartsview .k-sel { background: var(--info); }
+.chartsview .k-old { background: var(--ink-3); }
+
+/* --- horizontal bars: buckets, bills still to pay ----------------------------- */
+
+.chartsview .hb {
+  display: grid;
+  grid-template-columns: minmax(70px, max-content) minmax(0, 1fr);
+  gap: 7px 12px;
+  align-items: center;
+}
+
+.chartsview .hb .nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.chartsview .unc {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+/* Every length is a share of the track less room for the value beside it,
+ * so the longest bar's label never runs off a narrow card. */
+.chartsview .hb .tr {
+  --room: 150px;
+  position: relative;
+  height: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.chartsview .hb .b {
+  flex: none;
+  height: 14px;
+  width: calc((100% - var(--room)) * var(--f));
+  background: var(--ink-2);
+  border-radius: 0 4px 4px 0;
+}
+
+.chartsview .hb .b.muted { background: var(--line-2); }
+
+/* A bill's row says when it is due beside its amount: more room. */
+.chartsview .hb.topay .tr { --room: 290px; }
+
+.chartsview .hb .at,
+.chartsview .hb .prev {
+  left: calc((100% - var(--room)) * var(--f));
+}
+
+.chartsview .hb .at {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: baseline;
+  padding-left: 6px;
+}
+
+.chartsview .hb .v {
+  padding-left: 2px;
+  font: 11.5px var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.chartsview .hb .d {
+  margin-left: 8px;
+  font: 11px var(--mono);
+  white-space: nowrap;
+}
+
+/* Last month's value: a 2px tick across the bar. */
+.chartsview .hb .prev {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  border-radius: 1px;
+  background: var(--ink);
+}
+
+.chartsview .hb .tr:hover {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.chartsview .hb .tr .chtip {
+  top: 22px;
+  left: 0;
+}
+
+.chartsview .hb .tr:hover .chtip {
+  z-index: 3;
+  display: block;
+}
+
+/* Mirrored rows: OUT to the left of a center line, IN to the right. */
+.chartsview .mir,
+.chartsview .chdiv {
+  display: grid;
+  grid-template-columns: minmax(60px, max-content) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 9px 0;
+  align-items: center;
+}
+
+.chartsview .chdiv { gap: 7px 0; }
+
+.chartsview .mir .nm,
+.chartsview .chdiv .nm {
+  padding-right: 12px;
+  font-size: 12.5px;
+}
+
+.chartsview .mir .l,
+.chartsview .mir .r,
+.chartsview .chdiv .l,
+.chartsview .chdiv .r {
+  position: relative;
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.chartsview .mir .l,
+.chartsview .chdiv .l {
+  justify-content: flex-end;
+  border-right: 1px solid var(--line-2);
+}
+
+.chartsview .mir .b,
+.chartsview .chdiv .b {
+  flex: none;
+  height: 14px;
+  width: calc((100% - 120px) * var(--f));
+}
+
+.chartsview .chdiv .b { height: 12px; }
+.chartsview .mir .l .b { background: var(--ink-2); border-radius: 4px 0 0 4px; }
+.chartsview .mir .r .b { background: var(--pos); border-radius: 0 4px 4px 0; }
+
+.chartsview .mir .r .b.est {
+  background: var(--pos-soft);
+  border: 1.5px dashed var(--pos);
+  border-left: 0;
+}
+
+/* What moved: spending that rose goes right, in red; what fell, left, green. */
+.chartsview .chdiv .r .b { background: var(--neg); border-radius: 0 4px 4px 0; }
+.chartsview .chdiv .l .b { background: var(--pos); border-radius: 4px 0 0 4px; }
+
+.chartsview .mir .v,
+.chartsview .chdiv .v {
+  padding: 0 7px;
+  font: 11.5px var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.chartsview .chdiv .v small {
+  margin-left: 4px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.chartsview .mir .head {
+  padding: 0 7px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.chartsview .mir .head.l { border: 0; }
+
+/* Recurring | one-off, one bar with a 2px gap. */
+.chstack {
+  display: flex;
+  gap: 2px;
+  height: 22px;
+  margin: 22px 0 6px;
+}
+
+.chstack span {
+  position: relative;
+  height: 100%;
+}
+
+.chstack span:first-child {
+  background: var(--ink-2);
+  border-radius: 4px 0 0 4px;
+}
+
+.chstack span:last-child {
+  background: color-mix(in srgb, var(--ink-2) 38%, var(--surface));
+  border-radius: 0 4px 4px 0;
+}
+
+.chstack label {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.chstack span:last-child label {
+  left: auto;
+  right: 0;
+}
+
+.chstack label b {
+  font: 600 12px var(--mono);
+  color: var(--ink);
+}
+
+/* --- small multiples -------------------------------------------------------- */
+
+.chartsview .sm {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.chartsview .smc {
+  position: relative;
+  padding: 9px 11px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.chartsview .smc .top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.chartsview .smc .nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.chartsview .smc .t {
+  font: 11.5px var(--mono);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.chartsview .smc .sp {
+  position: relative;
+  height: 42px;
+  margin-top: 6px;
+}
+
+.chartsview .smc .ft {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font: 10.5px var(--mono);
+  color: var(--ink-3);
+}
+
+/* --- a phone ---------------------------------------------------------------- */
+
+@media (max-width: 700px) {
+  .chchips {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .chcap { column-gap: 8px; }
+
+  .chtab kbd,
+  .chchip kbd { display: none; }
+
+  .chartsview .plot { grid-template-columns: 40px 1fr; }
+  .chartsview .tile .val { font-size: 20px; }
+
+  .chartsview .chdiv .v small,
+  .chartsview .hb .d { display: none; }
+
+  .chartsview .hb.topay .tr { --room: 150px; }
+}

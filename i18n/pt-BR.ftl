@@ -1084,3 +1084,110 @@ prepare-failed = Não foi possível calcular o tamanho — o arquivo ficou como 
 prepare-shrink-no-gain = não diminui — mantido
 prepare-not-pdf = Só um PDF ou uma imagem pode ser recortado ou reduzido
 prepare-trim = Recortar / reduzir
+
+# --- :charts / gc -----------------------------------------------------------------
+charts-title = Gráficos
+charts-menu = gráficos do dinheiro — este mês, este ano, todos os anos
+charts-tab-month = Mês
+charts-tab-year = Ano
+charts-tab-years = Anos
+charts-admin = admin
+charts-household = Casa
+charts-from = de
+charts-to = até
+charts-close = Fechar
+charts-table = tabela
+charts-empty = Nada registrado nestes meses ainda.
+charts-refused = A aba Anos é de um admin.
+charts-selected = { $n ->
+        [one] 1 linha selecionada · s mostra tudo
+       *[other] { $n } linhas selecionadas · s mostra tudo
+    }
+charts-selected-off = { $n ->
+        [one] 1 linha selecionada · s mostra só ela
+       *[other] { $n } linhas selecionadas · s mostra só elas
+    }
+charts-in = Entradas
+charts-out = Saídas
+charts-net = Saldo
+charts-vs = vs { $period }
+charts-flat = igual
+charts-new = novo
+charts-includes-estimate = { $n ->
+        [one] entrada ~ inclui 1 estimativa
+       *[other] entrada ~ inclui { $n } estimativas
+    }
+charts-kept = Guardado do que entrou
+charts-to-pay = Ainda a pagar
+charts-to-pay-none = nada mais neste mês
+charts-to-pay-note = { $n ->
+        [one] 1 conta · próxima { $day }
+       *[other] { $n } contas · próxima { $day }
+    }
+charts-bills = { $n ->
+        [one] 1 conta
+       *[other] { $n } contas
+    }
+charts-buckets-title = Gastos por categoria
+charts-buckets-sub = { $period } · maiores primeiro
+charts-this-month = este mês
+charts-bucket = Categoria
+charts-members-title = Quem movimentou o dinheiro
+charts-members-sub = { $period } · gastos à esquerda, entradas à direita
+charts-fixed-title = Fixo e variável
+charts-fixed-sub = o que se repete todo mês, e o que não
+charts-recurring = Recorrente
+charts-oneoff = Avulso
+charts-fixed-note = Recorrente é o que uma regra trouxe; avulso é o que foi digitado à mão.
+charts-topay-title = Ainda a pagar neste mês
+charts-topay-sub = contas ainda não confirmadas, por vencimento
+charts-due = vence { $day }
+charts-late = atrasada desde { $day }
+charts-scheduled = agendada
+charts-flow-title = Fluxo de caixa
+charts-flow-sub = { $range } · entradas acima da linha, gastos abaixo
+charts-kept-title = Guardado até agora
+charts-kept-sub = o saldo somado, mês a mês
+charts-kept-so-far = guardado até agora
+charts-that-month = naquele mês
+charts-trend-title = A renda está crescendo?
+charts-trend-sub = média de 3 meses, desde { $month } ·
+charts-trend-short = a média precisa de quatro meses
+charts-month = mês
+charts-avg = média 3 meses
+charts-moved-title = O que mudou
+charts-moved-sub = média mensal, { $now } contra { $before } · maior mudança primeiro
+charts-moved-none = Nada mudou muito.
+charts-moved-short = Precisa de seis meses: os três últimos contra os três anteriores.
+charts-per-month = { $amount }/mês
+charts-change = mudança por mês
+charts-each-bucket-title = Cada categoria, mês a mês
+charts-each-bucket-sub = { $range } · uma escala só, para as alturas se compararem entre os cartões
+charts-together = juntas
+charts-together-title = { $n ->
+        [one] A linha selecionada
+       *[other] As { $n } linhas selecionadas, juntas
+    }
+charts-together-sub = seguidas pelos meses pela regra, ou pelo título · { $range }
+charts-each-title = Cada uma
+charts-each-sub = seguidas pelos meses pela regra, ou pelo título · uma escala só
+charts-years-range = { $range } de cada ano
+charts-years-flow-title = Os mesmos meses, todo ano
+charts-years-flow-sub = { $range } de cada ano, para este ano não ser um ano pela metade contra anos inteiros
+charts-spent-so-far = Gasto até agora, por ano
+charts-earned-so-far = Recebido até agora, por ano
+charts-by-month-against = até { $month }, contra { $year } ·
+charts-years-table-title = Ano a ano
+charts-years-table-sub = { $range } · a última coluna é o ano inteiro, para os anos que já acabaram
+charts-col-year = Ano
+charts-col-kept = guardado
+charts-col-vs = saldo vs ano anterior
+charts-col-whole = saldo do ano inteiro
+charts-key-tab = aba
+charts-key-period = antes · depois
+charts-key-member = membro
+charts-key-sel = seleção ⇄ tudo
+charts-key-scroll = rolar
+charts-key-close = fechar
+command-about-charts = gráficos do dinheiro — este mês, este ano, todos os anos
+keymap-row-charts = gráficos — este mês, este ano, todos os anos

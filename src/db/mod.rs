@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod bill_codes;
 pub mod changes;
+pub mod charts;
 pub mod ledger;
 pub mod members;
 pub mod order;

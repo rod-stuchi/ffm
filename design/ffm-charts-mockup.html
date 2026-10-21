@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FFM — :charts mockup</title>
+<!--
+  :charts — the full-viewport chart viewer. A THROWAWAY mockup, like the
+  others in design/: the JS below builds the markup from an array, which is
+  exactly the client-side data model the real app forbids. Port the markup
+  and the CSS; the server renders the same HTML from Askama (src/ui/chart.rs
+  computes every left/top/height percentage), with no JS at all.
+
+  What it is meant to prove before any Rust:
+  - charts are HTML boxes + one SVG per line/area, so text never scales with
+    the viewport and every mark reads a var(--token);
+  - hover tooltips are pure CSS (a .hit box per column, :hover);
+  - every chart has a <details> table twin;
+  - IN above the zero line, OUT below it — position carries the difference,
+    because no shade of --ink separates from --pos in every one of the
+    eleven palettes (Everforest, Rosé Pine, Catppuccin and One Dark dark fail
+    the normal-vision floor), so color only backs position up.
+
+  The statusline's right end holds MOCK-ONLY controls: palette, light/dark,
+  hidden amounts (gh), and a simulated selection.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F6F3ED;--surface:#FFFDF8;--surface-2:#EEE9DE;--ink:#211E19;--ink-2:#5C554A;--ink-3:#8E8578;
+  --line:#E1DACC;--accent:#A8620A;--pos:#3D7A4B;--neg:#B23A2B;--info:#3F6288;
+  --surface-3:color-mix(in srgb,var(--surface-2) 84%,var(--ink));
+  --line-2:color-mix(in srgb,var(--line) 72%,var(--ink));
+  --accent-soft:color-mix(in srgb,var(--accent) 13%,transparent);
+  --pos-soft:color-mix(in srgb,var(--pos) 15%,transparent);
+  --neg-soft:color-mix(in srgb,var(--neg) 14%,transparent);
+  --info-soft:color-mix(in srgb,var(--info) 14%,transparent);
+  --shadow-md:0 2px 4px rgba(20,16,10,.05),0 12px 28px rgba(20,16,10,.10);
+  --sans:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:10px;--status-h:30px;
+  --safe-t:env(safe-area-inset-top,0px);--safe-r:env(safe-area-inset-right,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);--safe-l:env(safe-area-inset-left,0px);
+  --foot-h:calc(var(--status-h) + var(--safe-b));
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#171512;--surface:#201D18;--surface-2:#2A261E;--ink:#EEE8DB;--ink-2:#B2A995;--ink-3:#807869;
+    --line:#332E25;--accent:#E9A63F;--pos:#82B47D;--neg:#E28470;--info:#8FB0D6;
+    --shadow-md:0 2px 4px rgba(0,0,0,.34),0 14px 32px rgba(0,0,0,.44);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#171512;--surface:#201D18;--surface-2:#2A261E;--ink:#EEE8DB;--ink-2:#B2A995;--ink-3:#807869;
+  --line:#332E25;--accent:#E9A63F;--pos:#82B47D;--neg:#E28470;--info:#8FB0D6;
+  --shadow-md:0 2px 4px rgba(0,0,0,.34),0 14px 32px rgba(0,0,0,.44);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+.mono,.tnum{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit}
+[hidden]{display:none!important}
+:root[data-hide] .money{filter:url(#ffm-pixelate) brightness(.7);user-select:none}
+.pxdefs{position:absolute;width:0;height:0;overflow:hidden}
+
+/* ---------- the statusline, under the overlay (as in the app) ---------- */
+.status{position:fixed;left:0;right:0;bottom:0;height:var(--foot-h);padding-bottom:var(--safe-b);
+  display:flex;align-items:center;gap:14px;padding-inline:12px;background:var(--surface-2);
+  border-top:1px solid var(--line);font:12px var(--mono);color:var(--ink-2);white-space:nowrap;overflow-x:auto}
+.status .mode{background:var(--accent);color:var(--paper);font-weight:600;padding:1px 8px;border-radius:4px}
+.status .grow{flex:1}
+.status .mock{display:flex;gap:6px;align-items:center;color:var(--ink-3)}
+.status select,.status .mk{font:12px var(--mono);background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:5px;padding:1px 6px;cursor:pointer}
+.status .mk.is-on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+/* ---------- the overlay: the P carousel's frame ---------- */
+.charts{position:fixed;inset:var(--safe-t) var(--safe-r) var(--foot-h) var(--safe-l);z-index:50;display:grid}
+.chstage{--cbar-h:34px;width:100vw;height:100%;background:var(--surface);display:grid;grid-template-rows:max-content 1fr max-content;overflow:hidden}
+
+.ccap{display:flex;flex-wrap:wrap;align-items:center;column-gap:14px;row-gap:4px;min-height:var(--cbar-h);
+  padding:4px 12px 4px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.ccap .cicon svg{width:18px;height:18px;fill:none;stroke:var(--ink-3);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
+.tabs,.chips{display:flex;gap:2px;align-items:center}
+.tab,.chip{font:12px var(--mono);border:1px solid transparent;background:none;border-radius:6px;padding:2px 9px;cursor:pointer;color:var(--ink-2);display:inline-flex;gap:6px;align-items:baseline}
+.tab kbd{font:10px var(--mono);color:var(--ink-3)}
+.tab:hover,.chip:hover{background:var(--surface)}
+.tab.is-on{background:var(--surface);border-color:var(--line-2);color:var(--ink);font-weight:600}
+.tab .adm{font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.chips{padding-left:12px;border-left:1px solid var(--line-2)}
+.chip{font-family:var(--sans);font-size:12.5px}
+.chip.is-on{color:var(--ink);background:var(--surface);border-color:var(--line-2)}
+.chip kbd{font:10px var(--mono);color:var(--ink-3)}
+.cright{margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;align-items:center;min-width:0}
+.btn{font:12px var(--mono);background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:6px;padding:2px 8px;cursor:pointer}
+.btn:hover{border-color:var(--ink-3)}
+.per{display:flex;align-items:center;gap:4px;font:12px var(--mono);color:var(--ink-2)}
+.per b{color:var(--ink);font-weight:600;min-width:64px;text-align:center}
+.per input{font:12px var(--mono);background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:5px;padding:1px 4px;width:118px}
+.selchip{display:none;font:12px var(--mono);color:var(--info);background:var(--info-soft);border-radius:6px;padding:2px 9px}
+.has-sel .selchip{display:inline-block}
+
+.chbody{overflow:auto;padding:18px clamp(12px,3vw,32px) 28px}
+.chgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;max-width:1360px;margin:0 auto}
+.span-12{grid-column:span 12}.span-7{grid-column:span 7}.span-5{grid-column:span 5}.span-6{grid-column:span 6}
+@media (max-width:980px){.span-7,.span-5,.span-6{grid-column:span 12}}
+
+.cnav{display:flex;gap:16px;align-items:center;min-height:var(--cbar-h);padding:4px 16px;border-top:1px solid var(--line);
+  background:var(--surface-2);font:11.5px var(--mono);color:var(--ink-3);white-space:nowrap;overflow-x:auto}
+.cnav kbd{font:11px var(--mono);color:var(--ink-2);background:var(--surface);border:1px solid var(--line-2);border-bottom-width:2px;border-radius:4px;padding:0 5px;margin-right:4px}
+
+/* ---------- a card ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px 10px;min-width:0}
+.card h3{font:600 13.5px var(--sans);letter-spacing:.005em}
+.card .sub{font-size:12px;color:var(--ink-3);margin-top:1px}
+.card header{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-bottom:12px}
+.card header .hl{flex:1;min-width:180px}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--ink-2);align-items:center}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.legend i.ln{height:2px;width:14px;border-radius:1px;vertical-align:3px}
+.legend i.lgd{width:8px;height:8px;border-radius:50%}
+
+details.tbl{margin-top:10px;border-top:1px solid var(--line);padding-top:6px}
+details.tbl summary{font:11.5px var(--mono);color:var(--ink-3);cursor:pointer;list-style:none;display:inline-flex;gap:6px}
+details.tbl summary::before{content:"▸"}
+details.tbl[open] summary::before{content:"▾"}
+details.tbl table{margin-top:8px;width:100%;border-collapse:collapse;font:12px var(--mono);font-variant-numeric:tabular-nums}
+details.tbl th{font:500 11px var(--sans);color:var(--ink-3);text-align:right;padding:3px 8px;border-bottom:1px solid var(--line)}
+details.tbl td{text-align:right;padding:3px 8px;border-bottom:1px solid var(--line)}
+details.tbl th:first-child,details.tbl td:first-child{text-align:left}
+details.tbl tr:last-child td{border-bottom:0}
+
+/* ---------- stat tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px 13px}
+.tile .lab{font-size:12px;color:var(--ink-3)}
+.tile .val{font:600 24px var(--sans);letter-spacing:-.01em;margin-top:2px;white-space:nowrap}
+.tile .val.neg{color:var(--neg)}
+.tile .dl{font:11.5px var(--mono);margin-top:3px;color:var(--ink-3)}
+.dl .up,.dl .dn{font-weight:600}
+.good{color:var(--pos)}.bad{color:var(--neg)}
+.tile .meter{height:6px;border-radius:3px;background:var(--surface-2);margin-top:9px;overflow:hidden}
+.tile .meter span{display:block;height:100%;background:var(--pos);border-radius:3px}
+.tile.est .val::before{content:"~";color:var(--ink-3);margin-right:1px}
+
+/* ---------- the plot frame: HTML boxes + an SVG for lines ---------- */
+.plot{display:grid;grid-template-columns:52px 1fr;grid-template-rows:var(--h,220px) 22px}
+.yax{position:relative;font:11px var(--mono);color:var(--ink-3);font-variant-numeric:tabular-nums}
+.yax span{position:absolute;right:8px;transform:translateY(-50%);white-space:nowrap}
+.pa{position:relative}
+.gl{position:absolute;left:0;right:0;height:0;border-top:1px solid var(--line)}
+.gl.zero{border-top-color:var(--line-2)}
+.xax{position:relative;grid-column:2;font:11px var(--mono);color:var(--ink-3)}
+.xax span{position:absolute;top:5px;transform:translateX(-50%);white-space:nowrap}
+.xax span.cur{color:var(--ink);font-weight:600}
+svg.ov{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+svg.ov path{vector-effect:non-scaling-stroke;fill:none;stroke-linejoin:round;stroke-linecap:round}
+.l-net{stroke:var(--ink);stroke-width:2}
+.l-in{stroke:var(--pos);stroke-width:2}
+.l-sel{stroke:var(--info);stroke-width:2}
+.l-cur{stroke:var(--ink);stroke-width:2.25}
+.l-old{stroke:var(--ink-3);stroke-width:1.5;opacity:.75}
+.a-net{fill:var(--ink)!important;fill-opacity:.07;stroke:none!important}
+.a-sel{fill:var(--info)!important;fill-opacity:.10;stroke:none!important}
+.a-spark{fill:var(--ink-2)!important;fill-opacity:.12;stroke:none!important}
+.l-spark{stroke:var(--ink-2);stroke-width:1.5}
+.l-avg{stroke:var(--pos);stroke-width:2}
+
+/* columns: IN grows up from zero, OUT grows down */
+.col{position:absolute;top:0;bottom:0}
+.bar{position:absolute;left:50%;transform:translateX(-50%);width:min(22px,56%)}
+.bar.in{background:var(--pos);border-radius:4px 4px 0 0;margin-top:-1px}
+.bar.out{background:var(--ink-2);border-radius:0 0 4px 4px;margin-top:1px}
+.bar.in.est{background:var(--pos-soft);border:1.5px dashed var(--pos);border-bottom:0}
+.bar.in.sel{background:var(--info)}
+.dot{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--ink);transform:translate(-50%,-50%);box-shadow:0 0 0 2px var(--surface);pointer-events:none}
+.dot.neg{background:var(--neg)}
+.dot.sel{background:var(--info)}
+.dot.pos{background:var(--pos)}
+.dot.sm{width:7px;height:7px}
+.endl{position:absolute;transform:translateY(-50%);font:600 11.5px var(--mono);white-space:nowrap;padding-left:8px;color:var(--ink)}
+.endl.old{font-weight:400;color:var(--ink-3)}
+
+/* hover: one box per column, the whole height; the tip lives inside it */
+.hit{position:absolute;top:0;bottom:0;z-index:1}
+.hit:hover{background:color-mix(in srgb,var(--ink) 5%,transparent);z-index:3}
+.tip{position:absolute;top:-6px;left:calc(100% + 6px);min-width:150px;padding:7px 10px;background:var(--surface);
+  border:1px solid var(--line-2);border-radius:7px;box-shadow:var(--shadow-md);font:12px var(--mono);
+  font-variant-numeric:tabular-nums;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .08s}
+.hit.flip .tip{left:auto;right:calc(100% + 6px)}
+.hit:hover .tip{opacity:1}
+.tip .th{font:600 11.5px var(--sans);color:var(--ink-2);margin-bottom:3px}
+.tip .tr{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.tip .tr b{font-weight:600;color:var(--ink)}
+.tip .tr span{color:var(--ink-3);font-family:var(--sans);font-size:11.5px;display:inline-flex;align-items:center;gap:6px}
+.tip .k{display:inline-block;width:10px;height:2px;border-radius:1px}
+
+/* ---------- horizontal bars (buckets, members, movers) ---------- */
+.hb{display:grid;grid-template-columns:minmax(70px,max-content) minmax(0,1fr);gap:7px 12px;align-items:center}
+.hb .nm{min-width:0;font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb .nm.unc{color:var(--ink-3);font-style:italic}
+.hb .tr{position:relative;height:18px;display:flex;align-items:center}
+/* every length is a share of the track minus room for the value beside it */
+.hb .tr{--room:150px}
+.hb .b{height:14px;background:var(--ink-2);border-radius:0 4px 4px 0;flex:none;width:calc((100% - var(--room)) * var(--f))}
+.hb .at,.hb .prev{left:calc((100% - var(--room)) * var(--f))}
+.hb .v{font:11.5px var(--mono);font-variant-numeric:tabular-nums;color:var(--ink);padding-left:8px;white-space:nowrap}
+.hb .at{position:absolute;top:50%;transform:translateY(-50%);display:flex;align-items:baseline;padding-left:6px}
+.hb .d{font:11px var(--mono);margin-left:8px;white-space:nowrap}
+.hb .prev{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);border-radius:1px;transform:translateX(-1px)}
+.hb .tr:hover{background:color-mix(in srgb,var(--ink) 4%,transparent);border-radius:3px}
+.hb .tr .tip{top:22px;left:0}
+.hb .tr:hover .tip{opacity:1;z-index:3}
+
+/* mirrored rows: OUT to the left of a center line, IN to the right */
+.mir{display:grid;grid-template-columns:minmax(60px,max-content) minmax(0,1fr) minmax(0,1fr);gap:9px 0;align-items:center}
+.mir .nm{font-size:12.5px;padding-right:12px}
+.mir .l,.mir .r{position:relative;height:20px;display:flex;align-items:center}
+.mir .l{justify-content:flex-end;border-right:1px solid var(--line-2);padding-right:1px}
+.mir .r{padding-left:1px}
+.mir .l .b{height:14px;background:var(--ink-2);border-radius:4px 0 0 4px}
+.mir .r .b{height:14px;background:var(--pos);border-radius:0 4px 4px 0}
+.mir .r .b.est{background:var(--pos-soft);border:1.5px dashed var(--pos);border-left:0}
+.mir .v{font:11.5px var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;padding:0 7px}
+.mir .head{font-size:11px;color:var(--ink-3);padding:0 7px}
+.mir .head.l{border:0;justify-content:flex-end}
+
+.div{display:grid;grid-template-columns:minmax(70px,max-content) minmax(0,1fr) minmax(0,1fr);gap:7px 0;align-items:center}
+.div .nm{font-size:12.5px;padding-right:12px}
+.div .l,.div .r{position:relative;height:18px;display:flex;align-items:center}
+.div .l{justify-content:flex-end;border-right:1px solid var(--line-2)}
+.div .b{height:12px}
+.div .r .b{border-radius:0 4px 4px 0;background:var(--neg)}
+.div .l .b{border-radius:4px 0 0 4px;background:var(--pos)}
+.div .v{font:11.5px var(--mono);white-space:nowrap;padding:0 7px;color:var(--ink)}
+.div .v small{color:var(--ink-3);font-size:10.5px;margin-left:4px}
+
+/* stacked: recurring | one-off */
+.stack{display:flex;gap:2px;height:22px;margin:22px 0 6px}
+.stack span{height:100%;position:relative}
+.stack span:first-child{border-radius:4px 0 0 4px;background:var(--ink-2)}
+.stack span:last-child{border-radius:0 4px 4px 0;background:color-mix(in srgb,var(--ink-2) 38%,var(--surface))}
+.stack label{position:absolute;bottom:calc(100% + 4px);left:0;font-size:12px;color:var(--ink-2);white-space:nowrap}
+.stack span:last-child label{left:auto;right:0}
+.stack label b{font:600 12px var(--mono);color:var(--ink)}
+
+/* small multiples */
+.sm{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.smc{border:1px solid var(--line);border-radius:8px;padding:9px 11px 8px;position:relative}
+.smc .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.smc .nm{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.smc .t{font:11.5px var(--mono);color:var(--ink-2);white-space:nowrap}
+.smc .sp{position:relative;height:42px;margin-top:6px}
+.smc .ft{display:flex;justify-content:space-between;font:10.5px var(--mono);color:var(--ink-3);margin-top:3px}
+.smc.sel .l-spark{stroke:var(--info)}
+.smc.sel .a-spark{fill:var(--info)!important}
+
+/* years table */
+.yt{width:100%;border-collapse:collapse;font:12.5px var(--mono);font-variant-numeric:tabular-nums}
+.yt th{font:500 11.5px var(--sans);color:var(--ink-3);text-align:right;padding:6px 10px;border-bottom:1px solid var(--line-2)}
+.yt td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--line)}
+.yt th:first-child,.yt td:first-child{text-align:left}
+.yt tr.cur td{font-weight:600}
+.yt td.n{color:var(--neg)}
+
+.note{font-size:11.5px;color:var(--ink-3);margin-top:8px}
+.panel{display:none}.panel.is-on{display:block}
+
+@media (max-width:700px){
+  .chips{border-left:0;padding-left:0}
+  .ccap{column-gap:8px}
+  .tab kbd,.chip kbd{display:none}
+  .plot{grid-template-columns:40px 1fr}
+  .tile .val{font-size:20px}
+  .per input{width:auto;max-width:112px}
+  .div .v small,.hb .d{display:none}
+  .chbody{padding-inline:10px}
+}
+</style>
+</head>
+<body>
+<svg class="pxdefs" width="0" height="0" aria-hidden="true" focusable="false">
+  <filter id="ffm-pixelate" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+    <feGaussianBlur stdDeviation="1.5"/>
+    <feComponentTransfer result="soft"><feFuncA type="linear" slope="2.5"/></feComponentTransfer>
+    <feFlood width="1" height="1"/><feComposite width="5" height="5"/><feTile result="grid"/>
+    <feComposite in="soft" in2="grid" operator="in"/><feMorphology operator="dilate" radius="2"/>
+  </filter>
+</svg>
+
+<div class="charts" id="charts">
+  <div class="chstage">
+    <div class="ccap">
+      <span class="cicon"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>
+      <nav class="tabs" id="tabs">
+        <button class="tab is-on" data-tab="month"><kbd>1</kbd>Month</button>
+        <button class="tab" data-tab="year"><kbd>2</kbd>Year</button>
+        <button class="tab" data-tab="years"><kbd>3</kbd>Years <span class="adm">admin</span></button>
+      </nav>
+      <nav class="chips" id="chips">
+        <button class="chip is-on"><kbd>H L</kbd>Household</button>
+        <button class="chip">Rodrigo</button>
+        <button class="chip">Natália</button>
+        <button class="chip">Miguel</button>
+      </nav>
+      <span class="selchip" id="selchip">2 selected rows · s to show all</span>
+      <div class="cright">
+        <span class="per" id="per-month"><button class="btn">‹</button><b>10/2026</b><button class="btn">›</button></span>
+        <span class="per" id="per-year" hidden>from <input type="month" value="2026-01"> to <input type="month" value="2026-10"></span>
+        <span class="per" id="per-years" hidden>Jan–Oct of each year</span>
+        <button class="btn" title="Close">esc</button>
+      </div>
+    </div>
+
+    <div class="chbody">
+      <section class="panel is-on" id="p-month"></section>
+      <section class="panel" id="p-year"></section>
+      <section class="panel" id="p-years"></section>
+    </div>
+
+    <div class="cnav">
+      <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>tab</span>
+      <span><kbd>[</kbd><kbd>]</kbd>month</span>
+      <span><kbd>H</kbd><kbd>L</kbd>member</span>
+      <span><kbd>s</kbd>selection ⇄ all</span>
+      <span><kbd>j</kbd><kbd>k</kbd>scroll</span>
+      <span><kbd>esc</kbd>close</span>
+    </div>
+  </div>
+</div>
+
+<div class="status">
+  <span class="mode">NORMAL</span>
+  <span>:charts</span>
+  <span class="grow"></span>
+  <span class="mock">mock ·
+    <select id="pal"></select>
+    <button class="mk" data-m="light">light</button><button class="mk" data-m="dark">dark</button><button class="mk is-on" data-m="system">system</button>
+    <button class="mk" id="hide">gh</button>
+    <button class="mk" id="sel">x×2</button>
+  </span>
+</div>
+
+<script>
+/* ===== mock data: the seed household, Jan–Oct 2026 ===================== */
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const N = 10; // Jan..Oct — today is 20/10/2026, nothing past it is drawn
+const BUCKETS = {
+  'Casa':      [5200,5200,5200,5200,5200,5200,5200,5200,5200,5200],
+  'Carro':     [2650,2650,2650,2650,2650,2650,9800,2650,2650,2650],
+  'Mercado':   [2480,2210,2390,2640,2150,2300,2420,2510,2280,2196],
+  'Escola':    [3400,1900,1900,1900,1900,1900,1900,1900,1900,1900],
+  'Saúde':     [980,1010,1120,1080,1150,1240,1290,1360,1420,1508],
+  'Consumo':   [1010,960,920,880,850,830,860,900,940,1004],
+  'Dívidas':   [600,600,600,600,600,600,600,600,600,600],
+  'Mesada':    [400,400,400,400,400,400,400,400,400,400],
+  'Academia':  [320,320,320,320,240,240,240,240,240,240],
+  'Presentes': [0,0,180,0,350,0,0,0,0,120],
+  '':          [210,90,140,380,60,120,40,200,160,94],
+};
+const IN  = [22400,22400,23150,22400,24800,22400,21400,23400,23100,24180];
+const OUT = Array.from({length:N},(_,i)=>Object.values(BUCKETS).reduce((s,a)=>s+a[i],0));
+const EST = [false,false,false,false,false,false,false,false,false,true]; // Natália's Consultoria, not landed yet
+const MEMBERS = [ // October
+  {n:'Rodrigo', in:15800, out:9600},
+  {n:'Natália', in:7980,  out:5872, est:true},
+  {n:'Miguel',  in:400,   out:440},
+];
+const RECURRING_OCT = 11994;
+// Years: Jan–Oct of each year, and the twelve monthly OUT/IN for the lines
+const YEARS = {
+  2023:{in:[19100,19100,19400,19600,20200,19800,19800,20300,20400,20500,20800,27600], out:[16900,16200,17100,17600,16800,17400,17900,16800,17100,17300,17800,21900]},
+  2024:{in:[20900,20900,21100,21300,21700,21500,21400,21900,22000,22100,22300,29800], out:[17200,16900,17600,18100,17300,17800,18400,17200,17600,17900,18400,23100]},
+  2025:{in:[21800,21900,22000,22100,22600,22300,22100,22500,22600,22700,22800,30600], out:[17900,17400,18200,18800,18000,18400,19100,18100,18300,18700,19300,24200]},
+  2026:{in:IN, out:OUT},
+};
+const SEL = { // two selected rows, followed across months by rule
+  'Energia · Enel SP': [310,295,280,262,248,240,251,268,289,312],
+  'Água · Sabesp':     [152,148,140,138,135,130,128,132,140,149],
+};
+
+/* ===== formatting: fmt::money / fmt::money_compact ===================== */
+const brl = v => 'R$ ' + Math.abs(v).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+const sgn = v => (v<0?'−':'+') + brl(v);
+const k = v => { const a=Math.abs(v), s=v<0?'−':''; return a>=1000 ? s+(a/1000).toFixed(a>=10000?0:1).replace('.',',')+'k' : s+Math.round(a); };
+const pct = v => (v>0?'+':v<0?'−':'')+Math.abs(Math.round(v))+'%';
+const esc = s => s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const M = (s,cls='') => `<span class="money ${cls}">${s}</span>`;
+
+/* ===== geometry: what src/ui/chart.rs computes ========================= */
+function nice(lo,hi,count=4){ // ticks at 1/2/5 × 10^n, zero always in
+  const span = Math.max(hi-lo,1), raw = span/count, p = 10**Math.floor(Math.log10(raw));
+  const step = [1,2,2.5,5,10].map(m=>m*p).find(s=>s>=raw);
+  const a = Math.floor(lo/step)*step, b = Math.ceil(hi/step)*step, t=[];
+  for(let v=a; v<=b+1e-9; v+=step) t.push(Math.round(v));
+  return {lo:a, hi:b, ticks:t};
+}
+const Y = s => v => (s.hi - v) / (s.hi - s.lo) * 100;  // value -> top %
+const band = n => i => ({l: i*100/n, w: 100/n, c: (i+.5)*100/n});
+
+function frame(scale, xs, body, {h=220, cur=-1}={}){
+  const y = Y(scale);
+  const grid = scale.ticks.map(t=>`<div class="gl ${t===0?'zero':''}" style="top:${y(t)}%"></div>`).join('');
+  const ylab = scale.ticks.map(t=>`<span class="money" style="top:${y(t)}%">${k(t)}</span>`).join('');
+  const b = band(xs.length);
+  const xlab = xs.map((x,i)=>`<span class="${i===cur?'cur':''}" style="left:${b(i).c}%">${x}</span>`).join('');
+  return `<div class="plot" style="--h:${h}px"><div class="yax">${ylab}</div><div class="pa">${grid}${body}</div><div class="xax">${xlab}</div></div>`;
+}
+const path = pts => pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(2)+' '+p[1].toFixed(2)).join('');
+const svg = inner => `<svg class="ov" viewBox="0 0 100 100" preserveAspectRatio="none">${inner}</svg>`;
+function tip(head, rows, flip){
+  return `<div class="tip"><div class="th">${head}</div>${rows.map(r=>`<div class="tr"><span><i class="k" style="background:${r.c}"></i>${r.l}</span><b class="money">${r.v}</b></div>`).join('')}</div>`;
+}
+function table(head, rows){
+  return `<details class="tbl"><summary>table</summary><table><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map((c,i)=>`<td>${i? M(c):c}</td>`).join('')}</tr>`).join('')}</table></details>`;
+}
+const card = (span, title, sub, legend, body) =>
+  `<article class="card span-${span}"><header><div class="hl"><h3>${title}</h3>${sub?`<p class="sub">${sub}</p>`:''}</div>${legend?`<div class="legend">${legend}</div>`:''}</header>${body}</article>`;
+
+/* the cash-flow chart: IN up, OUT down, NET a line with dots */
+function cashflow(labels, ins, outs, est, {cur=-1, h=240, title='Cash flow', sub}={}){
+  const nets = ins.map((v,i)=>v-outs[i]);
+  const s = nice(-Math.max(...outs), Math.max(...ins), 6);
+  const y = Y(s), b = band(labels.length), z = y(0);
+  let cols='', hits='', dots='';
+  labels.forEach((m,i)=>{
+    const {l,w,c} = b(i);
+    cols += `<div class="col" style="left:${l}%;width:${w}%">
+      <div class="bar in ${est[i]?'est':''}" style="top:${y(ins[i])}%;height:${z-y(ins[i])}%"></div>
+      <div class="bar out" style="top:${z}%;height:${y(-outs[i])-z}%"></div></div>`;
+    dots += `<div class="dot ${nets[i]<0?'neg':''}" style="left:${c}%;top:${y(nets[i])}%"></div>`;
+    hits += `<div class="hit ${c>60?'flip':''}" style="left:${l}%;width:${w}%">${tip(m,[
+      {l:'IN'+(est[i]?' ~':''), v:(est[i]?'~':'')+brl(ins[i]), c:'var(--pos)'},
+      {l:'OUT', v:brl(outs[i]), c:'var(--ink-2)'},
+      {l:'NET', v:sgn(nets[i]), c:nets[i]<0?'var(--neg)':'var(--ink)'}])}</div>`;
+  });
+  const line = svg(`<path class="l-net" d="${path(nets.map((v,i)=>[b(i).c,y(v)]))}"/>`);
+  return card(12, title, sub, `<span><i style="background:var(--pos)"></i>IN</span><span><i style="background:var(--ink-2)"></i>OUT</span><span><i class="ln" style="background:var(--ink)"></i>NET</span>`,
+    frame(s, labels, cols+line+dots+hits, {h, cur}) +
+    table(['','IN','OUT','NET'], labels.map((m,i)=>[m,(est[i]?'~':'')+brl(ins[i]),brl(outs[i]),sgn(nets[i])])));
+}
+
+/* ===== Month tab ======================================================= */
+function monthTab(){
+  const i = N-1, inn = IN[i], out = OUT[i], net = inn-out, prevIn = IN[i-1], prevOut = OUT[i-1];
+  const rate = Math.round(net/inn*100);
+  const dIn = (inn-prevIn)/prevIn*100, dOut = (out-prevOut)/prevOut*100;
+  const tiles = `<div class="tiles span-12">
+    <div class="tile est"><div class="lab">IN</div><div class="val">${M(brl(inn))}</div><div class="dl"><span class="${dIn>=0?'good':'bad'}">${dIn>=0?'▲':'▼'} ${pct(dIn)}</span> vs 09/2026</div></div>
+    <div class="tile"><div class="lab">OUT</div><div class="val">${M(brl(out))}</div><div class="dl"><span class="${dOut<=0?'good':'bad'}">${dOut>=0?'▲':'▼'} ${pct(dOut)}</span> vs 09/2026</div></div>
+    <div class="tile est"><div class="lab">NET</div><div class="val ${net<0?'neg':''}">${M(sgn(net))}</div><div class="dl">income ~ includes 1 estimate</div></div>
+    <div class="tile"><div class="lab">Kept of what came in</div><div class="val">${rate}%</div><div class="meter"><span style="width:${rate}%"></span></div></div>
+    <div class="tile"><div class="lab">Still to pay</div><div class="val">${M(brl(2524.70))}</div><div class="dl">3 bills · next 25/10</div></div>
+  </div>`;
+
+  // spend by bucket, biggest first, Uncategorized last, a tick at last month
+  const rows = Object.entries(BUCKETS).filter(([n,a])=>a[i]>0)
+    .sort((a,b)=> (a[0]===''?1:b[0]===''?-1:b[1][i]-a[1][i]));
+  const max = Math.max(...rows.map(([,a])=>Math.max(a[i],a[i-1])));
+  const hb = rows.map(([n,a])=>{
+    const d = a[i-1] ? (a[i]-a[i-1])/a[i-1]*100 : null;
+    const dd = d===null ? '<span class="d" style="color:var(--ink-3)">new</span>' : Math.abs(d)<1 ? '' : `<span class="d ${d>0?'bad':'good'}">${d>0?'▲':'▼'} ${pct(d)}</span>`;
+    return `<div class="nm ${n?'':'unc'}">${n||'Uncategorized'}</div>
+      <div class="tr"><div class="b" style="--f:${a[i]/max}"></div><span class="at" style="--f:${Math.max(a[i],a[i-1])/max}"><span class="v money">${brl(a[i])}</span>${dd}</span>
+        ${a[i-1]?`<div class="prev" style="--f:${a[i-1]/max}"></div>`:''}
+        <div class="tip"><div class="th">${n||'Uncategorized'}</div>
+          <div class="tr"><span>10/2026</span><b class="money">${brl(a[i])}</b></div>
+          <div class="tr"><span>09/2026</span><b class="money">${brl(a[i-1])}</b></div></div></div>`;
+  }).join('');
+  const buckets = card(7,'Spend by bucket','10/2026 · biggest first','<span><i style="background:var(--ink-2)"></i>this month</span><span><i class="ln" style="background:var(--ink);width:2px;height:12px;vertical-align:-1px"></i>09/2026</span>',
+    `<div class="hb">${hb}</div>` + table(['Bucket','10/2026','09/2026'], rows.map(([n,a])=>[n||'Uncategorized',brl(a[i]),brl(a[i-1])])));
+
+  // per member, mirrored
+  const mm = Math.max(...MEMBERS.flatMap(m=>[m.in,m.out]));
+  const mir = `<div class="mir"><div></div><div class="head l">OUT</div><div class="head">IN</div>` + MEMBERS.map(m=>`
+    <div class="nm">${m.n}</div>
+    <div class="l"><span class="v money">${brl(m.out)}</span><div class="b" style="width:${m.out/mm*72}%"></div></div>
+    <div class="r"><div class="b ${m.est?'est':''}" style="width:${m.in/mm*72}%"></div><span class="v money">${m.est?'~':''}${brl(m.in)}</span></div>`).join('') + `</div>`;
+  const members = card(5,'Who moved the money','10/2026 · spending left, income right','',
+    mir + table(['','IN','OUT'], MEMBERS.map(m=>[m.n,(m.est?'~':'')+brl(m.in),brl(m.out)])));
+
+  const one = out-RECURRING_OCT, rp = RECURRING_OCT/out*100;
+  const stack = card(5,'Fixed and variable','what recurs every month, and what does not','',
+    `<div class="stack"><span style="width:${rp}%"><label>Recurring <b class="money">${brl(RECURRING_OCT)}</b> · ${Math.round(rp)}%</label></span><span style="width:${100-rp}%"><label>One-off <b class="money">${brl(one)}</b> · ${Math.round(100-rp)}%</label></span></div>
+     <p class="note">Recurring is what a rule materialized; one-off is what was typed by hand.</p>`);
+
+  const toPay = card(7,'Still to pay this month','unconfirmed bills, by due date','',
+    `<div class="hb">${[['Energia · Enel SP',312.40,'25/10'],['Escola · mensalidade',1900,'28/10'],['Cartão · Nubank',312.30,'30/10']]
+      .map(([n,v,d])=>`<div class="nm">${n}</div><div class="tr"><div class="b" style="--f:${v/1900};background:var(--line-2)"></div><span class="v money">${brl(v)}</span><span class="d" style="color:var(--ink-3)">due ${d}</span></div>`).join('')}</div>`);
+
+  return `<div class="chgrid">${tiles}${buckets}${members}${stack}${toPay}</div>`;
+}
+
+/* ===== Year tab ======================================================== */
+function yearTab(sel){
+  const labels = MONTHS.slice(0,N);
+  if (sel) return yearSelection(labels);
+  const nets = IN.map((v,i)=>v-OUT[i]);
+  const flow = cashflow(labels, IN, OUT, EST, {cur:N-1, sub:'01/2026 – 10/2026 · income above the line, spending below'});
+
+  // cumulative NET
+  let acc=0; const cum = nets.map(v=>acc+=v);
+  const s1 = nice(Math.min(0,...cum), Math.max(...cum), 4), y1 = Y(s1), b = band(N);
+  const pts = cum.map((v,i)=>[b(i).c,y1(v)]);
+  const area = `M${pts[0][0]} ${y1(0)}` + pts.map(p=>`L${p[0]} ${p[1]}`).join('') + `L${pts[N-1][0]} ${y1(0)}Z`;
+  const hits1 = cum.map((v,i)=>`<div class="hit ${b(i).c>60?'flip':''}" style="left:${b(i).l}%;width:${b(i).w}%">${tip(labels[i]+' 2026',[{l:'kept so far',v:sgn(v),c:'var(--ink)'},{l:'that month',v:sgn(nets[i]),c:nets[i]<0?'var(--neg)':'var(--ink-3)'}])}</div>`).join('');
+  const cumC = card(6,'Kept so far','NET added up, month by month','',
+    frame(s1, labels, svg(`<path class="a-net" d="${area}"/><path class="l-net" d="${path(pts)}"/>`) +
+      `<div class="dot" style="left:${pts[N-1][0]}%;top:${pts[N-1][1]}%"></div><div class="endl money" style="left:${pts[N-1][0]}%;top:${pts[N-1][1]-9}%;transform:translate(-100%,-100%)">${sgn(cum[N-1])}</div>` + hits1, {h:190, cur:N-1}) +
+    table(['','kept so far'], labels.map((m,i)=>[m,sgn(cum[i])])));
+
+  // income trend: monthly IN as dots, rolling 3-month mean as the line
+  const avg = IN.map((_,i)=> i<2 ? null : (IN[i]+IN[i-1]+IN[i-2])/3);
+  const s2 = nice(Math.min(...IN)*0.94, Math.max(...IN)*1.02, 4), y2 = Y(s2);
+  const ap = avg.map((v,i)=>v===null?null:[b(i).c,y2(v)]).filter(Boolean);
+  const first = avg[2], last = avg[N-1], g = (last-first)/first*100;
+  const hits2 = IN.map((v,i)=>`<div class="hit ${b(i).c>60?'flip':''}" style="left:${b(i).l}%;width:${b(i).w}%">${tip(labels[i],[{l:'IN',v:(EST[i]?'~':'')+brl(v),c:'var(--pos)'}].concat(avg[i]?[{l:'3-month avg',v:brl(avg[i]),c:'var(--pos)'}]:[]))}</div>`).join('');
+  const trend = card(6,'Is income growing?',`3-month average · <span class="${g>=0?'good':'bad'}">${g>=0?'▲':'▼'} ${pct(g)}</span> since Mar`,
+    '<span><i class="lgd" style="background:var(--pos)"></i>month</span><span><i class="ln" style="background:var(--pos)"></i>3-month avg</span>',
+    frame(s2, labels, svg(`<path class="l-avg" d="${path(ap)}"/>`) +
+      IN.map((v,i)=>`<div class="dot sm pos" style="left:${b(i).c}%;top:${y2(v)}%;${EST[i]?'background:var(--surface);box-shadow:0 0 0 1.5px var(--pos)':''}"></div>`).join('') + hits2, {h:190, cur:N-1}) +
+    table(['','IN','3-month avg'], labels.map((m,i)=>[m,(EST[i]?'~':'')+brl(IN[i]),avg[i]?brl(avg[i]):'—'])));
+
+  // buckets as small multiples, one shared scale
+  const entries = Object.entries(BUCKETS).filter(([,a])=>a.some(v=>v>0))
+    .sort((a,b)=>(a[0]===''?1:b[0]===''?-1:b[1].reduce((s,v)=>s+v,0)-a[1].reduce((s,v)=>s+v,0)));
+  const smax = Math.max(...entries.flatMap(([,a])=>a));
+  const sm = entries.map(([n,a])=>sparkCard(n||'Uncategorized', a, smax)).join('');
+  const smC = card(12,'Every bucket, month by month','01/2026 – 10/2026 · one shared scale, so heights compare across cards','', `<div class="sm">${sm}</div>`);
+
+  // top movers: last 3 months vs the 3 before
+  const mv = entries.map(([n,a])=>{
+    const r = (a[7]+a[8]+a[9])/3, p = (a[4]+a[5]+a[6])/3;
+    return {n:n||'Uncategorized', r, p, d: p? (r-p)/p*100 : 0, a: r-p};
+  }).filter(m=>m.p>0 && Math.abs(m.a)>=50).sort((a,b)=>b.a-a.a).slice(0,7);
+  const md = Math.max(...mv.map(m=>Math.abs(m.a)));
+  const dv = `<div class="div">` + mv.map(m=>`
+    <div class="nm">${m.n}</div>
+    <div class="l">${m.a<0?`<span class="v"><span class="money">−${brl(-m.a)}</span>/mo<small>${pct(m.d)}</small></span><div class="b" style="width:${-m.a/md*70}%"></div>`:''}</div>
+    <div class="r">${m.a>0?`<div class="b" style="width:${m.a/md*70}%"></div><span class="v"><span class="money">+${brl(m.a)}</span>/mo<small>${pct(m.d)}</small></span>`:''}</div>`).join('') + `</div>`;
+  const movers = card(12,'What moved','monthly average, Aug–Oct against May–Jul · biggest change in reais first',
+    '', dv + table(['Bucket','May–Jul /mo','Aug–Oct /mo','change /mo'], mv.map(m=>[m.n,brl(m.p),brl(m.r),(m.a<0?'−':'+')+brl(m.a)+' · '+pct(m.d)])));
+
+  return `<div class="chgrid">${flow}${cumC}${trend}${movers}${smC}</div>`;
+}
+
+function sparkCard(name, a, smax, selected){
+  const n = a.length, b = band(n);
+  const y = v => (1 - v/smax) * 100;
+  const pts = a.map((v,i)=>[b(i).c, y(v)]);
+  const area = `M${pts[0][0]} 100` + pts.map(p=>`L${p[0]} ${p[1]}`).join('') + `L${pts[n-1][0]} 100Z`;
+  const tot = a.reduce((s,v)=>s+v,0);
+  const d = a[0] ? (a[n-1]-a[0])/a[0]*100 : null;
+  const hits = a.map((v,i)=>`<div class="hit ${b(i).c>55?'flip':''}" style="left:${b(i).l}%;width:${b(i).w}%">${tip(MONTHS[i],[{l:name,v:brl(v),c:selected?'var(--info)':'var(--ink-2)'}])}</div>`).join('');
+  return `<div class="smc ${selected?'sel':''}"><div class="top"><span class="nm ${name==='Uncategorized'?'unc':''}">${esc(name)}</span><span class="t money">${brl(tot)}</span></div>
+    <div class="sp">${svg(`<path class="a-spark" d="${area}"/><path class="l-spark" d="${path(pts)}"/>`)}
+      <div class="dot sm ${selected?'sel':''}" style="left:${pts[n-1][0]}%;top:${pts[n-1][1]}%;${selected?'':'background:var(--ink-2)'}"></div>${hits}</div>
+    <div class="ft"><span>Jan</span><span>${d===null?'':Math.abs(d)<1?'flat':`<span class="${d>0?'bad':'good'}">${d>0?'▲':'▼'} ${pct(d)}</span> vs Jan`}</span><span>Oct</span></div></div>`;
+}
+
+function yearSelection(labels){
+  // the selected lines, followed across months by rule; all in --info, one card each
+  const entries = Object.entries(SEL), smax = Math.max(...entries.flatMap(([,a])=>a));
+  const sum = labels.map((_,i)=>entries.reduce((s,[,a])=>s+a[i],0));
+  const s = nice(0, Math.max(...sum)*1.1, 4), y = Y(s), b = band(N);
+  const pts = sum.map((v,i)=>[b(i).c,y(v)]);
+  const area = `M${pts[0][0]} ${y(0)}` + pts.map(p=>`L${p[0]} ${p[1]}`).join('') + `L${pts[N-1][0]} ${y(0)}Z`;
+  const hits = sum.map((v,i)=>`<div class="hit ${b(i).c>60?'flip':''}" style="left:${b(i).l}%;width:${b(i).w}%">${tip(labels[i],
+    entries.map(([n,a])=>({l:n,v:brl(a[i]),c:'var(--info)'})).concat([{l:'together',v:brl(v),c:'var(--ink)'}]))}</div>`).join('');
+  const total = card(12,'The 2 selected rows, together','followed across months by their rule · 01/2026 – 10/2026','',
+    frame(s, labels, svg(`<path class="a-sel" d="${area}"/><path class="l-sel" d="${path(pts)}"/>`) +
+      pts.map(p=>`<div class="dot sm sel" style="left:${p[0]}%;top:${p[1]}%"></div>`).join('') + hits, {h:200, cur:N-1}) +
+    table(['', ...entries.map(([n])=>n), 'together'], labels.map((m,i)=>[m, ...entries.map(([,a])=>brl(a[i])), brl(sum[i])])));
+  const each = card(12,'Each one','one shared scale','', `<div class="sm">${entries.map(([n,a])=>sparkCard(n,a,smax,true)).join('')}</div>`);
+  return `<div class="chgrid">${total}${each}</div>`;
+}
+
+/* ===== Years tab (admin) =============================================== */
+function yearsTab(){
+  const ys = Object.keys(YEARS).map(Number), cur = 2026;
+  const ytd = ys.map(y=>({y, in:YEARS[y].in.slice(0,N).reduce((s,v)=>s+v,0), out:YEARS[y].out.slice(0,N).reduce((s,v)=>s+v,0)}));
+  const flow = cashflow(ys.map(String), ytd.map(r=>r.in), ytd.map(r=>r.out), ys.map(()=>false), {cur:ys.length-1, h:230,
+    title:'The same ten months, every year', sub:'Jan–Oct of each year, so 2026 is not a part-year against whole ones'});
+
+  // this year against last, added up month by month; the gap between them
+  // shaded, in the color of whether it is good news. Two lines, not one per
+  // year: the older ones run together and their labels collide — they are in
+  // the table and the year-by-year card instead.
+  function cumLines(kind, title){
+    const run = v => { let a=0; return v.map(x=>a+=x); };
+    const now = run(YEARS[cur][kind].slice(0,N)), was = run(YEARS[cur-1][kind]);
+    const s = nice(0, Math.max(...was, ...now), 4), yy = Y(s), b = band(12);
+    const pn = now.map((v,i)=>[b(i).c,yy(v)]), pw = was.map((v,i)=>[b(i).c,yy(v)]);
+    const d = (now[N-1]-was[N-1])/was[N-1]*100, good = kind==='in' ? d>=0 : d<=0;
+    const gap = path(pn) + pw.slice(0,N).reverse().map(p=>`L${p[0]} ${p[1]}`).join('') + 'Z';
+    const lastN = pn[N-1], lastW = pw[11];
+    const body = svg(`<path d="${gap}" style="fill:var(${good?'--pos':'--neg'});fill-opacity:.13;stroke:none"/>
+        <path class="l-old" d="${path(pw)}"/><path class="l-cur" d="${path(pn)}"/>`) +
+      `<div class="dot sm" style="left:${pw[N-1][0]}%;top:${pw[N-1][1]}%;background:var(--ink-3)"></div>` +
+      `<div class="dot" style="left:${lastN[0]}%;top:${lastN[1]}%"></div>` +
+      `<div class="endl" style="left:${lastN[0]}%;top:${lastN[1]}%;transform:translate(-100%,${now[N-1]<was[N-1]?'60%':'-150%'});padding:0 6px 0 0">${cur} · <span class="money">${k(now[N-1])}</span></div>` +
+      `<div class="endl old" style="left:${lastW[0]}%;top:${lastW[1]}%">${cur-1}</div>` +
+      MONTHS.map((m,i)=>`<div class="hit ${b(i).c>60?'flip':''}" style="left:${b(i).l}%;width:${b(i).w}%">${tip(m+' · so far',
+        (i<N?[{l:String(cur),v:brl(now[i]),c:'var(--ink)'}]:[]).concat([{l:String(cur-1),v:brl(was[i]),c:'var(--ink-3)'}]))}</div>`).join('');
+    return card(6, title, `by October: <span class="${good?'good':'bad'}">${d>=0?'▲':'▼'} ${pct(d)}</span> against ${cur-1}`,
+      `<span><i class="ln" style="background:var(--ink)"></i>${cur}</span><span><i class="ln" style="background:var(--ink-3)"></i>${cur-1}</span>`,
+      `<div style="padding-right:34px">${frame(s, MONTHS, body, {h:210, cur:N-1})}</div>` +
+      table(['', cur, cur-1], MONTHS.map((m,i)=>[m, i<N?brl(now[i]):'—', brl(was[i])])));
+  }
+
+  const rows = ytd.map((r,i)=>{
+    const net = r.in-r.out, prev = i? ytd[i-1].in-ytd[i-1].out : null, full = r.y===cur ? null : YEARS[r.y].in.reduce((s,v)=>s+v,0)-YEARS[r.y].out.reduce((s,v)=>s+v,0);
+    return `<tr class="${r.y===cur?'cur':''}"><td>${r.y}${r.y===cur?' ~':''}</td><td>${M(brl(r.in))}</td><td>${M(brl(r.out))}</td><td class="${net<0?'n':''}">${M(sgn(net))}</td><td>${Math.round(net/r.in*100)}%</td>
+      <td>${prev===null?'—':`<span class="${net>=prev?'good':'bad'}">${pct((net-prev)/Math.abs(prev)*100)}</span>`}</td><td style="color:var(--ink-3)">${full===null?'—':M(sgn(full))}</td></tr>`;
+  }).reverse().join('');
+  const tbl = card(12,'Year by year','Jan–Oct · the last column is the whole year, for years that are over','',
+    `<div style="overflow-x:auto"><table class="yt"><tr><th>Year</th><th>IN</th><th>OUT</th><th>NET</th><th>kept</th><th>NET vs year before</th><th>whole year NET</th></tr>${rows}</table></div>`);
+
+  return `<div class="chgrid">${flow}${cumLines('out','Spent so far, by year')}${cumLines('in','Earned so far, by year')}${tbl}</div>`;
+}
+
+/* ===== mock chrome ===================================================== */
+let selOn = false;
+function render(){
+  document.getElementById('p-month').innerHTML = monthTab();
+  document.getElementById('p-year').innerHTML = yearTab(selOn);
+  document.getElementById('p-years').innerHTML = yearsTab();
+}
+function tab(t){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('is-on', b.dataset.tab===t));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('is-on', p.id==='p-'+t));
+  ['month','year','years'].forEach(x=>document.getElementById('per-'+x).hidden = x!==t);
+}
+document.getElementById('tabs').onclick = e => { const b=e.target.closest('.tab'); if(b) tab(b.dataset.tab); };
+document.getElementById('chips').onclick = e => { const b=e.target.closest('.chip'); if(!b) return; document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('is-on',c===b)); };
+document.addEventListener('keydown', e => {
+  if (e.target.tagName==='INPUT') return;
+  if (e.key==='1') tab('month'); if (e.key==='2') tab('year'); if (e.key==='3') tab('years');
+  if (e.key==='s') toggleSel();
+  const body = document.querySelector('.chbody');
+  if (e.key==='j') body.scrollBy({top:80}); if (e.key==='k') body.scrollBy({top:-80});
+});
+function toggleSel(){ selOn=!selOn; document.getElementById('sel').classList.toggle('is-on',selOn); document.getElementById('charts').classList.toggle('has-sel',selOn); render(); if(selOn) tab('year'); }
+document.getElementById('sel').onclick = toggleSel;
+document.getElementById('hide').onclick = e => { const r=document.documentElement; r.toggleAttribute('data-hide'); e.target.classList.toggle('is-on', r.hasAttribute('data-hide')); };
+
+// palettes: the same table and derivations as ui::theme
+const PAL = {"ffm":{"dark":["#171512","#201D18","#2A261E","#EEE8DB","#B2A995","#807869","#332E25","#E9A63F","#82B47D","#E28470","#8FB0D6"],"light":["#F6F3ED","#FFFDF8","#EEE9DE","#211E19","#5C554A","#8E8578","#E1DACC","#A8620A","#3D7A4B","#B23A2B","#3F6288"]},"tokyonight":{"dark":["#1A1B26","#1F2335","#24283B","#C0CAF5","#A9B1D6","#565F89","#292E42","#7AA2F7","#9ECE6A","#F7768E","#BB9AF7"],"light":["#E1E2E7","#F0F0F5","#D9DBE3","#3760BF","#6172B0","#848CB5","#CBCFDA","#2E7DE9","#587539","#F52A65","#9854F1"]},"catppuccin":{"dark":["#181825","#1E1E2E","#292A3B","#CDD6F4","#A6ADC8","#6C7086","#313244","#CBA6F7","#A6E3A1","#F38BA8","#89B4FA"],"light":["#E6E9EF","#EFF1F5","#DCE0E8","#4C4F69","#6C6F85","#9CA0B0","#CCD0DA","#8839EF","#40A02B","#D20F39","#1E66F5"]},"kanagawa":{"dark":["#16161D","#1F1F28","#2A2A37","#DCD7BA","#C8C093","#727169","#363646","#7E9CD8","#98BB6C","#FF5D62","#E6C384"],"light":["#F2ECBC","#F7F1CB","#E7DBA0","#545464","#43436C","#8A8980","#DDD2A4","#4D699B","#6F894E","#C84053","#624C83"]},"everforest":{"dark":["#2D353B","#343F44","#3D484D","#D3C6AA","#9DA9A0","#7A8478","#475258","#DBBC7F","#A7C080","#E67E80","#7FBBB3"],"light":["#FDF6E3","#F4F0D9","#EFEBD4","#5C6A72","#829181","#939F91","#E6E2CC","#DFA000","#8DA101","#F85552","#3A94C5"]},"gruvbox":{"dark":["#1D2021","#282828","#3C3836","#EBDBB2","#BDAE93","#928374","#504945","#FABD2F","#B8BB26","#FB4934","#83A598"],"light":["#F9F5D7","#FBF1C7","#EBDBB2","#3C3836","#504945","#7C6F64","#D5C4A1","#B57614","#79740E","#9D0006","#076678"]},"rosepine":{"dark":["#191724","#1F1D2E","#26233A","#E0DEF4","#908CAA","#6E6A86","#403D52","#EBBCBA","#9CCFD8","#EB6F92","#C4A7E7"],"light":["#FAF4ED","#FFFAF3","#F2E9E1","#575279","#797593","#9893A5","#DFDAD9","#D7827E","#56949F","#B4637A","#907AA9"]},"onedark":{"dark":["#21252B","#282C34","#2C323C","#ABB2BF","#828997","#5C6370","#3E4451","#61AFEF","#98C379","#E06C75","#C678DD"],"light":["#F0F0F1","#FAFAFA","#E5E5E6","#383A42","#696C77","#A0A1A7","#DCDCDD","#4078F2","#50A14F","#E45649","#A626A4"]},"dracula":{"dark":["#21222C","#282A36","#343746","#F8F8F2","#C4C9D4","#6272A4","#44475A","#BD93F9","#50FA7B","#FF5555","#8BE9FD"],"light":["#F5F1E1","#FFFBEB","#E8E3D0","#1F1F1F","#4A4636","#6C664B","#DED9C4","#644AC9","#14710A","#CB3A2A","#036A96"]},"nord":{"dark":["#2E3440","#3B4252","#434C5E","#ECEFF4","#D8DEE9","#7B88A1","#4C566A","#88C0D0","#A3BE8C","#BF616A","#81A1C1"],"light":["#E5E9F0","#ECEFF4","#D8DEE9","#2E3440","#434C5E","#6B7794","#C8D0DE","#5E81AC","#56753F","#A54A52","#4C6E8F"]},"solarized":{"dark":["#002B36","#073642","#0E4450","#93A1A1","#839496","#586E75","#14505C","#B58900","#859900","#DC322F","#268BD2"],"light":["#EEE8D5","#FDF6E3","#E4DCC7","#586E75","#657B83","#93A1A1","#DDD6C1","#B58900","#859900","#DC322F","#268BD2"]}};
+const NAMES = ['paper','surface','surface-2','ink','ink-2','ink-3','line','accent','pos','neg','info'];
+let mode = 'system', palName = 'ffm';
+function applyTheme(){
+  const dark = mode==='dark' || (mode==='system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  const v = PAL[palName][dark?'dark':'light'], r = document.documentElement;
+  NAMES.forEach((n,i)=>r.style.setProperty('--'+n, v[i]));
+  r.style.setProperty('--shadow-md', dark ? '0 2px 4px rgba(0,0,0,.34),0 14px 32px rgba(0,0,0,.44)' : '0 2px 4px rgba(20,16,10,.05),0 12px 28px rgba(20,16,10,.10)');
+  if (mode==='system') r.removeAttribute('data-theme'); else r.dataset.theme = mode;
+}
+const pal = document.getElementById('pal');
+pal.innerHTML = Object.keys(PAL).map(n=>`<option>${n}</option>`).join('');
+pal.onchange = () => { palName = pal.value; applyTheme(); };
+document.querySelectorAll('.mk[data-m]').forEach(b=>b.onclick=()=>{ mode=b.dataset.m; document.querySelectorAll('.mk[data-m]').forEach(x=>x.classList.toggle('is-on',x===b)); applyTheme(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+applyTheme(); render();
+if (location.hash==='#sel') toggleSel(); else if (location.hash) tab(location.hash.slice(1));
+</script>
+</body>
+</html>

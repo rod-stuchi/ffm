@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n               t.id              AS \"id!: i64\",\n               t.period          AS \"period!: String\",\n               t.member_id       AS \"member_id!: i64\",\n               t.kind            AS \"kind!: String\",\n               t.amount_cents    AS \"amount_cents: i64\",\n               t.title           AS \"title!: String\",\n               t.bucket          AS \"bucket: String\",\n               t.rule_id         AS \"rule_id: i64\",\n               t.manual_paid     AS \"manual_paid!: i64\",\n               r.tracked         AS \"tracked?: i64\",\n               r.varies          AS \"varies?: i64\",\n               r.estimate_basis  AS \"estimate_basis?: String\",\n               r.estimate_window AS \"estimate_window?: i64\",\n               r.amount_cents    AS \"rule_amount_cents?: i64\"\n           FROM transactions t\n           LEFT JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.deleted_at IS NULL\n             AND t.period >= ?1 AND t.period <= ?2\n             -- The pane's own rule: a private row is its owner's and the\n             -- admin's (`Viewer::sees_private_of`), never under preview.\n             AND (t.visibility = 'household' OR t.member_id = ?3 OR ?4)\n             -- A turned-off member's months are hidden from every total, as\n             -- `members_in` hides their pane.\n             AND NOT EXISTS (SELECT 1 FROM member_inactive i\n                             WHERE i.member_id = t.member_id AND i.from_period <= t.period\n                               AND (i.until_period IS NULL OR t.period < i.until_period))\n             AND EXISTS (SELECT 1 FROM members m\n                         WHERE m.id = t.member_id AND m.deleted_at IS NULL)\n           ORDER BY t.period, t.member_id, t.sort_key",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "member_id!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "bucket: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule_id: i64",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "manual_paid!: i64",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tracked?: i64",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "varies?: i64",
+        "ordinal": 10,
+        "type_info": "Integer"
+      },
+      {
+        "name": "estimate_basis?: String",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "estimate_window?: i64",
+        "ordinal": 12,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_amount_cents?: i64",
+        "ordinal": 13,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "4acace60ee0c5169ed0d88c4ac18eef755a8f8880a2073d37661102ef06acf18"
+}

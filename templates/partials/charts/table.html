@@ -1,0 +1,10 @@
+{#- Every chart's twin, `tb: Table`: the same numbers as a table, one
+    `<details>` away — so no value is only reachable by hovering. -#}
+<details class="tbl"><summary>{{ t.charts_table() }}</summary>
+  <table>
+    <tr>{% for h in tb.head %}<th>{{ h }}</th>{% endfor %}</tr>
+    {%- for r in tb.rows %}
+    <tr><td>{{ r.name }}</td>{% for c in r.cells %}<td class="money">{{ c }}</td>{% endfor %}</tr>
+    {%- endfor %}
+  </table>
+</details>

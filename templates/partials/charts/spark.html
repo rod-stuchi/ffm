@@ -1,0 +1,19 @@
+{#- One series as a small chart of its own, `s: Spark`, on a scale shared
+    with its neighbors. -#}
+<div class="smc{% if s.sel %} sel{% endif %}">
+  <div class="top"><span class="nm{% if s.unc %} unc{% endif %}">{{ s.name }}</span><span class="t money">{{ s.total }}</span></div>
+  <div class="sp">
+    <svg class="ov" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <path class="a-spark" d="{{ s.area }}"/><path class="l-spark" d="{{ s.line }}"/>
+    </svg>
+    <div class="chdot sm spk" style="left:{{ s.dot_left }}%;top:{{ s.dot_top }}%"></div>
+    {%- for h in s.hits %}
+    <div class="chhit{% if h.flip %} flip{% endif %}" style="left:{{ h.left }}%;width:{{ h.width }}%">
+      <div class="chtip"><div class="th">{{ h.tip.head }}</div>
+        {%- for r in h.tip.rows %}<div class="tr"><span><i class="k {{ r.key }}"></i>{{ r.label }}</span><b class="money">{{ r.value }}</b></div>{% endfor -%}
+      </div>
+    </div>
+    {%- endfor %}
+  </div>
+  <div class="ft"><span>{{ s.first }}</span><span>{% if let Some(d) = s.delta %}{% if d.arrow.is_empty() %}{{ d.text }}{% else %}<span class="{{ d.class }}">{{ d.arrow }} {{ d.text }}</span>{% endif %}{% endif %}</span><span>{{ s.last }}</span></div>
+</div>

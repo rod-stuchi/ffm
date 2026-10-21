@@ -54,6 +54,10 @@ explanation of *why* it looks that way. Read this when a state's meaning is uncl
 `/invite/:token`) and their error states. The only surface that lives **outside**
 the `.app` shell.
 
+`design/ffm-charts-mockup.html` — the `:charts` viewer: its three tabs, every
+chart, the IN-up / OUT-down convention and the hover tips, in all eleven
+palettes. Port the markup and the CSS; its JS render loop is the mock's own.
+
 `design/ffm-settings-mockup.html` — `:household`, `:profile` and `:members`
 shown inside the app shell, because watching the ledger while a setting takes
 effect is the entire argument for a split rather than a full-screen buffer.
@@ -200,6 +204,7 @@ loaded each session: read the section you need** (`rg -n '^##' design/spec.md`).
 - **Income** · **Change log (`gl`)**: tables, pane
 - **Receipt tracking & files**: taxonomy, layout, file kinds, `spans_period`, watcher, live feed, `:prune`, upload, trim/shrink, bill import, manual paid
 - **Categorization & grouping**: folds, ring, `S`, fold state
+- **Charts (`:charts` / `gc`)**: tabs, scope, keys, how it is drawn, where the numbers come from
 - **Unresolved issues across months** · **Configuration — three tiers**: schemas, currency, Surface · **Language & copy (i18n)**
 
 
@@ -304,8 +309,8 @@ card in plain CSS.
   beside it.
 - **Still modal:** the `dd` delete confirmation (and its twin for removing a
   file from the `P` carousel), the question every `u`/`U` asks first, the
-  `ga` member picker, the `?` keymap and the `P` file carousel —
-  confirmations and viewers, not forms.
+  `ga` member picker, the `?` keymap, the `P` file carousel and the
+  `:charts` viewer — confirmations and viewers, not forms.
 
 ---
 
@@ -1360,6 +1365,32 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   device per member in `localStorage` (`ffm.folds.{member}`), so closing the
   tab or the installed app keeps it; changing *Folds start* drops it.
   `zM`/`zR` reach buckets only other months have. See `design/spec.md`'s Fold state survives a month change.
+
+### Charts (`:charts` / `gc`)
+
+- **The one report screen, and it is about trend.** `zM` stays the month's
+  per-category summary; `:charts` draws what it cannot — a range of months,
+  and year against year. Full-viewport in the `P` carousel's frame,
+  read-only, three tabs: Month, Year (a range, at most 36 months) and Years,
+  which is **admin-only** (`viewer.is_admin()`, so absent under preview and
+  refused if asked for). See `design/spec.md`'s Charts.
+- **Drawn on the server, no chart library and no crate** (`ui::chart`,
+  `web::charts`): boxes placed by percentage plus one stretched SVG per line,
+  every mark a `var(--token)`, every amount `.money`. A JS library means the
+  data as JSON in the page — the client-side model this app forbids.
+- **IN up from the zero line, OUT down from it.** Position tells them apart,
+  because no shade of `--ink` separates from `--pos` in all twenty-two
+  palettes. OUT is a neutral; red is a deficit, a late bill or a bucket that
+  got dearer. No color per bucket — small multiples on one scale.
+- **Month reads `member_panes`; Year and Years read `db::charts::rows`**, one
+  query for the range with the pane's own privacy and turned-off predicates,
+  and the varying-income projection through the same `ledger::projection`
+  the pane calls. `tests/charts.rs` holds every month's sums to the panes',
+  viewer by viewer — keep it passing when either side changes.
+- **A selection (`x`) narrows every chart**, followed across months as the
+  same line (rule, else exact title, in one member's ledger); `s` toggles.
+- **The viewer's keys press the stage's own links** (`data-ck`), so the
+  keyboard and the mouse cannot disagree and Alpine decides nothing.
 
 ### Unresolved issues across months
 

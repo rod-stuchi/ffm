@@ -48,5 +48,6 @@
   @import "./row.css";
   @import "./ledger.css";
   @import "./busy.css";
+  @import "./charts.css";
   @import "./sandbox.css";
 }
