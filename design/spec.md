@@ -926,6 +926,11 @@ whole keymap was out of reach: there was no field to focus.
   viewport for its keyboard; a `100vh` shell put the statusline and the
   command bar underneath it. While the keyboard is up the shell is sized to
   `visualViewport.height` (`--app-h`).
+- **The `:` and `/` bars neither capitalize nor autocorrect** —
+  `autocapitalize="off"` and `autocorrect="off"`, as the key trap has (the
+  sign-in name field gets the same from `autocomplete="username"`). A
+  command is an identifier (`:group`, not *:Group*), and `nonu` or a search
+  term is not a misspelling to fix.
 - **Known limit:** after a form field took the keyboard (`e`, the add row),
   saving or canceling closes the keyboard with the field; tap `NORMAL` again.
   Focus moving to a checkbox or a button (the trash's list) does the same.

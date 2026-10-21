@@ -937,7 +937,8 @@
            @keydown="searchKey($event)"
            @keydown.enter.prevent="if (search) keepHist(searchHistKey, search); step(1); backToKeys($el)"
            @keydown.escape.prevent="clearSearch(); backToKeys($el)"
-           placeholder="{{ t.search_placeholder() }}" autocomplete="off" spellcheck="false">
+           placeholder="{{ t.search_placeholder() }}" autocomplete="off"
+           autocapitalize="off" autocorrect="off" spellcheck="false">
   </div>
 
   {#- The command bar. `:` is how every setting surface is reached, and the
@@ -953,7 +954,8 @@
            @keydown="cmdKey($event)"
            @keydown.enter.prevent="runCommand()"
            @keydown.escape.prevent="commanding = false; command = ''; backToKeys($el)"
-           placeholder="{{ t.command_placeholder() }}" autocomplete="off" spellcheck="false">
+           placeholder="{{ t.command_placeholder() }}" autocomplete="off"
+           autocapitalize="off" autocorrect="off" spellcheck="false">
     {#- At rest, the vocabulary. Typing a command's name turns it into what
         that command does and what it takes — which is the whole answer to
         "what does :set do?" — and Tab turns it into the wildmenu, the
