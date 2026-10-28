@@ -3289,6 +3289,7 @@ with fewer than three years in range, where both draw the same.
 | `s` | selection ⇄ all, when rows are selected |
 | `v` | two lines ⇄ five in Years' spent and earned so far |
 | `j` `k` · `gg` `G` | scroll |
+| `gh` | hide the amounts, or show them — as on the ledger |
 | `Esc` | close (inside a from/to field: leave the field) |
 
 Every key presses a link the stage carries (`data-ck`), so a key and a click

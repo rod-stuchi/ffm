@@ -4095,6 +4095,9 @@ function ledger() {
       const g = this.chartsBuf;
       this.chartsBuf = '';
       if (k === 'Escape') return this.closeCharts();
+      // `gh` hides the amounts here as on the ledger: the viewer owns every
+      // key, so without this the statusline's eye was the only way.
+      if (g === 'g' && k === 'h') return this.toggleValues();
       if (!body) return;
       if (k === 'j' || k === 'ArrowDown') return body.scrollBy({ top: 80 });
       if (k === 'k' || k === 'ArrowUp') return body.scrollBy({ top: -80 });

@@ -1225,6 +1225,7 @@ charts-key-period = earlier · later
 charts-key-member = member
 charts-key-sel = selection ⇄ all
 charts-key-scroll = scroll
+charts-key-hide = hide amounts
 charts-key-close = close
 command-about-charts = charts of the money — this month, this year, every year
 keymap-row-charts = charts — this month, this year, every year
