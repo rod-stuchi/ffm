@@ -183,21 +183,25 @@ pub struct HouseTotals {
     pub negative: bool,
 }
 
-/// Every pane's totals for one period, plus the household's — read through the
-/// same pane query a page load uses, so a fragment's numbers are computed by
-/// exactly the same path as the page's.
-pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTotals>, HouseTotals) {
-    let ctx = session_ctx(st, auth).await;
-    let currency = ctx.currency;
+/// Every pane's totals for one period, plus the household's, summed from the
+/// month's panes ([`member_panes`]) — read through the same pane query a page
+/// load uses, so a fragment's numbers are computed by exactly the same path as
+/// the page's. The caller has read them already: an answer about one row
+/// takes that row's pane from the same read, rather than reading it twice.
+pub(crate) fn totals_of(
+    panes: &[Pane],
+    auth: &Auth,
+    currency: crate::domain::money::Currency,
+) -> (Vec<PaneTotals>, HouseTotals) {
     let t = auth.catalog();
     let group = GroupOrder::of(&auth.settings);
 
-    let mut panes = Vec::new();
+    let mut out = Vec::new();
     let mut ins = crate::domain::money::Cents::ZERO;
     let mut outs = crate::domain::money::Cents::ZERO;
     let mut any_estimated = false;
 
-    for pane in member_panes(st, auth, period, ctx).await {
+    for pane in panes {
         ins += pane.ins;
         outs += pane.outs;
         any_estimated |= pane.estimated;
@@ -205,7 +209,7 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
         let folds = group
             .map(|order| fold_summaries(pane.member.id, &pane.rows, &t, currency, order))
             .unwrap_or_default();
-        panes.push(PaneTotals {
+        out.push(PaneTotals {
             id: pane.member.id,
             ins: money(pane.ins, currency, pane.estimated),
             // Only income varies, so OUTs are never a projection.
@@ -218,7 +222,7 @@ pub async fn totals(st: &AppState, auth: &Auth, period: Period) -> (Vec<PaneTota
 
     let net = ins - outs;
     (
-        panes,
+        out,
         HouseTotals {
             ins: money(ins, currency, any_estimated),
             outs: fmt::money(outs, currency),

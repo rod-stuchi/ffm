@@ -40,7 +40,9 @@ pub struct Slot {
     pub bill_name: String,
     pub instance: Option<String>,
     pub period: Period,
-    /// Only consulted for the receipt, and only when the rule opted in.
+    /// Only consulted for the receipt, and only when the rule opted in —
+    /// [`slots_for`] leaves it out otherwise, so the household's currency is
+    /// read only for a name that carries it.
     pub amount: Option<(Cents, Currency)>,
     pub amount_in_filename: bool,
 }
@@ -1010,9 +1012,10 @@ pub async fn slot_of(pool: &SqlitePool, transaction_id: i64) -> sqlx::Result<Opt
 /// [`slot_of`] for many occurrences at once, keyed by transaction id — still
 /// the one place a path is decided; `slot_of` is this with one id.
 ///
-/// One query for the batch, and the household's currency read **once** — it
-/// was read again for every row, which a pane paid per tracked row and again
-/// per month of every run it counted.
+/// One query for the batch, and the household's currency read **at most
+/// once** — it was read again for every row, which a pane paid per tracked row
+/// and again per month of every run it counted — and only when a row's rule
+/// puts the amount in its file name, the one thing the currency spells.
 pub async fn slots_for(pool: &SqlitePool, ids: &[i64]) -> sqlx::Result<HashMap<i64, (Slot, i64)>> {
     if ids.is_empty() {
         return Ok(HashMap::new());
@@ -1034,13 +1037,14 @@ pub async fn slots_for(pool: &SqlitePool, ids: &[i64]) -> sqlx::Result<HashMap<i
     )
     .fetch_all(pool)
     .await?;
-    if rows.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let currency = crate::db::ledger::household(pool)
-        .await?
-        .map(|h| h.currency)
-        .unwrap_or_default();
+    let currency = if rows.iter().any(|r| r.amount_in_filename != 0) {
+        crate::db::ledger::household(pool)
+            .await?
+            .map(|h| h.currency)
+            .unwrap_or_default()
+    } else {
+        Currency::default()
+    };
     Ok(rows
         .into_iter()
         .filter_map(|r| {
@@ -1059,7 +1063,10 @@ pub async fn slots_for(pool: &SqlitePool, ids: &[i64]) -> sqlx::Result<HashMap<i
                         bill_name,
                         instance: r.instance,
                         period,
-                        amount: r.amount_cents.map(|c| (Cents(c), currency)),
+                        amount: r
+                            .amount_cents
+                            .filter(|_| r.amount_in_filename != 0)
+                            .map(|c| (Cents(c), currency)),
                         amount_in_filename: r.amount_in_filename != 0,
                     },
                     r.member_id,

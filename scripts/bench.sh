@@ -88,6 +88,13 @@ pick_ids() {
         WHERE t.member_id = $me AND t.period = '$period' AND t.deleted_at IS NULL
           AND r.tracked = 1 ORDER BY t.sort_key LIMIT 1")
     member=$me
+    # A varying income's rule, for `E` — its estimate box walks a year back.
+    # Your own first; another member's only when you are the admin.
+    vary=$(sqlite3 "$work/run/ffm.db" "
+        SELECT r.id FROM recurring_rules r
+        WHERE r.deleted_at IS NULL AND r.varies = 1
+          AND (r.member_id = $me OR (SELECT role FROM members WHERE id = $me) = 0)
+        ORDER BY r.member_id = $me DESC, r.id LIMIT 1")
 }
 
 fresh
@@ -102,6 +109,7 @@ paths=(
     "/charts?tab=year&period=$period"
     "/charts?tab=years&period=$period"
 )
+[ -n "$vary" ] && paths+=("/rules/$vary/edit?period=$period")
 
 # --- 1. statements per request ------------------------------------------------
 start "$work/count.log" "warn,sqlx::query=debug"

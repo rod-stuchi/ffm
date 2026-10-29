@@ -229,22 +229,12 @@ pub(crate) async fn pane_rows(
     member_id: i64,
     period: Period,
 ) -> Option<crate::web::rules::PaneRows> {
-    let members = ledger::members(&st.pool).await.ok()?;
-    let member = members.into_iter().find(|m| m.id == member_id)?;
-    let house = ledger::household(&st.pool).await.ok().flatten();
-    let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
-    let show_recurring = house.as_ref().is_none_or(|h| h.show_recurring);
-
-    let pane = ledger::pane_with_vault(
-        &st.pool,
-        &member,
-        period,
-        ctx(auth, currency, show_recurring),
-        auth.viewer,
-        Some(&st.cfg.receipts_root),
-    )
-    .await
-    .ok()?;
+    let Month {
+        pane,
+        currency,
+        pane_totals,
+        house_totals,
+    } = month_of(st, auth, member_id, period).await.ok()?;
 
     let t = auth.catalog();
     // Built by the page's own `view`, grouped exactly when the page groups —
@@ -253,14 +243,74 @@ pub(crate) async fn pane_rows(
     let group = crate::web::ledger::GroupOrder::of(&auth.settings);
     let writable = auth.viewer.may_write(member_id);
     let p = crate::web::ledger::view(pane, &t, currency, group, writable);
-    let (panes, totals) = crate::web::ledger::totals(st, auth, period).await;
 
     Some(crate::web::rules::PaneRows {
         t,
         p,
-        pane_totals: panes.into_iter().find(|p| p.id == member_id),
-        house_totals: Some(totals),
+        pane_totals,
+        house_totals: Some(house_totals),
     })
+}
+
+/// A month as an answer needs it: every pane read once, the totals summed
+/// from them, and the one pane the answer is about taken out of the same
+/// read. An answer used to read its own pane, then every pane again for the
+/// totals — its own twice.
+pub(crate) struct Month {
+    pub pane: ledger::Pane,
+    pub currency: crate::domain::money::Currency,
+    pub pane_totals: Option<PaneTotals>,
+    pub house_totals: HouseTotals,
+}
+
+pub(crate) async fn month_of(
+    st: &AppState,
+    auth: &Auth,
+    member_id: i64,
+    period: Period,
+) -> Result<Month, &'static str> {
+    let ctx = crate::web::ledger::session_ctx(st, auth).await;
+    let mut panes = crate::web::ledger::member_panes(st, auth, period, ctx).await;
+    let (totals, house_totals) = crate::web::ledger::totals_of(&panes, auth, ctx.currency);
+    let pane = match panes.iter().position(|p| p.member.id == member_id) {
+        Some(i) => panes.swap_remove(i),
+        // No pane in this month's totals — a member turned off from it — yet
+        // still rows somebody can be answered about: read theirs on its own.
+        None => one_pane(st, auth, member_id, period, ctx).await?,
+    };
+    Ok(Month {
+        pane,
+        currency: ctx.currency,
+        pane_totals: totals.into_iter().find(|p| p.id == member_id),
+        house_totals,
+    })
+}
+
+/// One member's pane alone, for an answer that needs no totals.
+async fn one_pane(
+    st: &AppState,
+    auth: &Auth,
+    member_id: i64,
+    period: Period,
+    ctx: RowCtx,
+) -> Result<ledger::Pane, &'static str> {
+    let t = auth.catalog();
+    let Ok(members) = ledger::members(&st.pool).await else {
+        return Err(t.tx_cannot_read_household());
+    };
+    let Some(member) = members.into_iter().find(|m| m.id == member_id) else {
+        return Err(t.tx_cannot_read_household());
+    };
+    ledger::pane_with_vault(
+        &st.pool,
+        &member,
+        period,
+        ctx,
+        auth.viewer,
+        Some(&st.cfg.receipts_root),
+    )
+    .await
+    .map_err(|_| t.tx_cannot_read_month())
 }
 
 /// Whether the focused ordering is one the SERVER derives — grouped by
@@ -336,33 +386,33 @@ async fn live_pane(
     auth: &Auth,
     id: i64,
 ) -> Result<(Vec<LedgerRow>, i64, Period, crate::domain::money::Currency), &'static str> {
-    let t = auth.catalog();
-    let Ok(Some((member_id, period, _deleted))) = tx::one(&st.pool, id).await else {
-        return Err(t.tx_row_gone());
-    };
-    let Ok(members) = ledger::members(&st.pool).await else {
-        return Err(t.tx_cannot_read_household());
-    };
-    let Some(member) = members.into_iter().find(|m| m.id == member_id) else {
-        return Err(t.tx_cannot_read_household());
-    };
-    let house = ledger::household(&st.pool).await.ok().flatten();
-    let currency = house.as_ref().map(|h| h.currency).unwrap_or_default();
-    let show_recurring = house.as_ref().is_none_or(|h| h.show_recurring);
+    let (member_id, period) = where_is(st, auth, id).await?;
+    let ctx = crate::web::ledger::session_ctx(st, auth).await;
+    let pane = one_pane(st, auth, member_id, period, ctx).await?;
+    Ok((pane.rows, member_id, period, ctx.currency))
+}
 
-    let Ok(pane) = ledger::pane_with_vault(
-        &st.pool,
-        &member,
+/// The month `id` lives in, every pane of it read once — for an answer that
+/// carries the totals beside the row.
+async fn live_month(
+    st: &AppState,
+    auth: &Auth,
+    id: i64,
+) -> Result<(Month, i64, Period), &'static str> {
+    let (member_id, period) = where_is(st, auth, id).await?;
+    Ok((
+        month_of(st, auth, member_id, period).await?,
+        member_id,
         period,
-        ctx(auth, currency, show_recurring),
-        auth.viewer,
-        Some(&st.cfg.receipts_root),
-    )
-    .await
-    else {
-        return Err(t.tx_cannot_read_month());
-    };
-    Ok((pane.rows, member_id, period, currency))
+    ))
+}
+
+/// Whose pane and which month a row is in, deleted or not.
+async fn where_is(st: &AppState, auth: &Auth, id: i64) -> Result<(i64, Period), &'static str> {
+    match tx::one(&st.pool, id).await {
+        Ok(Some((member_id, period, _deleted))) => Ok((member_id, period)),
+        _ => Err(auth.catalog().tx_row_gone()),
+    }
 }
 
 async fn render_row(
@@ -374,7 +424,14 @@ async fn render_row(
     // Deleted rows are not in the pane query — the row stays in the database,
     // but the ledger reads live rows. Re-render it from what we know instead of
     // widening the query that every page load runs.
-    let (rows, member_id, period, currency) = live_pane(st, auth, id).await?;
+    let (month, member_id, period) = live_month(st, auth, id).await?;
+    let Month {
+        pane,
+        currency,
+        pane_totals,
+        house_totals,
+    } = month;
+    let rows = pane.rows;
     let t = auth.catalog();
     // A grouped pane's headers are totals too — every fold's, since a row's
     // answer does not know which ones it moved (an import can change an
@@ -411,10 +468,9 @@ async fn render_row(
             deleted
         }
     };
-    let (panes, house) = crate::web::ledger::totals(st, auth, period).await;
     fragment.oob = oob.then(|| format!("outerHTML:#row-{id}"));
-    fragment.pane_totals = panes.into_iter().find(|p| p.id == member_id);
-    fragment.house_totals = Some(house);
+    fragment.pane_totals = pane_totals;
+    fragment.house_totals = Some(house_totals);
     fragment.folds = folds;
     Ok(fragment)
 }
@@ -1352,21 +1408,24 @@ pub(crate) async fn edit_files_answer(
     id: i64,
     message: &str,
 ) -> Response {
-    let (row, member_id, period, _) = match live_row(st, auth, id).await {
+    let (month, ..) = match live_month(st, auth, id).await {
         Ok(x) => x,
         Err(e) => return say_only(e, true),
     };
-    let files = row
+    let files = month
+        .pane
+        .rows
+        .iter()
+        .find(|r| r.id == id)
         .map(|r| r.view(&auth.catalog()).files)
         .unwrap_or_default();
-    let (panes, house) = crate::web::ledger::totals(st, auth, period).await;
     say(
         Html(EditFilesAnswer {
             t: auth.catalog(),
             id,
             files,
-            pane_totals: panes.into_iter().find(|p| p.id == member_id),
-            house_totals: Some(house),
+            pane_totals: month.pane_totals,
+            house_totals: Some(month.house_totals),
         })
         .into_response(),
         message,
