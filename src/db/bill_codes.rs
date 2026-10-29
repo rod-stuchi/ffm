@@ -127,23 +127,48 @@ pub async fn shared_file(
 }
 
 /// Each month's amount in a rule's live codes — what the row's Progress line
-/// counts for a month that has no row yet (`db::ledger`). One query per rule.
+/// counts for a month that has no row yet (`db::ledger`). [`amounts_for`]
+/// with one rule.
 pub async fn amounts(
     pool: &SqlitePool,
     rule_id: i64,
 ) -> sqlx::Result<std::collections::HashMap<Period, Cents>> {
+    Ok(amounts_for(pool, &[rule_id])
+        .await?
+        .remove(&rule_id)
+        .unwrap_or_default())
+}
+
+/// [`amounts`] for many rules in one query, keyed by rule id. A rule with no
+/// live code that carries an amount is absent.
+pub async fn amounts_for(
+    pool: &SqlitePool,
+    rule_ids: &[i64],
+) -> sqlx::Result<std::collections::HashMap<i64, std::collections::HashMap<Period, Cents>>> {
+    let mut out: std::collections::HashMap<i64, std::collections::HashMap<Period, Cents>> =
+        std::collections::HashMap::new();
+    if rule_ids.is_empty() {
+        return Ok(out);
+    }
+    let list = serde_json::to_string(rule_ids).unwrap_or_else(|_| "[]".into());
     let rows = sqlx::query!(
-        r#"SELECT period AS "period!: String", amount_cents AS "amount_cents!: i64"
+        r#"SELECT rule_id AS "rule_id!: i64", period AS "period!: String",
+                  amount_cents AS "amount_cents!: i64"
            FROM rule_bill_code
-           WHERE rule_id = ?1 AND retired_at IS NULL AND amount_cents IS NOT NULL"#,
-        rule_id
+           WHERE rule_id IN (SELECT value FROM json_each(?1))
+             AND retired_at IS NULL AND amount_cents IS NOT NULL"#,
+        list
     )
     .fetch_all(pool)
     .await?;
-    Ok(rows
-        .into_iter()
-        .filter_map(|r| Some((Period::parse(&r.period)?, Cents(r.amount_cents))))
-        .collect())
+    for r in rows {
+        if let Some(p) = Period::parse(&r.period) {
+            out.entry(r.rule_id)
+                .or_default()
+                .insert(p, Cents(r.amount_cents));
+        }
+    }
+    Ok(out)
 }
 
 /// What a rule's live codes cover, for the rule pane's read-back.

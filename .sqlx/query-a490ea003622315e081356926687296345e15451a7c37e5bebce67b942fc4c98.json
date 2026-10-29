@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!: i64\", t.rule_id AS \"rule_id!: i64\",\n                  t.period AS \"period!: String\",\n                  t.amount_cents AS \"amount_cents: i64\",\n                  t.manual_paid AS \"manual_paid!: i64\",\n                  r.tracked AS \"tracked!: i64\"\n           FROM transactions t\n           JOIN recurring_rules r ON r.id = t.rule_id\n           WHERE t.rule_id IN (SELECT value FROM json_each(?1))\n             AND t.period < ?2 AND t.deleted_at IS NULL\n             AND t.amount_cents IS NOT NULL\n           ORDER BY t.period DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rule_id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "manual_paid!: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tracked!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "a490ea003622315e081356926687296345e15451a7c37e5bebce67b942fc4c98"
+}

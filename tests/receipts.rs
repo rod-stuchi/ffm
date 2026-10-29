@@ -1293,3 +1293,66 @@ async fn a_locked_pdf_is_refused_and_the_file_on_the_row_stays() {
     );
     assert!(deleted_copies(&root, &slot.vault, "09").is_empty());
 }
+
+/// A pane asks the vault once for all its rows (`receipts::files_of`), so a
+/// batch must answer each row with its OWN files: a receipt stored for July
+/// is July's alone, a bill filed by hand in August is August's alone, and
+/// every answer is what asking for that one row would have said.
+#[tokio::test]
+async fn a_batch_answers_each_row_with_its_own_files() {
+    let pool = pool().await;
+    let root = vault();
+    let me = household(&pool).await;
+    let (_, sep) = tracked_occurrence(&pool, me).await;
+    // The same rule, two months back: July and August materialize too.
+    sqlx::query("UPDATE recurring_rules SET start_date = '2026-07-01'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    materializer::reconcile(&pool, d(2026, 9, 21))
+        .await
+        .unwrap();
+    let jul = row_of(&pool, "2026-07").await;
+    let aug = row_of(&pool, "2026-08").await;
+
+    let jul_slot = receipts::slot_of(&pool, jul).await.unwrap().unwrap().0;
+    receipts::store(
+        &pool,
+        &root,
+        Actor::User(me),
+        &jul_slot,
+        Kind::Receipt,
+        "comprovante.pdf",
+        b"%PDF-",
+    )
+    .await
+    .unwrap();
+    // Filed by hand: no `receipts` row, so only the probe can find it.
+    let hand = root.join(format!("{}/consumo/energia/2026/08_barcode.png", sep.vault));
+    std::fs::create_dir_all(hand.parent().unwrap()).unwrap();
+    std::fs::write(&hand, b"png").unwrap();
+
+    let ids = [jul, aug, sep.transaction_id, 999_999];
+    let batch = receipts::files_of(&pool, &root, &ids).await.unwrap();
+
+    assert_eq!(batch[&jul].receipt.as_deref(), Some("pdf"));
+    assert_eq!(batch[&jul].bill, None);
+    assert_eq!(batch[&aug].bill.as_deref(), Some("png"));
+    assert_eq!(batch[&aug].receipt, None);
+    assert_eq!(batch[&sep.transaction_id], Default::default());
+    assert!(!batch.contains_key(&999_999), "no row, no path, no answer");
+
+    for id in [jul, aug, sep.transaction_id] {
+        let slot = receipts::slot_of(&pool, id).await.unwrap().unwrap().0;
+        let one = receipts::presence(&pool, &root, &slot).await.unwrap();
+        assert_eq!(batch[&id], one, "row {id}: the batch agrees with one row");
+    }
+}
+
+async fn row_of(pool: &SqlitePool, period: &str) -> i64 {
+    sqlx::query_scalar("SELECT id FROM transactions WHERE period = ?")
+        .bind(period)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}

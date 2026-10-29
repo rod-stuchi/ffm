@@ -10,8 +10,9 @@
 //! same privacy predicate the pane applies (another member's private row only
 //! for its owner and an admin, and not under preview), the same months a
 //! turned-off member is hidden from (`members_in`), and the same `~`
-//! projection for a varying income that has not landed yet — one function,
-//! `ledger::projection`, so the two cannot come apart. A test holds a month's
+//! projection for a varying income that has not landed yet — the same steps
+//! the pane takes (`ledger::unconfirmed_projections`), so the two cannot come
+//! apart. A test holds a month's
 //! sums against `pane_with_vault`'s.
 
 use crate::db::ledger;
@@ -98,42 +99,39 @@ pub async fn rows(
     .fetch_all(pool)
     .await?;
 
+    // A varying income shows its projection until the money lands — and only
+    // those rows ask the disk, all at once, so a year of plain rows costs
+    // nothing and a year of payslips costs two batches, not two per month.
+    let varying: Vec<ledger::Varying> = found
+        .iter()
+        .filter(|r| {
+            TxKind::parse(&r.kind).is_some_and(TxKind::is_income) && r.varies.unwrap_or(0) != 0
+        })
+        .filter_map(|r| {
+            Some(ledger::Varying {
+                id: r.id,
+                rule_id: r.rule_id?,
+                period: Period::parse(&r.period)?,
+                tracked: r.tracked.unwrap_or(0) != 0,
+                manual_paid: r.manual_paid != 0,
+                basis: r.estimate_basis.as_deref(),
+                window: r.estimate_window,
+                rule_amount: r.rule_amount_cents,
+            })
+        })
+        .collect();
+    let projected = ledger::unconfirmed_projections(pool, root, &varying).await?;
+
     let mut out = Vec::with_capacity(found.len());
     for r in found {
         let Some(period) = Period::parse(&r.period) else {
             continue;
         };
         let kind = TxKind::parse(&r.kind).unwrap_or(TxKind::Out);
-        let mut cents = r.amount_cents.map(Cents);
-        let mut estimated = false;
-
-        // A varying income shows its projection until the money lands — and
-        // only then is the disk asked, so a year of plain rows costs nothing.
-        if kind.is_income()
-            && r.varies.unwrap_or(0) != 0
-            && let Some(rule_id) = r.rule_id
-            && !ledger::is_confirmed(
-                pool,
-                root,
-                r.tracked.unwrap_or(0) != 0,
-                r.id,
-                r.manual_paid != 0,
-            )
-            .await
-            && let Some(p) = ledger::projection(
-                pool,
-                root,
-                rule_id,
-                period,
-                r.estimate_basis.as_deref(),
-                r.estimate_window,
-                r.rule_amount_cents,
-            )
-            .await?
-        {
-            cents = Some(p);
-            estimated = true;
-        }
+        let (cents, estimated) = match projected.get(&r.id) {
+            Some(p) => (Some(*p), true),
+            None => (r.amount_cents.map(Cents), false),
+        };
 
         out.push(ChartRow {
             id: r.id,

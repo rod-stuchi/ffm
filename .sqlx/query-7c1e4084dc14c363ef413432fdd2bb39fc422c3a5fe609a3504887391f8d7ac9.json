@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT rule_id AS \"rule_id!: i64\", period AS \"period!: String\",\n                  amount_cents AS \"amount_cents!: i64\"\n           FROM rule_bill_code\n           WHERE rule_id IN (SELECT value FROM json_each(?1))\n             AND retired_at IS NULL AND amount_cents IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "rule_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "period!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_cents!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "7c1e4084dc14c363ef413432fdd2bb39fc422c3a5fe609a3504887391f8d7ac9"
+}

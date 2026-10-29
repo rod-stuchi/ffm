@@ -3348,7 +3348,8 @@ cannot disagree and no decision about what to show lives in Alpine.
   read per month asks the vault about every tracked row, which Years over
   several years cannot afford and a chart does not need. It applies the
   pane's privacy and turned-off predicates, and puts a varying income's
-  projection in through the same `ledger::projection` the pane uses; a test
+  projection in through the same steps the pane takes
+  (`ledger::unconfirmed_projections`); a test
   (`tests/charts.rs`) holds every month's sums to the panes', viewer by
   viewer.
 

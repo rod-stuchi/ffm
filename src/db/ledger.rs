@@ -21,6 +21,7 @@ use crate::ui::i18n::Lang;
 use crate::ui::row::{FilePresence, LedgerRow, Progress, RowCtx};
 use chrono::NaiveDate;
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 
 /// The one household row. Every member's numbers feed the same totals, which
 /// is exactly why currency lives here and not beside theme.
@@ -344,7 +345,7 @@ pub async fn pane_with_vault(
     // `s` re-sorts the rows inside the folds and never moves a fold — which
     // first seen in the CURRENT sort did, every time a sort put another
     // bucket's row first.
-    let manual_of: std::collections::HashMap<i64, usize> = {
+    let manual_of: HashMap<i64, usize> = {
         let mut keyed: Vec<(&str, i64)> =
             rows.iter().map(|r| (r.sort_key.as_str(), r.id)).collect();
         keyed.sort_unstable();
@@ -460,69 +461,150 @@ pub async fn pane_with_vault(
         });
     }
 
+    // Three facts below need OTHER rows than the ones on screen: a varying
+    // income's projection (its last confirmed months), the `3/10` badge (every
+    // month of the rule's run) and the files (the disk). Each used to ask per
+    // row, and per month of each run — hundreds of queries and stats for one
+    // pane. So the rows they need are gathered first, the vault is asked once
+    // for all of them, and the three are computed from that one answer.
+
     // A varying income shows a projection until the money lands. Done here
     // rather than in `LedgerRow` because it needs the last N confirmed
     // periods, which is a query — and the row's contract is that every visual
     // channel is a function of fields ON the row.
-    for (i, row) in out.iter_mut().enumerate() {
-        if !row.kind.is_income() || !row.varies {
-            continue;
-        }
-        let Some(rule_id) = row.rule_id else { continue };
-        row.estimate_cents = projection(
-            pool,
-            root,
-            rule_id,
-            row.period,
-            basis_of.get(i).and_then(|b| b.as_deref()),
-            window_of.get(i).copied().flatten(),
-            rule_amount_of.get(i).copied().flatten(),
-        )
-        .await?;
-    }
-
-    // The disk decides `paid`, so it is consulted per tracked row — one exact
-    // path per kind, never a traversal. An untracked row has no taxonomy to
-    // file under and is skipped entirely.
-    if let Some(root) = root {
-        for row in out.iter_mut().filter(|r| r.tracked) {
-            // The path is `slot_of`'s, the one place it is decided — never
-            // rebuilt here from the row's own bucket, which is how the ledger
-            // came to look in one folder while uploads wrote to another.
-            let Ok(Some((slot, _))) = crate::services::receipts::slot_of(pool, row.id).await else {
-                continue;
-            };
-            if let Ok(found) = crate::services::receipts::presence(pool, root, &slot).await {
-                row.files = found;
-            }
-            // A bill covering several months is one file on one row: every
-            // month it has a code for shows it, on that code's page.
-            if row.spans_period
-                && let Some(shared) =
-                    crate::services::receipts::shared_bill(pool, root, row.id).await
-            {
-                row.bill_page = Some(shared.page);
-                if row.files.bill.is_none() {
-                    row.files.bill = Some(shared.ext);
-                    row.bill_path = Some(shared.path);
-                }
-            }
-        }
+    let varying: Vec<(usize, (i64, Period, usize))> = out
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.kind.is_income() && row.varies)
+        .filter_map(|(i, row)| {
+            let window = estimate_window(window_of.get(i).copied().flatten());
+            Some((i, (row.rule_id?, row.period, window)))
+        })
+        .collect();
+    let wants: Vec<(i64, Period, usize)> = varying.iter().map(|(_, w)| *w).collect();
+    let mut history: Vec<Option<Vec<Occurrence>>> = (0..out.len()).map(|_| None).collect();
+    for ((i, _), candidates) in varying.iter().zip(history_for(pool, &wants).await?) {
+        history[*i] = Some(candidates);
     }
 
     // How far each rule's run has come as of this month: the `3/10` badge and
     // the popup's Progress line. A rule with nothing to count to — open-ended,
     // every month — has no run and is skipped.
+    let runs: Vec<Option<Vec<Period>>> = out
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            row.rule_id?;
+            plan_of.get(i)?.as_ref()?.run_for(row.period)
+        })
+        .collect();
+    let spans: Vec<(i64, Period, Period)> = out
+        .iter()
+        .zip(&runs)
+        .filter_map(|(row, run)| {
+            let run = run.as_ref()?;
+            Some((row.rule_id?, *run.first()?, *run.last()?))
+        })
+        .collect();
+    let run_rows = run_occurrences(pool, &spans).await?;
+    let planned: Vec<i64> = spans.iter().map(|(rule, _, _)| *rule).collect();
+    let codes = crate::db::bill_codes::amounts_for(pool, &planned).await?;
+
+    // The disk decides `paid`, so it is consulted for every tracked row — one
+    // exact path per kind, never a traversal — and for every tracked month a
+    // projection or a run counts. An untracked row has no taxonomy to file
+    // under and is skipped entirely. The path is `slot_of`'s (`slots_for`),
+    // the one place it is decided — never rebuilt here from the row's own
+    // bucket, which is how the ledger came to look in one folder while
+    // uploads wrote to another.
+    let files: HashMap<i64, FilePresence> = match root {
+        Some(root) => {
+            let mut ids: Vec<i64> = out.iter().filter(|r| r.tracked).map(|r| r.id).collect();
+            ids.extend(
+                history
+                    .iter()
+                    .flatten()
+                    .flatten()
+                    .filter(|o| o.tracked)
+                    .map(|o| o.id),
+            );
+            for (row, run) in out.iter().zip(&runs) {
+                let (Some(rule_id), Some(run)) = (row.rule_id, run) else {
+                    continue;
+                };
+                ids.extend(
+                    in_run(&run_rows, rule_id, run)
+                        .filter(|o| o.tracked && o.period <= row.period)
+                        .map(|o| o.id),
+                );
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            // A vault that cannot be read leaves the rows reading `pending`,
+            // as a row whose path could not be built always has.
+            crate::services::receipts::files_of(pool, root, &ids)
+                .await
+                .unwrap_or_default()
+        }
+        None => HashMap::new(),
+    };
+
+    for row in out.iter_mut().filter(|r| r.tracked) {
+        if let Some(found) = files.get(&row.id) {
+            row.files = found.clone();
+        }
+    }
+
+    // A bill covering several months is one file on one row: every month it
+    // has a code for shows it, on that code's page. Only for a row whose
+    // files could be looked for at all — one with a path.
+    if let Some(root) = root {
+        let ids: Vec<i64> = out
+            .iter()
+            .filter(|r| r.tracked && r.spans_period && files.contains_key(&r.id))
+            .map(|r| r.id)
+            .collect();
+        let shared = crate::services::receipts::shared_bills(pool, root, &ids)
+            .await
+            .unwrap_or_default();
+        for row in out.iter_mut() {
+            if let Some(shared) = shared.get(&row.id) {
+                row.bill_page = Some(shared.page);
+                if row.files.bill.is_none() {
+                    row.files.bill = Some(shared.ext.clone());
+                    row.bill_path = Some(shared.path.clone());
+                }
+            }
+        }
+    }
+
     for (i, row) in out.iter_mut().enumerate() {
-        let (Some(rule_id), Some(plan)) = (row.rule_id, plan_of.get(i).and_then(|p| p.as_ref()))
-        else {
+        let Some(candidates) = &history[i] else {
             continue;
         };
-        let Some(run) = plan.run_for(row.period) else {
+        let window = estimate_window(window_of.get(i).copied().flatten());
+        row.estimate_cents = project(
+            &confirmed_of(candidates, window, &files),
+            basis_of.get(i).and_then(|b| b.as_deref()),
+            window,
+            rule_amount_of.get(i).copied().flatten(),
+        );
+    }
+
+    for (i, row) in out.iter_mut().enumerate() {
+        let (Some(rule_id), Some(run)) = (row.rule_id, &runs[i]) else {
             continue;
         };
         let fallback = rule_amount_of.get(i).copied().flatten().map(Cents);
-        row.progress = Some(progress_of(pool, root, rule_id, &run, row.period, fallback).await?);
+        let rows: Vec<&Occurrence> = in_run(&run_rows, rule_id, run).collect();
+        row.progress = Some(progress_from(
+            run,
+            row.period,
+            &rows,
+            codes.get(&rule_id),
+            fallback,
+            &files,
+        ));
     }
 
     // Any projection in the pane marks its INs and Balance. Leaving
@@ -549,109 +631,284 @@ pub async fn pane_with_vault(
     })
 }
 
-/// What a varying income is projected at in `period`, from the rule's
-/// `estimate_basis`, `estimate_window` and own amount — `None` when there is
-/// nothing to project from. Whether the row shows it is the row's question
-/// (`LedgerRow::is_estimated`: only while unconfirmed).
-///
-/// One function, because two readers ask: the pane, and `:charts`, which reads
-/// months by the year and must put the same `~` figure in a month's IN that
-/// the pane header does.
-pub(crate) async fn projection(
-    pool: &SqlitePool,
-    root: Option<&std::path::Path>,
-    rule_id: i64,
-    period: Period,
-    basis: Option<&str>,
-    window: Option<i64>,
-    rule_amount: Option<i64>,
-) -> sqlx::Result<Option<Cents>> {
-    let basis = estimate::Basis::parse(basis.unwrap_or("")).unwrap_or_default();
-    let window = window.unwrap_or(3).clamp(1, 12) as usize;
-    let history = confirmed_history(pool, root, rule_id, period, window).await?;
-    Ok(estimate::project(&history, basis, window, rule_amount.map(Cents)).map(|p| p.amount))
+/// A varying income's row, as much as projecting it needs.
+pub(crate) struct Varying<'a> {
+    pub id: i64,
+    pub rule_id: i64,
+    pub period: Period,
+    pub tracked: bool,
+    pub manual_paid: bool,
+    pub basis: Option<&'a str>,
+    pub window: Option<i64>,
+    pub rule_amount: Option<i64>,
 }
 
-/// The last `window` **confirmed** periods of a rule, newest first.
+/// What each varying income **not yet confirmed** is projected at, keyed by
+/// row id — `None`-free: a row with nothing to project from, or one whose
+/// money has landed, is absent.
 ///
-/// Confirmed means the same thing it means everywhere else: a payslip on disk
-/// for a tracked rule, the manual tick for an untracked one. An unconfirmed
-/// month is skipped rather than folded in — two of them back to back would
-/// otherwise project a guess from another guess.
-async fn confirmed_history(
+/// The pane and `:charts` must put the same `~` figure in a month's IN, so
+/// both reach it through the same steps — [`history_for`],
+/// [`confirmed_of`], [`project`] — with the vault asked once for the whole
+/// batch rather than once per row. `:charts` reads months by the year, and
+/// asked twice per varying income in the range.
+pub(crate) async fn unconfirmed_projections(
     pool: &SqlitePool,
     root: Option<&std::path::Path>,
-    rule_id: i64,
-    before: Period,
+    rows: &[Varying<'_>],
+) -> sqlx::Result<HashMap<i64, Cents>> {
+    let tracked: Vec<i64> = rows.iter().filter(|r| r.tracked).map(|r| r.id).collect();
+    let own = vault_files(pool, root, &tracked).await;
+    let open: Vec<&Varying> = rows
+        .iter()
+        .filter(|r| !confirmed(r.tracked, r.manual_paid, r.id, &own))
+        .collect();
+
+    let wants: Vec<(i64, Period, usize)> = open
+        .iter()
+        .map(|r| (r.rule_id, r.period, estimate_window(r.window)))
+        .collect();
+    let candidates = history_for(pool, &wants).await?;
+    let ids: Vec<i64> = candidates
+        .iter()
+        .flatten()
+        .filter(|o| o.tracked)
+        .map(|o| o.id)
+        .collect();
+    let files = vault_files(pool, root, &ids).await;
+
+    Ok(open
+        .iter()
+        .zip(&candidates)
+        .filter_map(|(r, c)| {
+            let window = estimate_window(r.window);
+            let p = project(
+                &confirmed_of(c, window, &files),
+                r.basis,
+                window,
+                r.rule_amount,
+            )?;
+            Some((r.id, p))
+        })
+        .collect())
+}
+
+/// The projection itself, from confirmed history already in hand.
+fn project(
+    history: &[estimate::Confirmed],
+    basis: Option<&str>,
     window: usize,
-) -> sqlx::Result<Vec<estimate::Confirmed>> {
-    let before_s = before.to_string();
-    // A generous candidate list: unconfirmed months are skipped, so the window
-    // has to be able to reach past them to find real ones.
-    let limit = (window as i64 * 6).clamp(6, 48);
+    rule_amount: Option<i64>,
+) -> Option<Cents> {
+    let basis = estimate::Basis::parse(basis.unwrap_or("")).unwrap_or_default();
+    estimate::project(history, basis, window, rule_amount.map(Cents)).map(|p| p.amount)
+}
+
+/// The rule's `estimate_window`, as the projection reads it.
+fn estimate_window(window: Option<i64>) -> usize {
+    window.unwrap_or(3).clamp(1, 12) as usize
+}
+
+/// One occurrence of a rule, as much as confirming it and counting it needs.
+#[derive(Clone, Debug)]
+struct Occurrence {
+    id: i64,
+    period: Period,
+    amount_cents: Option<i64>,
+    manual_paid: bool,
+    tracked: bool,
+}
+
+impl Occurrence {
+    fn confirmed(&self, files: &HashMap<i64, FilePresence>) -> bool {
+        confirmed(self.tracked, self.manual_paid, self.id, files)
+    }
+}
+
+/// Whether the money moved — the same answer the mark gives: the receipt (or
+/// payslip) on disk for a tracked rule, the manual tick for an untracked one.
+/// No manual tick for a tracked rule, ever. `files` is the vault's answer for
+/// the batch; a tracked occurrence missing from it has no file, or no path to
+/// have one at.
+fn confirmed(
+    tracked: bool,
+    manual_paid: bool,
+    id: i64,
+    files: &HashMap<i64, FilePresence>,
+) -> bool {
+    if tracked {
+        files.get(&id).is_some_and(|f| f.receipt.is_some())
+    } else {
+        manual_paid
+    }
+}
+
+/// The months each varying income's projection may be drawn from, newest
+/// first — one list per `(rule, before, window)` asked, in the order asked.
+///
+/// A generous candidate list: unconfirmed months are skipped, so the window
+/// has to be able to reach past them to find real ones. Every rule's history
+/// is read in ONE query and sliced here, since a pane projects a row or two
+/// and `:charts` a row per unconfirmed month of a decade.
+async fn history_for(
+    pool: &SqlitePool,
+    wants: &[(i64, Period, usize)],
+) -> sqlx::Result<Vec<Vec<Occurrence>>> {
+    let Some(latest) = wants.iter().map(|(_, before, _)| *before).max() else {
+        return Ok(Vec::new());
+    };
+    let rules: Vec<i64> = wants.iter().map(|(rule, _, _)| *rule).collect();
+    let rules = serde_json::to_string(&rules).unwrap_or_else(|_| "[]".into());
+    let latest_s = latest.to_string();
 
     let rows = sqlx::query!(
-        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
+        r#"SELECT t.id AS "id!: i64", t.rule_id AS "rule_id!: i64",
+                  t.period AS "period!: String",
                   t.amount_cents AS "amount_cents: i64",
                   t.manual_paid AS "manual_paid!: i64",
                   r.tracked AS "tracked!: i64"
            FROM transactions t
            JOIN recurring_rules r ON r.id = t.rule_id
-           WHERE t.rule_id = ?1 AND t.period < ?2 AND t.deleted_at IS NULL
+           WHERE t.rule_id IN (SELECT value FROM json_each(?1))
+             AND t.period < ?2 AND t.deleted_at IS NULL
              AND t.amount_cents IS NOT NULL
-           ORDER BY t.period DESC
-           LIMIT ?3"#,
-        rule_id,
-        before_s,
-        limit,
+           ORDER BY t.period DESC"#,
+        rules,
+        latest_s,
     )
     .fetch_all(pool)
     .await?;
 
-    let mut out = Vec::new();
+    let mut by_rule: HashMap<i64, Vec<Occurrence>> = HashMap::new();
     for r in rows {
-        if out.len() >= window {
-            break;
-        }
-        let amount = Cents(r.amount_cents.unwrap_or(0));
-        if is_confirmed(pool, root, r.tracked != 0, r.id, r.manual_paid != 0).await {
-            out.push(estimate::Confirmed {
-                period: r.period,
-                amount,
-            });
-        }
+        let Some(period) = Period::parse(&r.period) else {
+            continue;
+        };
+        by_rule.entry(r.rule_id).or_default().push(Occurrence {
+            id: r.id,
+            period,
+            amount_cents: r.amount_cents,
+            manual_paid: r.manual_paid != 0,
+            tracked: r.tracked != 0,
+        });
+    }
+    Ok(wants
+        .iter()
+        .map(|(rule, before, window)| {
+            let limit = (*window * 6).clamp(6, 48);
+            by_rule
+                .get(rule)
+                .into_iter()
+                .flatten()
+                .filter(|o| o.period < *before)
+                .take(limit)
+                .cloned()
+                .collect()
+        })
+        .collect())
+}
+
+/// The last `window` **confirmed** periods among `candidates`, newest first.
+///
+/// Confirmed means the same thing it means everywhere else: a payslip on disk
+/// for a tracked rule, the manual tick for an untracked one. An unconfirmed
+/// month is skipped rather than folded in — two of them back to back would
+/// otherwise project a guess from another guess.
+fn confirmed_of(
+    candidates: &[Occurrence],
+    window: usize,
+    files: &HashMap<i64, FilePresence>,
+) -> Vec<estimate::Confirmed> {
+    candidates
+        .iter()
+        .filter(|o| o.confirmed(files))
+        .take(window)
+        .map(|o| estimate::Confirmed {
+            period: o.period.to_string(),
+            amount: Cents(o.amount_cents.unwrap_or(0)),
+        })
+        .collect()
+}
+
+/// The vault's answer for a batch of tracked occurrences; empty with no
+/// vault, so nothing reads as confirmed — the honest answer rather than a
+/// convenient one.
+async fn vault_files(
+    pool: &SqlitePool,
+    root: Option<&std::path::Path>,
+    ids: &[i64],
+) -> HashMap<i64, FilePresence> {
+    match root {
+        Some(root) => crate::services::receipts::files_of(pool, root, ids)
+            .await
+            .unwrap_or_default(),
+        None => HashMap::new(),
+    }
+}
+
+/// Every occurrence of the rules in `spans`, each `(rule, first, last)` of a
+/// run, in ONE query — a pane counts several runs, and used to read each with
+/// its own. Keyed by rule; [`in_run`] narrows a rule's rows to one run.
+///
+/// The rows are the rule's in any member's ledger, as a run is: a row handed
+/// to somebody else is still that installment.
+async fn run_occurrences(
+    pool: &SqlitePool,
+    spans: &[(i64, Period, Period)],
+) -> sqlx::Result<HashMap<i64, Vec<Occurrence>>> {
+    let mut out: HashMap<i64, Vec<Occurrence>> = HashMap::new();
+    let (Some(first), Some(last)) = (
+        spans.iter().map(|(_, f, _)| *f).min(),
+        spans.iter().map(|(_, _, l)| *l).max(),
+    ) else {
+        return Ok(out);
+    };
+    let rules: Vec<i64> = spans.iter().map(|(r, _, _)| *r).collect();
+    let rules = serde_json::to_string(&rules).unwrap_or_else(|_| "[]".into());
+    let (first_s, last_s) = (first.to_string(), last.to_string());
+    let rows = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", t.rule_id AS "rule_id!: i64",
+                  t.period AS "period!: String",
+                  t.amount_cents AS "amount_cents: i64",
+                  t.manual_paid AS "manual_paid!: i64",
+                  r.tracked AS "tracked!: i64"
+           FROM transactions t
+           JOIN recurring_rules r ON r.id = t.rule_id
+           WHERE t.rule_id IN (SELECT value FROM json_each(?1))
+             AND t.period BETWEEN ?2 AND ?3
+             AND t.deleted_at IS NULL"#,
+        rules,
+        first_s,
+        last_s,
+    )
+    .fetch_all(pool)
+    .await?;
+    for r in rows {
+        let Some(period) = Period::parse(&r.period) else {
+            continue;
+        };
+        out.entry(r.rule_id).or_default().push(Occurrence {
+            id: r.id,
+            period,
+            amount_cents: r.amount_cents,
+            manual_paid: r.manual_paid != 0,
+            tracked: r.tracked != 0,
+        });
     }
     Ok(out)
 }
 
-/// Whether one occurrence is confirmed — the money moved. The same answer
-/// the mark gives: the receipt (or payslip) on disk for a tracked rule, the
-/// manual tick for an untracked one.
-pub(crate) async fn is_confirmed(
-    pool: &SqlitePool,
-    root: Option<&std::path::Path>,
-    tracked: bool,
-    transaction_id: i64,
-    manual_paid: bool,
-) -> bool {
-    if !tracked {
-        return manual_paid;
-    }
-    // No manual tick for a tracked rule, ever — the disk answers, at the path
-    // `slot_of` decides (it used to be rebuilt here from the row's bucket, and
-    // with a hardcoded currency in the filename).
-    let Some(root) = root else {
-        // No vault to consult: nothing is confirmed, which is the honest
-        // answer rather than a convenient one.
-        return false;
-    };
-    match crate::services::receipts::slot_of(pool, transaction_id).await {
-        Ok(Some((slot, _))) => crate::services::receipts::presence(pool, root, &slot)
-            .await
-            .map(|p| p.receipt.is_some())
-            .unwrap_or(false),
-        _ => false,
-    }
+/// A rule's occurrences inside one run's first and last month.
+fn in_run<'a>(
+    rows: &'a HashMap<i64, Vec<Occurrence>>,
+    rule_id: i64,
+    run: &[Period],
+) -> impl Iterator<Item = &'a Occurrence> {
+    let bounds = run.first().copied().zip(run.last().copied());
+    rows.get(&rule_id)
+        .into_iter()
+        .flatten()
+        .filter(move |o| bounds.is_some_and(|(first, last)| first <= o.period && o.period <= last))
 }
 
 /// How far a rule's run has come as of `at` (`ui::row::Progress`).
@@ -664,38 +921,24 @@ pub(crate) async fn is_confirmed(
 /// run has seen — what carrying the amount forward would seed it with. The
 /// last two are a projection, and say so. With none of them, what is left is
 /// unknown (`None`), never `R$ 0,00`: those months are not free.
-async fn progress_of(
-    pool: &SqlitePool,
-    root: Option<&std::path::Path>,
-    rule_id: i64,
+///
+/// `rows` are the rule's occurrences inside the run, `codes` its bill codes'
+/// amounts, and `files` the vault's answer for the pane.
+fn progress_from(
     run: &[Period],
     at: Period,
+    rows: &[&Occurrence],
+    codes: Option<&HashMap<Period, Cents>>,
     fallback: Option<Cents>,
-) -> sqlx::Result<Progress> {
-    let (Some(first), Some(last)) = (run.first(), run.last()) else {
-        return Ok(Progress::default());
-    };
-    let (first_s, last_s) = (first.to_string(), last.to_string());
-    let rows = sqlx::query!(
-        r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
-                  t.amount_cents AS "amount_cents: i64",
-                  t.manual_paid AS "manual_paid!: i64",
-                  r.tracked AS "tracked!: i64"
-           FROM transactions t
-           JOIN recurring_rules r ON r.id = t.rule_id
-           WHERE t.rule_id = ?1 AND t.period BETWEEN ?2 AND ?3
-             AND t.deleted_at IS NULL"#,
-        rule_id,
-        first_s,
-        last_s,
-    )
-    .fetch_all(pool)
-    .await?;
-    let codes = crate::db::bill_codes::amounts(pool, rule_id).await?;
+    files: &HashMap<i64, FilePresence>,
+) -> Progress {
+    if run.is_empty() {
+        return Progress::default();
+    }
     let fallback = fallback.or_else(|| {
         rows.iter()
             .filter(|r| r.amount_cents.is_some())
-            .max_by(|a, b| a.period.cmp(&b.period))
+            .max_by_key(|r| r.period)
             .and_then(|r| r.amount_cents)
             .map(Cents)
     });
@@ -706,17 +949,13 @@ async fn progress_of(
         ..Progress::default()
     };
     for period in run {
-        let row = rows
-            .iter()
-            .find(|r| Period::parse(&r.period) == Some(*period));
+        let row = rows.iter().find(|r| r.period == *period);
         let amount = row
             .and_then(|r| r.amount_cents)
             .map(Cents)
-            .or_else(|| codes.get(period).copied());
+            .or_else(|| codes.and_then(|c| c.get(period)).copied());
         let confirmed = match row {
-            Some(r) if *period <= at => {
-                is_confirmed(pool, root, r.tracked != 0, r.id, r.manual_paid != 0).await
-            }
+            Some(r) if *period <= at => r.confirmed(files),
             _ => false,
         };
         if confirmed {
@@ -733,7 +972,7 @@ async fn progress_of(
             };
         }
     }
-    Ok(p)
+    p
 }
 
 /// Dates are ISO-8601 TEXT, fixed width, so this is exact rather than lenient.
@@ -891,36 +1130,29 @@ pub async fn unresolved_months(
     .fetch_all(pool)
     .await?;
 
+    // The current month is where the person already is; the badge points at
+    // the ones they are not looking at.
+    let rows: Vec<(i64, Period)> = rows
+        .into_iter()
+        .filter_map(|r| Some((r.id, Period::parse(&r.period)?)))
+        .filter(|(_, period)| *period != current)
+        .collect();
+
+    // The disk decides, here as everywhere: a receipt on disk resolves it,
+    // whatever the database thinks. The path is `slot_of`'s, as everywhere,
+    // and the vault is asked once for the whole year. With no vault to
+    // consult nothing is resolved, which is the honest answer rather than a
+    // convenient one.
+    let ids: Vec<i64> = rows.iter().map(|(id, _)| *id).collect();
+    let files = vault_files(pool, root, &ids).await;
+
     let mut months: Vec<Unresolved> = Vec::new();
-    for r in rows {
-        let Some(period) = Period::parse(&r.period) else {
-            continue;
-        };
-        // The current month is where the person already is; the badge points
-        // at the ones they are not looking at.
-        if period == current {
+    for (id, period) in rows {
+        // Every row here is tracked (the query says so), so only the disk can
+        // resolve it — there is no manual tick to consult.
+        if confirmed(true, false, id, &files) {
             continue;
         }
-
-        // The disk decides, here as everywhere: a receipt on disk resolves it,
-        // whatever the database thinks.
-        // The path is `slot_of`'s, as everywhere.
-        let resolved = match root {
-            Some(root) => match crate::services::receipts::slot_of(pool, r.id).await {
-                Ok(Some((slot, _))) => crate::services::receipts::presence(pool, root, &slot)
-                    .await
-                    .map(|p| p.receipt.is_some())
-                    .unwrap_or(false),
-                _ => false,
-            },
-            // No vault to consult: nothing is resolved, which is the honest
-            // answer rather than a convenient one.
-            None => false,
-        };
-        if resolved {
-            continue;
-        }
-
         match months.last_mut() {
             Some(m) if m.period == period => m.count += 1,
             _ => months.push(Unresolved { period, count: 1 }),

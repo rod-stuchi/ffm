@@ -1384,8 +1384,8 @@ other way. `I` creates one, `E` edits it, `i` still adds a one-off.
   got dearer. No color per bucket — small multiples on one scale.
 - **Month reads `member_panes`; Year and Years read `db::charts::rows`**, one
   query for the range with the pane's own privacy and turned-off predicates,
-  and the varying-income projection through the same `ledger::projection`
-  the pane calls. `tests/charts.rs` holds every month's sums to the panes',
+  and the varying-income projection through the same steps the pane takes
+  (`ledger::unconfirmed_projections`: history, confirmation, `project`). `tests/charts.rs` holds every month's sums to the panes',
   viewer by viewer — keep it passing when either side changes.
 - **Years opens on the last ten years**, its *from* field reaching the rest,
   and its spent/earned-so-far cards draw this year against last or, with

@@ -24,6 +24,7 @@ use crate::domain::period::Period;
 use crate::domain::receipt_path::{self, Kind, Taxonomy};
 use crate::ui::row::FilePresence;
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 fn now() -> String {
@@ -66,24 +67,95 @@ impl Slot {
 }
 
 /// What is on disk for one occurrence, as extensions — which is what the row
-/// needs, since the path ends in one.
+/// needs, since the path ends in one. [`presences`] for a batch of one.
 pub async fn presence(pool: &SqlitePool, root: &Path, slot: &Slot) -> sqlx::Result<FilePresence> {
+    Ok(presences(pool, root, std::slice::from_ref(slot))
+        .await?
+        .remove(&slot.transaction_id)
+        .unwrap_or_default())
+}
+
+/// What is on disk for many occurrences at once, keyed by transaction id.
+///
+/// One `receipts` query for the whole batch, and every `stat` in **one**
+/// blocking task rather than one at a time on the async runtime. A pane asks
+/// this once for every tracked row it shows and every month its runs and
+/// projections need — it used to be a query and up to twelve stats per row,
+/// and again per month of each rule's run.
+///
+/// The check per occurrence is unchanged: the two steps the module describes.
+pub async fn presences(
+    pool: &SqlitePool,
+    root: &Path,
+    slots: &[Slot],
+) -> sqlx::Result<HashMap<i64, FilePresence>> {
+    if slots.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let ids = id_list(slots.iter().map(|s| s.transaction_id));
     let rows = sqlx::query!(
-        r#"SELECT kind AS "kind!: String", ext AS "ext!: String"
+        r#"SELECT transaction_id AS "transaction_id!: i64",
+                  kind AS "kind!: String", ext AS "ext!: String"
            FROM receipts
-           WHERE transaction_id = ?1 AND deleted_at IS NULL"#,
-        slot.transaction_id
+           WHERE transaction_id IN (SELECT value FROM json_each(?1))
+             AND deleted_at IS NULL"#,
+        ids
     )
     .fetch_all(pool)
     .await?;
 
+    let mut recorded: HashMap<i64, Vec<(String, String)>> = HashMap::new();
+    for r in rows {
+        recorded
+            .entry(r.transaction_id)
+            .or_default()
+            .push((r.kind, r.ext));
+    }
+    let root = root.to_path_buf();
+    let slots = slots.to_vec();
+    let found = tokio::task::spawn_blocking(move || {
+        slots
+            .iter()
+            .map(|slot| {
+                let rec = recorded
+                    .get(&slot.transaction_id)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+                (slot.transaction_id, on_disk(&root, slot, rec))
+            })
+            .collect()
+    })
+    .await;
+    Ok(blocking_result(found))
+}
+
+/// The files of many occurrences, by transaction id: [`slots_for`], then
+/// [`presences`]. An id with nothing to file under — untracked, deleted, a
+/// rule with no taxonomy — is absent, which is how the row already read it.
+pub async fn files_of(
+    pool: &SqlitePool,
+    root: &Path,
+    ids: &[i64],
+) -> sqlx::Result<HashMap<i64, FilePresence>> {
+    let slots: Vec<Slot> = slots_for(pool, ids)
+        .await?
+        .into_values()
+        .map(|(slot, _)| slot)
+        .collect();
+    presences(pool, root, &slots).await
+}
+
+/// Steps 1 and 2 of the module's check, for one occurrence: the recorded
+/// extension's one exact path, else the four probes. `recorded` is its live
+/// `receipts` rows as `(kind, ext)`.
+fn on_disk(root: &Path, slot: &Slot, recorded: &[(String, String)]) -> FilePresence {
     let mut out = FilePresence::default();
     for kind in Kind::ALL {
         // Step 1: the extension we recorded, if there is one.
-        let known = rows
+        let known = recorded
             .iter()
-            .find(|r| r.kind == kind.code())
-            .map(|r| r.ext.clone());
+            .find(|(k, _)| k == kind.code())
+            .map(|(_, ext)| ext.clone());
 
         let found = match known {
             Some(ext) if root.join(slot.path(kind, &ext)).exists() => Some(ext),
@@ -103,7 +175,34 @@ pub async fn presence(pool: &SqlitePool, root: &Path, slot: &Slot) -> sqlx::Resu
             Kind::Receipt => out.receipt = found,
         }
     }
-    Ok(out)
+    out
+}
+
+/// A list of ids as the JSON array `json_each` reads: one bound parameter
+/// for any number of them, so a batch is one statement.
+fn id_list(ids: impl Iterator<Item = i64>) -> String {
+    let mut s = String::from("[");
+    for (i, id) in ids.enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push_str(&id.to_string());
+    }
+    s.push(']');
+    s
+}
+
+/// A blocking batch's answer. A panic inside it is re-raised here, as it
+/// would have been had the stats run inline; a task canceled because the
+/// runtime is shutting down answers nothing.
+fn blocking_result<T: Default>(r: Result<T, tokio::task::JoinError>) -> T {
+    match r {
+        Ok(v) => v,
+        Err(e) => match e.try_into_panic() {
+            Ok(panic) => std::panic::resume_unwind(panic),
+            Err(_) => T::default(),
+        },
+    }
 }
 
 #[derive(Debug)]
@@ -903,7 +1002,23 @@ impl Reconciled {
 /// `None` for a row with nothing to file under, or one that is deleted (its
 /// files went to the trash with it).
 pub async fn slot_of(pool: &SqlitePool, transaction_id: i64) -> sqlx::Result<Option<(Slot, i64)>> {
-    let row = sqlx::query!(
+    Ok(slots_for(pool, &[transaction_id])
+        .await?
+        .remove(&transaction_id))
+}
+
+/// [`slot_of`] for many occurrences at once, keyed by transaction id — still
+/// the one place a path is decided; `slot_of` is this with one id.
+///
+/// One query for the batch, and the household's currency read **once** — it
+/// was read again for every row, which a pane paid per tracked row and again
+/// per month of every run it counted.
+pub async fn slots_for(pool: &SqlitePool, ids: &[i64]) -> sqlx::Result<HashMap<i64, (Slot, i64)>> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let list = id_list(ids.iter().copied());
+    let rows = sqlx::query!(
         r#"SELECT t.id AS "id!: i64", t.period AS "period!: String",
                   r.bucket AS "bucket: String", r.bill_name AS "bill_name: String",
                   t.amount_cents AS "amount_cents: i64", t.member_id AS "member_id!: i64",
@@ -913,34 +1028,45 @@ pub async fn slot_of(pool: &SqlitePool, transaction_id: i64) -> sqlx::Result<Opt
            FROM transactions t
            JOIN recurring_rules r ON r.id = t.rule_id
            JOIN members m ON m.id = t.member_id
-           WHERE t.id = ?1 AND t.deleted_at IS NULL AND r.tracked = 1"#,
-        transaction_id
+           WHERE t.id IN (SELECT value FROM json_each(?1))
+             AND t.deleted_at IS NULL AND r.tracked = 1"#,
+        list
     )
-    .fetch_optional(pool)
+    .fetch_all(pool)
     .await?;
-    let Some(r) = row else { return Ok(None) };
-    let (Some(bucket), Some(bill_name), Some(period)) =
-        (r.bucket, r.bill_name, Period::parse(&r.period))
-    else {
-        return Ok(None);
-    };
+    if rows.is_empty() {
+        return Ok(HashMap::new());
+    }
     let currency = crate::db::ledger::household(pool)
         .await?
         .map(|h| h.currency)
         .unwrap_or_default();
-    Ok(Some((
-        Slot {
-            transaction_id: r.id,
-            vault: receipt_path::vault(&r.slug),
-            bucket,
-            bill_name,
-            instance: r.instance,
-            period,
-            amount: r.amount_cents.map(|c| (Cents(c), currency)),
-            amount_in_filename: r.amount_in_filename != 0,
-        },
-        r.member_id,
-    )))
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| {
+            let (Some(bucket), Some(bill_name), Some(period)) =
+                (r.bucket, r.bill_name, Period::parse(&r.period))
+            else {
+                return None;
+            };
+            Some((
+                r.id,
+                (
+                    Slot {
+                        transaction_id: r.id,
+                        vault: receipt_path::vault(&r.slug),
+                        bucket,
+                        bill_name,
+                        instance: r.instance,
+                        period,
+                        amount: r.amount_cents.map(|c| (Cents(c), currency)),
+                        amount_in_filename: r.amount_in_filename != 0,
+                    },
+                    r.member_id,
+                ),
+            ))
+        })
+        .collect())
 }
 
 /// Brings one occurrence's **record** in line with its **disk**, and logs the
@@ -1070,27 +1196,60 @@ pub async fn shared_bill(
     root: &Path,
     transaction_id: i64,
 ) -> Option<SharedBill> {
-    let row = sqlx::query!(
-        r#"SELECT t.rule_id AS "rule_id!: i64", t.period AS "period!: String"
-           FROM transactions t JOIN recurring_rules r ON r.id = t.rule_id
-           WHERE t.id = ?1 AND r.spans_period = 1"#,
-        transaction_id
+    shared_bills(pool, root, &[transaction_id])
+        .await
+        .ok()?
+        .remove(&transaction_id)
+}
+
+/// [`shared_bill`] for many occurrences at once, keyed by transaction id: one
+/// query from the row to its month's live code to that code's live file, and
+/// the `exists()` for all of them in one blocking task. A row of a rule that
+/// does not cover several months, or a month with no code, is absent.
+pub async fn shared_bills(
+    pool: &SqlitePool,
+    root: &Path,
+    ids: &[i64],
+) -> sqlx::Result<HashMap<i64, SharedBill>> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let list = id_list(ids.iter().copied());
+    let rows = sqlx::query!(
+        r#"SELECT t.id AS "id!: i64", c.page AS "page!: i64",
+                  rc.path AS "path!: String", rc.ext AS "ext!: String"
+           FROM transactions t
+           JOIN recurring_rules r ON r.id = t.rule_id AND r.spans_period = 1
+           JOIN rule_bill_code c ON c.rule_id = t.rule_id AND c.period = t.period
+                                AND c.retired_at IS NULL
+           JOIN receipts rc ON rc.id = c.receipt_id AND rc.deleted_at IS NULL
+           WHERE t.id IN (SELECT value FROM json_each(?1))"#,
+        list
     )
-    .fetch_optional(pool)
-    .await
-    .ok()??;
-    let period = Period::parse(&row.period)?;
-    let code = crate::db::bill_codes::for_period(pool, row.rule_id, period)
-        .await
-        .ok()??;
-    let (path, ext) = crate::db::bill_codes::shared_file(pool, &code)
-        .await
-        .ok()??;
-    root.join(&path).exists().then_some(SharedBill {
-        path,
-        ext,
-        page: code.page,
+    .fetch_all(pool)
+    .await?;
+    if rows.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let root = root.to_path_buf();
+    let found = tokio::task::spawn_blocking(move || {
+        rows.into_iter()
+            .filter(|r| root.join(&r.path).exists())
+            .map(|r| {
+                (
+                    r.id,
+                    SharedBill {
+                        path: r.path,
+                        ext: r.ext,
+                        // `bill_codes::for_period`'s reading of the column.
+                        page: r.page.max(1) as u32,
+                    },
+                )
+            })
+            .collect()
     })
+    .await;
+    Ok(blocking_result(found))
 }
 
 /// The note on a file the app moved because the path its row computes moved
