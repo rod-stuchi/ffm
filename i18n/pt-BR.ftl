@@ -395,6 +395,7 @@ household-assistant-note = Na primeira conta de uma regra, o assistente lê a pr
 household-assistant-off = nada é enviado para lugar nenhum
 household-assistant-ready = { $name } · pronto
 household-assistant-installed = { $name } · instalado
+household-assistant-checking = verificando o { $name }…
 household-assistant-not-found = { $name } não está instalado neste servidor
 household-assistant-logged-out = { $name } está instalado mas sem login — rode `{ $login }` no servidor
 household-trash = Lixeira

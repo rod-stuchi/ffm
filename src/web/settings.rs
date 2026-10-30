@@ -403,15 +403,25 @@ struct HouseholdPane {
     gap: i64,
     densities: Vec<Choice>,
     /// Which CLI teaches rules to read their bills, and whether this server
-    /// can run it right now.
+    /// can run it right now — or, while that is being found out, saying so.
     assistants: Vec<Choice>,
     assistant_status: String,
+    assistant_pending: bool,
     /// Days a removed file stays in the trash before `:prune` offers it for
     /// removal for good; 0 keeps it forever.
     trash_keep_days: i64,
     db_path: String,
     receipts_root: String,
     backup_dir: String,
+}
+
+/// The line under the assistant setting, on its own: `:household` asks for it
+/// once the pane is on screen.
+#[derive(Template)]
+#[template(path = "partials/assistant_status.html")]
+struct AssistantLine {
+    assistant_status: String,
+    assistant_pending: bool,
 }
 
 /// The line under the assistant setting: whether the server can run it, and
@@ -451,12 +461,18 @@ pub async fn household(State(st): State<AppState>, auth: Auth) -> Response {
     let d = settings::member_defaults(&st.pool)
         .await
         .unwrap_or_default();
-    // Runs the CLI's own `--version` and login check — a second, off the
-    // async runtime.
+    // Whether the server can run the assistant is filled in once the pane is
+    // on screen (`household_assistant`): finding out launches the CLI twice,
+    // and the form should not wait for it. With none chosen there is nothing
+    // to find out.
     let provider = settings::assistant(&st.pool).await;
-    let status = tokio::task::spawn_blocking(move || crate::services::assistant::status(provider))
-        .await
-        .unwrap_or(crate::services::assistant::Status::NotFound);
+    let (status_line, pending) = match provider {
+        crate::services::assistant::Provider::None => (
+            assistant_status(&t, provider, crate::services::assistant::Status::Off),
+            false,
+        ),
+        _ => (t.household_assistant_checking(provider.code()), true),
+    };
 
     Html(HouseholdPane {
         assistants: crate::services::assistant::Provider::ALL
@@ -475,7 +491,8 @@ pub async fn household(State(st): State<AppState>, auth: Auth) -> Response {
                 selected: *p == provider,
             })
             .collect(),
-        assistant_status: assistant_status(&t, provider, status),
+        assistant_status: status_line,
+        assistant_pending: pending,
         trash_keep_days: settings::trash_keep_days(&st.pool).await,
         themes: swatches(d.theme),
         panes: pane_choices(&d.panes),
@@ -526,6 +543,25 @@ pub async fn household(State(st): State<AppState>, auth: Auth) -> Response {
         receipts_root: st.cfg.receipts_root.display().to_string(),
         backup_dir: st.cfg.backup_dir.display().to_string(),
         t,
+    })
+    .into_response()
+}
+
+/// The assistant's line in `:household`, asked for once the pane is on
+/// screen: it runs the CLI's own `--version` and login check, off the async
+/// runtime, and those launches used to sit between the click and the form.
+pub async fn household_assistant(State(st): State<AppState>, auth: Auth) -> Response {
+    let t = auth.catalog();
+    if !auth.viewer.is_admin() {
+        return crate::web::tx::say_only(t.settings_admin_only(), true);
+    }
+    let provider = settings::assistant(&st.pool).await;
+    let status = tokio::task::spawn_blocking(move || crate::services::assistant::status(provider))
+        .await
+        .unwrap_or(crate::services::assistant::Status::NotFound);
+    Html(AssistantLine {
+        assistant_status: assistant_status(&t, provider, status),
+        assistant_pending: false,
     })
     .into_response()
 }

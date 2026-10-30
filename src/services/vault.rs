@@ -205,6 +205,24 @@ pub async fn tidy_trash(pool: &SqlitePool, root: &Path) -> Result<usize, VaultEr
     Ok(moved)
 }
 
+/// The vault's upkeep at startup: [`tidy_trash`], then [`refile_all`]. Run
+/// after the listener is bound — both are no-ops once done, and the ledger
+/// does not need them to answer — so it is never fatal: a file that cannot
+/// move is logged, and the household is not kept out of its ledger for it.
+pub async fn upkeep(pool: &SqlitePool, root: &Path) {
+    if let Err(e) = tidy_trash(pool, root).await {
+        tracing::warn!("{e}");
+    }
+    match refile_all(pool, root).await {
+        Ok((0, _)) => {}
+        Ok((n, blocked)) => tracing::info!(
+            "vault · {n} file(s) re-filed where their row now looks, {} left in place",
+            blocked.len()
+        ),
+        Err(e) => tracing::warn!("{e}"),
+    }
+}
+
 /// Re-files every live file the app holds to the path its row computes now
 /// (`receipts::refile_row`), at startup. Idempotent: once the vault agrees,
 /// it is one path comparison per file.
@@ -227,6 +245,11 @@ pub async fn refile_all(
         .map_err(|e| VaultError::Db(e.to_string()))?;
     let mut all = receipts::Refiled::default();
     for (id, _, _) in rows {
+        // A shutdown mid-pass ends it, rather than logging every row left as
+        // a failure; the next startup finishes it.
+        if pool.is_closed() {
+            break;
+        }
         // One file that cannot move is that file's problem, logged — not a
         // reason to keep the household out of its ledger.
         match receipts::refile_row(pool, root, id).await {

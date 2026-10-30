@@ -112,7 +112,7 @@
           <option value="{{ a.code }}"{% if a.selected %} selected{% endif %}>{{ a.label }}</option>
           {%- endfor %}
         </select>
-        <span class="hint mono">{{ assistant_status }}</span>
+        {% include "partials/assistant_status.html" %}
       </label>
     </form>
     <p class="hint mwide">{{ t.household_assistant_note() }}</p>

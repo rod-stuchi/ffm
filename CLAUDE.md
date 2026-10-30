@@ -854,7 +854,10 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   is kept: an app write updates its row in the same handler, so reconcile
   finds nothing. It never moves a file — a hand-filed receipt does **not**
   supersede the scheduled one. Startup catches up on what changed while the
-  process was down, in its own task. What it finds is pushed over
+  process was down, in its own task after the bind — behind the vault's upkeep
+  and the materializer's first pass (see the gotcha on two writers at
+  startup). A folder that arrives is read for its files' months; only one that
+  is gone reconciles the whole member. What it finds is pushed over
   Server-Sent Events as **ids only**; each page re-fetches the row as itself,
   never swapping a row open in `e` (its kept copy goes stale instead).
 - **Every change reaches every open page — announced from the change log,
@@ -1768,7 +1771,8 @@ that will otherwise be re-proposed.
   (`id`, `member_id`, `created_at`, `last_seen_at`, `label`) backs an opaque
   `HttpOnly` session cookie, so a single lost/stolen device can be logged out
   without rotating a secret that would log out the whole household. Sized for a
-  LAN/Tailscale-only deployment: long-lived sliding sessions, no lockout or rate
+  LAN/Tailscale-only deployment: long-lived sliding sessions (`last_seen_at`
+  moves at most once a minute, so a request is not a write), no lockout or rate
   limiting, `SameSite=Lax` plus checking HTMX's own `HX-Request` header is enough
   CSRF defense at this scale. Revisit all of this if this is ever exposed to the
   open internet.
@@ -2249,6 +2253,15 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   can steal from it — so the event left only when the handler next awaited.
   A child process belongs in `spawn_blocking` (`import::read_bill_off`,
   `unlock_for`) anyway; this is how it shows when it is not.
+- **Two writers at startup and one of them fails — and the materializer
+  waits an hour to try again.** Moving the vault's upkeep after the bind put
+  its re-filing beside the materializer's first pass, and that pass died with
+  `database is locked` (517, `SQLITE_BUSY_SNAPSHOT`): a transaction that has
+  read cannot wait out a writer that committed under it, so `busy_timeout`
+  does not help. A restart across a month boundary would have shown the new
+  month without its recurring rows. `materializer::spawn` now says when its
+  first pass is over, and the upkeep and the catch-up wait for it. **Any new
+  startup work that writes goes in that same task, after them.**
 - **Watch class-name collisions.** An `app.cfg` state class silently matched a
   leftover `.cfg { display: grid; align-items: start }` rule and broke the whole
   shell width. Namespace state classes (`is-`/`has-` prefix) and delete dead CSS.

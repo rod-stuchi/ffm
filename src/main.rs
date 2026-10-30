@@ -106,24 +106,6 @@ async fn main() {
         eprintln!("{e}");
         std::process::exit(1);
     }
-    // And into the one-trash-per-member layout: a `.delete/` beside a file
-    // moves into the member's trash, and a deleted row's still-live files
-    // follow it there. Also a no-op once done.
-    if let Err(e) = ffm::services::vault::tidy_trash(&pool, &cfg.receipts_root).await {
-        eprintln!("{e}");
-        std::process::exit(1);
-    }
-    // And every file where its row now looks: a rule renamed, or a row given
-    // to another member, by v0.0.5 or earlier left its files behind. A no-op
-    // once done; a file whose new path is taken stays put and is logged.
-    match ffm::services::vault::refile_all(&pool, &cfg.receipts_root).await {
-        Ok((0, _)) => {}
-        Ok((n, blocked)) => tracing::info!(
-            "vault · {n} file(s) re-filed where their row now looks, {} left in place",
-            blocked.len()
-        ),
-        Err(e) => tracing::warn!("{e}"),
-    }
     // And `config/issuers.toml` retires: a rule still bound to one of its
     // profiles gets it as its own recipe, bound by CNPJ. A no-op once done.
     match ffm::db::recipes::convert_profiles(&pool, &cfg.issuers_path()).await {
@@ -142,7 +124,7 @@ async fn main() {
     // One pass now, then one an hour. Startup matters as much as the tick: a
     // process that was down across a month boundary has to catch up the moment
     // it is back, not up to an hour later.
-    ffm::services::materializer::spawn(pool.clone());
+    let materialized = ffm::services::materializer::spawn(pool.clone());
     // One snapshot now, then one a day. Startup matters for the same reason it
     // does for the materializer: a process that was down for a week should not
     // also be a week without a backup.
@@ -194,7 +176,19 @@ async fn main() {
     // what it finds changed by hand.
     ffm::services::live_feed::spawn(state_pool.clone(), live.clone());
     ffm::services::watch::spawn(state_pool.clone(), receipts_root.clone(), live.clone());
-    ffm::services::watch::catch_up(state_pool.clone(), receipts_root, live);
+    // The vault's upkeep, then the catch-up, in one task: the catch-up reads
+    // the vault the upkeep leaves. The upkeep ran before the bind once, and
+    // every startup waited on a pass over every file the household keeps.
+    // Both write, so they wait for the materializer's first pass to be over
+    // rather than fail it.
+    {
+        let pool = state_pool.clone();
+        tokio::spawn(async move {
+            let _ = materialized.await;
+            ffm::services::vault::upkeep(&pool, &receipts_root).await;
+            ffm::services::watch::catch_up(&pool, &receipts_root, &live).await;
+        });
+    }
 
     // WAL mode means `ffm.db` is only the whole database when read WITH its
     // sidecar. Checkpointing on the way out leaves a file that is complete on

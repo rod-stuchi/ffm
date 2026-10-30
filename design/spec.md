@@ -1802,7 +1802,10 @@ does most of the real work, so the auth layer stays simple on purpose.
   rotating a secret that logs out the whole household. `label` is derived from
   the User-Agent so `:profile` can name the device it is offering to revoke.
 - **Long-lived, sliding sessions.** No lockout or rate limiting — disproportionate
-  for a closed household network. Revisit all of this the day this is ever
+  for a closed household network. `last_seen_at` slides at most once a
+  minute: a page asks for a dozen things at once, and each request writing it
+  queued the carousel's pages and the live feed's rows behind SQLite's one
+  writer. Revisit all of this the day this is ever
   exposed to the open internet; it is not designed for that today.
 - **CSRF**: `SameSite=Lax` plus checking HTMX's own `HX-Request` header on
   state-changing routes. No token scheme — not proportionate at this scale.
@@ -2669,12 +2672,18 @@ found out on their next load. A file deleted by hand even stayed "live" in
   and the file name's first two digits); that member's tracked rows in that
   month are reconciled, so the bucket and bill name never have to be read
   back out of a slug. `.delete/`, dotfiles and half-downloaded names are
-  ignored; a whole folder going reconciles the whole member.
+  ignored. A folder that arrives is read for the months of the files in it
+  (`watch::groups_of`) — every upload into a new year makes one, and it used
+  to reconcile the whole member; only a folder that is **gone**, removed or
+  moved away, still reconciles the whole member.
 - **A hand-filed receipt does not supersede the scheduled file** the way an
   upload does. The watcher records; it never rearranges somebody's filing.
 - **Startup catches up**, on its own task after the bind — the server answers
   from the first moment — and logs `files · N found on disk, M removed by hand
-  while away`.
+  while away`. The same task first runs the vault's upkeep (`vault::upkeep`:
+  the trash's layout, then every file where its row looks), which ran before
+  the bind once, and both wait for the materializer's first pass: a second
+  writer beside it failed that pass with `database is locked`.
 - **The trash leaves a file removed by hand out**: nothing went through
   `.delete/`, so there is nothing to bring back.
 - **Open pages update live, over Server-Sent Events** (`GET /live`). An event

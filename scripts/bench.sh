@@ -74,9 +74,16 @@ login() {
     rg -q ffm.sid "$work/jar" || { echo "login as $who failed" >&2; exit 1; }
 }
 
+# `/undo` is POSTed, its query as the form: `u`'s first press only answers
+# what it would put back and writes nothing, so it can be timed again and
+# again.
 get() {
-    curl -s -o /dev/null -b "$work/jar" -H 'HX-Request: true' \
-        -w '%{time_total} %{size_download}\n' "$base$1"
+    local url=$base$1 post=()
+    case $1 in
+    /undo\?*) url=$base${1%%\?*}; post=(--data "${1#*\?}") ;;
+    esac
+    curl -s -o /dev/null -b "$work/jar" -H 'HX-Request: true' "${post[@]}" \
+        -w '%{time_total} %{size_download}\n' "$url"
 }
 
 # A tracked live row of the signed-in member this month, for the row fetch.
@@ -110,6 +117,7 @@ paths=(
     "/charts?tab=years&period=$period"
 )
 [ -n "$vary" ] && paths+=("/rules/$vary/edit?period=$period")
+paths+=("/undo?member=$member&period=$period" "/household")
 
 # --- 1. statements per request ------------------------------------------------
 start "$work/count.log" "warn,sqlx::query=debug"

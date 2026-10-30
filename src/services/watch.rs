@@ -19,7 +19,9 @@
 //!   the member's folder, the year is its folder, and the month is the file
 //!   name's first two digits. Parsing the bucket and bill name back out of a
 //!   lossy slug is avoided altogether: that member's tracked rows in that
-//!   month are a handful, and all of them are reconciled.
+//!   month are a handful, and all of them are reconciled. A folder that
+//!   arrives says only what the files in it say ([`groups_of`]); one that is
+//!   gone reconciles every tracked row of its member.
 //! - **The trash is never watched for meaning.** `.delete/` is where the app
 //!   puts files; anything there, and dotfiles and half-downloaded files, are
 //!   ignored.
@@ -75,6 +77,39 @@ pub fn locate(root: &Path, path: &Path) -> Option<(String, Option<Period>)> {
         })
         .flatten();
     Some((slug.to_string(), period))
+}
+
+/// What a burst of changed paths asks to be reconciled: a member's month for
+/// each file, and for a folder that is there, the months of the files in it.
+/// Every upload into a new year or a new bill makes one, and it used to
+/// reconcile every tracked row of the member — hundreds, for a file that
+/// named its own month; the file in it is its own change, and a folder moved
+/// in whole is read here instead. Only a folder that is **gone** — removed,
+/// or moved away — still reconciles the whole member: what it held cannot be
+/// read any more.
+pub fn groups_of(
+    root: &Path,
+    paths: impl IntoIterator<Item = PathBuf>,
+) -> BTreeSet<(String, Option<Period>)> {
+    let mut groups = BTreeSet::new();
+    for p in paths {
+        match locate(root, &p) {
+            Some((_, None)) if p.is_dir() => groups.extend(
+                walkdir::WalkDir::new(&p)
+                    .into_iter()
+                    .filter_entry(|e| !e.file_name().to_string_lossy().starts_with('.'))
+                    .filter_map(Result::ok)
+                    .filter(|e| e.file_type().is_file())
+                    .filter_map(|e| locate(root, e.path()))
+                    .filter(|(_, period)| period.is_some()),
+            ),
+            Some(g) => {
+                groups.insert(g);
+            }
+            None => {}
+        }
+    }
+    groups
 }
 
 /// Reconciles one member's rows — of one month, or all of them — and pushes
@@ -164,13 +199,16 @@ pub fn spawn(pool: SqlitePool, root: PathBuf, live: Live) {
                         .filter(|(_, at)| at.elapsed() >= QUIET)
                         .map(|(p, _)| p.clone())
                         .collect();
-                    let mut groups: BTreeSet<(String, Option<Period>)> = BTreeSet::new();
-                    for p in ready {
-                        pending.remove(&p);
-                        if let Some(g) = locate(&root, &p) {
-                            groups.insert(g);
-                        }
+                    if ready.is_empty() {
+                        continue;
                     }
+                    for p in &ready {
+                        pending.remove(p);
+                    }
+                    let at = root.clone();
+                    let groups = tokio::task::spawn_blocking(move || groups_of(&at, ready))
+                        .await
+                        .unwrap_or_default();
                     for (slug, period) in groups {
                         settle(&pool, &root, &live, &slug, period).await;
                     }
@@ -181,35 +219,37 @@ pub fn spawn(pool: SqlitePool, root: PathBuf, live: Live) {
 }
 
 /// Catches up on what changed while the process was down: every live tracked
-/// row, reconciled once. Its own task, started after the listener is bound —
+/// row, reconciled once. Run in a task started after the listener is bound —
 /// the server answers from the first moment, and the log fills in behind it.
-pub fn catch_up(pool: SqlitePool, root: PathBuf, live: Live) {
-    tokio::spawn(async move {
-        let rows = match receipts::all_tracked(&pool).await {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::warn!("files · cannot catch up: {e}");
-                return;
-            }
-        };
-        let (mut found, mut removed) = (0, 0);
-        for (id, member_id, period) in rows {
-            match receipts::reconcile_row(&pool, &root, id).await {
-                Ok(d) => {
-                    found += d.found;
-                    removed += d.removed;
-                    if d.changed() {
-                        live.publish(LiveEvent {
-                            disk: true,
-                            ..LiveEvent::row(id, member_id, period)
-                        });
-                    }
-                }
-                Err(e) => tracing::warn!("files · cannot reconcile row {id}: {e}"),
-            }
+pub async fn catch_up(pool: &SqlitePool, root: &Path, live: &Live) {
+    let rows = match receipts::all_tracked(pool).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("files · cannot catch up: {e}");
+            return;
         }
-        tracing::info!("files · {found} found on disk, {removed} removed by hand while away");
-    });
+    };
+    let (mut found, mut removed) = (0, 0);
+    for (id, member_id, period) in rows {
+        // A shutdown mid-pass ends it; the next startup catches up again.
+        if pool.is_closed() {
+            return;
+        }
+        match receipts::reconcile_row(pool, root, id).await {
+            Ok(d) => {
+                found += d.found;
+                removed += d.removed;
+                if d.changed() {
+                    live.publish(LiveEvent {
+                        disk: true,
+                        ..LiveEvent::row(id, member_id, period)
+                    });
+                }
+            }
+            Err(e) => tracing::warn!("files · cannot reconcile row {id}: {e}"),
+        }
+    }
+    tracing::info!("files · {found} found on disk, {removed} removed by hand while away");
 }
 
 #[cfg(test)]
@@ -237,6 +277,56 @@ mod tests {
         );
         // A folder going says no month: the whole member is reconciled.
         assert_eq!(at("udo/consumo/cpfl/2026"), Some(("udo".into(), None)));
+    }
+
+    #[test]
+    fn a_folder_that_arrives_names_the_months_inside_it_and_one_gone_names_none() {
+        let root = std::env::temp_dir().join(format!("ffm-watch-groups-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let bill = root.join("udo/consumo/cpfl");
+        for f in [
+            "2026/09.pdf",
+            "2026/10_barcode.pdf",
+            "casa_2/2025/12_scheduled.pdf",
+        ] {
+            let p = bill.join(f);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, b"x").unwrap();
+        }
+        // The trash under it is not read: it is the app's own.
+        let trashed = root.join("udo/consumo/cpfl/.delete/2024/01.r4.pdf");
+        std::fs::create_dir_all(trashed.parent().unwrap()).unwrap();
+        std::fs::write(&trashed, b"x").unwrap();
+
+        let named = |paths: Vec<PathBuf>| -> Vec<(String, Option<String>)> {
+            groups_of(&root, paths)
+                .into_iter()
+                .map(|(s, p)| (s, p.map(|p| p.to_string())))
+                .collect()
+        };
+        let month = |m: &str| ("udo".to_string(), Some(m.to_string()));
+        // A new year folder, a whole bill moved in: the months of their files.
+        assert_eq!(
+            named(vec![bill.join("2026")]),
+            vec![month("2026-09"), month("2026-10")]
+        );
+        assert_eq!(
+            named(vec![bill.clone()]),
+            vec![month("2025-12"), month("2026-09"), month("2026-10")]
+        );
+        // An empty folder says nothing; a file says its month.
+        std::fs::create_dir_all(bill.join("2027")).unwrap();
+        assert_eq!(named(vec![bill.join("2027")]), vec![]);
+        assert_eq!(
+            named(vec![bill.join("2026/09.pdf")]),
+            vec![month("2026-09")]
+        );
+        // A folder gone: every tracked row of the member.
+        assert_eq!(
+            named(vec![root.join("udo/agua/sabesp/2026")]),
+            vec![("udo".to_string(), None)]
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

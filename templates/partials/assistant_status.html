@@ -1,0 +1,5 @@
+{#- The line under `:household`'s assistant: whether this server can run it.
+    Finding out launches the CLI twice, so the pane opens saying it is
+    checking, and this line asks for itself once it is on screen. -#}
+<span class="hint mono"
+      {%- if assistant_pending %} hx-get="/household/assistant" hx-trigger="load" hx-swap="outerHTML"{% endif %}>{{ assistant_status }}</span>

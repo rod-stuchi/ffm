@@ -333,20 +333,47 @@ const SATELLITES: [&str; 2] = [
 pub async fn next(pool: &SqlitePool, scope: Scope, dir: Direction) -> sqlx::Result<Next> {
     let period = scope.period.map(|p| p.to_string());
     let rows = sqlx::query!(
-        r#"WITH RECURSIVE depth(id, d) AS (
-               SELECT id, 0 FROM change WHERE member_id = ?1 AND undo_of IS NULL
+        r#"WITH RECURSIVE
+           -- Where to look: my entries on the month's rows — anybody's rows,
+           -- since one this pane handed to somebody else is still this pane's
+           -- change — and on their files, and the month's `:order` anchors;
+           -- every entry of mine only when no month is given. It was every
+           -- entry of mine always, a log that grows for as long as the
+           -- household keeps the ledger. `CROSS JOIN` holds SQLite to driving
+           -- from the month, which it does not choose on its own.
+           cand(id) AS (
+               SELECT c.id FROM change c WHERE ?3 IS NULL AND c.member_id = ?1
                UNION ALL
-               SELECT c.id, depth.d + 1 FROM change c JOIN depth ON c.undo_of = depth.id
+               SELECT c.id FROM transactions t
+               CROSS JOIN change c ON c.entity = 'transaction' AND c.entity_id = t.id
+               WHERE t.period = ?3 AND c.member_id = ?1
+               UNION ALL
+               SELECT c.id FROM transactions t
+               CROSS JOIN receipts r ON r.transaction_id = t.id
+               CROSS JOIN change c ON c.entity = 'file' AND c.entity_id = r.id
+               WHERE t.period = ?3 AND c.member_id = ?1
+               UNION ALL
+               SELECT c.id FROM change c
+               WHERE c.entity = 'member' AND c.member_id = ?1 AND c.period = ?3
+           ),
+           -- Each one's depth: `undo_of` walked up to the original action,
+           -- which `top` ends on.
+           up(id, top, cur, d) AS (
+               SELECT c.id, c.id, c.undo_of, 0 FROM cand CROSS JOIN change c ON c.id = cand.id
+               UNION ALL
+               SELECT up.id, p.id, p.undo_of, up.d + 1 FROM up CROSS JOIN change p ON p.id = up.cur
            )
            SELECT c.id AS "id!: i64", c.entity AS "entity!: String",
                   c.entity_id AS "entity_id!: i64", c.action AS "action!: String",
-                  c.at AS "at!: String", depth.d AS "depth!: i64",
+                  c.at AS "at!: String", up.d AS "depth!: i64",
                   c.period AS "period: String",
                   c.part_of IS NOT NULL AS "part!: bool",
                   t.id AS "tx_id?: i64", t.title AS "title?: String",
                   EXISTS (SELECT 1 FROM change u WHERE u.undo_of = c.id) AS "reversed!: bool"
-           FROM change c
-           JOIN depth ON depth.id = c.id
+           FROM up
+           CROSS JOIN change c ON c.id = up.id AND up.cur IS NULL
+           -- A chain is mine when its original is.
+           JOIN change root ON root.id = up.top AND root.member_id = ?1
            LEFT JOIN receipts r ON c.entity = 'file' AND r.id = c.entity_id
            -- Only a row's or a file's change is about a transaction: a
            -- member entry's id is a member's, and must not join a row that

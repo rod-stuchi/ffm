@@ -179,6 +179,46 @@ async fn one_device_can_be_signed_out_without_touching_the_others() {
 }
 
 #[tokio::test]
+async fn a_session_slides_once_a_minute_not_on_every_request() {
+    let pool = pool().await;
+    let sid = first_household(&pool).await;
+    let seen = |pool: SqlitePool, sid: String| async move {
+        sqlx::query_scalar::<_, String>("SELECT last_seen_at FROM sessions WHERE id = ?1")
+            .bind(sid)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+
+    // Seen 30 seconds ago: a request is a read and nothing more — a page asks
+    // for a dozen things at once, and each one used to take the one writer.
+    let recent = (ffm::clock::now() - chrono::Duration::seconds(30))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    sqlx::query("UPDATE sessions SET last_seen_at = ?2 WHERE id = ?1")
+        .bind(&sid)
+        .bind(&recent)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(auth::session(&pool, &sid).await.unwrap().is_some());
+    assert_eq!(seen(pool.clone(), sid.clone()).await, recent);
+
+    // Seen two minutes ago: it slides to now.
+    let stale = (ffm::clock::now() - chrono::Duration::seconds(120))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    sqlx::query("UPDATE sessions SET last_seen_at = ?2 WHERE id = ?1")
+        .bind(&sid)
+        .bind(&stale)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(auth::session(&pool, &sid).await.unwrap().is_some());
+    assert!(seen(pool.clone(), sid.clone()).await > recent);
+}
+
+#[tokio::test]
 async fn preview_is_session_scoped_not_account_scoped() {
     let pool = pool().await;
     let a = first_household(&pool).await;

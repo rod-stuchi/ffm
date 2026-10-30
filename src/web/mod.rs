@@ -164,6 +164,7 @@ pub fn router(state: AppState) -> Router {
         // of the truth.
         .route("/profile", get(settings::profile))
         .route("/household", get(settings::household))
+        .route("/household/assistant", get(settings::household_assistant))
         .route("/members", get(settings::members_view))
         .route("/settings/member", post(settings::set_member))
         .route(

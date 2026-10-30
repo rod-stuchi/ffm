@@ -331,7 +331,14 @@ async fn insert_occurrence(pool: &SqlitePool, o: Occurrence<'_>) -> sqlx::Result
 }
 
 /// Starts the background task: one pass now, then one an hour.
-pub fn spawn(pool: SqlitePool) {
+///
+/// The receiver hears when the first pass is over, so the rest of startup's
+/// writing can wait for it: the vault's upkeep, running beside it, made it
+/// fail with `database is locked` — a pass that has read cannot wait for
+/// the writer that moved on under it — and a failed pass waits an hour.
+pub fn spawn(pool: SqlitePool) -> tokio::sync::oneshot::Receiver<()> {
+    let (first_done, first) = tokio::sync::oneshot::channel();
+    let mut first_done = Some(first_done);
     tokio::spawn(async move {
         loop {
             let today = crate::clock::today();
@@ -348,9 +355,13 @@ pub fn spawn(pool: SqlitePool) {
                 // rows themselves, so there is no state to have corrupted.
                 Err(e) => tracing::error!("materializer: {e}"),
             }
+            if let Some(done) = first_done.take() {
+                let _ = done.send(());
+            }
             tokio::time::sleep(TICK).await;
         }
     });
+    first
 }
 
 /// The day of the month a rule's date falls on, for the form's sync of

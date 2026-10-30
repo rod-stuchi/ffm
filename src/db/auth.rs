@@ -183,6 +183,9 @@ pub async fn start_session(
     Ok(id)
 }
 
+/// How stale `last_seen_at` may get before a request moves it.
+const SEEN_EVERY: chrono::Duration = chrono::Duration::seconds(60);
+
 /// Resolves the cookie, sliding the session's `last_seen_at` as it goes.
 ///
 /// Long-lived and sliding rather than expiring: signing a household out of its
@@ -196,7 +199,8 @@ pub async fn session(pool: &SqlitePool, id: &str) -> sqlx::Result<Option<Session
                   m.uuid AS "uuid!: String",
                   m.slug AS "slug!: String",
                   m.role AS "role!: i64",
-                  s.preview AS "preview!: i64"
+                  s.preview AS "preview!: i64",
+                  s.last_seen_at AS "last_seen_at!: String"
            FROM sessions s
            JOIN members m ON m.id = s.member_id
            WHERE s.id = ?1 AND m.deleted_at IS NULL
@@ -211,14 +215,24 @@ pub async fn session(pool: &SqlitePool, id: &str) -> sqlx::Result<Option<Session
 
     let Some(r) = row else { return Ok(None) };
 
-    let at = now();
-    sqlx::query!(
-        "UPDATE sessions SET last_seen_at = ?2 WHERE id = ?1",
-        id,
-        at
-    )
-    .execute(pool)
-    .await?;
+    // Slid once a minute, not on every request. A page asks for a dozen things
+    // at once — the carousel's pages, the live feed's rows — and each one took
+    // SQLite's single writer to move a timestamp by a second. Only `:members`
+    // reads it, to order a member's devices.
+    let fresh = chrono::DateTime::parse_from_rfc3339(&r.last_seen_at).is_ok_and(|seen| {
+        let age = crate::clock::now() - seen.to_utc();
+        age >= chrono::Duration::zero() && age < SEEN_EVERY
+    });
+    if !fresh {
+        let at = now();
+        sqlx::query!(
+            "UPDATE sessions SET last_seen_at = ?2 WHERE id = ?1",
+            id,
+            at
+        )
+        .execute(pool)
+        .await?;
+    }
 
     Ok(Some(Session {
         id: r.id,

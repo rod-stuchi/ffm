@@ -434,6 +434,7 @@ household-assistant-note = On a rule's first bill, the assistant reads its first
 household-assistant-off = nothing is sent anywhere
 household-assistant-ready = { $name } · ready
 household-assistant-installed = { $name } · installed
+household-assistant-checking = checking { $name }…
 household-assistant-not-found = { $name } is not installed on this server
 household-assistant-logged-out = { $name } is installed but not logged in — run `{ $login }` on the server
 household-trash = Trash
