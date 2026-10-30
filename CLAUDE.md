@@ -1961,9 +1961,15 @@ that will otherwise be re-proposed.
 - **The same feature sends `Cache-Control: no-cache` on `/static`**, so a
   rebuilt `build.css` lands on a plain reload. Without it Safari reused a
   stale stylesheet from its heuristic cache and a CSS fix looked like it had
-  not landed, while the template beside it (not cached) had. A production
-  build leaves caching alone on purpose: there the files change only on a
-  deploy.
+  not landed, while the template beside it (not cached) had.
+- **Elsewhere a page's stylesheet and scripts are kept for a year** —
+  amended from "a production build leaves caching alone". A page names them
+  through `web::assets::url` (`/static/css/build.css?v=<hash of the file>`),
+  and only a URL whose hash is the file's *current* one is sent
+  `immutable`, so a deploy is a new URL for exactly the files it changed.
+  Fonts and icons carry no hash and keep the browser's own caching. The
+  response is gzip or brotli unless it is a PDF, a font, an image or an
+  event stream (`compression()` in `src/web/mod.rs`).
 - `just db` creates the database and applies every migration with the plain
   `sqlite3` CLI — which exists to break a bootstrap deadlock: `sqlx::query!`
   checks queries against a real schema at **compile** time, but

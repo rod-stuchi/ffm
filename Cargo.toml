@@ -50,8 +50,19 @@ notify = { version = "8", default-features = false, features = ["macos_fsevent"]
 walkdir = "2.5"
 blake3 = "1.8"
 tower = { version = "0.5", features = ["util"] }
-# No "compression": behind a LAN, brotli costs more CPU than it saves.
-tower-http = { version = "0.6", features = ["fs", "trace", "set-header", "catch-panic"] }
+# Compression — amended from "none: behind a LAN, brotli costs more CPU than
+# it saves", written when a page was a few KB. A month is ~170 KB of HTML and
+# a pane answer 50 KB, ~19 KB and 3 KB as brotli, and the household opens them
+# from a phone over Tailscale, where the bytes are the wait; gzip and brotli
+# (tower-http's level 4) cost a few ms.
+tower-http = { version = "0.6", features = [
+    "fs",
+    "trace",
+    "set-header",
+    "catch-panic",
+    "compression-gzip",
+    "compression-br",
+] }
 
 # --- templates ---------------------------------------------------------------
 # 0.14 has no askama_axum; src/web/template.rs carries a local HtmlTemplate<T>

@@ -6,7 +6,7 @@
 <title>{% block title %}FFM sandbox{% endblock %}</title>
 {#- The BUILT stylesheet, not the four sources: the sandbox must render what
     actually ships, or it stops being evidence. `just dev` builds it first. -#}
-<link rel="stylesheet" href="/static/css/build.css">
+<link rel="stylesheet" href="{{ crate::web::assets::url("css/build.css") }}">
 {% include "partials/icons.html" %}
 {#- The theme is server-rendered as the full light/dark triple. It is the ONLY
     source of color: no palette is duplicated into a stylesheet, so the picker

@@ -1,5 +1,6 @@
 //! HTTP. Routing, and the one place a template becomes a response.
 
+pub mod assets;
 pub mod auth;
 pub mod charts;
 pub mod commands;
@@ -32,6 +33,8 @@ pub mod sandbox;
 use crate::state::AppState;
 use axum::Router;
 use axum::routing::{get, post};
+use tower_http::compression::CompressionLayer;
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::services::ServeDir;
 
 pub fn router(state: AppState) -> Router {
@@ -197,17 +200,39 @@ pub fn router(state: AppState) -> Router {
     #[cfg(feature = "dev-reload")]
     let app = app.route("/_dev/reload", get(dev_reload::stream));
 
-    app.with_state(state)
+    app.with_state(state).layer(compression())
 }
 
-/// `/static`. Under `just dev` / `just dev-lan` (the `dev-reload` feature)
-/// every response says `Cache-Control: no-cache`, so the browser revalidates
-/// on each load and a rebuilt `build.css` shows up on a plain reload. Without
-/// it Safari kept serving a stale stylesheet from its heuristic cache, and a
-/// CSS fix looked like it had not landed. A production build leaves caching
-/// alone: there, the files only change on a deploy.
+/// gzip or brotli, whichever the browser offers — for the HTML above all: a
+/// month is ~170 KB and a pane answer 50 KB, which compress about ninefold
+/// and fifteenfold, and over a phone's Tailscale link the bytes are the wait.
+///
+/// The default predicate already leaves out images (the carousel's page
+/// JPEGs), anything under 32 bytes and `text/event-stream` — so `/live` and
+/// `/_dev/reload` still arrive an event at a time, never held for a buffer to
+/// fill. PDFs and fonts are left out too: both are compressed inside already,
+/// and a PDF is the one file here big enough for that to cost real time.
+fn compression() -> CompressionLayer<impl Predicate> {
+    CompressionLayer::new().compress_when(
+        DefaultPredicate::new()
+            .and(NotForContentType::const_new("application/pdf"))
+            .and(NotForContentType::const_new("font/")),
+    )
+}
+
+/// `/static`. A URL a page names with its file's hash (`assets::url`) is kept
+/// for a year — see `assets` for why that is safe across a deploy; anything
+/// else keeps the browser's ordinary caching.
+///
+/// Under `just dev` / `just dev-lan` (the `dev-reload` feature) every response
+/// says `Cache-Control: no-cache` instead, so the browser revalidates on each
+/// load and a rebuilt `build.css` shows up on a plain reload. Without it
+/// Safari kept serving a stale stylesheet from its heuristic cache, and a CSS
+/// fix looked like it had not landed.
 fn static_files() -> Router {
-    let files = Router::new().fallback_service(ServeDir::new("static"));
+    let files = Router::new()
+        .fallback_service(ServeDir::new("static"))
+        .layer(axum::middleware::from_fn(assets::cache));
     #[cfg(feature = "dev-reload")]
     let files = files.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
         axum::http::header::CACHE_CONTROL,

@@ -1,0 +1,8 @@
+{#- The two faces nearly every character on a page is drawn in — Archivo and
+    JetBrains Mono, 400, latin — asked for beside the stylesheet rather than
+    after it has been read, so a cold first load does not paint in the
+    fallback and then jump. `crossorigin` even on our own origin: a font is
+    fetched in CORS mode, and a preload without it is a second download. The
+    URLs must be the stylesheet's exactly (fonts.css), or it is a third. -#}
+<link rel="preload" href="/static/fonts/archivo-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin>

@@ -16,7 +16,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% if let Some(r) = run %}{{ r.tab }}{% endif %}{{ household }} · {{ period }}</title>
-<link rel="stylesheet" href="/static/css/build.css">
+<link rel="stylesheet" href="{{ crate::web::assets::url("css/build.css") }}">
+{%- include "partials/preload.html" %}
 {% include "partials/icons.html" %}
 <meta name="apple-mobile-web-app-title" content="{{ household }}">
 {{ theme_meta|safe }}
@@ -76,8 +77,8 @@
 </style>
 {#- Self-hosted, like the fonts. A household on a LAN should not need the
     open internet to open its own ledger. -#}
-<script src="/static/js/htmx.min.js"></script>
-<script defer src="/static/js/alpine.min.js"></script>
+<script src="{{ crate::web::assets::url("js/htmx.min.js") }}"></script>
+<script defer src="{{ crate::web::assets::url("js/alpine.min.js") }}"></script>
 </head>
 <body>
 {#- `gh` / the statusline eye: every `.money` is drawn through this filter

@@ -13,7 +13,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% if let Some(r) = chrome.run %}{{ r.tab }}{% endif %}{{ chrome.household }}</title>
-<link rel="stylesheet" href="/static/css/build.css">
+<link rel="stylesheet" href="{{ crate::web::assets::url("css/build.css") }}">
+{%- include "partials/preload.html" %}
 {% include "partials/icons.html" %}
 <meta name="apple-mobile-web-app-title" content="{{ chrome.household }}">
 {{ chrome.theme_meta|safe }}
