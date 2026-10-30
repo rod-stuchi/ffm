@@ -1970,6 +1970,14 @@ that will otherwise be re-proposed.
   Fonts and icons carry no hash and keep the browser's own caching. The
   response is gzip or brotli unless it is a PDF, a font, an image or an
   event stream (`compression()` in `src/web/mod.rs`).
+- **The keymap is `static/js/ledger.js`, and nothing in it is templated.**
+  It was ~200 KB inline in `pages/ledger.html`, sent again on every month
+  change. What the server decides per page — the pane, the member's
+  settings, the catalog's words — is the page's `window.FFM` block, read as
+  `FFM.<name>`; **a new value goes there**, never as `{{ … }}` in the file,
+  where it would reach the browser as braces (`just tpl-check` refuses it).
+  Editing the keymap now needs a reload, not a `cargo build` — the `FFM`
+  block still does.
 - `just db` creates the database and applies every migration with the plain
   `sqlite3` CLI — which exists to break a bootstrap deadlock: `sqlx::query!`
   checks queries against a real schema at **compile** time, but

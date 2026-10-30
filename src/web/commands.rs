@@ -3,7 +3,7 @@
 //!
 //! Before this there were four lists: the bar's hint (`command_hint`), the
 //! `?` keymap's Type section, the Type table in `design/spec.md` and the
-//! dispatcher's `case`s in `ledger.html`. `just cmd-check` held three of them
+//! dispatcher's `case`s in `static/js/ledger.js`. `just cmd-check` held three of them
 //! against each other, and the fourth drifted anyway — `?` kept advertising
 //! `:add 50 mercado` long after `:add` was abandoned. Now the hint, the `?`
 //! section, tab completion and the bar's contextual help are all rendered

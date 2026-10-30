@@ -333,7 +333,29 @@ tpl-check:
         echo "✗ a |json|safe inside a double-quoted attribute — its quotes end the attribute; use single quotes" >&2
         exit 1
     fi
-    echo "✓ every |json is paired with |safe, and none sits inside double quotes"
+    # The keymap is static/js/ledger.js, a file Askama never sees: a template
+    # expression there reaches the browser as its own braces, and the value it
+    # meant is undefined — a keymap that silently does nothing. What a page
+    # decides goes in the page's `window.FFM` block instead. Hand-written files
+    # only (a minified one may hold double braces as code), and comments
+    # stripped first: the file's own header quotes the thing it forbids.
+    python3 - <<'PY'
+    import re, sys, pathlib
+    bad = []
+    for path in sorted(pathlib.Path("static/js").glob("*.js")):
+        if path.name.endswith(".min.js"):
+            continue
+        text = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), path.read_text(), flags=re.S)
+        for n, line in enumerate(text.splitlines(), 1):
+            code = re.sub(r"(^|\s)//.*$", "", line)
+            if "{{{{" in code or "{%" in code:
+                bad.append(f"{path}:{n}: {line.strip()}")
+    if bad:
+        print("\n".join(bad))
+        print("\u2717 template syntax in a static script — put the value in the page's window.FFM block", file=sys.stderr)
+        sys.exit(1)
+    PY
+    echo "✓ every |json is paired with |safe, none sits inside double quotes, and no static script is templated"
 
 # Words a member reads that never pass through the catalog stay English in a
 # pt-BR session: `title="previous month"` sat on the month arrows for as long
@@ -373,7 +395,9 @@ js-check:
     #!/usr/bin/env python3
     import re, sys, pathlib
     bad = False
-    for path in pathlib.Path("templates").rglob("*.html"):
+    sources = list(pathlib.Path("templates").rglob("*.html"))
+    sources += [p for p in pathlib.Path("static/js").glob("*.js") if not p.name.endswith(".min.js")]
+    for path in sources:
         text = path.read_text()
         for fn in re.finditer(r"function (\w+)\(\) \{\s*return \{(.*?)\n  \};", text, re.S):
             name, body = fn.group(1), fn.group(2)
@@ -397,7 +421,7 @@ js-check:
 # type, and every command the KEYMAP documents must actually be handled — and
 # every command that is handled must be documented.
 #
-# The hint is built in Rust, the dispatcher is JavaScript in a template and the
+# The hint is built in Rust, the dispatcher is JavaScript (static/js/ledger.js) and the
 # keymap is prose in design/spec.md, so nothing else can hold the three
 # together. All three have drifted already:
 #
@@ -427,8 +451,9 @@ cmd-check:
     advertised = set(re.findall(r'name: "(\w+)"', table))
     for group in re.findall(r"aliases: &\[(.*?)\]", table):
         advertised |= set(re.findall(r'"(\w+)"', group))
-    html = pathlib.Path("templates/pages/ledger.html").read_text()
-    handled = set(re.findall(r"case '(\w+)':", html))
+    # The dispatcher — `runCommand` in the keymap's file.
+    js = pathlib.Path("static/js/ledger.js").read_text()
+    handled = set(re.findall(r"case '(\w+)':", js))
     missing = sorted(advertised - handled)
     if missing:
         print("\u2717 the command table offers what runCommand does not handle: "
