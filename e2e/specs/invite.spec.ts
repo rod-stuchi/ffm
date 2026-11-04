@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { type App, expect, test } from '../fixtures';
-import { command } from '../lib/keys';
+import { autofocused, command } from '../lib/keys';
 
 const PASSWORD = 'correct horse battery';
 
@@ -20,6 +20,7 @@ async function issue(app: App, page: Page, label: string, role: 'member' | 'admi
 
 /// Fills a link's form, as whoever it reached.
 async function accept(page: Page, fields: { name?: string; password: string; confirm?: string }): Promise<void> {
+  await autofocused(page);
   if (fields.name !== undefined) await page.locator('input[name="name"]').fill(fields.name);
   await page.locator('input[name="password"]').fill(fields.password);
   await page.locator('input[name="confirm"]').fill(fields.confirm ?? fields.password);
@@ -182,10 +183,12 @@ test.describe('a password reset', () => {
     // The old password is gone, and the new one signs in.
     await command(stranger, 'logout');
     await expect(stranger).toHaveURL(/\/login/);
+    await autofocused(stranger);
     await stranger.locator('input[name="name"]').fill(app.adult.name);
     await stranger.locator('input[name="password"]').fill(app.password);
     await stranger.keyboard.press('Enter');
     await expect(stranger.locator('.warnbox')).toBeVisible();
+    await autofocused(stranger);
     await stranger.locator('input[name="password"]').fill(PASSWORD);
     await stranger.keyboard.press('Enter');
     await expect(ownPane(stranger)).toHaveText(new RegExp(`^${app.adult.name}$`, 'i'));

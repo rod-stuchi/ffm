@@ -2022,6 +2022,9 @@ that will otherwise be re-proposed.
   - **`vim(page, 'gT')` presses Shift on its own first**, as a keyboard does —
     the case a synthetic event cannot test. Playwright types with no delay, so
     a key sent the instant something opens is a real race, not test noise.
+    The one race that is the test's own: WebKit can land a pre-auth page's
+    `autofocus` in the middle of a `fill`, so a form's helper calls
+    `autofocused(page)` first.
   - **Linux WebKit is close to Safari and is not Safari.** It does not replace
     the check below, and a WebKit-only failure wants checking in real Safari:
     `x-show` lands over a second late there, which real Safari does not do.
@@ -2221,8 +2224,8 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   tap, and keeps it only when focus moves to another text field in the same
   gesture.** A `focus()` after `$nextTick` or a timeout is silently a focus
   with no keyboard. So the phone's key trap is focused in the `NORMAL` tap
-  itself, `:` and `/` focus their field at once while it is up (`focusBar`,
-  which first undoes `x-show`'s `display: none`), and the key strip's buttons
+  itself, `:` and `/` focus their field at once (`focusBar`, which first
+  undoes `x-show`'s `display: none`), and the key strip's buttons
   act on `pointerdown.prevent` so a tap never takes focus from the field
   holding the keyboard. See `design/spec.md`'s *On a phone*.
 - **`x-show` has not been applied yet when `$nextTick` runs.** Alpine queues
@@ -2237,6 +2240,12 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   `this.folds`, which is correct synchronously, and `offsetParent` decides
   only what the model does not know about. **A cursor derived from layout is
   a cursor derived from a race.**
+  - **The same gap swallowed what was typed after `:`.** The command field
+    was focused a tick later (`focusSoon`), and every key typed before then
+    went to the keymap: in real Safari 2 of 3 reopened bars at 40 ms between
+    keys, where an `s` cycled the sort and wrote `ledger_sort`. `focusBar`
+    now shows the bar and focuses it inside the `:` keydown, on every device,
+    not only with a phone's keyboard up.
 
 - **A cursor that is an index, over a list the server re-renders, is a bug
   waiting for a second keypress.** `J` moved the row and left the cursor on

@@ -54,19 +54,31 @@ test('gt and gT cycle the panes, with Shift pressed as a keyboard presses it', a
   await expect(page.locator('.ledger-shell')).toHaveAttribute('data-period', app.period);
 });
 
-// A known bug, pinned: `openCommand` focuses the field a tick later (`focusSoon`)
-// and `key()` does not check `commanding`, so keys in that gap run as normal-mode
-// commands. Linux WebKit always loses this race, Chromium sometimes (`help` read
-// as `elp`), and real Safari lost it in 2 of 3 tries on a reopened bar at 40 ms
-// between keys, where `s` wrote `ledger_sort`. Once the focus is synchronous this
-// fails as "expected to fail, but passed": delete both annotations then.
-test('keys typed straight after : land in the command field', async ({ app, page, browserName }) => {
-  test.skip(browserName === 'chromium', 'loses this race only sometimes, so it would be flaky');
-  test.fail(browserName === 'webkit', 'the command field takes focus after the keymap has read the keys');
+// The field used to take focus a tick after `:` (`focusSoon`), and keys typed in
+// that gap ran as normal-mode commands: Linux WebKit always lost the race,
+// Chromium sometimes (`help` read as `elp`), and real Safari in 2 of 3 tries on a
+// reopened bar, where `s` wrote `ledger_sort`. `focusBar` now focuses inside the
+// keydown. Playwright types with no delay, so this is the race at its tightest.
+test('keys typed straight after : land in the command field, opened again too', async ({ app, page }) => {
   await app.open(page, app.admin);
+  const field = page.locator('.cmdbar:not(.searchbar) input');
+
   await page.keyboard.press(':');
   await page.keyboard.type('help');
-  await expect(page.locator('.cmdbar:not(.searchbar) input')).toHaveValue('help', { timeout: 3_000 });
+  await expect(field).toHaveValue('help');
+  await page.keyboard.press('Escape');
+  await expect(field).toBeHidden();
+
+  await page.keyboard.press(':');
+  await page.keyboard.type('sort');
+  await expect(field).toHaveValue('sort');
+});
+
+test('keys typed straight after / land in the search field', async ({ app, page }) => {
+  await app.open(page, app.admin);
+  await page.keyboard.press('/');
+  await page.keyboard.type('xyz');
+  await expect(page.locator('.searchbar input')).toHaveValue('xyz');
 });
 
 // `2J` once lost its count to the same Shift, and a second `J` once moved the

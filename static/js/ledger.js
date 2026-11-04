@@ -2540,17 +2540,22 @@ function ledger() {
       this.focusBar(this.$refs.search);
     },
 
-    /// A bar's field takes focus as soon as it can — and, with a phone's
-    /// keyboard up, at once: iOS keeps its keyboard only when focus moves to
-    /// another field inside the same gesture, and `focusSoon`'s `$nextTick`
-    /// is already outside it, so the keyboard dropped and `:` typed nothing.
+    /// A bar's field takes focus at once, inside the keydown that opened it.
+    /// Two reasons, either enough. iOS keeps its keyboard only when focus
+    /// moves to another field inside the same gesture, and `focusSoon`'s
+    /// `$nextTick` is already outside it, so the keyboard dropped and `:`
+    /// typed nothing. And on any keyboard, a key typed before the focus lands
+    /// is read by the keymap: an `s` typed straight after `:` cycled the sort
+    /// and wrote `ledger_sort` (real Safari, 2 of 3 on a reopened bar).
     /// The bar is still `display: none` until Alpine's `x-show` lands, and a
     /// hidden field cannot take focus, so it is shown here first; `x-show`
-    /// then agrees with it.
+    /// then agrees with it. `focusSoon` stays as the fallback for a field
+    /// that still could not take it.
     focusBar(el) {
-      if (!this.keyboard || !el) return this.focusSoon(el);
+      if (!el) return;
       el.closest('.cmdbar')?.style.removeProperty('display');
       el.focus({ preventScroll: true });
+      if (document.activeElement !== el) this.focusSoon(el);
     },
 
     // --- the phone's keyboard ----------------------------------------------

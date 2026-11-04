@@ -1,11 +1,12 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { command } from '../lib/keys';
+import { autofocused, command } from '../lib/keys';
 
 const PASSWORD = 'correct horse battery';
 
 /// `/setup` is one form and one POST, so a test fills what it cares about.
 async function fill(page: Page, fields: { household?: string; name?: string; password?: string; confirm?: string }) {
+  await autofocused(page);
   if (fields.household !== undefined) await page.locator('input[name="household"]').fill(fields.household);
   if (fields.name !== undefined) await page.locator('input[name="name"]').fill(fields.name);
   if (fields.password !== undefined) await page.locator('input[name="password"]').fill(fields.password);
@@ -59,6 +60,7 @@ test('the password chosen at setup signs in afterwards, in any case', async ({ b
 
   await command(page, 'logout');
   await expect(page).toHaveURL(/\/login/);
+  await autofocused(page);
   await page.locator('input[name="name"]').fill('ANA CLARA');
   await page.locator('input[name="password"]').fill(PASSWORD);
   await page.keyboard.press('Enter');

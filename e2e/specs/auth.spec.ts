@@ -1,8 +1,9 @@
 import { expect, test } from '../fixtures';
-import { command } from '../lib/keys';
+import { autofocused, command } from '../lib/keys';
 
 test('a member signs in, in any case, and lands on their own pane', async ({ app, page }) => {
   await page.goto(`${app.url}/login`);
+  await autofocused(page);
   await page.locator('input[name="name"]').fill(app.adult.name.toUpperCase());
   await page.locator('input[name="password"]').fill(app.password);
   await page.keyboard.press('Enter');
@@ -13,6 +14,7 @@ test('a member signs in, in any case, and lands on their own pane', async ({ app
 
 test('a wrong password keeps the name, clears the password and says so', async ({ app, page }) => {
   await page.goto(`${app.url}/login`);
+  await autofocused(page);
   await page.locator('input[name="name"]').fill(app.adult.name);
   await page.locator('input[name="password"]').fill('not-the-password');
   await page.keyboard.press('Enter');

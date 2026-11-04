@@ -919,9 +919,10 @@ whole keymap was out of reach: there was no field to focus.
   and never take focus, or the keyboard would drop.
 - **The focus has to happen inside the tap.** iOS shows its keyboard only for
   a `focus()` made synchronously in the gesture, and keeps it only when focus
-  moves to another text field in the same gesture. So with the keyboard up,
-  `:` and `/` focus their field at once (`focusBar`) rather than after Alpine's
-  next tick, and closing either bar hands focus straight back to the trap.
+  moves to another text field in the same gesture. So `:` and `/` focus their
+  field at once (`focusBar`) rather than after Alpine's next tick — on a
+  desktop too, where a key typed in that tick ran as a motion — and closing
+  either bar hands focus straight back to the trap.
 - **The shell follows the visible screen.** iOS shrinks only the visual
   viewport for its keyboard; a `100vh` shell put the statusline and the
   command bar underneath it. While the keyboard is up the shell is sized to
