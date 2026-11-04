@@ -203,12 +203,9 @@ test.describe('a password reset', () => {
     expect(log.every((l) => l.member_id === app.admin.id)).toBe(true);
   });
 
-  // A known bug, pinned: `settings::reset` never calls `sessions_revoked()`, while
-  // `settings::invite`, which revokes nothing, does. So the page leaves only on
-  // the stream's 30-second re-check (measured 27 to 30 s). Once the call moves,
-  // this fails as "expected to fail, but passed": delete the `test.fail` then.
+  // Well inside the stream's 30-second re-check, which is what a reset used to
+  // wait for: the ping was on `settings::invite`, which revokes nothing.
   test('sends the member\'s open page to the sign-in page at once', async ({ app, page, stranger }) => {
-    test.fail(true, 'the reset does not ping the live streams');
     await app.open(stranger, app.adult);
     await issueReset(app, page);
     await expect(stranger).toHaveURL(/\/login\?out=1/, { timeout: 5_000 });

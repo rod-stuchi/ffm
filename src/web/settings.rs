@@ -747,11 +747,7 @@ pub async fn invite(
     )
     .await
     {
-        Ok(token) => {
-            // A reset signs the member out everywhere — see `issue_link`.
-            st.live.sessions_revoked();
-            members_pane(&st, &auth, "active", Some(&token)).await
-        }
+        Ok(token) => members_pane(&st, &auth, "active", Some(&token)).await,
         Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
     }
 }
@@ -778,7 +774,12 @@ pub async fn reset(State(st): State<AppState>, auth: Auth, Path(id): Path<i64>) 
     )
     .await
     {
-        Ok(token) => members_pane(&st, &auth, "active", Some(&token)).await,
+        Ok(token) => {
+            // A reset signs the member out everywhere — see `issue_link` — and
+            // their open pages leave now, not at the stream's next re-check.
+            st.live.sessions_revoked();
+            members_pane(&st, &auth, "active", Some(&token)).await
+        }
         Err(_) => crate::web::tx::say_only(t.error_not_written(), true),
     }
 }
