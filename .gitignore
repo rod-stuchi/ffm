@@ -33,6 +33,9 @@
 /anon
 /anon.old-*
 
+# `just e2e`'s staged source, report and traces. Made-up data, and regenerated.
+/e2e/.run
+
 # `just release`'s output — binaries and tarballs, rebuilt from a tag.
 /dist
 

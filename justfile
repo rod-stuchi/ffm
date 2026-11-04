@@ -519,6 +519,24 @@ check-slow: lint test
 
 check: check-fast check-slow
 
+# The browser tests, in a container, on data ffm-anon makes up from seeds/e2e.sql.
+# Worktrees do not collide: nothing is published, and the container, the build
+# volume and the report are all named after the worktree. Needs a runtime, and
+# nothing else on the host: see scripts/e2e.sh.
+#
+# `just e2e` · `just e2e auth.spec.ts --project=webkit` · `E2E_SEED=123 just e2e`
+e2e *args:
+    scripts/e2e.sh run {{args}}
+
+# Serves the last run's report and traces, on a port it prints.
+e2e-report:
+    scripts/e2e.sh report
+
+# Removes this worktree's E2E build volume and output. Cargo never trims it, and
+# a target/ has reached 189 GB here.
+e2e-clean:
+    scripts/e2e.sh clean
+
 # Turn the versioned hooks in .githooks/ on for this clone. Git config is not
 # versioned, so a fresh clone runs this once.
 hooks:

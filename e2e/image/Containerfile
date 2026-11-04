@@ -1,0 +1,43 @@
+# The E2E image: tools only, so it changes rarely and every worktree shares it.
+#
+# The code is never in here. The build context is this folder alone, not the
+# repository, because a worktree holds real bills and databases that git does
+# not know about; scripts/e2e.sh mounts an allow-listed copy of the source at
+# run time, and compiles it there. See CLAUDE.md's Development workflow.
+#
+# Versions arrive as build args from scripts/e2e.sh, read from package.json,
+# `rustc --version` and mise.toml, so they cannot drift from what they mirror.
+
+ARG PLAYWRIGHT_VERSION
+FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble
+
+ARG RUST_VERSION
+ARG TAILWIND_VERSION
+
+# poppler, qpdf and ghostscript are what the server runs on a bill. lsof and
+# qpdf are what ffm-anon's guard and vault need. gcc builds the bundled SQLite.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates curl gcc libc6-dev ghostscript lsof poppler-utils qpdf sqlite3 \
+ && rm -rf /var/lib/apt/lists/*
+
+# Minimal profile: the musl targets and rust-analyzer in rust-toolchain.toml
+# are for `just release` and the editor, and that file is not copied in.
+ENV RUSTUP_HOME=/opt/rustup
+ENV PATH=/opt/cargo/bin:/node_modules/.bin:$PATH
+RUN curl -fsSL https://sh.rustup.rs \
+  | CARGO_HOME=/opt/cargo sh -s -- -y --profile minimal --default-toolchain "${RUST_VERSION}"
+
+RUN case "$(dpkg --print-architecture)" in \
+      arm64) arch=arm64 ;; \
+      amd64) arch=x64 ;; \
+      *) echo "no tailwindcss binary for this architecture" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL -o /usr/local/bin/tailwindcss \
+      "https://github.com/tailwindlabs/tailwindcss/releases/download/v${TAILWIND_VERSION}/tailwindcss-linux-${arch}" \
+ && chmod +x /usr/local/bin/tailwindcss
+
+# /node_modules through a link: Node resolves upward from any file, so tests at
+# /src/e2e find it with nothing of the kind in the mounted source.
+COPY package.json package-lock.json /opt/e2e/
+RUN cd /opt/e2e && npm ci --no-audit --no-fund && ln -s /opt/e2e/node_modules /node_modules

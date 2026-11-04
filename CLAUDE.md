@@ -1991,6 +1991,40 @@ that will otherwise be re-proposed.
   every template — including success, error and skeleton states — against dummy
   data, so UI and CSS can be iterated without touching the real database. Keep it
   in sync with the row-state table above; it is how that table stays honest.
+- **`just e2e` runs the browser tests, in a container** — Playwright and
+  TypeScript, Chromium and WebKit, on data `ffm-anon` makes up. `E2E_SEED=123`
+  reproduces a run's data; `just e2e-report` serves the report and traces;
+  `just e2e-clean` drops this worktree's build volume. See `scripts/e2e.sh`.
+  - **Apple's `container` on macOS, `podman` on Linux**, and only flags both
+    have. Its builder asks for Rosetta, so without Rosetta
+    `~/.config/container/config.toml` needs `[build] rosetta = false` and a
+    service restart; the script says so. It also needs `--dns` here: the
+    gateway's resolver does not answer.
+  - **Worktrees cannot collide.** Nothing is published, and the container, the
+    build volume and the report are named after the worktree. An Apple volume
+    is a block device on one VM, so each worktree has its own Cargo registry
+    too; the image is tools only and shared.
+  - **A run sees an allow-list, never the repository**: a worktree can hold
+    `ffm.db`, `receipts/`, `.env` and `_backups/`, not all of it ignored by
+    git, so `stage` copies named paths and the image's build context is
+    `e2e/image/`. **A new top-level folder the build needs goes in that list.**
+  - **The data is `seeds/e2e.sql`, shuffled per run.** `ffm-anon` needs a source
+    database, so the seed is fictional and holds every state a row can be in;
+    `tests/e2e_seed.rs` fails when a migration breaks it. Names and amounts
+    differ per seed, so **a spec never hardcodes them**: it finds its row with
+    `app.sql`, by what the row is.
+  - **Each test has its own server on a copy of the data**, on tmpfs, because
+    `u` depends on who did what. `test.use({ today: '2026-10-15' })` moves its
+    clock, which is why the binary is a debug build. Sessions are already in
+    the data, so only the sign-in specs go through the form. `/setup` exists
+    only with no members, so its spec takes the `blank` fixture: a server on an
+    empty database, not the shuffled data.
+  - **`vim(page, 'gT')` presses Shift on its own first**, as a keyboard does —
+    the case a synthetic event cannot test. Playwright types with no delay, so
+    a key sent the instant something opens is a real race, not test noise.
+  - **Linux WebKit is close to Safari and is not Safari.** It does not replace
+    the check below, and a WebKit-only failure wants checking in real Safari:
+    `x-show` lands over a second late there, which real Safari does not do.
 - **Test UI in Safari AND Chrome before calling it done.** The household uses
   Safari; Chrome is only where the automation is convenient. A fix checked in
   one browser is a guess about the other — the `P` carousel's zoom passed in

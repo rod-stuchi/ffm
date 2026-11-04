@@ -54,6 +54,33 @@ command checks.
 If you'd rather not activate mise in your shell, prefix commands with
 `mise exec --`, for example `mise exec -- just dev`.
 
+## Browser tests
+
+`just e2e` builds and runs the Playwright tests in a container, on made-up data.
+The host needs only the container runtime and `rustc`, whose version the image
+matches; Node stays inside the image.
+
+```sh
+# macOS 26 on Apple silicon
+brew install container
+container system start
+mkdir -p ~/.config/container                 # the builder asks for Rosetta
+printf '[build]\nrosetta = false\n' >> ~/.config/container/config.toml
+container system stop && container system start
+
+# Linux
+sudo pacman -S podman                        # or your distro's package
+
+just e2e                                     # every test, Chromium and WebKit
+just e2e auth.spec.ts --project=webkit       # any Playwright arguments
+E2E_SEED=123 just e2e                        # the data a failed run printed
+just e2e-report                              # that run's report and traces
+just e2e-clean                               # this worktree's build volume
+```
+
+Several worktrees can run at once. `E2E_CPUS`, `E2E_MEMORY`, `E2E_WORKERS` and
+`E2E_DNS` override the defaults in `scripts/e2e.sh`.
+
 ## Updating dependencies
 
 ### mise tools

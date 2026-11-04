@@ -1,0 +1,10 @@
+{
+  "name": "ffm-e2e",
+  "private": true,
+  "description": "What the E2E container's tests run on. Installed in the image, never on the host: there is no Node here (see CLAUDE.md's Development workflow).",
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "^24",
+    "typescript": "^5"
+  }
+}
