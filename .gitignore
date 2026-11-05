@@ -13,6 +13,10 @@
 # Rolling backups of the database
 /backups
 
+# PDF pages drawn for the `P` carousel, kept beside the database
+# (`Config::pages_dir`) — pictures of real bills.
+*.pages/
+
 # Tailwind output. static/css/*.css is source; build.css is generated.
 /static/css/build.css
 

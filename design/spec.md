@@ -577,16 +577,15 @@ standing out.)
   file, stacked, only the current one visible — `visibility: hidden` on the
   others, so each keeps its layout and scroll. The file on show loads first;
   once its pages are in, the row's other files load out of sight, so
-  switching to one fetches nothing and shows it at once. Not the HTTP cache:
-  the page images are `no-cache` with no validator (a replaced bill keeps its
-  path), so a warmed cache would draw every page again. `v` reloads every
+  switching to one fetches nothing and shows it at once — and keeps its
+  scroll and zoom, which the browser's cache, warm as it is, would not. `v` reloads every
   PDF's stage, the one on show first; a replaced file (`t`, `b`, `a`)
   reloads its own.
 - **The stage shows the file itself**, with its kind, icon and computed
   path in a caption above it. It used to show only the icon and the path —
   "not the file's actual bytes" — which could not do the one job this modal
   is full-viewport for. **A PDF's pages are drawn by the server** with
-  `pdftoppm` at 300 dpi (`GET /tx/{id}/file/{kind}/page/{n}`) and stacked as
+  `pdftoppm` (`GET /tx/{id}/file/{kind}/page/{n}`) and stacked as
   images, fitted to the width; a photo is shown as itself and a text file as
   text. The stage is one fragment per file (`…/view`), and a bill shared
   across months scrolls to this month's page. `+`/`-`/`0` set the pages'
@@ -613,11 +612,21 @@ standing out.)
   way; a text file has no page, and only scrolls. The trim view's large
   page has the same keys and switch — one set of keys wherever a page is
   an image — drawn at 150 dpi there so fit width stays readable.
-- **300 dpi, not 150.** An image has the resolution it was drawn at: a
-  statement drawn small in PDF points (Inter's is 446 pt wide) came out
-  929 px at 150 dpi and was stretched 2–4× to fill the stage — blurry beside
-  the same file in a tab. At 300 an A4 page is ~2480 px and that statement
-  ~1860 px.
+- **150 dpi, or 300 once the page is shown larger than that.** An image
+  has the resolution it was drawn at: a statement drawn small in PDF points
+  (Inter's is 446 pt wide) came out 929 px at 150 dpi and was stretched 2–4×
+  at fit width — blurry beside the same file in a tab — so every page was
+  drawn at 300 for a while. But at fit height, how `P` opens, 150 covers a
+  page on a laptop and on a phone, and a page at 300 holds four times the
+  memory: an A4 page decodes to ~33 MB against ~8 MB. So a page opens at 150
+  and asks for 300 (`?dpi=300`) once its laid-out width, in device pixels,
+  is more than a fifth past what 150 covers — fit width on a large screen, a
+  zoom, a window made bigger (`sharpen`). A page not drawn yet is pointed at
+  what it needs, up or down, and loads only as it comes into view; one
+  already drawn only goes up, and only near the view, the rest as they come
+  near. The `src` at 150 is in the markup, not set by script: Safari gives an
+  image whose `src` arrives later no aspect ratio from its `width`/`height`
+  until it loads, which laid every page not yet drawn out the wrong size.
 - **JPEG, kept by the browser, loaded as it comes into view** — the three
   things that made `P` feel slow beside the browser's own viewer
   (`services::pdfpage`).
@@ -630,6 +639,15 @@ standing out.)
     server for nothing. A replaced bill keeps its path but gets a new `v`, so
     an old image can never show. It was `no-cache` with no validator, which
     redrew every page on every open.
+  - **Kept by the server as well** (`pdfpage::cached`), in `ffm.pages/`
+    beside the database and never in the vault, so a second device draws
+    nothing: a page is named after its file's path, size and modified time,
+    its page and its dpi, and a sweep at startup and once a day drops
+    drawings over 30 days old. A cache, safe to delete.
+  - **Three at a time.** At most three `pdftoppm` run at once
+    (`pdfpage::DRAWING`, the trim view's pages too), queued in the order they
+    were asked for, so the page on show — asked for first — is drawn first.
+    A row of three statements used to start twenty-odd together.
   - **Lazy.** Only the page `P` opens on — the owed one, else the first —
     loads at once; the others load as they come into view. Each `<img>`
     carries its page's size from `pdfinfo` as `width`/`height`, so a page not

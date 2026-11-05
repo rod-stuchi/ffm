@@ -742,7 +742,9 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
 - **A file badge or `g1`/`g2`/`g3` opens the file in a new tab; `P` / `gp`
   opens a full-viewport carousel of the row's files** — stopping above the
   statusline (`--foot-h`). PDF pages are drawn server-side by `pdftoppm` as
-  JPEG (`services::pdfpage`); `v` swaps to the browser's own PDF view
+  JPEG (`services::pdfpage`), at 150 dpi or 300 by the size they are shown,
+  three at a time, and kept in `ffm.pages/` beside the database (never in
+  the vault); `v` swaps to the browser's own PDF view
   (`member_settings.pdf_view`). `1`/`2`/`3` jump to a file kind, `h`/`l`
   step and clamp, `+`/`-`/`0` zoom; each file keeps its own place, and the
   others load behind the one on show. See `design/decisions.md` §The `P`

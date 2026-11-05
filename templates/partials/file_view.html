@@ -18,9 +18,17 @@
       carousel opens on loads at once; the rest load as they come into view.
       Each page's box (`width`/`height`, in points) is its aspect ratio before
       it has loaded, so a page not yet drawn already takes its real place and
-      J/K, gg/G and the scroll to the owed page land where they should. -#}
+      J/K, gg/G and the scroll to the owed page land where they should.
+
+      Drawn at 150 dpi, which covers a page at fit height, how the carousel
+      opens; the carousel raises a page to 300 once it is shown wider than
+      that (`sharpen`, from `data-src`). The `src` stays in the markup:
+      Safari gives an image whose `src` a script sets later no aspect ratio
+      from its `width`/`height` until it has loaded, so every page not yet
+      drawn was laid out the wrong size. -#}
   {%- for p in pages %}
-  <img class="cpg" id="cpg-{{ p.n }}" src="{{ base }}/page/{{ p.n }}?v={{ version }}"
+  <img class="cpg" id="cpg-{{ p.n }}" src="{{ base }}/page/{{ p.n }}?v={{ version }}&amp;dpi=150"
+       data-src="{{ base }}/page/{{ p.n }}?v={{ version }}" data-dpi="150"
        width="{{ p.w }}" height="{{ p.h }}" decoding="async"
        {%- if p.n == first %} loading="eager" fetchpriority="high"{% else %} loading="lazy"{% endif %}
        alt="{{ t.carousel_page_alt(p.n.clone()) }}"{% if p.n == owed %} data-owed{% endif %}>

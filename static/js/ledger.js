@@ -1636,6 +1636,7 @@ function ledger() {
           // Its own view's scroll, never `scrollIntoView`, which would also
           // scroll whatever holds a stage that is not on show.
           if (view && owed) view.scrollTop = Math.max(0, Math.round(this.pageTop(view, owed)));
+          this.sharpen(view);
           if (!current) return;
           const settled = img => img.complete ? null : new Promise(done => {
             img.addEventListener('load', done, { once: true });
@@ -1797,6 +1798,7 @@ function ledger() {
           if (f) f.zoom = 1;
           this.paintPages(view, fit, 1);
         }, false);
+        this.sharpen(view);
       });
       this.pageFit = fit;
     },
@@ -1810,6 +1812,46 @@ function ledger() {
         f.zoom = z;
         this.paintPages(view, this.pageFit, z);
       }, true);
+      this.sharpen(view);
+    },
+
+    /// Each page of a stage drawn at the resolution it is shown at: 150 dpi
+    /// while that covers the page's laid-out width in device pixels (with a
+    /// fifth to spare, which nobody can see), 300 once it does not — fit
+    /// width on a large screen, or a zoom. The only two the server draws
+    /// (`files::PAGE_DPI`, `SHARP_DPI`). The stage arrives at 150
+    /// (`file_view.html`); this runs when it has loaded, on a zoom or a fit
+    /// change, as a page scrolls near and when the window is resized.
+    ///
+    /// A page not drawn yet is pointed at what it needs now, up or down,
+    /// wherever it is — lazy, it is fetched only as it comes into view. One
+    /// already drawn only goes up, and only near the view: a zoom redraws
+    /// the pages being looked at, not the whole statement, and the rest
+    /// follow as they come near. The browser keeps showing the old drawing
+    /// until the sharper one has arrived.
+    sharpen(view) {
+      if (!view) return;
+      const box = view.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      for (const img of view.querySelectorAll('img.cpg[data-src]')) {
+        const r = img.getBoundingClientRect();
+        // `width` is the page's own, in points: 72 to the inch.
+        const shown = r.width * dpr * 72 / (+img.getAttribute('width') || 1);
+        const want = shown > 150 * 1.2 ? 300 : 150;
+        const has = +img.dataset.dpi || 0;
+        if (img.complete && img.naturalWidth > 0) {
+          if (has >= want) continue;
+          if (r.bottom < box.top - box.height || r.top > box.bottom + box.height) continue;
+        } else if (has === want) continue;
+        img.dataset.dpi = want;
+        img.src = img.dataset.src + '&dpi=' + want;
+      }
+    },
+
+    /// Every stage's — a resize changes how large each page is shown.
+    sharpenAll() {
+      if (!this.carousel) return;
+      document.querySelectorAll('.carousel .cview').forEach(v => this.sharpen(v));
     },
 
     /// A stage's fit and zoom, on the DOM now — `keepPage` measures the new

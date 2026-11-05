@@ -93,6 +93,15 @@ struct Resolved {
 }
 
 impl Config {
+    /// Where a vault file's PDF pages are kept once drawn
+    /// (`services::pdfpage::cached`) — `ffm.pages/` beside `ffm.db`, named
+    /// after it so two databases in one folder keep two. Never inside
+    /// `receipts_root`: the vault is browsed by hand, and these are only a
+    /// cache, safe to delete at any time.
+    pub fn pages_dir(&self) -> std::path::PathBuf {
+        self.db_path.with_extension("pages")
+    }
+
     /// Where the retired issuer profiles lived — beside `ffm.toml`. Read only
     /// by the startup step that turns them into rules' own recipes
     /// (`db::recipes::convert_profiles`); bills are no longer read with it.

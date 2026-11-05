@@ -488,18 +488,30 @@ pub async fn view(
     crate::web::template::Html(view).into_response()
 }
 
-/// How finely a PDF page is drawn for the carousel.
+/// How finely a PDF page is drawn for the carousel: [`PAGE_DPI`] unless the
+/// page asks for [`SHARP_DPI`] (`?dpi=300`), which it does once it is shown
+/// wider than 150 dpi covers (`sharpen` in `ledger.js` — fit width on a large
+/// screen, or a zoom). Only these two, so a page is drawn and kept at most
+/// twice.
 ///
-/// 300 dpi: an A4 page comes out ~2480 px wide, and a statement drawn small in
-/// PDF points (the Inter one is 446 pt wide, ~1860 px here) still fills the
-/// stage without being stretched. It was 150, which left that statement at
-/// 929 px and stretched it 2–4× — blurry beside the same file in a tab. As a
-/// JPEG (`services::pdfpage`) a 300 dpi page takes 45–190 ms; as the PNG it
-/// was, 0.3–2.5 s.
-const PAGE_DPI: &str = "300";
+/// It was 300 for every page. That was for a statement drawn small in PDF
+/// points (Inter's is 446 pt wide), which came out 929 px at 150 and was
+/// stretched 2–4× at fit width — but at fit height, how the carousel opens,
+/// 150 covers every page on a laptop and on a phone, and an A4 page at 300
+/// decodes to ~33 MB against ~8 MB: a 10-page card statement scrolled
+/// through held 332 MB of pixels, on a phone too.
+const PAGE_DPI: u32 = 150;
+const SHARP_DPI: u32 = 300;
 
-/// `GET /tx/{id}/file/{kind}/page/{n}?v=…` — one page of a PDF, as a JPEG,
-/// at [`PAGE_DPI`].
+#[derive(serde::Deserialize)]
+pub struct PageParams {
+    #[serde(default)]
+    dpi: Option<u32>,
+}
+
+/// `GET /tx/{id}/file/{kind}/page/{n}?v=…&dpi=…` — one page of a PDF, as a
+/// JPEG, drawn once and kept beside the database (`pdfpage::cached`), so a
+/// second device or a reopen in another browser draws nothing either.
 ///
 /// **Kept by the browser for good.** The stage names each page with the
 /// file's size and modified time (`FileView::version`), so a URL means one
@@ -511,6 +523,7 @@ pub async fn page(
     State(st): State<AppState>,
     auth: Auth,
     Path((tx_id, kind, n)): Path<(i64, String, u32)>,
+    axum::extract::Query(p): axum::extract::Query<PageParams>,
 ) -> Response {
     let Some((path, ext)) = on_disk(&st, &auth, tx_id, &kind).await else {
         return StatusCode::NOT_FOUND.into_response();
@@ -518,13 +531,13 @@ pub async fn page(
     if ext != "pdf" || n == 0 {
         return StatusCode::NOT_FOUND.into_response();
     }
-    // A subprocess, like the importer's `pdftotext`; off the async runtime,
-    // since it blocks for the time a page takes.
-    let out =
-        tokio::task::spawn_blocking(move || crate::services::pdfpage::render(&path, n, PAGE_DPI))
-            .await;
-    match out {
-        Ok(Some(jpeg)) => (
+    let dpi = if p.dpi == Some(SHARP_DPI) {
+        SHARP_DPI
+    } else {
+        PAGE_DPI
+    };
+    match crate::services::pdfpage::cached(st.cfg.pages_dir(), path, n, dpi).await {
+        Some(jpeg) => (
             [
                 (header::CONTENT_TYPE, "image/jpeg"),
                 (
@@ -535,7 +548,7 @@ pub async fn page(
             jpeg,
         )
             .into_response(),
-        _ => StatusCode::NOT_FOUND.into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 

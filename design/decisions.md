@@ -356,12 +356,30 @@ Find a section with `rg -n '^##' design/decisions.md`.
   reversing "the kind, the path and an icon, never the bytes", which could
   not do the job the carousel is full-viewport *for*: reading a boleto's
   digits, or holding a phone up to its QR code. **A PDF's pages are drawn
-  server-side by `pdftoppm`** (poppler, already required for `pdftotext`),
-  at 300 dpi, and shown as images; a photo is itself, a text file is text.
+  server-side by `pdftoppm`** (poppler, already required for `pdftotext`)
+  and shown as images; a photo is itself, a text file is text.
   **As JPEG, kept by the browser, and loaded as they come into view**
   (`services::pdfpage`): PNG's encoder was the cost — 0.3–2.5 s a page, against
   45–190 ms — the page URL carries the file's version (`?v=`) so a reopen asks
   for nothing, and only the page `P` opens on loads at once.
+  - **At the size it is shown, 150 dpi or 300** — amended from "300 dpi,
+    every page". 300 was for a statement drawn small in PDF points, stretched
+    at fit width; but `P` opens at fit height, where 150 covers a page on a
+    laptop and on a phone, and an A4 page at 300 decodes to ~33 MB against
+    ~8 MB — a 10-page statement scrolled through held 332 MB of pixels. The
+    page asks for 300 (`?dpi=300`) once its laid-out width outgrows what 150
+    covers: fit width on a large screen, a zoom, a bigger window
+    (`sharpen` in `ledger.js`). A page already drawn is raised only near the
+    view, the rest as they come near, so a zoom redraws what is looked at.
+    Only the two, so a page is drawn at most twice.
+  - **Kept on the server too, three drawn at a time.** A drawn page is kept
+    in `ffm.pages/` beside the database — never in the vault, which is
+    browsed by hand — named after the file's path, size and modified time,
+    so a replaced file is a new name; a sweep drops drawings over 30 days
+    old, at startup and daily. A second device, or the installed app beside
+    Safari, draws nothing. At most three `pdftoppm` run at once
+    (`pdfpage::DRAWING`), the trim view's included: a row's three statements
+    started twenty-odd together.
   The browser's own PDF viewer was tried first, in a frame, and could not be
   zoomed from the carousel reliably in either Chrome or Safari — a frame is
   somebody else's program and answers to its own controls. **It is offered
@@ -408,9 +426,9 @@ Find a section with `rg -n '^##' design/decisions.md`.
   (`visibility`, not `display: none`, which would drop its scroll): the file
   on show loads first, and once its pages are in, the others load out of
   sight, so `h`/`l`/`1`/`2`/`3` fetch nothing. Kept in the DOM rather than
-  warmed in the HTTP cache because the page images are `no-cache` with no
-  validator — a replaced bill keeps its path — so a cache would fetch, and
-  `pdftoppm` would draw, every page again.
+  only warmed in the browser's cache, which the pages do reach now (`?v=`,
+  `immutable`): a stage kept in the DOM also keeps its scroll, zoom and
+  decoded pages, and shows at once.
 
 ### Deleting files
 

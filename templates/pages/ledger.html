@@ -646,7 +646,8 @@
       natively (an <iframe> for pdf/txt, an <img> for jpg/png), from the same
       URL "Open in new tab" uses, so there is exactly one way a file is
       served. The label, path and page sit in a caption above it. -#}
-  <div class="carousel" x-show="carousel" x-cloak @click.self="carousel = null">
+  <div class="carousel" x-show="carousel" x-cloak @click.self="carousel = null"
+       @resize.window.debounce.150ms="sharpenAll()">
     <template x-if="carousel">
       <div class="cstage">
         {#- The caption, and at its right end the view's controls — in the
@@ -711,7 +712,8 @@
             back to a file finds it where it was left. -#}
         <div class="cviews">
           <template x-for="(f, i) in carousel.files" :key="f.kind">
-            <div class="cview" :class="{ 'is-current': i === carousel.at }" :data-kind="f.kind">
+            <div class="cview" :class="{ 'is-current': i === carousel.at }" :data-kind="f.kind"
+                 @scroll.passive="sharpen($el)">
               <div class="cviewin" :style="'--z: ' + f.zoom" :data-fit="pageFit"
                    x-effect="showFile($el, f, i === carousel.at, carousel.ready)"></div>
             </div>

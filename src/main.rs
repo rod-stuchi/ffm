@@ -129,6 +129,8 @@ async fn main() {
     // does for the materializer: a process that was down for a week should not
     // also be a week without a backup.
     ffm::services::backup::spawn(pool.clone(), cfg.backup_dir.clone());
+    // The carousel's drawn pages, kept a month: dropped now and once a day.
+    ffm::services::pdfpage::spawn_sweep(cfg.pages_dir());
 
     let state_pool = pool.clone();
     let receipts_root = cfg.receipts_root.clone();
