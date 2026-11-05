@@ -3,6 +3,7 @@
     A reset drops everything but the password — that person is not new, renaming
     is a vault move once files exist, and a reset has no business resetting
     taste. -#}
+{% block head %}{% if !is_reset %}{% include "auth/picker_head.html" %}{% endif %}{% endblock %}
 {% block card %}
 <form class="card" style="max-width:440px" method="post" action="{{ action }}">
   <div class="ch">

@@ -641,6 +641,21 @@ impl RenderedTheme {
             }
         }
     }
+
+    /// The `<style>` block and the `theme-color` tags, each marked to replace
+    /// the page's own by id (`hx-swap-oob`), so every color changes in place
+    /// with no reload. One builder for both callers: `:profile`'s palette
+    /// write, and the pre-auth picker's preview (`web::auth::palette`), which
+    /// is how the preview cannot drift from the page it previews.
+    pub fn oob(&self, var: &str) -> String {
+        let meta = self
+            .meta_tags(var)
+            .replace("<meta ", r#"<meta hx-swap-oob="true" "#);
+        format!(
+            r#"<style id="ffm-theme" hx-swap-oob="true">{}</style>{meta}"#,
+            self.to_css()
+        )
+    }
 }
 
 impl fmt::Display for RenderedTheme {

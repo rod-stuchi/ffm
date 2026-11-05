@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { autofocused, command } from '../lib/keys';
+import { paper, pick, swatchPaper } from '../lib/palette';
 
 const PASSWORD = 'correct horse battery';
 
@@ -85,6 +86,10 @@ test('an empty form says everything wrong at once, and creates nothing', async (
 test('a refused form keeps what was typed, except the passwords, and can be corrected', async ({ blank, page }) => {
   await page.goto(`${blank.url}/setup`);
   await fill(page, { household: 'Lar dos Testes', name: 'Ana Clara', password: PASSWORD, confirm: 'something else' });
+  // None of them on its default, so a pick that comes back on one shows.
+  await page.locator('select[name="currency"]').selectOption('USD');
+  await page.locator('input[name="language"][value="pt-BR"]').check();
+  await page.locator('input[name="nu"][value="absolute"]').check();
   await submit(page);
 
   // A mismatch is reported on Confirm: the two are a pair, and that is the box to retype.
@@ -94,6 +99,10 @@ test('a refused form keeps what was typed, except the passwords, and can be corr
   await expect(page.locator('input[name="name"]')).toHaveValue('Ana Clara');
   await expect(page.locator('input[name="password"]')).toHaveValue('');
   await expect(page.locator('input[name="confirm"]')).toHaveValue('');
+  // The picks too, which are higher up than the error, where nobody looks.
+  await expect(page.locator('select[name="currency"]')).toHaveValue('USD');
+  await expect(page.locator('input[name="language"][value="pt-BR"]')).toBeChecked();
+  await expect(page.locator('input[name="nu"][value="absolute"]')).toBeChecked();
   expect(blank.sql(`SELECT id FROM members`)).toEqual([]);
 
   await fill(page, { password: 'short', confirm: 'short' });
@@ -105,6 +114,55 @@ test('a refused form keeps what was typed, except the passwords, and can be corr
   await fill(page, { password: PASSWORD, confirm: PASSWORD });
   await submit(page);
   await expect(page.locator('.pane.is-focus .pane-head b').first()).toHaveText('Ana Clara');
+  // Kept through two refusals, all the way to what is stored.
+  expect(blank.sql(`SELECT locale_currency, default_language FROM household_settings`)).toEqual([
+    { locale_currency: 'USD', default_language: 'pt-BR' },
+  ]);
+  expect(blank.sql(`SELECT language, line_numbers FROM member_settings`)).toEqual([
+    { language: 'pt-BR', line_numbers: 'absolute' },
+  ]);
+});
+
+test('a swatch repaints the whole page as it is picked, and a refused form comes back on it', async ({ blank, page }) => {
+  await page.goto(`${blank.url}/setup`);
+  // Painted in the swatch that is checked, from the first frame.
+  await expect(page.locator('input[name="theme"]:checked')).toHaveValue('ffm');
+  expect(await paper(page)).toBe(await swatchPaper(page, 'ffm'));
+  await expect(page.locator('#auth-palette')).toHaveText('ffm');
+
+  await fill(page, { household: 'Lar dos Testes' });
+  await pick(page, 'nord');
+  const nord = await swatchPaper(page, 'nord');
+  expect(nord).not.toBe(await swatchPaper(page, 'ffm'));
+  await expect.poll(() => paper(page)).toBe(nord);
+  await expect(page.locator('#auth-palette')).toHaveText('nord');
+  // In place, not a reload: what was typed is still there. And nothing is
+  // remembered until the form is sent.
+  await expect(page.locator('input[name="household"]')).toHaveValue('Lar dos Testes');
+  expect((await page.context().cookies()).map((c) => c.name)).not.toContain('ffm.palette');
+
+  // The keyboard walks the radios, and each one it lands on is shown.
+  const keys = await page.locator('input[name="theme"]').evaluateAll((all) => all.map((i) => (i as HTMLInputElement).value));
+  const next = keys[keys.indexOf('nord') + 1];
+  await page.locator('input[name="theme"]:checked').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('input[name="theme"]:checked')).toHaveValue(next);
+  await expect.poll(() => paper(page)).toBe(await swatchPaper(page, next));
+  await expect(page.locator('#auth-palette')).toHaveText(next);
+  // Held down, a pick per repeat: the page ends on the last one checked.
+  for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowLeft');
+  const last = keys[keys.indexOf(next) - 4];
+  await expect(page.locator('input[name="theme"]:checked')).toHaveValue(last);
+  await expect.poll(() => paper(page)).toBe(await swatchPaper(page, last));
+  await expect(page.locator('#auth-palette')).toHaveText(last);
+
+  await pick(page, 'nord');
+  await expect.poll(() => paper(page)).toBe(nord);
+  await fill(page, { name: 'Ana Clara', password: PASSWORD, confirm: 'something else' });
+  await submit(page);
+  await expect(page.locator('label.is-bad input[name="confirm"]')).toBeVisible();
+  await expect(page.locator('input[name="theme"]:checked')).toHaveValue('nord');
+  expect(await paper(page)).toBe(nord);
 });
 
 test('the password meter and the match line answer as you type', async ({ blank, page }) => {

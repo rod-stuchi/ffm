@@ -19,10 +19,12 @@
 <meta name="apple-mobile-web-app-title" content="{{ chrome.household }}">
 {{ chrome.theme_meta|safe }}
 {#- The 11 tokens as the full light/dark triple, in the palette of whoever
-    last signed in on this device (`ffm.palette`; `ffm` for nobody). Light/dark
-    comes from its own cookie, which is the whole reason the two facts live in
-    different places. -#}
+    last signed in on this device (`ffm.palette`; `ffm` for nobody) — or, on
+    `/setup` and `/invite`, the one their picker has checked, which a swatch
+    swaps by id (`auth/swatch.html`). Light/dark comes from its own cookie,
+    which is the whole reason the two facts live in different places. -#}
 <style id="ffm-theme">{{ chrome.theme_css|safe }}</style>
+{%- block head %}{% endblock %}
 </head>
 <body>
 <div class="auth">
@@ -36,7 +38,7 @@
   <div class="status">
     <div class="st">{{ chrome.where_label }} · {{ chrome.household_slug }}</div>
     <div class="st grow msg{% if chrome.msg_bad %} bad{% endif %}">{{ chrome.msg }}</div>
-    <div class="st right">{{ chrome.lang_code }} · {{ chrome.palette }}</div>
+    <div class="st right">{{ chrome.lang_code }} · <span id="auth-palette">{{ chrome.palette }}</span></div>
   </div>
 
   <div class="auth-chrome">

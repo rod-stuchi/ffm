@@ -1893,6 +1893,10 @@ What is still guaranteed from the keyboard:
   same treatment the tab bar's `gt · gT` hint already gets.
 - The color-scheme picker is a real `<fieldset>` of radios, so `←`/`→` walk it
   natively. Do not build a grid of buttons and then reimplement arrow keys.
+  **Each swatch checked — by click or by arrow — repaints the whole page in
+  it**, the server's `<style>` block swapped by id: the honest preview is the
+  page you are looking at, not a tile. The page is painted in the checked
+  swatch from the first frame, and nothing is stored until the form is sent.
 
 The keyboard-first identity still shows: every primary button carries a real `⏎`
 key-cap in the same styling used throughout the app.
@@ -1958,6 +1962,11 @@ and reset page, the same two partials (`auth/pwmeter.html`,
   With JS off the fields work exactly as before.
 - **Editing a field clears its server error**, which answered the last
   submission and would otherwise sit there contradicting the live line.
+
+**A refused form comes back with everything but the passwords** — the picks
+too. Currency, language, color scheme and line numbers sit above the error,
+where nobody looks back, and they used to come back on their defaults: a
+household that picked US dollars and mistyped Confirm was made in reais.
 
 Success sets the session cookie and lands on the ledger. It never says "now
 sign in with the password you just typed".
@@ -3686,8 +3695,9 @@ validator per value, whoever writes it).
   causes. The alternative, member columns that follow the household until
   changed, was rejected: an admin's tweak would rearrange somebody else's
   screen under them.
-- **The invite page opens its palette picker on the household's palette.**
-  The newcomer still picks; a refused form comes back on what they picked.
+- **The invite page opens its palette picker on the household's palette**,
+  and is painted in it. The newcomer still picks; a refused form comes back on
+  what they picked.
 - **The founder sets the first one.** `/setup` stores the admin's own palette
   as the household's default, so a new household starts looking like its
   first member; the layout defaults keep the schema's values.

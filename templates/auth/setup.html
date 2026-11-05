@@ -4,6 +4,7 @@
     no member, therefore no session, and holding them client-side is the data
     model this architecture forbids. One POST is one transaction that creates
     household_settings + members + member_settings + sessions, or nothing. -#}
+{% block head %}{% include "auth/picker_head.html" %}{% endblock %}
 {% block card %}
 <form class="card" style="max-width:520px" method="post" action="/setup">
   <div class="ch">
@@ -95,9 +96,9 @@
       <fieldset class="f">
         <legend class="k">{{ t.setup_line_numbers() }}</legend>
         <div class="radios">
-          <label><input type="radio" name="nu" value="relative" checked> <span>{{ t.setup_nu_relative() }}</span></label>
-          <label><input type="radio" name="nu" value="absolute"> <span>{{ t.setup_nu_absolute() }}</span></label>
-          <label><input type="radio" name="nu" value="none"> <span>{{ t.setup_nu_none() }}</span></label>
+          {%- for n in line_numbers %}
+          <label><input type="radio" name="nu" value="{{ n.code }}"{% if n.selected %} checked{% endif %}> <span>{{ n.label }}</span></label>
+          {%- endfor %}
         </div>
       </fieldset>
     </div>

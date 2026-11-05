@@ -1,8 +1,21 @@
 {#- One palette in the picker. A real radio inside a label, so ←/→ walk the
     fieldset natively — do not rebuild this as a grid of buttons and then
-    reimplement arrow keys. -#}
+    reimplement arrow keys.
+
+    Checking one previews it on the whole page — the honest preview is the
+    page you are looking at: `hx-get` on `change`, and the server answers
+    with the palette's `<style>` block, out of band (`auth::palette`).
+    `hx-params="none"`, because the form around it holds a password, and a
+    GET carries what it sends in its URL: this one sends nothing the path
+    does not already say. `hx-sync` across the grid, because a held arrow key
+    checks a swatch per repeat, and answers that arrive out of order would
+    leave the page in one that is no longer checked: a newer pick cancels
+    the one still on its way. With htmx absent it is still the form field it
+    was. -#}
 <label class="swatch">
-  <input type="radio" name="theme" value="{{ s.key }}"{% if s.selected %} checked{% endif %}>
+  <input type="radio" name="theme" value="{{ s.key }}"{% if s.selected %} checked{% endif %}
+         hx-get="/palette/{{ s.key }}" hx-params="none" hx-swap="none"
+         hx-sync="closest .swatches:replace">
   <span class="bars">{% for c in s.bars %}<i style="background:{{ c }}"></i>{% endfor %}</span>
   <span class="nm">{{ s.label }}</span>
 </label>

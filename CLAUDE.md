@@ -186,13 +186,22 @@ reason: storage reaches the page only after a script runs, which is a flash of
 `ffm` and a repaint. There is still no picker on `/login` — an anonymous
 visitor's own choice would have nowhere to live. `/setup` and `/invite` are the
 exception that proves it — they *do* show the full 11-palette picker, because
-there it's a form field writing `member_settings`, not chrome.
+there it's a form field writing `member_settings`, not chrome. **So those two
+are painted in the swatch that is checked**, not the cookie's: `ffm` on
+`/setup`, the household's default on `/invite`, the pick when a refused form
+comes back (`Chrome::paint`).
 
 **The picker previews by swapping a server-rendered `<style>` block**, not by
 recomputing colors in JS: the control does an `hx-get` and the server returns
 the 11 tokens plus their `color-mix()` derivations from the same palette table
 the app itself uses. One round trip per click, zero JS, and the preview provably
-cannot drift from the real thing.
+cannot drift from the real thing. Before sign-in that is `GET /palette/{key}`
+(`auth::palette`): it writes nothing, not even `ffm.palette`, and answers with
+the very block `:profile`'s palette write sends (`RenderedTheme::oob`). It was
+written down long before it existed — the pre-auth pages loaded no htmx, so a
+swatch only selected itself. Now `/setup` and `/invite` load htmx for this
+alone (`/login` and a reset do not), and the radio sends `hx-params="none"`:
+its form holds a password, and a GET carries what it sends in the URL.
 
 ---
 

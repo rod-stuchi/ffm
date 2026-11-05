@@ -52,6 +52,9 @@ pub fn router(state: AppState) -> Router {
         .route("/invite/{token}", get(auth::invite_page).post(auth::accept))
         .route("/lang", post(auth::set_lang))
         .route("/theme", post(auth::set_theme))
+        // The palette picker's preview on `/setup` and `/invite`, which have
+        // no session to show it to. A GET that writes nothing.
+        .route("/palette/{key}", get(auth::palette))
         // What makes the ledger installable on a phone — see `web::pwa`.
         // Public: the browser fetches it without the session cookie.
         .route("/manifest.webmanifest", get(pwa::manifest));

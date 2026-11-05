@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { type App, expect, test } from '../fixtures';
 import { autofocused, command } from '../lib/keys';
+import { paper, pick, swatchPaper } from '../lib/palette';
 
 const PASSWORD = 'correct horse battery';
 
@@ -60,6 +61,26 @@ test('an invite lets a new person choose their own name, password, language and 
     `SELECT token, accepted_member_id FROM member_invites WHERE label = 'Para a tia'`,
   );
   expect(invite).toEqual({ token: null, accepted_member_id: member.id });
+});
+
+test('the invite page is painted in the household\'s palette, and a swatch repaints it', async ({ app, page, stranger }) => {
+  app.exec(`UPDATE household_settings SET default_theme = 'dracula'`);
+  const link = await issue(app, page, 'Cores');
+
+  await stranger.goto(link);
+  await expect(stranger.locator('input[name="theme"]:checked')).toHaveValue('dracula');
+  expect(await paper(stranger)).toBe(await swatchPaper(stranger, 'dracula'));
+  await expect(stranger.locator('#auth-palette')).toHaveText('dracula');
+
+  await pick(stranger, 'gruvbox');
+  await expect.poll(() => paper(stranger)).toBe(await swatchPaper(stranger, 'gruvbox'));
+  await expect(stranger.locator('#auth-palette')).toHaveText('gruvbox');
+
+  // A refused form comes back on the pick, painted in it.
+  await accept(stranger, { name: 'Cores', password: PASSWORD, confirm: 'something else' });
+  await expect(stranger.locator('label.is-bad input[name="confirm"]')).toBeVisible();
+  await expect(stranger.locator('input[name="theme"]:checked')).toHaveValue('gruvbox');
+  expect(await paper(stranger)).toBe(await swatchPaper(stranger, 'gruvbox'));
 });
 
 test('a link issued for an admin makes an admin', async ({ app, page, stranger }) => {
@@ -168,6 +189,8 @@ test.describe('a password reset', () => {
     // No name, no language, no palette: this person is not new.
     await expect(stranger.locator('input[name="name"]')).toHaveCount(0);
     await expect(stranger.locator('input[name="theme"]')).toHaveCount(0);
+    // And with no picker, no htmx: it is there for the preview alone.
+    await expect(stranger.locator('script[src*="htmx"]')).toHaveCount(0);
     await accept(stranger, { password: PASSWORD });
 
     await expect(ownPane(stranger)).toHaveText(new RegExp(`^${app.adult.name}$`, 'i'));

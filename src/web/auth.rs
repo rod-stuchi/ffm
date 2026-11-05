@@ -15,6 +15,7 @@ use crate::db::ledger;
 use crate::domain::money::{Cents, Currency};
 use crate::state::AppState;
 use crate::ui::i18n::{Catalog, Lang};
+use crate::ui::row::LineNumbers;
 use crate::ui::theme::{self, ModePref, ThemeName};
 use crate::ui::{fmt, theme::Overrides};
 use crate::web::form::FieldErrors;
@@ -64,6 +65,31 @@ pub struct Chrome {
     /// A dev build's badge — shown before you sign in too, since `/login`
     /// is where you would first mistake one server for another.
     pub run: Option<crate::run::Badge>,
+    /// This device's light/dark, kept so `paint` can render another palette.
+    mode: ModePref,
+}
+
+impl Chrome {
+    /// Paints the page in `palette` instead of the device's. On `/setup` and
+    /// `/invite` the palette is a form field, and the page is its preview from
+    /// the first frame: painted in the swatch that is checked, so clicking the
+    /// checked one has nothing to change.
+    fn paint(&mut self, palette: ThemeName) {
+        let rendered = painted(palette, self.mode);
+        self.theme_css = rendered.to_css();
+        self.theme_meta = rendered.meta_tags(BAR);
+        self.palette = palette.key();
+    }
+}
+
+/// The token a phone paints its bar in before sign-in: the card sits on
+/// paper, and so does the strip above it.
+const BAR: &str = "paper";
+
+/// A pre-auth page's palette. There is no member yet, so there are no
+/// overrides: what a swatch previews is the palette as it ships.
+fn painted(palette: ThemeName, mode: ModePref) -> theme::RenderedTheme {
+    theme::render(palette, mode, &Overrides::default())
 }
 
 pub struct Choice {
@@ -122,20 +148,21 @@ async fn chrome(
     let mode_label = mode_label(&t, mode);
     let next_mode = mode.next();
 
-    let rendered = theme::render(palette, mode, &Overrides::default());
+    let rendered = painted(palette, mode);
     let chrome = Chrome {
         run: crate::run::badge(&t),
         household_slug: crate::domain::slug::slugify(&name),
         household: name,
         // The palette of whoever last signed in on this device, from the
         // `ffm.palette` cookie their session kept in step — `ffm` for a device
-        // nobody has. Still no picker here: a palette chosen by an anonymous
-        // visitor would have nowhere to live. Light/dark comes from its own
-        // cookie, which is why those are two facts stored in two places.
+        // nobody has. Still no picker on `/login`: a palette chosen by an
+        // anonymous visitor would have nowhere to live. Light/dark comes from
+        // its own cookie, which is why those are two facts stored in two
+        // places. `/setup` and `/invite` repaint in their picker's (`paint`).
         theme_css: rendered.to_css(),
-        // The card sits on paper, and so does the strip above it.
-        theme_meta: rendered.meta_tags("paper"),
+        theme_meta: rendered.meta_tags(BAR),
         palette: palette.key(),
+        mode,
         attr: mode.attr(),
         lang_code: lang.code(),
         lang_label: match lang {
@@ -197,6 +224,22 @@ fn currencies(t: &Catalog, selected: Currency) -> Vec<CurrencyChoice> {
             selected: *c == selected,
         })
         .collect()
+}
+
+/// The gutter's three modes, in the order `:profile` lists them.
+fn line_numbers(t: &Catalog, selected: LineNumbers) -> Vec<Choice> {
+    [
+        (LineNumbers::Relative, t.setup_nu_relative()),
+        (LineNumbers::Absolute, t.setup_nu_absolute()),
+        (LineNumbers::Off, t.setup_nu_none()),
+    ]
+    .into_iter()
+    .map(|(n, label)| Choice {
+        code: n.code(),
+        label,
+        selected: n == selected,
+    })
+    .collect()
 }
 
 /// The 11 palettes, each shown as its own colors rather than its name alone —
@@ -402,6 +445,7 @@ struct SetupPage {
     currencies: Vec<CurrencyChoice>,
     languages: Vec<Choice>,
     themes: Vec<Swatch>,
+    line_numbers: Vec<Choice>,
     date_pattern: &'static str,
     db_path: String,
     receipts_root: String,
@@ -436,24 +480,75 @@ pub async fn setup_page(State(st): State<AppState>, jar: CookieJar, parts: Parts
         .into_response();
     }
     let (chrome, t) = chrome(&st, &jar, &parts, Where::Setup, "/setup").await;
-    Html(setup_form(&st, chrome, t, None, None, FieldErrors::new())).into_response()
+    let lang = Lang::parse(chrome.lang_code).unwrap_or(Lang::En);
+    Html(setup_form(
+        &st,
+        chrome,
+        t,
+        SetupDraft::fresh(lang),
+        FieldErrors::new(),
+    ))
+    .into_response()
+}
+
+/// Everything `/setup` asks for but the passwords, as the form shows it:
+/// blank and on the defaults on a first visit, and exactly as sent when a
+/// refused form comes back. The passwords are the one thing it does not
+/// keep. The picks used to come back on their defaults — a household that
+/// chose US dollars and mistyped Confirm was made in reais, with nothing on
+/// screen pointing at it, since the error was down by the passwords.
+struct SetupDraft {
+    household: String,
+    name: String,
+    currency: Currency,
+    language: Lang,
+    line_numbers: LineNumbers,
+    /// The swatch the picker opens on, and the page is painted in it.
+    palette: ThemeName,
+}
+
+impl SetupDraft {
+    /// A first visit: the bundled defaults, and the page's own language.
+    fn fresh(lang: Lang) -> SetupDraft {
+        SetupDraft {
+            household: String::new(),
+            name: String::new(),
+            currency: Currency::Brl,
+            language: lang,
+            line_numbers: LineNumbers::default(),
+            palette: ThemeName::default(),
+        }
+    }
+
+    /// A form as sent, read once: what a refused form shows is what would
+    /// have been stored.
+    fn sent(form: &SetupForm) -> SetupDraft {
+        SetupDraft {
+            household: form.household.trim().to_string(),
+            name: form.name.trim().to_string(),
+            currency: Currency::parse(&form.currency).unwrap_or(Currency::Brl),
+            language: Lang::parse(&form.language).unwrap_or(Lang::En),
+            line_numbers: LineNumbers::parse(&form.nu),
+            palette: ThemeName::parse(&form.theme).unwrap_or_default(),
+        }
+    }
 }
 
 fn setup_form(
     st: &AppState,
-    chrome: Chrome,
+    mut chrome: Chrome,
     t: Catalog,
-    household_name: Option<String>,
-    admin_name: Option<String>,
+    draft: SetupDraft,
     errors: FieldErrors,
 ) -> SetupPage {
-    let lang = Lang::parse(chrome.lang_code).unwrap_or(Lang::En);
+    chrome.paint(draft.palette);
     SetupPage {
-        household_name: household_name.unwrap_or_default(),
-        admin_name: admin_name.unwrap_or_default(),
-        currencies: currencies(&t, Currency::Brl),
-        languages: languages(lang),
-        themes: swatches(ThemeName::default()),
+        currencies: currencies(&t, draft.currency),
+        languages: languages(draft.language),
+        themes: swatches(draft.palette),
+        line_numbers: line_numbers(&t, draft.line_numbers),
+        household_name: draft.household,
+        admin_name: draft.name,
         date_pattern: fmt::DATE_PATTERN,
         // The operator's three keys, resolved and read-only. Shown so the admin
         // can confirm the vault is where they think it is before a single
@@ -486,19 +581,17 @@ pub async fn setup(
     Form(form): Form<SetupForm>,
 ) -> Response {
     let (chrome, t) = chrome(&st, &jar, &parts, Where::Setup, "/setup").await;
-
-    let household = form.household.trim();
-    let name = form.name.trim();
+    let draft = SetupDraft::sent(&form);
 
     // Every field is checked, not just the first that fails: a form that
     // rejects one box per round trip makes somebody submit four times to find
     // out four things. The order is the order they sit on the page, so the
     // summary reads top to bottom and the cursor lands on the first one.
     let mut errors = FieldErrors::new();
-    if household.is_empty() {
+    if draft.household.is_empty() {
         errors.add("household", t.field_required(t.setup_household_name()));
     }
-    if name.is_empty() {
+    if draft.name.is_empty() {
         errors.add("name", t.field_required(t.login_name()));
     }
     if form.password.chars().count() < MIN_PASSWORD {
@@ -510,46 +603,38 @@ pub async fn setup(
         errors.add("confirm", t.password_mismatch());
     }
     if errors.is_bad() {
-        return Html(setup_form(
-            &st,
-            chrome,
-            t,
-            Some(household.to_string()),
-            Some(name.to_string()),
-            errors,
-        ))
-        .into_response();
+        return Html(setup_form(&st, chrome, t, draft, errors)).into_response();
     }
 
-    let lang = Lang::parse(&form.language).unwrap_or(Lang::En);
-    let theme = ThemeName::parse(&form.theme).unwrap_or_default();
-    let currency = Currency::parse(&form.currency).unwrap_or(Currency::Brl);
     let label = auth::device_label(session::user_agent(&parts));
-
-    match auth::setup(
+    let result = auth::setup(
         &st.pool,
         auth::NewHousehold {
-            household_name: household,
-            currency: currency.code(),
-            language: lang.code(),
-            admin_name: name,
+            household_name: &draft.household,
+            currency: draft.currency.code(),
+            language: draft.language.code(),
+            admin_name: &draft.name,
             password: &form.password,
-            theme: theme.key(),
-            line_numbers: &form.nu,
+            theme: draft.palette.key(),
+            line_numbers: draft.line_numbers.code(),
             device_label: &label,
         },
     )
-    .await
-    {
+    .await;
+
+    match result {
         Ok(sid) => {
             // Lands on the ledger, signed in. It never says "now sign in with
             // the password you just typed".
             let jar = jar
                 .add(session::session_cookie(sid))
-                .add(session::pref_cookie(session::LANG, lang.code().to_string()))
+                .add(session::pref_cookie(
+                    session::LANG,
+                    draft.language.code().to_string(),
+                ))
                 .add(session::pref_cookie(
                     session::PALETTE,
-                    theme.key().to_string(),
+                    draft.palette.key().to_string(),
                 ));
             (jar, Redirect::to("/")).into_response()
         }
@@ -560,8 +645,7 @@ pub async fn setup(
             &st,
             chrome,
             t,
-            Some(household.to_string()),
-            Some(name.to_string()),
+            draft,
             FieldErrors::new().with("", e.to_string()),
         ))
         .into_response(),
@@ -625,11 +709,13 @@ pub async fn invite_page(
     )
 }
 
-/// `palette` is the swatch the picker opens on: the household's default on a
-/// first visit, and what was picked when a refused form comes back.
+/// `palette` is the swatch the picker opens on, and an invite's page is
+/// painted in it: the household's default on a first visit, and what was
+/// picked when a refused form comes back. A reset has no picker, and keeps
+/// the device's palette.
 #[allow(clippy::too_many_arguments)]
 fn render_link(
-    chrome: Chrome,
+    mut chrome: Chrome,
     t: Catalog,
     token: &str,
     link: Link,
@@ -642,20 +728,23 @@ fn render_link(
     match link {
         Link::Invite {
             inviter, expires, ..
-        } => Html(InvitePage {
-            action: format!("/invite/{token}"),
-            is_reset: false,
-            inviter,
-            expires: iso_to_date(&expires),
-            name,
-            languages: languages(lang),
-            themes: swatches(palette),
-            note,
-            errors,
-            chrome,
-            t,
-        })
-        .into_response(),
+        } => {
+            chrome.paint(palette);
+            Html(InvitePage {
+                action: format!("/invite/{token}"),
+                is_reset: false,
+                inviter,
+                expires: iso_to_date(&expires),
+                name,
+                languages: languages(lang),
+                themes: swatches(palette),
+                note,
+                errors,
+                chrome,
+                t,
+            })
+            .into_response()
+        }
         Link::Reset { expires, .. } => Html(InvitePage {
             action: format!("/invite/{token}"),
             is_reset: true,
@@ -847,6 +936,24 @@ pub async fn set_theme(jar: CookieJar, Form(form): Form<PrefForm>) -> Response {
     (jar, Redirect::to(&safe_next(&form.next))).into_response()
 }
 
+/// A swatch's preview on `/setup` and `/invite` (`auth/swatch.html`): the
+/// palette in this device's light/dark, swapped out of band the way
+/// `:profile`'s palette write answers (`RenderedTheme::oob`), plus the
+/// statusline's palette cell. It reads nothing and writes nothing — there the
+/// palette is a form field, stored with the form, so not even `ffm.palette`
+/// moves until then.
+pub async fn palette(jar: CookieJar, Path(key): Path<String>) -> Response {
+    let Some(palette) = ThemeName::parse(&key) else {
+        return axum::http::StatusCode::NOT_FOUND.into_response();
+    };
+    let swap = painted(palette, session::mode_of(&jar)).oob(BAR);
+    let cell = format!(
+        r#"<span id="auth-palette" hx-swap-oob="true">{}</span>"#,
+        palette.key()
+    );
+    axum::response::Html(swap + &cell).into_response()
+}
+
 /// The word for a light/dark state, in the viewer's language. Shared with the
 /// ledger bar's own control — the ids are `auth-theme-*` only because that is
 /// where the first one lived; they name the mode, not the page.
@@ -924,5 +1031,29 @@ mod tests {
     fn a_date_is_written_the_one_way_this_app_writes_dates() {
         assert_eq!(fmt_date("2026-09-27T10:00:00Z"), "27/09/2026");
         assert_eq!(fmt_date("nonsense"), "nonsense");
+    }
+
+    #[tokio::test]
+    async fn a_swatch_previews_its_palette_in_the_devices_mode_and_writes_nothing() {
+        let jar = CookieJar::new().add(session::pref_cookie(session::THEME, "dark".into()));
+        let r = palette(jar, Path("nord".into())).await;
+        assert_eq!(r.status(), 200);
+        // Not even `ffm.palette`: the pick is stored with the form, or never.
+        assert!(r.headers().get(axum::http::header::SET_COOKIE).is_none());
+        let html = axum::body::to_bytes(r.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let html = String::from_utf8(html.to_vec()).unwrap();
+        // The very block a page painted in it carries, swapped by id.
+        let page = painted(ThemeName::Nord, ModePref::Dark);
+        assert!(html.starts_with(&page.oob(BAR)), "{html}");
+        assert!(html.contains(&format!(
+            r#"<style id="ffm-theme" hx-swap-oob="true">{}</style>"#,
+            page.to_css()
+        )));
+        assert!(html.ends_with(r#"<span id="auth-palette" hx-swap-oob="true">nord</span>"#));
+
+        let unknown = palette(CookieJar::new(), Path("nope".into())).await;
+        assert_eq!(unknown.status(), 404);
     }
 }

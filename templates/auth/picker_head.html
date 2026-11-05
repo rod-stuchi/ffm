@@ -1,0 +1,4 @@
+{#- htmx, on the two pre-auth pages with a palette picker, for its preview
+    alone (`auth/swatch.html`). Every form here is still a plain post that
+    works with htmx absent; `/login` has no picker and does not load it. -#}
+<script defer src="{{ crate::web::assets::url("js/htmx.min.js") }}"></script>
