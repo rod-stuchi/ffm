@@ -4,6 +4,8 @@
 //!
 //! * **`ffm.sid`** — the session. Opaque, `HttpOnly`, `SameSite=Lax`. It
 //!   carries a random id and nothing else; the member it belongs to is a row.
+//!   400 days, renewed as the row slides — never a browser-session cookie,
+//!   which an installed iPhone app drops every time iOS closes it.
 //! * **`ffm.lang`** — the pre-login language. A cookie rather than
 //!   `localStorage` because the server renders the page: storage is readable
 //!   only after JS runs, which leaves a flash of the wrong words or a
@@ -29,12 +31,15 @@ use crate::domain::viewer::Viewer;
 use crate::state::AppState;
 use crate::ui::i18n::{Catalog, Lang};
 use crate::ui::theme::{ModePref, ThemeName};
-use axum::extract::FromRequestParts;
-use axum::http::header::{ACCEPT_LANGUAGE, USER_AGENT};
+use axum::extract::{FromRequestParts, Request};
+use axum::http::HeaderValue;
+use axum::http::header::{ACCEPT_LANGUAGE, SET_COOKIE, USER_AGENT};
 use axum::http::request::Parts;
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::CookieJar;
 use axum_extra::extract::cookie::{Cookie, SameSite};
+use std::sync::{Arc, OnceLock};
 
 pub const SID: &str = "ffm.sid";
 pub const LANG: &str = "ffm.lang";
@@ -54,11 +59,58 @@ fn base<'c>(name: &'static str, value: String) -> Cookie<'c> {
     c
 }
 
-/// The session cookie. No `Max-Age`: sessions are long-lived and sliding
-/// server-side, and the row is what expiry actually means — a cookie lifetime
-/// would be a second, disagreeing answer.
+/// 400 days, renewed whenever the session slides — so in practice, never
+/// reached by anybody who opens the ledger once a year. 400 is Chrome's
+/// ceiling: a longer `Max-Age` is cut to it anyway.
+const SESSION_MAX_AGE: time::Duration = time::Duration::days(400);
+
+/// The session cookie, with a lifetime of its own.
+///
+/// It had none, on the reasoning that the row decides expiry and a cookie
+/// lifetime would be a second answer. But a cookie with no `Max-Age` is not
+/// "no expiry": it is a browser-session cookie, gone when the browser quits —
+/// and on an iPhone, the installed app loses it every time iOS closes the app,
+/// so opening the ledger from the home screen meant signing in again. The row
+/// still decides whether a session is alive; the cookie's lifetime is only how
+/// long the device keeps the key, and `renew` slides it with the row.
 pub fn session_cookie<'c>(id: String) -> Cookie<'c> {
-    base(SID, id)
+    let mut c = base(SID, id);
+    c.set_max_age(SESSION_MAX_AGE);
+    c
+}
+
+/// Carries "this request's session slid" from the `Auth` extractor out to
+/// `renew`, which is the one that can see the response. Request extensions
+/// do not travel back out, so the two share this handle.
+#[derive(Clone, Default)]
+pub struct Renewal(Arc<OnceLock<String>>);
+
+/// Re-sends the session cookie on a response whose request slid the session
+/// (at most once a minute), so its 400 days count from the last visit. A
+/// cookie set before the cookie had a lifetime is upgraded the same way, on
+/// its next slide.
+///
+/// Never over a response that already sets `ffm.sid` — a sign-out clearing it,
+/// or a sign-in replacing it, must have the last word.
+pub async fn renew(mut req: Request, next: Next) -> Response {
+    let renewal = Renewal::default();
+    req.extensions_mut().insert(renewal.clone());
+    let mut res = next.run(req).await;
+    if let Some(id) = renewal.0.get()
+        && !sets_session(&res)
+        && let Ok(v) = HeaderValue::from_str(&session_cookie(id.clone()).to_string())
+    {
+        res.headers_mut().append(SET_COOKIE, v);
+    }
+    res
+}
+
+fn sets_session(res: &Response) -> bool {
+    let prefix = format!("{SID}=");
+    res.headers()
+        .get_all(SET_COOKIE)
+        .iter()
+        .any(|v| v.to_str().is_ok_and(|s| s.starts_with(&prefix)))
 }
 
 pub fn clear_session<'c>() -> Cookie<'c> {
@@ -204,6 +256,12 @@ impl FromRequestParts<AppState> for Auth {
             return Err(NotSignedIn(fresh().await));
         };
 
+        if session.slid
+            && let Some(r) = parts.extensions.get::<Renewal>()
+        {
+            let _ = r.0.set(session.id.clone());
+        }
+
         let settings = settings::member_settings(&st.pool, session.member.id)
             .await
             .unwrap_or_default();
@@ -241,14 +299,74 @@ mod tests {
     }
 
     #[test]
-    fn the_session_cookie_is_httponly_lax_and_has_no_lifetime_of_its_own() {
+    fn the_session_cookie_is_httponly_lax_and_outlives_the_browser() {
         let c = session_cookie("abc".into());
         assert_eq!(c.http_only(), Some(true));
         assert_eq!(c.same_site(), Some(SameSite::Lax));
         assert_eq!(c.path(), Some("/"));
-        // Expiry is the sessions row, not the cookie: two answers would
-        // eventually disagree, and the row is the one that can be revoked.
-        assert!(c.max_age().is_none());
+        // Without a Max-Age it is a browser-session cookie, and an installed
+        // iPhone app loses it every time iOS closes the app.
+        assert_eq!(c.max_age(), Some(time::Duration::days(400)));
+    }
+
+    /// One request through `renew`, its handler setting the renewal (as `Auth`
+    /// does when the session slid) and answering with `answer`'s cookies.
+    async fn through_renew(slid: bool, answer: Option<Cookie<'static>>) -> Vec<String> {
+        use axum::routing::get;
+        use tower::ServiceExt;
+
+        let handler = move |req: Request| async move {
+            if slid {
+                let _ = req
+                    .extensions()
+                    .get::<Renewal>()
+                    .unwrap()
+                    .0
+                    .set("abc".into());
+            }
+            match answer {
+                Some(c) => (CookieJar::new().add(c), "ok").into_response(),
+                None => "ok".into_response(),
+            }
+        };
+        let app = axum::Router::new()
+            .route("/", get(handler))
+            .layer(axum::middleware::from_fn(renew));
+        let res = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        res.headers()
+            .get_all(SET_COOKIE)
+            .iter()
+            .map(|v| v.to_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_slide_renews_the_cookie_and_a_quiet_request_does_not() {
+        let set = through_renew(true, None).await;
+        assert_eq!(set.len(), 1);
+        assert!(set[0].starts_with("ffm.sid=abc"), "{set:?}");
+        assert!(set[0].contains("Max-Age=34560000"), "{set:?}");
+
+        assert!(through_renew(false, None).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_renewal_never_undoes_a_sign_out_in_the_same_response() {
+        let set = through_renew(true, Some(clear_session())).await;
+        assert_eq!(set.len(), 1, "{set:?}");
+        assert!(set[0].contains("Max-Age=0"), "{set:?}");
+
+        // Another cookie is no reason to hold the renewal back.
+        let set = through_renew(true, Some(pref_cookie(HIDE, "1".into()))).await;
+        assert_eq!(set.len(), 2, "{set:?}");
     }
 
     #[test]

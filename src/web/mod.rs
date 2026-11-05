@@ -204,7 +204,11 @@ pub fn router(state: AppState) -> Router {
     #[cfg(feature = "dev-reload")]
     let app = app.route("/_dev/reload", get(dev_reload::stream));
 
-    app.with_state(state).layer(compression())
+    // Over everything, so no authenticated route can be added without it: a
+    // request whose session slid gets its cookie's 400 days back.
+    app.layer(axum::middleware::from_fn(session::renew))
+        .with_state(state)
+        .layer(compression())
 }
 
 /// gzip or brotli, whichever the browser offers — for the HTML above all: a

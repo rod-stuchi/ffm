@@ -89,6 +89,10 @@ pub struct Session {
     /// This admin has switched their own admin powers off to see what a member
     /// sees. Session-scoped, so one browser can preview while another does not.
     pub preview: bool,
+    /// This lookup moved `last_seen_at` — at most once a minute. The cookie's
+    /// lifetime is renewed on exactly these requests (`web::session::renew`),
+    /// so it counts from the last visit, like the row, not from sign-in.
+    pub slid: bool,
 }
 
 impl Session {
@@ -190,7 +194,8 @@ const SEEN_EVERY: chrono::Duration = chrono::Duration::seconds(60);
 ///
 /// Long-lived and sliding rather than expiring: signing a household out of its
 /// own ledger every fortnight buys nothing behind a LAN, and the revocation
-/// path — one row — is the thing that actually matters.
+/// path — one row — is the thing that actually matters. The cookie follows
+/// the slide (`Session::slid`), so the device keeps holding it too.
 pub async fn session(pool: &SqlitePool, id: &str) -> sqlx::Result<Option<Session>> {
     let row = sqlx::query!(
         r#"SELECT s.id AS "id!: String",
@@ -245,6 +250,7 @@ pub async fn session(pool: &SqlitePool, id: &str) -> sqlx::Result<Option<Session
         },
         role_admin: r.role == 0,
         preview: r.preview != 0,
+        slid: !fresh,
     }))
 }
 

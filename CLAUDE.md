@@ -1781,7 +1781,10 @@ that will otherwise be re-proposed.
   `HttpOnly` session cookie, so a single lost/stolen device can be logged out
   without rotating a secret that would log out the whole household. Sized for a
   LAN/Tailscale-only deployment: long-lived sliding sessions (`last_seen_at`
-  moves at most once a minute, so a request is not a write), no lockout or rate
+  moves at most once a minute, so a request is not a write, and the cookie's
+  400-day `Max-Age` is re-sent on that same request — `web::session::renew`.
+  It had none, and a cookie without one dies with the browser: the installed
+  iPhone app signed out every time iOS closed it), no lockout or rate
   limiting, `SameSite=Lax` plus checking HTMX's own `HX-Request` header is enough
   CSRF defense at this scale. Revisit all of this if this is ever exposed to the
   open internet.

@@ -1806,7 +1806,13 @@ does most of the real work, so the auth layer stays simple on purpose.
   for a closed household network. `last_seen_at` slides at most once a
   minute: a page asks for a dozen things at once, and each request writing it
   queued the carousel's pages and the live feed's rows behind SQLite's one
-  writer. Revisit all of this the day this is ever
+  writer. **The cookie slides with it**: `Max-Age` 400 days (Chrome's
+  ceiling), sent again on every request that moved `last_seen_at`
+  (`web::session::renew`), never over a response that sets `ffm.sid` itself.
+  It had no `Max-Age`, on the reasoning that the row decides expiry — but a
+  cookie without one is a browser-session cookie, and an installed iPhone
+  app dropped it every time iOS closed the app, so the household signed in
+  again on each open. Revisit all of this the day this is ever
   exposed to the open internet; it is not designed for that today.
 - **CSRF**: `SameSite=Lax` plus checking HTMX's own `HX-Request` header on
   state-changing routes. No token scheme — not proportionate at this scale.

@@ -201,7 +201,8 @@ async fn a_session_slides_once_a_minute_not_on_every_request() {
         .execute(&pool)
         .await
         .unwrap();
-    assert!(auth::session(&pool, &sid).await.unwrap().is_some());
+    // Nor is the cookie sent again.
+    assert!(!auth::session(&pool, &sid).await.unwrap().unwrap().slid);
     assert_eq!(seen(pool.clone(), sid.clone()).await, recent);
 
     // Seen two minutes ago: it slides to now.
@@ -214,7 +215,8 @@ async fn a_session_slides_once_a_minute_not_on_every_request() {
         .execute(&pool)
         .await
         .unwrap();
-    assert!(auth::session(&pool, &sid).await.unwrap().is_some());
+    // It says so, which is what renews the cookie's lifetime with it.
+    assert!(auth::session(&pool, &sid).await.unwrap().unwrap().slid);
     assert!(seen(pool.clone(), sid.clone()).await > recent);
 }
 
