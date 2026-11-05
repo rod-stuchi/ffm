@@ -6,6 +6,8 @@ fully usable with a mouse.
 
 - **Why it exists and what it does:** `design/overview.md`
 - **The working agreement** (stack, decisions, conventions): `CLAUDE.md`
+- **The long form of its decisions:** `design/decisions.md`
+- **The long form of its decisions:** `design/decisions.md`
 - **Keymap, row states, config schema:** `design/spec.md`
 
 ## Getting started

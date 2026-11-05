@@ -469,7 +469,7 @@ different: it's the same number every period, because it identifies the
   nothing). It was "flagged, not silently overwritten", then a hard refusal;
   a question is what keeps it from being a dead end. The same goes for a
   different issuer or card (below), and for a bill nothing can confirm. See
-  CLAUDE.md's *Never a dead end*.
+  `design/decisions.md`'s *Never a dead end*.
 - **Unlinkable independently of the rule itself.** A dedicated control
   clears just the code — not `tracked`, `bucket`, `bill_name` or `pattern`
   — for correcting "the wrong file got attached the first time" without
