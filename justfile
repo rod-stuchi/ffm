@@ -510,9 +510,24 @@ cmd-check:
           f"the {len(told)} named in messages exist, and the keymap "
           f"documents exactly the {len(handled)} that are")
 
+# Claude Code loads CLAUDE.md only while it is under 150k characters —
+# characters, not bytes, and this file is full of — and →. It reached 157k
+# before anybody noticed; the long form of a decision goes to
+# design/decisions.md, and this keeps the brief one inside the limit.
+doc-check:
+    #!/usr/bin/env python3
+    import pathlib, sys
+    limit = 150_000
+    size = len(pathlib.Path("CLAUDE.md").read_text(encoding="utf-8"))
+    if size > limit:
+        print(f"✗ CLAUDE.md is {size:,} characters, over the {limit:,} "
+              f"Claude Code loads — move the long form to design/decisions.md")
+        sys.exit(1)
+    print(f"✓ CLAUDE.md is {size:,} characters, {limit - size:,} under the limit")
+
 # What the pre-commit hook runs: everything that takes seconds — formatting,
 # the offline build (a query changed without `just prepare`), and the greps.
-check-fast: fmt-check offline-check db-check css-check tpl-check i18n-check js-check cmd-check
+check-fast: fmt-check offline-check db-check css-check tpl-check i18n-check js-check cmd-check doc-check
 
 # What the pre-push hook runs: the slow ones.
 check-slow: lint test

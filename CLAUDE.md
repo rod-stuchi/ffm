@@ -225,9 +225,10 @@ what it covers, and amend both. Sections: bills and their files
 and shrink, the `P` carousel, deleting files) · the ledger bar · the PWA ·
 the dev badge, releases, `_free-port`, `just e2e`.
 
-**This file must stay under the 150k characters Claude Code loads.** A new
-decision goes here as the rule and its key names; its reasoning, history and
-edge cases go to `design/decisions.md`.
+**This file must stay under the 150k characters Claude Code loads** — `just
+doc-check`, in `check-fast`, refuses a commit past it. A new decision goes
+here as the rule and its key names; its reasoning, history and edge cases go
+to `design/decisions.md`.
 
 ## Layout
 
