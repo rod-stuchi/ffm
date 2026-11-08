@@ -1669,6 +1669,13 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   has to read a form's own values before it is swapped away belongs on a
   container outside the target — which, for drafts, is the same shell they
   already live on.
+- **`htmx:afterSwap` fires once for every element an answer swapped**, not
+  once per answer — the target, then each out-of-band piece. The ledger's
+  listener (draft marks, the selection, the cursor, each forcing a layout)
+  ran thirteen times for one `J`, and with a draft parked put thirteen on
+  the bell's count. `afterSwap` in `ledger.js` queues it once, in a
+  microtask, and skips an answer that never reached `.stagewrap`. **A new
+  after-swap job goes there**, never in a listener of its own.
 - **An HTMX swap destroys the Alpine state inside it — and drafts live in
   Alpine.** Three decided rules collide here: a draft is unsubmitted form values
   so it never goes to the server; several can be parked at once; and the ledger

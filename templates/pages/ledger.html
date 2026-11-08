@@ -106,7 +106,6 @@
      @keydown.window="key($event)"
      @mousemove.window="mouseMoved($event)"
      @htmx:before-swap.window="savedSwap($event)"
-     @htmx:after-swap.window="if ($event.detail.target?.id !== 'stsel') refreshSelection(true)"
      {#- A file dragged anywhere over the ledger reveals every attachable
          row's three drop targets. `dragover` rather than `dragenter` because
          it fires continuously: moving between rows raises leave/enter pairs

@@ -173,6 +173,11 @@ const ffmBusy = { next: null, counts: new WeakMap() };
    anything else inside the form that writes (removing a file). */
 const ffmRowHtml = new Map();
 
+/* What one response swapped, element by element, waiting for the ledger's
+   upkeep to run once over all of it (`afterSwap`). DOM nodes, which is why
+   it is not Alpine state. */
+const ffmSwapped = [];
+
 function ledger() {
   return {
     // Where the server put us: your own pane by default, or whatever `?pane=`
@@ -462,20 +467,29 @@ function ledger() {
       // return below: moving to a pane with no rows in it is exactly when a
       // draft would otherwise be stranded, and it is not a rare case in a
       // household where one person has nothing this month.
-      const focused = this.focusedId();
+      // The positions are read once, while the layout is clean, and again
+      // only when one of the three below may have changed them: reading them
+      // after the focus class came off made the browser lay the page out an
+      // extra time on every `j`.
+      let rows = this.rows();
+      const focused = this.idOf(rows[this.row]);
+      let changed = false;
       if (this.editing && this.editing !== focused) {
         this.parkDraft(this.editing);
+        changed = true;
       }
       // The `E` pane is parked the same way: its arrow points at one row,
       // and a pane about a row the cursor has left is worse than none.
       if (this.ruleFor && this.ruleFor.row !== focused) {
         this.parkRule();
+        changed = true;
       }
       // The log pane closes when the cursor leaves the row it is about — one
       // check in the render loop, the same one that parks a draft. A pane
       // still showing the previous row's history is worse than no pane.
       if (this.logFor && this.logFor !== focused) {
         this.closeLog();
+        changed = true;
       }
       // The row menu is about one row, too.
       if (this.rowMenu && this.rowMenu.id !== focused) this.rowMenu = null;
@@ -493,7 +507,7 @@ function ledger() {
 
       document.querySelectorAll('.row.is-focus, .foldhead.is-focus')
         .forEach(r => r.classList.remove('is-focus'));
-      const rows = this.rows();
+      if (changed) rows = this.rows();
       if (!rows.length) return;
       this.row = Math.max(0, Math.min(this.row, rows.length - 1));
       rows[this.row].classList.add('is-focus');
@@ -506,11 +520,38 @@ function ledger() {
     },
 
     focusedId() {
-      const el = this.rows()[this.row];
-      // A fold header has no row wrapper, so it has no id — which is exactly
-      // what every row action already treats as "nothing to act on".
+      return this.idOf(this.rows()[this.row]);
+    },
+
+    /// A position's row id. A fold header has no row wrapper, so it has no
+    /// id — which is exactly what every row action already treats as
+    /// "nothing to act on".
+    idOf(el) {
       const wrap = el && el.closest('div[id^="row-"]');
       return wrap ? wrap.id.slice(4) : null;
+    },
+
+    /// The ledger's upkeep after a swap: draft marks, the selection, the
+    /// cursor. Once per response — htmx reports every element a response
+    /// swapped one by one, the target and then each out-of-band piece (the
+    /// pane's rows, its total, the tab's balance, the household's), so a
+    /// `J` ran all of it thirteen times, its live echo included, and with a
+    /// draft parked put thirteen on the bell's count. htmx swaps everything
+    /// first and then reports it all in one go, so a microtask runs after
+    /// the last of them. And only for a response that reached the ledger: the
+    /// month's dot, the selection's cell or the carousel swapped on its own
+    /// has no row to repaint.
+    afterSwap(el) {
+      if (ffmSwapped.push(el) > 1) return;
+      queueMicrotask(() => {
+        const els = ffmSwapped.splice(0);
+        const wrap = document.querySelector('.stagewrap');
+        if (wrap && !els.some(t => !t.isConnected || wrap.contains(t) || t.contains(wrap))) return;
+        this.markDrafts();
+        this.selAsked = null;
+        this.paintSelection();
+        this.paint();
+      });
     },
 
     // --- the loader --------------------------------------------------------
@@ -582,6 +623,21 @@ function ledger() {
           rows.set(id, rows.get(id) || !!ev.disk);
         }
       }
+      // Several rows of one pane at once — a month's folder filed by hand, a
+      // re-filing — is one fetch of the pane rather than one per row, each
+      // of which carried the pane's totals anyway. Not while a row there is
+      // open in `e`: that holds a pane's refresh back until the form closes,
+      // and the other rows need not wait for it.
+      const byPane = new Map();
+      for (const id of rows.keys()) {
+        const pane = document.getElementById('row-' + id)?.closest('.rows[id^="rows-"]');
+        if (pane) byPane.set(pane, (byPane.get(pane) || []).concat(id));
+      }
+      for (const [pane, ids] of byPane) {
+        if (ids.length <= 3 || (this.editing && pane.querySelector('#row-' + this.editing))) continue;
+        this.livePanes[pane.id.slice(5)] = true;
+        if (ids.some(id => rows.get(id))) this.say(this.liveFromDisk, false);
+      }
       for (const [id, disk] of rows) {
         const el = document.getElementById('row-' + id);
         if (!el) continue;
@@ -598,12 +654,7 @@ function ledger() {
         // Its own element as the source, so one row's request never cancels
         // another's.
         this.ajax('GET', '/tx/' + id, { source: el, target: el, swap: 'outerHTML' }, 'none')
-          .then(() => {
-            this.markDrafts();
-            this.paintSelection();
-            this.paint();
-            if (disk) this.say(this.liveFromDisk, false);
-          });
+          .then(() => { if (disk) this.say(this.liveFromDisk, false); });
       }
       this.refreshPanes();
     },
@@ -624,12 +675,7 @@ function ledger() {
         const keep = this.focusedId();
         this.ajax('GET', '/panes/' + member + '/' + period,
                   { source: rowsEl, target: rowsEl, swap: 'none' }, 'none')
-          .then(() => {
-            if (keep) this.cursorTo(keep);
-            this.markDrafts();
-            this.paintSelection();
-            this.paint();
-          });
+          .then(() => { if (keep) this.cursorTo(keep); });
       }
     },
 
@@ -2243,17 +2289,15 @@ function ledger() {
 
     /// What the selection cell last asked about — the focused member and the
     /// selected ids on screen in that pane — so moving the cursor does not
-    /// send a request per keystroke.
+    /// send a request per keystroke. A swap clears it (`afterSwap`): an
+    /// edited amount changes the sum without changing which rows are selected.
     selAsked: null,
 
     /// The statusline's selection cell: count and sum of what `x` marked in
     /// the focused pane. This only lists ids the page already holds; the
     /// server counts, sums and formats them (`web::selection`), because money
     /// is formatted in one place and privacy is applied with the numbers.
-    ///
-    /// `force` after a swap: an edited amount changes the sum without
-    /// changing which rows are selected.
-    refreshSelection(force) {
+    refreshSelection() {
       const cell = document.getElementById('stsel');
       const pane = document.querySelectorAll('.pane')[this.pane];
       if (!cell || !pane) return;
@@ -2262,7 +2306,7 @@ function ledger() {
         .filter(id => pane.querySelector('#row-' + id))
         .sort();
       const ask = member + '|' + ids.join(',');
-      if (ask === this.selAsked && !force) return;
+      if (ask === this.selAsked) return;
       this.selAsked = ask;
       if (!ids.length) { cell.innerHTML = ''; return; }
       const period = document.querySelector('.ledger-shell')?.dataset.period || '';
@@ -2703,6 +2747,11 @@ function ledger() {
     /// the different verb that reaches other months.
     runSearch() {
       const term = this.search;
+      // The positions are read first, while the layout is clean. Read after
+      // the marks below came off and went on, each read made the browser lay
+      // the page out again — twice a keystroke, which was nearly all of what
+      // a keystroke cost, where reading the rows' words was a few percent.
+      const rows = term ? this.rows() : [];
       document.querySelectorAll('.row.is-match').forEach(r => r.classList.remove('is-match'));
       this.matches = [];
       if (!term) return;
@@ -2713,7 +2762,7 @@ function ledger() {
       try { re = new RegExp(term, 'i'); }
       catch { re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
 
-      this.rows().forEach((row, i) => {
+      rows.forEach((row, i) => {
         // Title, dates, the formatted amount — and the WORDS a row's state
         // implies, so `/private` and `/paid` find what they look like they
         // should.
@@ -2730,7 +2779,7 @@ function ledger() {
           this.matches.push(i);
         }
       });
-      this.msg = this.matches.length ? (this.matches.length + '/' + this.rows().length) : this.lastCmd;
+      this.msg = this.matches.length ? (this.matches.length + '/' + rows.length) : this.lastCmd;
     },
 
     step(dir) {
@@ -4494,11 +4543,7 @@ function ledger() {
           }, { once: true });
         }
       });
-      document.body.addEventListener('htmx:afterSwap', () => {
-        this.markDrafts();
-        this.paintSelection();
-        this.paint();
-      });
+      document.body.addEventListener('htmx:afterSwap', (e) => this.afterSwap(e.target));
     },
   };
 }
