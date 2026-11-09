@@ -312,4 +312,19 @@ mod tests {
         assert_eq!((s.selected, s.total), (1, 5));
         assert_eq!(s.outs, Cents(9_990));
     }
+
+    /// The answer fills the page's cell and never replaces it — so it is
+    /// the cell's contents, and nothing at all when nothing is selected,
+    /// which is what the stylesheet's `:empty` hides.
+    #[test]
+    fn the_answer_is_the_cells_contents_and_empty_is_nothing() {
+        assert_eq!(SelectionCell::empty().render().unwrap(), "");
+        let t = Catalog::new(crate::ui::i18n::Lang::En);
+        let s = summarize(&pane(), &ids(&[2, 3]));
+        let html = SelectionCell::of(t, s, Currency::default())
+            .render()
+            .unwrap();
+        assert!(html.starts_with("<span>"), "{html}");
+        assert!(!html.contains("stsel"), "{html}");
+    }
 }

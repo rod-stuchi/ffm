@@ -1030,8 +1030,10 @@
         the way a spreadsheet shows the cells you picked. Rendered by the
         SERVER (`web::selection`): money is formatted in exactly one place,
         and the numbers come from the same pane query the header uses. Empty,
-        and hidden, while nothing in this pane is selected. -#}
-    <div class="st sel" id="stsel"></div>
+        and hidden, while nothing in this pane is selected. Its answers fill it
+        and never replace it (`refreshSelection`); `data-busy="none"`
+        because a queued one starts after `ajax` let go of its anchor. -#}
+    <div class="st sel" id="stsel" data-busy="none"></div>
     {#- The pending count and key buffer, so a half-typed `3d` or `g` is
         visible rather than something the app silently remembers. -#}
     <div class="st buf" x-text="count + pending" x-show="count || pending" x-cloak></div>

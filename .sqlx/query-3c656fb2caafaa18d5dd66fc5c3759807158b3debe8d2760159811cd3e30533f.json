@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT entity AS \"entity!: String\", action AS \"action!: String\",\n                      entity_id AS \"entity_id!: i64\"\n               FROM change WHERE id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "entity!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "action!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "entity_id!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3c656fb2caafaa18d5dd66fc5c3759807158b3debe8d2760159811cd3e30533f"
+}

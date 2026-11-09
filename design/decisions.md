@@ -263,6 +263,31 @@ Find a section with `rg -n '^##' design/decisions.md`.
   keeps the cursor on its row by id, and holds a pane with a row open in `e`
   until that form closes. The watcher now announces only what it found by
   hand, for *updated from disk*.
+- **Except back to the page that made a change, once its answer drew all of
+  it** (`live::claim`, `X-FFM-Changes`). The feed's word reached its maker
+  too, so every `J` drew its pane twice — the answer, then `/panes` a second
+  later — every `p` and save fetched its row twice, and a row walked a press
+  at a time could show a step behind, when a pane drawn before the next move
+  landed after it. Now every write runs with a record open (a task-local in
+  `services::live`): `Change::write` adds each entry's id, and `render_row` /
+  `pane_rows` add each row and pane drawn for the answer. A layer over the
+  authenticated routes names, on the answer, the entries whose whole reach
+  was drawn **after** them (`live_feed::drawn`, through the same
+  `event_of` the feed uses); every event carries its entries, a row covered
+  by a pane hands its entries to the pane, and the page lets pass an event
+  made only of claimed ones. **Only those**: `dd` answers with the
+  struck-through row while its pane lost a line, so it is not claimed and its
+  pane still comes back — and with it the row leaves the pane. A rule's
+  `materialize` of another member's month, a bill released from another row,
+  a re-attribution's other pane: all unclaimed by the same test, with nothing
+  for a handler to remember. Two guards: an entry the layer cannot find was
+  rolled back, and its id may yet be somebody else's, so it is not claimed;
+  and the page claims an answer only if it had the wire to itself — anything
+  else in flight (a live fetch, another write) may have been drawn before
+  this write and landed after its answer, or the other way round, and then
+  the echo is what puts the pane right. Settled at the XHR's `readyState` 4,
+  before htmx's own `onload` swaps, so what the swap sets off (the
+  selection's sum) is not an overlap.
 
 ### PDF passwords
 

@@ -186,6 +186,11 @@ pub fn router(state: AppState) -> Router {
         .route("/members/{id}/restore", post(settings::restore))
         .route("/members/invites/{id}/revoke", post(settings::revoke))
         .merge(overdue)
+        // Inside the guard: a refused write made nothing to name.
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            live::claim,
+        ))
         .layer(axum::middleware::from_fn(csrf::guard));
 
     let app = Router::new()

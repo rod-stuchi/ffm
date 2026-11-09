@@ -244,6 +244,10 @@ pub(crate) async fn pane_rows(
     let writable = auth.viewer.may_write(member_id);
     let p = crate::web::ledger::view(pane, &t, currency, group, writable);
 
+    crate::services::live::drew(crate::services::live::Drawn::Pane(
+        member_id,
+        period.to_string(),
+    ));
     Some(crate::web::rules::PaneRows {
         t,
         p,
@@ -472,6 +476,7 @@ async fn render_row(
     fragment.pane_totals = pane_totals;
     fragment.house_totals = Some(house_totals);
     fragment.folds = folds;
+    crate::services::live::drew(crate::services::live::Drawn::Row(id));
     Ok(fragment)
 }
 

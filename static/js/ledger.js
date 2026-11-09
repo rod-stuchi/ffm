@@ -178,6 +178,13 @@ const ffmRowHtml = new Map();
    it is not Alpine state. */
 const ffmSwapped = [];
 
+/* The changes this page's own answers drew in full (`X-FFM-Changes`), so
+   their echo on `/live` can pass (`flushLive`); and the requests on the wire,
+   which decide whether an answer may claim them at all. Bookkeeping about
+   requests, not visual state. */
+const ffmMade = new Set();
+const ffmWire = { open: new Set(), started: 0 };
+
 function ledger() {
   return {
     // Where the server put us: your own pane by default, or whatever `?pane=`
@@ -593,9 +600,6 @@ function ledger() {
       es.addEventListener('row', (e) => {
         let ev;
         try { ev = JSON.parse(e.data); } catch (_) { return; }
-        // Any month, not only the one on screen: the dot is about the OTHER
-        // months, and a receipt filed by hand in August is what clears it.
-        this.refreshDot();
         this.liveQueue.push(ev);
         clearTimeout(this.liveTimer);
         this.liveTimer = setTimeout(() => this.flushLive(), 250);
@@ -606,7 +610,17 @@ function ledger() {
     /// inside a pane that is re-rendered anyway needs no fetch of its own.
     flushLive() {
       const period = this.shell().dataset.period;
-      const events = this.liveQueue.splice(0);
+      // An event made only of changes this page's own answers drew is their
+      // echo, and passes: every `J` drew its pane twice, and a row walked a
+      // press at a time could show a step behind when the echo's pane, drawn
+      // before the next move, landed after it. Waiting out the 250ms is what
+      // lets the answer that names them arrive first.
+      const events = this.liveQueue.splice(0)
+        .filter(ev => !(ev.changes?.length && ev.changes.every(id => ffmMade.has(id))));
+      // Any month, not only the one on screen: the dot is about the OTHER
+      // months, and a receipt filed by hand in August is what clears it. An
+      // echo needs none — its answer's own `ffm:dot` already asked.
+      if (events.length) this.refreshDot();
       const rows = new Map();
       for (const ev of events) {
         if (ev.period && ev.period !== period) continue;
@@ -2292,6 +2306,9 @@ function ledger() {
     /// send a request per keystroke. A swap clears it (`afterSwap`): an
     /// edited amount changes the sum without changing which rows are selected.
     selAsked: null,
+    /// Whether the cell may hold a count, or have one on its way: only then
+    /// does an empty selection need asking about, to clear it in turn.
+    selShown: false,
 
     /// The statusline's selection cell: count and sum of what `x` marked in
     /// the focused pane. This only lists ids the page already holds; the
@@ -2308,10 +2325,18 @@ function ledger() {
       const ask = member + '|' + ids.join(',');
       if (ask === this.selAsked) return;
       this.selAsked = ask;
-      if (!ids.length) { cell.innerHTML = ''; return; }
+      if (!ids.length && !this.selShown) return;
+      this.selShown = ids.length > 0;
       const period = document.querySelector('.ledger-shell')?.dataset.period || '';
+      // From the cell, into it, and never replacing it: htmx holds a second
+      // request from one element until the first is answered, so the latest
+      // question is answered last. The answer used to replace the cell
+      // (`outerHTML`) and the next one landed in the element it had taken out
+      // of the page — `x` `j` `x` faster than an answer read "1" with two
+      // selected. Clearing it here at once let an answer still on its way
+      // put the count back, so an empty selection asks too.
       this.ajax('GET', '/tx/selection?member=' + member + '&period=' + period +
-                '&ids=' + ids.join(','), { target: '#stsel', swap: 'outerHTML' }, 'none');
+                '&ids=' + ids.join(','), { source: cell, target: cell, swap: 'innerHTML' }, 'none');
     },
 
     /// `ga` — "give to". Opens the member picker for the row under the
@@ -4514,6 +4539,26 @@ function ledger() {
         const xhr = d.xhr;
         this.busyStart(anchor);
         xhr.addEventListener('loadend', () => this.busyEnd(anchor), { once: true });
+
+        // A write's answer names the changes it drew, so their echo can pass
+        // (`flushLive`) — but only when it had the wire to itself. Anything
+        // else in flight meanwhile (a live fetch, another write) may have
+        // been drawn before this write and landed after its answer, or the
+        // other way round, and then the echo is what puts the pane right.
+        // Settled at readyState 4, before htmx's own `onload` swaps: what
+        // the swap sets off (the selection's sum) is not an overlap.
+        const alone = ffmWire.open.size === 0;
+        const started = ++ffmWire.started;
+        ffmWire.open.add(xhr);
+        const settle = () => {
+          if (!ffmWire.open.delete(xhr)) return;
+          const made = xhr.getResponseHeader('X-FFM-Changes');
+          if (!made || !alone || started !== ffmWire.started) return;
+          made.split(',').forEach(id => ffmMade.add(Number(id)));
+          while (ffmMade.size > 500) ffmMade.delete(ffmMade.values().next().value);
+        };
+        xhr.addEventListener('readystatechange', () => { if (xhr.readyState === 4) settle(); });
+        xhr.addEventListener('loadend', settle, { once: true });
         // A dropped connection answers nothing, and the loader vanishing with
         // nothing changed reads exactly like the key that was not pressed.
         xhr.addEventListener('error', () => this.say(this.busyOffline, true), { once: true });

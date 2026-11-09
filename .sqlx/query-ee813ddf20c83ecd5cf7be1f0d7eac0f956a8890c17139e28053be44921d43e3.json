@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", member_id AS \"member!: i64\",\n                                  period AS \"period!: String\"\n                           FROM transactions WHERE id = ?1",
+  "query": "SELECT t.id AS \"id!: i64\", t.member_id AS \"member!: i64\",\n                      t.period AS \"period!: String\"\n               FROM receipts r JOIN transactions t ON t.id = r.transaction_id\n               WHERE r.id = ?1",
   "describe": {
     "columns": [
       {
@@ -28,5 +28,5 @@
       false
     ]
   },
-  "hash": "15a0d9c5b47df767998cf881188d117583a78b23ee2d36b26bc3f10914e71c07"
+  "hash": "ee813ddf20c83ecd5cf7be1f0d7eac0f956a8890c17139e28053be44921d43e3"
 }

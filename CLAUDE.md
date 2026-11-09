@@ -701,8 +701,10 @@ arrow and parking behavior the `A`/`I`/`E` rule editor uses.
   *removed by hand*, logged as the system. It records and never moves a
   file. **Every change reaches every open page, announced from the change
   log, not by each handler** (`services::live_feed`, `GET /live`, ids only;
-  a row open in `e` is never swapped). Details: `design/decisions.md`
-  §The vault, watched and live.
+  a row open in `e` is never swapped) — **except back to the page whose
+  answer already drew all it reaches** (`live::claim`, `X-FFM-Changes`): a
+  `J` is not drawn twice, a `dd` still comes back. Details:
+  `design/decisions.md` §The vault, watched and live.
 - **`receipts` is also the extension index, and that is its real second job.**
   The path ends in `.{ext}`, and the extension is whatever was uploaded, so the
   path cannot be *constructed* without reading `receipts.ext`. That makes the
@@ -1676,6 +1678,13 @@ These cost real debugging time in the prototype. Do not re-introduce them.
   the bell's count. `afterSwap` in `ledger.js` queues it once, in a
   microtask, and skips an answer that never reached `.stagewrap`. **A new
   after-swap job goes there**, never in a listener of its own.
+- **A request's target is an element, fixed when it is sent.** `htmx.ajax`
+  resolves `target: '#stsel'` at the call, and the selection cell answered
+  `outerHTML`: a second `x` sent before the first answer landed was swapped
+  into the cell that answer had just taken out of the page, and the count
+  stayed one behind. A target more than one request can be on its way to is
+  filled (`innerHTML`), never replaced, and is their `source` too, so htmx
+  answers them in order.
 - **An HTMX swap destroys the Alpine state inside it — and drafts live in
   Alpine.** Three decided rules collide here: a draft is unsubmitted form values
   so it never goes to the server; several can be parked at once; and the ledger

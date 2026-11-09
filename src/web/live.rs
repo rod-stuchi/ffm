@@ -15,7 +15,8 @@
 //! for this: the signal only ever runs server to page, which is what this
 //! stream already is.
 
-use crate::services::live::Signal;
+use crate::services::live::{self, Signal};
+use crate::services::live_feed;
 use crate::state::AppState;
 use crate::web::session::Auth;
 use axum::extract::State;
@@ -137,6 +138,42 @@ pub async fn mark_dot(
     let json = crate::web::tx::ascii_json(&serde_json::Value::Object(events).to_string());
     if let Ok(v) = axum::http::HeaderValue::from_str(&json) {
         res.headers_mut().insert("HX-Trigger", v);
+    }
+    res
+}
+
+/// Names, on a write's answer, the changes it already drew in full
+/// (`X-FFM-Changes`, `live_feed::drawn`), so the page that made them can let
+/// their live event pass instead of fetching what it is showing (`flushLive`).
+/// Over every authenticated route, so no handler has to remember; a GET makes
+/// nothing and goes straight through.
+pub async fn claim(
+    State(st): State<AppState>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    if req.method() == axum::http::Method::GET {
+        return next.run(req).await;
+    }
+    let (mut res, made) = live::recording(next.run(req)).await;
+    if made.changes.is_empty() || !res.status().is_success() {
+        return res;
+    }
+    let ids = match live_feed::drawn(&st.pool, &made).await {
+        Ok(ids) => ids,
+        // The echo comes back, as it always did: a page fetching what it
+        // already shows is the safe way to be wrong.
+        Err(e) => {
+            tracing::warn!("live: which changes the answer drew: {e}");
+            return res;
+        }
+    };
+    if ids.is_empty() {
+        return res;
+    }
+    let ids: Vec<String> = ids.iter().map(i64::to_string).collect();
+    if let Ok(v) = axum::http::HeaderValue::from_str(&ids.join(",")) {
+        res.headers_mut().insert("X-FFM-Changes", v);
     }
     res
 }

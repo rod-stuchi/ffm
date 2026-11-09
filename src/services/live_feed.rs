@@ -14,7 +14,7 @@
 //! files is one pane event, not four. Nothing is replayed at boot: a page
 //! opened since loaded what is there.
 
-use crate::services::live::{Live, LiveEvent};
+use crate::services::live::{Live, LiveEvent, Made};
 use sqlx::SqlitePool;
 use std::time::Duration;
 
@@ -87,81 +87,126 @@ pub async fn drain(pool: &SqlitePool, live: &Live, after: i64) -> sqlx::Result<i
     };
 
     let mut events: Vec<LiveEvent> = Vec::new();
-    let mut push = |ev: LiveEvent| {
-        // A pane event already re-renders its rows: a row inside it is
-        // covered, and the same event twice is one.
-        if !events.contains(&ev) {
-            events.push(ev);
-        }
-    };
     for e in &entries {
-        match reach(&e.entity, &e.action) {
-            Reach::Nothing => {}
-            Reach::RuleEverywhere => {
-                if let Some(member) = sqlx::query_scalar!(
-                    r#"SELECT member_id AS "m!: i64" FROM recurring_rules WHERE id = ?1"#,
-                    e.entity_id
-                )
-                .fetch_optional(pool)
-                .await?
-                {
-                    push(LiveEvent::pane(member, None));
-                }
-            }
-            reach => {
-                // The row the entry is about: the transaction itself, or the
-                // one a file belongs to. Its owner and month as they are now,
-                // never the actor's.
-                let row = if e.entity == "file" {
-                    sqlx::query!(
-                        r#"SELECT t.id AS "id!: i64", t.member_id AS "member!: i64",
-                                  t.period AS "period!: String"
-                           FROM receipts r JOIN transactions t ON t.id = r.transaction_id
-                           WHERE r.id = ?1"#,
-                        e.entity_id
-                    )
-                    .fetch_optional(pool)
-                    .await?
-                    .map(|r| (r.id, r.member, r.period))
-                } else {
-                    sqlx::query!(
-                        r#"SELECT id AS "id!: i64", member_id AS "member!: i64",
-                                  period AS "period!: String"
-                           FROM transactions WHERE id = ?1"#,
-                        e.entity_id
-                    )
-                    .fetch_optional(pool)
-                    .await?
-                    .map(|r| (r.id, r.member, r.period))
-                };
-                let Some((id, member, period)) = row else {
-                    continue;
-                };
-                push(match reach {
-                    Reach::Row => LiveEvent::row(id, member, period),
-                    Reach::Pane => LiveEvent::pane(member, Some(period)),
-                    _ => LiveEvent::pane(0, Some(period)),
-                });
-            }
+        let Some(ev) = event_of(pool, &e.entity, &e.action, e.entity_id).await? else {
+            continue;
+        };
+        // The same event twice is one, carrying both entries.
+        match events.iter_mut().find(|x| x.same(&ev)) {
+            Some(x) => x.changes.push(e.id),
+            None => events.push(LiveEvent {
+                changes: vec![e.id],
+                ..ev
+            }),
         }
     }
 
-    // A row whose pane is re-rendered anyway needs no fetch of its own.
-    let panes: Vec<(i64, Option<String>)> = events
-        .iter()
-        .filter(|e| e.pane)
-        .map(|e| (e.member_id, e.period.clone()))
-        .collect();
-    for ev in events {
-        let covered = !ev.pane
-            && panes
-                .iter()
-                .any(|(m, p)| (*m == 0 || *m == ev.member_id) && (p.is_none() || *p == ev.period));
+    // A row whose pane is re-rendered anyway needs no fetch of its own. Its
+    // entries go with the pane: a page letting that pane pass as its own
+    // echo must not let somebody else's row pass with it.
+    let mut covered = vec![false; events.len()];
+    for i in 0..events.len() {
+        let changes = events[i].changes.clone();
+        for j in 0..events.len() {
+            if events[j].covers(&events[i]) {
+                events[j].changes.extend(&changes);
+                covered[i] = true;
+            }
+        }
+    }
+    for (mut ev, covered) in events.into_iter().zip(covered) {
         if !covered {
+            ev.changes.sort_unstable();
+            ev.changes.dedup();
             live.publish(ev);
         }
     }
     Ok(last)
+}
+
+/// What one entry asks of the open pages, as an event — `None` for nothing
+/// a ledger shows, or a row no longer there. The row is named by its owner
+/// and month as they are now, never the actor's.
+pub async fn event_of(
+    pool: &SqlitePool,
+    entity: &str,
+    action: &str,
+    entity_id: i64,
+) -> sqlx::Result<Option<LiveEvent>> {
+    let reach = reach(entity, action);
+    match reach {
+        Reach::Nothing => return Ok(None),
+        Reach::RuleEverywhere => {
+            return Ok(sqlx::query_scalar!(
+                r#"SELECT member_id AS "m!: i64" FROM recurring_rules WHERE id = ?1"#,
+                entity_id
+            )
+            .fetch_optional(pool)
+            .await?
+            .map(|member| LiveEvent::pane(member, None)));
+        }
+        _ => {}
+    }
+    // The row the entry is about: the transaction itself, or the one a file
+    // belongs to.
+    let row = if entity == "file" {
+        sqlx::query!(
+            r#"SELECT t.id AS "id!: i64", t.member_id AS "member!: i64",
+                      t.period AS "period!: String"
+               FROM receipts r JOIN transactions t ON t.id = r.transaction_id
+               WHERE r.id = ?1"#,
+            entity_id
+        )
+        .fetch_optional(pool)
+        .await?
+        .map(|r| (r.id, r.member, r.period))
+    } else {
+        sqlx::query!(
+            r#"SELECT id AS "id!: i64", member_id AS "member!: i64",
+                      period AS "period!: String"
+               FROM transactions WHERE id = ?1"#,
+            entity_id
+        )
+        .fetch_optional(pool)
+        .await?
+        .map(|r| (r.id, r.member, r.period))
+    };
+    Ok(row.map(|(id, member, period)| match reach {
+        Reach::Row => LiveEvent::row(id, member, period),
+        Reach::Pane => LiveEvent::pane(member, Some(period)),
+        _ => LiveEvent::pane(0, Some(period)),
+    }))
+}
+
+/// The changes in `made` its answer drew in full: everything their event
+/// would have a page re-fetch, rendered after the change was made. Those are
+/// the page's own to let pass (`services::live::Made`); a change that reaches
+/// further — a delete answered with its row, another member's month
+/// materialized beside a rule — still comes back to that page as an event.
+/// An entry that is not there was rolled back, and its id may yet be
+/// somebody else's.
+pub async fn drawn(pool: &SqlitePool, made: &Made) -> sqlx::Result<Vec<i64>> {
+    let mut out = Vec::new();
+    for (i, &id) in made.changes.iter().enumerate() {
+        let Some(e) = sqlx::query!(
+            r#"SELECT entity AS "entity!: String", action AS "action!: String",
+                      entity_id AS "entity_id!: i64"
+               FROM change WHERE id = ?1"#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?
+        else {
+            continue;
+        };
+        let Some(ev) = event_of(pool, &e.entity, &e.action, e.entity_id).await? else {
+            continue;
+        };
+        if made.drawn.iter().any(|(d, n)| *n > i && d.shows(&ev)) {
+            out.push(id);
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

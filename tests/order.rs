@@ -362,7 +362,9 @@ async fn the_months_a_copy_reached_hear_it() {
     }
     for m in [p(8), p(9)] {
         assert!(
-            panes.contains(&LiveEvent::pane(me, Some(m.to_string()))),
+            panes
+                .iter()
+                .any(|e| e.same(&LiveEvent::pane(me, Some(m.to_string())))),
             "{m}: {panes:?}"
         );
     }

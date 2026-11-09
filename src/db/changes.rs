@@ -442,6 +442,9 @@ impl Change {
             .await?;
         }
 
+        // For the page that made it, which is answered with it already
+        // (`services::live::Made`).
+        crate::services::live::made(id);
         Ok(id)
     }
 }
