@@ -174,9 +174,11 @@ const ffmBusy = { next: null, counts: new WeakMap() };
 const ffmRowHtml = new Map();
 
 /* What one response swapped, element by element, waiting for the ledger's
-   upkeep to run once over all of it (`afterSwap`). DOM nodes, which is why
-   it is not Alpine state. */
-const ffmSwapped = [];
+   upkeep to run once over all of it (`afterSwap`) — whether any of it
+   answered a request the person made, which may scroll to the cursor, and
+   which row (or the add form) was on screen before it landed (`notePlace`). DOM
+   nodes, which is why it is not Alpine state. */
+const ffmSwapped = { els: [], reveal: false, place: null };
 
 /* The changes this page's own answers drew in full (`X-FFM-Changes`), so
    their echo on `/live` can pass (`flushLive`); and the requests on the wire,
@@ -469,7 +471,14 @@ function ledger() {
       return !!el && el.classList.contains('foldhead');
     },
 
-    paint() {
+    /// `reveal` scrolls the cursor's row into view. A key or a click that
+    /// moves the cursor wants it; the rows being redrawn around a cursor that
+    /// stayed put do not, because the ledger may be scrolled away from it on
+    /// purpose — on a phone it is scrolled by hand while the cursor stays
+    /// wherever it was tapped last. Revealing on every answer made a Save in
+    /// the add form jump to the cursor's row, taking the form, still open for
+    /// the next entry, off the screen.
+    paint(reveal = true) {
       // The cursor-left-the-row checks come FIRST, before the empty-pane
       // return below: moving to a pane with no rows in it is exactly when a
       // draft would otherwise be stranded, and it is not a rare case in a
@@ -518,7 +527,7 @@ function ledger() {
       if (!rows.length) return;
       this.row = Math.max(0, Math.min(this.row, rows.length - 1));
       rows[this.row].classList.add('is-focus');
-      rows[this.row].scrollIntoView({ block: 'nearest' });
+      if (reveal) rows[this.row].scrollIntoView({ block: 'nearest' });
       this.renumber(rows);
       // The arrow follows the row it points at — including when a swap
       // re-renders the pane under it, which is when it would otherwise be
@@ -548,17 +557,82 @@ function ledger() {
     /// the last of them. And only for a response that reached the ledger: the
     /// month's dot, the selection's cell or the carousel swapped on its own
     /// has no row to repaint.
-    afterSwap(el) {
-      if (ffmSwapped.push(el) > 1) return;
+    afterSwap(el, xhr) {
+      // An answer to a request with no loader — a live fetch, a read-back —
+      // is the ground moving under the cursor, not the person moving it.
+      if (!xhr?.ffmQuiet) ffmSwapped.reveal = true;
+      if (ffmSwapped.els.push(el) > 1) return;
+      // Everything is swapped by the first report, so the place on screen
+      // is put back now — before anything the answer goes on to do (a
+      // focus, the cursor below) can move it on purpose.
+      this.keepPlace();
       queueMicrotask(() => {
-        const els = ffmSwapped.splice(0);
+        const els = ffmSwapped.els.splice(0);
+        const reveal = ffmSwapped.reveal;
+        ffmSwapped.reveal = false;
         const wrap = document.querySelector('.stagewrap');
         if (wrap && !els.some(t => !t.isConnected || wrap.contains(t) || t.contains(wrap))) return;
         this.markDrafts();
         this.selAsked = null;
         this.paintSelection();
-        this.paint();
+        // Revealed, so `e`'s form opening at the foot of the screen comes up
+        // whole — but not while the add form is open: it is where you are,
+        // and it stays open for the next entry.
+        this.paint(reveal && this.adding === null);
       });
+    },
+
+    /// Which row is at the top of the ledger's screen, and how far down it
+    /// sits — read before an answer swaps (`htmx:beforeSwap`), for
+    /// `keepPlace`. iOS Safari scrolls the stage back to the top when a
+    /// pane's rows are replaced whole, with no script asking it to: a Save in
+    /// the add form held its place, and then its own live echo, re-fetching
+    /// the pane, threw the screen to the first row. Chrome's scroll anchoring
+    /// keeps the place by itself, which is why only the phone showed it.
+    ///
+    /// While the add form is open and on screen, the form is what is held
+    /// instead: a save puts its row above the form, and held by the top row
+    /// the form slid down one row a save — under a phone's keyboard after a
+    /// couple. Held by the form, the rows move up above it and it stays put.
+    notePlace() {
+      const stage = document.querySelector('.stage');
+      if (!stage) { ffmSwapped.place = null; return; }
+      const s = stage.getBoundingClientRect();
+      const top = s.top;
+      const form = this.addForm();
+      const f = form && form.offsetParent !== null ? form.getBoundingClientRect() : null;
+      if (f && f.bottom > s.top && f.top < s.bottom) {
+        ffmSwapped.place = { stage, scroll: stage.scrollTop, el: form, at: f.top - top };
+        return;
+      }
+      // A row in a closed fold or a hidden tab has an empty box, so it is
+      // never the first one on screen.
+      const row = [...stage.querySelectorAll('div[id^="row-"]')]
+        .find(r => r.getBoundingClientRect().bottom > top);
+      ffmSwapped.place = {
+        stage,
+        scroll: stage.scrollTop,
+        id: row?.id,
+        at: row ? row.getBoundingClientRect().top - top : 0,
+      };
+    },
+
+    /// Puts that row (or the add form) back where it was on screen: scroll
+    /// anchoring, by hand, so every browser keeps the place the same way.
+    /// With the row gone, the stage's own scroll is put back instead.
+    keepPlace() {
+      const p = ffmSwapped.place;
+      ffmSwapped.place = null;
+      if (!p || !p.stage.isConnected) return;
+      // A row is looked up by id: the swap replaced the element noted. The
+      // form is outside every swap, so it is the same element.
+      const el = p.el || (p.id && document.getElementById(p.id));
+      let to = p.scroll;
+      if (el && p.stage.contains(el) && el.offsetParent !== null) {
+        to = p.stage.scrollTop + el.getBoundingClientRect().top
+          - p.stage.getBoundingClientRect().top - p.at;
+      }
+      if (Math.abs(p.stage.scrollTop - to) >= 1) p.stage.scrollTop = to;
     },
 
     // --- the loader --------------------------------------------------------
@@ -685,11 +759,13 @@ function ledger() {
         if (this.editing && rowsEl.querySelector('#row-' + this.editing)) continue;
         delete this.livePanes[member];
         // The cursor stays on its row, by id: the rows around it may have
-        // come, gone or moved.
+        // come, gone or moved. Never scrolled to — the change was somebody's
+        // elsewhere, or an add's own echo (its answer drew only the row),
+        // and neither is a reason to move the screen.
         const keep = this.focusedId();
         this.ajax('GET', '/panes/' + member + '/' + period,
                   { source: rowsEl, target: rowsEl, swap: 'none' }, 'none')
-          .then(() => { if (keep) this.cursorTo(keep); });
+          .then(() => { if (keep) this.cursorTo(keep, false); });
       }
     },
 
@@ -1198,14 +1274,49 @@ function ledger() {
       e.preventDefault();
     },
 
+    /// `a` / `i`. The form is shown and focused here, inside the key that
+    /// opened it, for `focusBar`'s two reasons — a phone keeps its keyboard
+    /// for a focus made inside the gesture, and a key typed before the focus
+    /// lands is read by the keymap — and then brought on screen (`revealAdd`).
     open(kind) {
       if (this.readOnly()) return;
       this.kind = kind;
       this.adding = this.pane;
-      this.$nextTick(() => {
-        const pane = document.querySelectorAll('.pane')[this.pane];
-        pane.querySelector('.addrow input[name="title"]').focus();
-      });
+      const form = this.addForm();
+      if (!form) return;
+      form.style.removeProperty('display');
+      const title = form.querySelector('input[name="title"]');
+      title.focus({ preventScroll: true });
+      if (document.activeElement !== title) this.focusSoon(title);
+      this.revealAdd();
+    },
+
+    /// The open add form, or null.
+    addForm() {
+      if (this.adding === null) return null;
+      return document.querySelectorAll('.pane')[this.adding]?.querySelector('.addrow') || null;
+    },
+
+    /// The add form, brought whole into the ledger's screen by the least
+    /// scroll of the stage that shows it — the fields first, if it is taller
+    /// than the screen. It sits at the foot of the pane, and on a phone the
+    /// keyboard covers half the screen: `a` focused a title far below it,
+    /// nothing seemed to happen, and the form had to be scrolled to by hand.
+    /// Measured and scrolled here rather than left to the browser's own
+    /// scroll on focus, which iOS does not do for a field inside a scrolled
+    /// box. While the keyboard is up the screen is what is above it
+    /// (`fitViewport`), so "on screen" means above the keyboard.
+    revealAdd() {
+      const form = this.addForm();
+      const stage = document.querySelector('.stage');
+      if (!form || !stage || form.offsetParent === null) return;
+      const s = stage.getBoundingClientRect();
+      const f = form.getBoundingClientRect();
+      const gap = 8;
+      let by = 0;
+      if (f.bottom > s.bottom - gap) by = f.bottom - (s.bottom - gap);
+      if (f.top - by < s.top + gap) by = f.top - (s.top + gap);
+      if (Math.abs(by) >= 1) stage.scrollTop += by;
     },
 
     /// Write the focused member into the URL, so a refresh comes back to the
@@ -2765,6 +2876,10 @@ function ledger() {
       shell.style.setProperty('--app-h', vv.height + 'px');
       shell.style.setProperty('--safe-b', '0px');
       window.scrollTo(0, 0);
+      // The keyboard changes height under a form being typed into — the
+      // amount's number pad is not the title's letters — so the add form is
+      // brought back above it.
+      if (this.addForm()?.contains(document.activeElement)) this.revealAdd();
     },
 
     /// Incremental, client-side and scoped to the visible month: it filters
@@ -2867,7 +2982,7 @@ function ledger() {
       });
     },
 
-    cursorTo(id) {
+    cursorTo(id, reveal = true) {
       this.$nextTick(() => {
         const i = this.rows().findIndex(
           el => el.closest('div[id^="row-"]')?.id === 'row-' + id,
@@ -2876,7 +2991,7 @@ function ledger() {
         // to another pane entirely. Leaving the cursor where it is, is the
         // right answer there.
         if (i >= 0) this.row = i;
-        this.paint();
+        this.paint(reveal);
       });
     },
 
@@ -4506,9 +4621,11 @@ function ledger() {
       document.body.addEventListener('ffm:say', e => this.say(e.detail.message, e.detail.bad));
       // A change that re-rendered a derived pane (grouped, or sorted by date or
       // amount) names the row it moved; the cursor follows it by id, the same
-      // way it follows a row that `J`/`K` moved.
+      // way it follows a row that `J`/`K` moved. Not scrolled to while the
+      // add form is open: an add in such a pane names its new row, which can
+      // land far from the form still open for the next one.
       document.body.addEventListener('ffm:cursor', e => {
-        this.cursorTo(String(e.detail.id));
+        this.cursorTo(String(e.detail.id), this.adding === null);
         if (e.detail.flash) this.flashRow(String(e.detail.id));
       });
       document.body.addEventListener('ffm:undo-ask', e => { this.undoAsk = e.detail; });
@@ -4537,6 +4654,9 @@ function ledger() {
         const d = e.detail;
         const anchor = this.busyAnchor(d.elt === document.body ? d.target : d.elt);
         const xhr = d.xhr;
+        // No loader is no request the person made here, so its answer never
+        // scrolls the ledger (`afterSwap`).
+        xhr.ffmQuiet = !anchor;
         this.busyStart(anchor);
         xhr.addEventListener('loadend', () => this.busyEnd(anchor), { once: true });
 
@@ -4588,7 +4708,8 @@ function ledger() {
           }, { once: true });
         }
       });
-      document.body.addEventListener('htmx:afterSwap', (e) => this.afterSwap(e.target));
+      document.body.addEventListener('htmx:beforeSwap', () => this.notePlace());
+      document.body.addEventListener('htmx:afterSwap', (e) => this.afterSwap(e.target, e.detail.xhr));
     },
   };
 }

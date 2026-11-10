@@ -1552,6 +1552,13 @@
   outline: none;
 }
 
+/* 16px on a touch screen, or iOS zooms in on focus — see `input.i` in ui.css. */
+@media (pointer: coarse) {
+  .cmdinput {
+    font-size: 16px;
+  }
+}
+
 /* --- the settings panes -------------------------------------------------- */
 
 /* Same column as the rule pane: one visual language for "a pane beside the
@@ -3207,6 +3214,13 @@
   background: transparent;
   color: var(--ink);
   font: inherit;
+}
+
+/* 16px on a touch screen, or iOS zooms in on focus — see `input.i` in ui.css. */
+@media (pointer: coarse) {
+  .kmfind input {
+    font-size: 16px;
+  }
 }
 
 .kmfind input::placeholder {

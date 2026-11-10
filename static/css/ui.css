@@ -245,6 +245,19 @@ select.i:focus {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* iOS zooms the page in on a focused field whose text is under 16px, and
+ * leaves it zoomed after the field is done — so on a touch screen a field is
+ * 16px, the size `.keytrap` already is for the same reason. A desktop keeps
+ * the ledger's 13px. Every rule that sets a field's size again (`.cmdinput`,
+ * `.kmfind input`, `.chcap .per select`) repeats this beside itself: they come
+ * later in the layer, so a rule here would lose to them. */
+@media (pointer: coarse) {
+  input.i,
+  select.i {
+    font-size: 16px;
+  }
+}
+
 .hint {
   font-size: 12px;
   color: var(--ink-3);

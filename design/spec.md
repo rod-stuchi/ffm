@@ -128,6 +128,42 @@ a household entering the week's spending types straight into the next one.
   token an income row's amount already wears, and `−` in the plain ink a
   spend's amount is written in. Not the accent: the accent means "you are
   here", and a minus in red would say something the ledger does not.
+- **It opens on screen** (`revealAdd`). The form sits at the foot of the
+  pane, and on a phone the keyboard covers half the screen: `a` focused a
+  title far below it, nothing seemed to happen, and the form had to be
+  scrolled to by hand. Now the stage scrolls by the least that shows the
+  whole form — the fields first, when it is taller than the screen — measured
+  and scrolled by the page, since iOS does not scroll a field inside a
+  scrolled box into view on focus. While the keyboard is up the screen is
+  what is above it (`fitViewport`), and a keyboard changing height under the
+  form (the amount's number pad is not the title's letters) brings it back
+  above. It is shown and focused inside the key that opened it, as `:` is
+  (`focusBar`), so a key typed straight after `a` is never read as a motion.
+- **A save leaves the screen where it is.** The new row lands above the form
+  and nothing scrolls to the cursor's row: while the form is open, it is
+  where you are. Every answer used to reveal the cursor's row, so on a phone,
+  scrolled down to the form by hand with the cursor still up at the top, Save
+  jumped back up and took the form off screen — and the add's own live echo,
+  which re-fetches the pane, did it again a moment later. The general rule
+  (`paint(reveal)`): the cursor's row is scrolled to when the cursor moves —
+  a key, a click, `J`/`K` taking it along, `u` naming a row — and not when
+  the rows only change around it. An answer to a request with no loader (a
+  live fetch, a read-back) never scrolls the ledger.
+- **And a swap keeps the place by itself** (`notePlace` / `keepPlace`). iOS
+  Safari scrolls the stage back to the top when a pane's rows are replaced
+  whole, with no script asking it to — so with the reveal gone, Save still
+  held its place for half a second and then the echo's pane threw the screen
+  to the first row, and the same happens on a phone whenever somebody else's
+  change re-renders the pane. Before an answer swaps, the row at the top of
+  the screen and its offset are noted; once htmx has swapped everything, that
+  row is put back at the same offset, or the scroll itself when the row is
+  gone. It is Chrome's scroll anchoring done by hand, so every browser keeps
+  the place the same way, and it runs before anything the answer does on
+  purpose — a focus, the cursor's reveal — so those still move the screen.
+  **While the add form is open and on screen, the form is what is held**,
+  not the top row: held by the top row, each save's new row pushed the form
+  down by one, and a couple of saves put it under a phone's keyboard. Held
+  by the form, the rows move up above it and it stays where it is.
 
 **All three amount fields carry the same mask** — the add row, the inline
 edit row and the rule pane. It is a plain function rather than a method on
@@ -950,6 +986,13 @@ whole keymap was out of reach: there was no field to focus.
   sign-in name field gets the same from `autocomplete="username"`). A
   command is an identifier (`:group`, not *:Group*), and `nonu` or a search
   term is not a misspelling to fix.
+- **A field is 16px on a touch screen.** iOS zooms the page in on a focused
+  field whose text is under 16px, and leaves it zoomed — tapping into the add
+  row did it. So under `pointer: coarse` every text field and select is 16px,
+  the size the key trap already was; a desktop keeps 13px. Each rule that sets
+  a field's size carries its own override beside it. Pinch-zoom is left alone:
+  `maximum-scale=1` would have stopped the zoom with no change in size, but on
+  Android it turns pinch-zoom off entirely.
 - **Known limit:** after a form field took the keyboard (`e`, the add row),
   saving or canceling closes the keyboard with the field; tap `NORMAL` again.
   Focus moving to a checkbox or a button (the trash's list) does the same.
