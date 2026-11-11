@@ -147,6 +147,17 @@
     <div class="sect">{{ t.profile_layout() }}</div>
 
     {%- include "partials/layout_band.html" %}
+    {#- Whether the panes out of focus recede. Only split mode shows more than
+        one pane, so this is about panes, beside the layout that decides it. -#}
+    <form class="setting" hx-post="/settings/member" hx-trigger="change" hx-swap="none">
+      <input type="hidden" name="key" value="dim_unfocused">
+      <label class="tog">
+        <input type="checkbox" name="value" value="{% if dim %}on{% else %}off{% endif %}"
+               {% if dim %}checked{% endif %}
+               @change="$el.value = $el.checked ? 'on' : 'off'">
+        <span>{{ t.profile_dim_unfocused() }}</span>
+      </label>
+    </form>
     {%- include "partials/density_choice.html" %}
 
     {#- Adopt what the household gives new members — palette and layout,

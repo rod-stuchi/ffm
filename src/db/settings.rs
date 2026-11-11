@@ -38,6 +38,7 @@ pub enum MemberKey {
     DefaultVisibility,
     Density,
     PdfView,
+    DimUnfocused,
 }
 
 impl MemberKey {
@@ -60,6 +61,7 @@ impl MemberKey {
             "default_visibility" => MemberKey::DefaultVisibility,
             "density" => MemberKey::Density,
             "pdf_view" => MemberKey::PdfView,
+            "dim_unfocused" => MemberKey::DimUnfocused,
             _ => return None,
         })
     }
@@ -102,6 +104,10 @@ pub struct MemberSettings {
     /// How `P` first shows a PDF: `png` (the server's page images) | `pdf`
     /// (the browser's own viewer). `v` flips it while the carousel is open.
     pub pdf_view: String,
+    /// Whether the panes out of focus recede (faded and desaturated) in
+    /// split mode. Off, focus is the accent border alone. Written onto the
+    /// shell as `data-dim`.
+    pub dim_unfocused: bool,
 }
 
 impl Default for MemberSettings {
@@ -125,6 +131,7 @@ impl Default for MemberSettings {
             default_visibility: None,
             density: "comfortable".into(),
             pdf_view: "png".into(),
+            dim_unfocused: true,
         }
     }
 }
@@ -148,7 +155,8 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
                   group_order AS "group_order!: String",
                   default_visibility AS "default_visibility: String",
                   density AS "density!: String",
-                  pdf_view AS "pdf_view!: String"
+                  pdf_view AS "pdf_view!: String",
+                  dim_unfocused AS "dim_unfocused!: i64"
            FROM member_settings WHERE member_id = ?1"#,
         member_id
     )
@@ -179,6 +187,7 @@ pub async fn member_settings(pool: &SqlitePool, member_id: i64) -> sqlx::Result<
             default_visibility: r.default_visibility,
             density: r.density,
             pdf_view: r.pdf_view,
+            dim_unfocused: r.dim_unfocused != 0,
         })
         .unwrap_or_default())
 }
@@ -502,6 +511,17 @@ pub async fn set_member(
             let v = one_of("pdf_view", value, &["png", "pdf"])?;
             sqlx::query!(
                 "UPDATE member_settings SET pdf_view = ?2 WHERE member_id = ?1",
+                member_id,
+                v
+            )
+            .execute(pool)
+            .await
+            .map_err(db)?;
+        }
+        MemberKey::DimUnfocused => {
+            let v = i64::from(is_on(value));
+            sqlx::query!(
+                "UPDATE member_settings SET dim_unfocused = ?2 WHERE member_id = ?1",
                 member_id,
                 v
             )
@@ -938,6 +958,7 @@ mod tests {
             "default_visibility",
             "density",
             "pdf_view",
+            "dim_unfocused",
         ] {
             assert!(MemberKey::parse(k).is_some(), "{k}");
         }

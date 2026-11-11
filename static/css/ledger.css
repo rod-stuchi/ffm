@@ -945,6 +945,47 @@
   border-color: var(--accent-line);
 }
 
+/* The unfocused pane recedes, with opacity AND desaturation: dimming alone
+ * leaves the green checks and red deltas shouting from the inactive side.
+ * Hover lifts it enough to read without taking focus. Only split mode ever
+ * shows it — tabs mode hides every pane but the focused one.
+ *
+ * A member setting (`member_settings.dim_unfocused`, `:profile`), written
+ * onto the shell as `data-dim`. Off — or no attribute at all — every pane is
+ * at full strength and focus is the accent border alone.
+ *
+ * A filter makes the pane the frame of any `position: fixed` inside it; none
+ * is — every menu, tip and modal is rendered after `</main>`. And the server
+ * marks the focused pane itself (`focused`), so a page load does not paint
+ * every pane dimmed and fade one in once Alpine starts. */
+.ledger-shell[data-dim="on"] .pane {
+  opacity: 0.62;
+  filter: saturate(0.65);
+  transition:
+    opacity 0.22s ease,
+    filter 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.ledger-shell[data-dim="on"] .pane:hover {
+  opacity: 0.85;
+  filter: saturate(0.9);
+}
+
+.ledger-shell[data-dim="on"] .pane.is-focus,
+.ledger-shell[data-dim="on"] .pane.is-focus:hover,
+/* A file dragged over the page can land in a row's slot in either pane. */
+.ledger-shell[data-dim="on"].is-dragging .pane {
+  opacity: 1;
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ledger-shell[data-dim="on"] .pane {
+    transition: none;
+  }
+}
+
 /* --- the one modal that survives ----------------------------------------- */
 
 /* `dd` confirms because deletion READS as destructive, even though nothing is

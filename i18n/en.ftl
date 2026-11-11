@@ -401,6 +401,7 @@ profile-search-scope = Search scope
 profile-scope-pane = This pane
 profile-scope-household = The household
 profile-show-delta = Show month-over-month change
+profile-dim-unfocused = Fade the panes out of focus
 profile-density = Density
 density-default = Default
 density-comfortable = Comfortable

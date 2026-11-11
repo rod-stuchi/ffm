@@ -362,6 +362,7 @@ profile-search-scope = Onde buscar
 profile-scope-pane = Neste painel
 profile-scope-household = Na casa toda
 profile-show-delta = Mostrar variação em relação ao mês anterior
+profile-dim-unfocused = Esmaecer os painéis fora de foco
 profile-density = Densidade
 density-default = Padrão
 density-comfortable = Confortável

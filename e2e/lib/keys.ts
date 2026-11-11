@@ -1,10 +1,23 @@
 import { expect, type Page } from '@playwright/test';
 
+/// Waits for the keymap to be listening: `@keydown.window` on `.ledger-shell`,
+/// bound in the same pass in which Alpine starts that element. A key pressed
+/// before then reaches nothing. Nothing on screen says so — the server marks
+/// the focused pane itself, so `.pane.is-focus` is there before Alpine is.
+export async function keymapReady(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => !!(document.querySelector('.ledger-shell') as { _x_dataStack?: unknown } | null)?._x_dataStack,
+    null,
+    { timeout: 7_000 },
+  );
+}
+
 /// Types a Vim sequence the way a keyboard does: `gT` is `g`, then Shift going
 /// down on its own, then `T`. A synthetic KeyboardEvent skips the Shift, which
 /// is how `gT` stayed broken for months with every check passing (CLAUDE.md's
 /// Gotchas).
 export async function vim(page: Page, sequence: string): Promise<void> {
+  await keymapReady(page);
   for (const key of sequence) {
     await page.keyboard.press(/[A-Z]/.test(key) ? `Shift+${key}` : key);
   }
@@ -12,6 +25,7 @@ export async function vim(page: Page, sequence: string): Promise<void> {
 
 /// Runs a `:` command, typed straight after the `:` as a person types it.
 export async function command(page: Page, text: string): Promise<void> {
+  await keymapReady(page);
   await page.keyboard.press(':');
   await page.keyboard.type(text);
   await page.keyboard.press('Enter');

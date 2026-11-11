@@ -100,7 +100,7 @@
     <feMorphology operator="dilate" radius="2"/>
   </filter>
 </svg>
-<div class="ledger-shell" data-period="{{ period_key }}" data-today="{{ today_key }}" data-density="{{ density }}" data-pdf-view="{{ pdf_view }}" x-data="ledger()"
+<div class="ledger-shell" data-period="{{ period_key }}" data-today="{{ today_key }}" data-density="{{ density }}" data-pdf-view="{{ pdf_view }}" data-dim="{% if dim %}on{% else %}off{% endif %}" x-data="ledger()"
      @focusout="keyFocusOut($event)"
      :class="{ 'is-dragging': dragging }"
      @keydown.window="key($event)"
@@ -329,7 +329,10 @@
         it, rendered here with the owner's name — the keymap reads it before a
         write gesture leaves the browser. The server refuses regardless: this
         is the page saying so first, not the rule. -#}
-    <section class="pane{% if !p.writable %} is-readonly{% endif %}"
+    {#- `is-focus` is in the markup too, so the first paint already shows
+        which pane is focused: the unfocused ones recede, and a pane marked
+        only by Alpine would fade in on every page load. -#}
+    <section class="pane{% if loop.index0 == focused %} is-focus{% endif %}{% if !p.writable %} is-readonly{% endif %}"
              {%- if !p.writable %} data-readonly="{{ t.read_only_ledger(p.name) }}"{% endif %}
              :class="{ 'is-focus': pane === {{ loop.index0 }} }" @click="clickPane($event, {{ loop.index0 }})"
              @contextmenu="rowMenuAt($event, {{ loop.index0 }}, $event.clientX, $event.clientY)"

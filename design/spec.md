@@ -3796,6 +3796,7 @@ ledger_group            text  -- "none" | "bucket"
 group_fold_default      text  -- "expanded" | "collapsed"
 density                 text  -- "default" | "comfortable" | "compact"; see Density
 pdf_view                text  -- "png" | "pdf": which side `P` opens a PDF on (0015)
+dim_unfocused           bool  -- the panes out of focus recede in split mode (0022)
 default_visibility      text  -- NULL = follow the household's policy,
                               -- else "household" | "private"
 ```

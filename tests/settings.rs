@@ -423,6 +423,24 @@ async fn density_starts_comfortable_and_takes_only_its_three_values() {
 }
 
 #[tokio::test]
+async fn dimming_starts_on_and_turns_off() {
+    let pool = pool().await;
+    let me = household(&pool).await;
+    // Everybody starts with the panes out of focus receding.
+    assert!(settings_of(&pool, me).await.dim_unfocused);
+
+    // The checkbox sends `off` rather than nothing when unticked.
+    settings::set_member(&pool, me, MemberKey::DimUnfocused, "off")
+        .await
+        .unwrap();
+    assert!(!settings_of(&pool, me).await.dim_unfocused);
+    settings::set_member(&pool, me, MemberKey::DimUnfocused, "on")
+        .await
+        .unwrap();
+    assert!(settings_of(&pool, me).await.dim_unfocused);
+}
+
+#[tokio::test]
 async fn the_trash_keeps_files_between_zero_days_and_ten_years() {
     let pool = pool().await;
     household(&pool).await;

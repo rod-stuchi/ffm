@@ -272,10 +272,16 @@ card in plain CSS.
 
 ### Split mode
 
-- The unfocused pane recedes with **opacity *and* desaturation** (`opacity: .46`,
-  `saturate(.5)`). Dimming alone leaves the green checks and red deltas shouting
-  from the inactive side. Hover lifts it to `.78` so it stays readable without
-  stealing focus.
+- The unfocused pane recedes with **opacity *and* desaturation** (`opacity: .62`,
+  `saturate(.65)`). Dimming alone leaves the green checks and red deltas shouting
+  from the inactive side. Hover lifts it to `.85` so it stays readable without
+  stealing focus, and a file dragged over the page lifts both, since either
+  pane's rows can take it. It was written here from the first commit (at
+  `.46`) and built only later, 30% softer — focus had been the accent border
+  alone, which is what a member gets with **`member_settings.dim_unfocused`**
+  off (`:profile`, on by default; `data-dim` on the shell). **The server
+  marks the focused pane `is-focus` in the markup**, not Alpine alone, or
+  every page load paints the panes dimmed and fades one in.
 - Panes are cards with their own border, radius and surface, separated by
   `layout.gap`. The gap must read as separation, not as a crack.
 - **A pane has a floor it will not be squeezed below**, and it is a member
@@ -404,8 +410,9 @@ card in plain CSS.
   - **`member_settings`** (one row per member, via `:profile`) — language, theme
     and overrides, line numbers, all five `layout_*` values, `density`
     (`default` | `comfortable` | `compact` — see `design/spec.md`'s Density),
-    `ledger_sort`, `search_scope`, `show_delta`, group and fold defaults, and
-    a nullable privacy default that falls back to the household's.
+    `ledger_sort`, `search_scope`, `show_delta`, `dim_unfocused`, group and
+    fold defaults, and a nullable privacy default that falls back to the
+    household's.
 
   The reason is the one already argued for theme: a shared file that two people
   both want to edit is the file *disagreeing with itself*. Once that's admitted

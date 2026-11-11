@@ -131,6 +131,8 @@ struct ProfilePane {
     gap: i64,
     densities: Vec<Choice>,
     show_delta: bool,
+    /// Whether the panes out of focus recede (`member_settings.dim_unfocused`).
+    dim: bool,
     devices: Vec<String>,
 }
 
@@ -246,6 +248,7 @@ pub async fn profile(State(st): State<AppState>, auth: Auth) -> Response {
         gap: s.layout_gap,
         densities: density_choices(&t, &s.density),
         show_delta: s.ledger_show_delta,
+        dim: s.dim_unfocused,
         devices,
         t,
     })
@@ -341,6 +344,8 @@ pub async fn set_member(
                     | MemberKey::Density
                     // The shell carries it (`data-pdf-view`) for `P` to open on.
                     | MemberKey::PdfView
+                    // The shell carries it too (`data-dim`), for the CSS.
+                    | MemberKey::DimUnfocused
             );
             let mut res =
                 crate::web::tx::say_only(&t.settings_saved(&member_label(&t, key)), false);
@@ -921,6 +926,7 @@ fn member_label(t: &Catalog, key: MemberKey) -> String {
         MemberKey::DefaultVisibility => t.profile_privacy(),
         MemberKey::Density => t.profile_density(),
         MemberKey::PdfView => t.profile_pdf_view(),
+        MemberKey::DimUnfocused => t.profile_dim_unfocused(),
     }
     .to_string()
 }

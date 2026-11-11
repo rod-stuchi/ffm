@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE member_settings SET dim_unfocused = ?2 WHERE member_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "2f21d551b10a2932e5241a8a4f89788b5fdaf2b0ebc304d10cb56e78b9753ab0"
+}

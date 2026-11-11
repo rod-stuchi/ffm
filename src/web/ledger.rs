@@ -549,6 +549,9 @@ struct LedgerPage {
     density: String,
     /// `png` | `pdf` — which side `P` opens a PDF on (`v` flips it there).
     pdf_view: String,
+    /// Whether the panes out of focus recede — `data-dim` on the shell, read
+    /// by `ledger.css`. Server-rendered for the same reason as `density`.
+    dim: bool,
     give_nobody: String,
     give_moved_key: String,
     details_none: String,
@@ -768,6 +771,7 @@ pub async fn ledger(
         today_key: Period::of(today).to_string(),
         density: auth.settings.density.clone(),
         pdf_view: auth.settings.pdf_view.clone(),
+        dim: auth.settings.dim_unfocused,
         give_nobody: t.give_nobody().to_string(),
         give_moved_key: t.give_moved_key().to_string(),
         details_none: t.details_none().to_string(),

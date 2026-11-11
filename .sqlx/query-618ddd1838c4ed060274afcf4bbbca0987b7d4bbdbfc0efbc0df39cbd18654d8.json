@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT language AS \"language!: String\",\n                  theme_name AS \"theme_name!: String\",\n                  theme_overrides AS \"theme_overrides!: String\",\n                  line_numbers AS \"line_numbers!: String\",\n                  layout_panes AS \"layout_panes!: String\",\n                  layout_min_split_width AS \"layout_min_split_width!: i64\",\n                  layout_min_width AS \"layout_min_width!: i64\",\n                  layout_max_width AS \"layout_max_width!: i64\",\n                  layout_gap AS \"layout_gap!: i64\",\n                  ledger_sort AS \"ledger_sort!: String\",\n                  ledger_search_scope AS \"ledger_search_scope!: String\",\n                  ledger_show_delta AS \"ledger_show_delta!: i64\",\n                  ledger_group AS \"ledger_group!: String\",\n                  group_fold_default AS \"group_fold_default!: String\",\n                  group_order AS \"group_order!: String\",\n                  default_visibility AS \"default_visibility: String\",\n                  density AS \"density!: String\",\n                  pdf_view AS \"pdf_view!: String\"\n           FROM member_settings WHERE member_id = ?1",
+  "query": "SELECT language AS \"language!: String\",\n                  theme_name AS \"theme_name!: String\",\n                  theme_overrides AS \"theme_overrides!: String\",\n                  line_numbers AS \"line_numbers!: String\",\n                  layout_panes AS \"layout_panes!: String\",\n                  layout_min_split_width AS \"layout_min_split_width!: i64\",\n                  layout_min_width AS \"layout_min_width!: i64\",\n                  layout_max_width AS \"layout_max_width!: i64\",\n                  layout_gap AS \"layout_gap!: i64\",\n                  ledger_sort AS \"ledger_sort!: String\",\n                  ledger_search_scope AS \"ledger_search_scope!: String\",\n                  ledger_show_delta AS \"ledger_show_delta!: i64\",\n                  ledger_group AS \"ledger_group!: String\",\n                  group_fold_default AS \"group_fold_default!: String\",\n                  group_order AS \"group_order!: String\",\n                  default_visibility AS \"default_visibility: String\",\n                  density AS \"density!: String\",\n                  pdf_view AS \"pdf_view!: String\",\n                  dim_unfocused AS \"dim_unfocused!: i64\"\n           FROM member_settings WHERE member_id = ?1",
   "describe": {
     "columns": [
       {
@@ -92,6 +92,11 @@
         "name": "pdf_view!: String",
         "ordinal": 17,
         "type_info": "Text"
+      },
+      {
+        "name": "dim_unfocused!: i64",
+        "ordinal": 18,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -115,8 +120,9 @@
       false,
       true,
       false,
+      false,
       false
     ]
   },
-  "hash": "6de5c2c4df5fe665c84579a1c3d5621653e01ce1f44b086654d167932a484d6a"
+  "hash": "618ddd1838c4ed060274afcf4bbbca0987b7d4bbdbfc0efbc0df39cbd18654d8"
 }
