@@ -1,6 +1,6 @@
 [package]
 name = "ffm"
-version = "0.0.32"
+version = "0.0.33"
 edition = "2024"
 # `ffm-anon` is a second binary, so a bare `cargo run` (what `just dev` runs)
 # would otherwise have to be told which one to start.
